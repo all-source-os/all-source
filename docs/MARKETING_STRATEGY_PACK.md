@@ -119,6 +119,39 @@ journey.
 Do not mass-post identical copy. Each contribution must answer community question
 before linking AllSource. Founder identity and commercial interest must be clear.
 
+## Commercial search coverage system
+
+Ward-derived rule: map commercially relevant demand before producing more
+content; build owned surfaces nearest revenue; influence sources already cited
+in buyer decisions; measure coverage across Google, AI answers, and those
+sources. Sources: [organic search system](https://www.linkedin.com/pulse/seo-2026-playbook-winning-google-ai-search-everywhere-jake-ward-jjfbe),
+[structured programmatic pages](https://www.linkedin.com/pulse/programmatic-seo-2026-how-i-built-13000-pages-3-hours-jake-ward-pcjke),
+and [native authority content](https://www.linkedin.com/pulse/why-you-should-publishing-articles-linkedin-xtwitter-right-jake-ward-3aome).
+
+- Buyer-near query set: durable AI-agent memory; agent memory after restart;
+  memory with provenance; replay AI-agent decisions; reconstruct what an agent
+  knew; Mem0, Zep, and Letta alternatives; LangGraph, LangChain, LlamaIndex,
+  CrewAI, AutoGen, and MCP memory integrations.
+- Owned surface order: improve existing comparison and alternative pages;
+  publish one framework-plus-failure decision page per distinct intent; connect
+  each page to runnable restart proof, documentation, and hosted trial.
+- Influenced-source map: for every query cluster, record recurring GitHub
+  discussions, framework documentation, MCP directories, technical
+  comparisons, Reddit threads, LinkedIn articles, and X discussions; pursue
+  factual inclusion or contribute useful implementation evidence.
+- Native authority asset: publish one original restart, correction-history, or
+  point-in-time reconstruction experiment; site holds reproducible artifact,
+  while LinkedIn and X receive distinct native explanations.
+- Working utility: ship `memcheck` only when it performs real local diagnosis
+  and links each result to evidence; never publish a text-only tool shell.
+- Rollout rule: release five to ten structured pages, validate uniqueness,
+  indexation, proof use, and qualified trial progression, then keep, revise, or
+  stop. Never copy Ward's page volume without matching structured data.
+- Coverage metric: percentage of mapped buyer queries with correct owned page,
+  percentage with truthful AllSource presence in recurring cited sources, and
+  qualified restart-proof progression by cluster. Coverage remains diagnostic;
+  retained hosted customers remain promotion gate.
+
 ## Content engine
 
 Every content unit starts with one real failure, one reproducible proof, and one
