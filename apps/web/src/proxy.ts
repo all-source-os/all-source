@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { publicUrl } from "@/lib/public-url";
 
 // Routes that require authentication
 const protectedRoutes = ["/dashboard", "/onboarding"];
@@ -40,14 +41,14 @@ export function proxy(request: NextRequest) {
 
   // If trying to access protected route without token, redirect to login
   if (isProtectedRoute && !token) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   // If logged in and trying to access login/signup, redirect to dashboard
   if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(publicUrl(request, "/dashboard"));
   }
 
   return NextResponse.next();

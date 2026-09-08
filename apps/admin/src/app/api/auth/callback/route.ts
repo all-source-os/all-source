@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { decodeJwt, isAdminRole, validateAdminToken } from "@/lib/auth";
+import { validateAdminToken } from "@/lib/auth";
+import { publicUrl } from "@/lib/public-url";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -8,14 +9,14 @@ export async function GET(request: NextRequest) {
 
   // Handle OAuth errors
   if (error) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", error);
     return NextResponse.redirect(loginUrl);
   }
 
   // Token is required
   if (!token) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", "missing_token");
     return NextResponse.redirect(loginUrl);
   }
@@ -24,13 +25,13 @@ export async function GET(request: NextRequest) {
   const result = await validateAdminToken(token);
 
   if (!result.valid) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", result.error);
     return NextResponse.redirect(loginUrl);
   }
 
   // Token is valid and user is admin — set cookie and redirect
-  const response = NextResponse.redirect(new URL("/tenants", request.url));
+  const response = NextResponse.redirect(publicUrl(request, "/tenants"));
 
   response.cookies.set("admin_token", token, {
     httpOnly: true,
