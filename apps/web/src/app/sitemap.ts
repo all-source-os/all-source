@@ -7,6 +7,7 @@ const STATIC_PATHS = [
   "",
   "/about",
   "/architecture",
+  "/agent-memory-restart-proof",
   "/blog",
   "/changelog",
   "/compare/agent-memory",
