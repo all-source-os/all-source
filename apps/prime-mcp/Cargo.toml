@@ -35,7 +35,7 @@ prime-remote-embed = ["allsource-core/prime-remote-embed"]
 prime-bundled-model = ["allsource-core/prime-bundled-model"]
 
 [dependencies]
-allsource-core = { version = "0.23.0", path = "../../apps/core", default-features = false, features = ["prime-recall", "prime-vectors"] }
+allsource-core = { version = "0.23.1", path = "../../apps/core", default-features = false, features = ["prime-recall", "prime-vectors"] }
 anyhow = "1.0"
 axum = { version = "0.8", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
