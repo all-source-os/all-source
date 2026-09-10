@@ -5,6 +5,10 @@ edition = "2021"
 description = "Tree-sitter codebase extractor for Prime Hound — turns source files into graph nodes and edges (on-device, no LLM)."
 license = "Apache-2.0"
 repository = "https://github.com/all-source-os/all-source"
+homepage = "https://all-source.xyz/prime"
+readme = "README.md"
+keywords = ["tree-sitter", "code-graph", "static-analysis", "rust"]
+categories = ["development-tools"]
 
 # Standalone crate (NOT a root-workspace member): consumed by the excluded,
 # standalone `apps/prime-mcp` build via a path dependency. Keeping it out of the

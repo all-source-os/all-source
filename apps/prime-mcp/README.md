@@ -4,6 +4,8 @@ Unified agent memory engine — vectors + graph + events in one binary.
 
 MCP server (stdio) and HTTP REST API for AI agents that need persistent, cross-domain memory with temporal reasoning.
 
+- MCP Registry: `mcp-name: io.github.all-source-os/allsource-prime`
+
 ## Install
 
 ```bash
