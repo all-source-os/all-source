@@ -1,5 +1,56 @@
 export const BLUR_FADE_DELAY = 0.15;
 
+export const platformNavigationGroups = [
+  {
+    id: "core",
+    label: "Core",
+    items: [
+      {
+        href: "/what-is-allsource",
+        label: "Platform overview",
+        description: "Core, Query Service, Prime, hosted services, and MCP.",
+      },
+      {
+        href: "/platform/event-sourcing",
+        label: "Core event store",
+        description: "Immutable streams, replay, snapshots, and schemas.",
+      },
+      {
+        href: "/platform/query-service",
+        label: "Query Service",
+        description: "Tenant-scoped HTTP, realtime, analytics, and projections.",
+      },
+    ],
+  },
+  {
+    id: "build-with-it",
+    label: "Build with it",
+    items: [
+      {
+        href: "/prime",
+        label: "Prime agent memory",
+        description: "Graph, vector, and temporal memory over Core history.",
+      },
+      {
+        href: "/event-sourcing/patterns",
+        label: "Production patterns",
+        description: "Ten practical event-sourcing implementation guides.",
+      },
+      {
+        href: "/examples",
+        label: "Live demo",
+        description: "Inspect timelines, replay, projections, and MCP access.",
+      },
+    ],
+  },
+] as const;
+
+export const primaryNavigation = [
+  { href: "/use-cases", label: "Use cases" },
+  { href: "/docs", label: "Docs" },
+  { href: "/pricing", label: "Pricing" },
+] as const;
+
 export const siteConfig = {
   name: "AllSource",
   productName: "AllSource Event Store",
@@ -63,101 +114,50 @@ export const siteConfig = {
       content: {
         main: {
           icon: "logo" as const,
-          title: "Event Store Engine",
-          description:
-            "Purpose-built database with a published 469K events/sec batch-ingest reference.",
-          href: "/platform/event-sourcing",
+          title: "Platform overview",
+          description: "Core, Query Service, Prime, hosted services, and MCP.",
+          href: "/what-is-allsource",
         },
         items: [
           {
             href: "/platform/event-sourcing",
-            title: "Event Sourcing",
-            description: "Immutable event logs with time-travel queries.",
+            title: "Core event store",
+            description: "Immutable streams, replay, snapshots, and schemas.",
           },
           {
-            href: "/event-sourcing/patterns",
-            title: "Event-Sourcing Patterns",
-            description: "Ten production guides for streams, replay, projections, and consumers.",
-          },
-          {
-            href: "/platform/stream-processing",
-            title: "Stream Processing",
-            description: "Real-time pipelines with filter, map, and reduce.",
-          },
-          {
-            href: "/docs/mcp",
-            title: "MCP Tools for Agents",
-            description: "55 tenant tools by default; 73 with fleet and admin controls.",
+            href: "/platform/query-service",
+            title: "Query Service",
+            description: "Tenant-scoped HTTP, realtime, analytics, and projections.",
           },
           {
             href: "/prime",
-            title: "Prime — Memory for Claude",
-            description: "Persistent agent memory over MCP with in-process embeddings.",
+            title: "Prime agent memory",
+            description: "Graph, vector, and temporal memory over Core history.",
+          },
+          {
+            href: "/event-sourcing/patterns",
+            title: "Production patterns",
+            description: "Ten practical event-sourcing implementation guides.",
+          },
+          {
+            href: "/examples",
+            title: "Live demo",
+            description: "Inspect timelines, replay, projections, and MCP access.",
           },
         ],
       },
     },
     {
-      trigger: "Solutions",
-      content: {
-        items: [
-          {
-            title: "Audit & Compliance",
-            href: "/solutions/audit-compliance",
-            description: "Complete audit trails with immutable event history.",
-          },
-          {
-            title: "Real-time Analytics",
-            href: "/solutions/real-time-analytics",
-            description: "11.9μs p99 reads in the published reference benchmark.",
-          },
-          {
-            title: "AI Agents",
-            href: "/solutions/agent-memory",
-            description: "MCP server integration for autonomous workflows.",
-          },
-          {
-            title: "Financial Services",
-            href: "/solutions/financial-services",
-            description: "Transaction logs with temporal consistency.",
-          },
-          {
-            title: "IoT & Telemetry",
-            href: "/solutions/iot-telemetry",
-            description: "High-throughput ingestion for sensor data.",
-          },
-          {
-            title: "Multi-tenant SaaS",
-            href: "/solutions/multi-tenant-saas",
-            description: "Secure isolation with RBAC and policy enforcement.",
-          },
-          {
-            title: "Quant Intelligence",
-            href: "/solutions/quant-intelligence",
-            description: "Market-event storage and reproducible analytical summaries.",
-          },
-        ],
-      },
+      href: "/use-cases",
+      label: "Use cases",
     },
     {
-      href: "/install",
-      label: "Install",
+      href: "/docs",
+      label: "Docs",
     },
     {
       href: "/pricing",
       label: "Pricing",
-    },
-    {
-      href: "/ecosystem",
-      label: "Ecosystem",
-    },
-    {
-      href: "/architecture",
-      label: "Architecture",
-    },
-    {
-      href: "/blog",
-      label: "Blog",
     },
   ],
   // Single source of truth for pricing tiers. The /pricing page and the
@@ -429,6 +429,7 @@ export const siteConfig = {
       title: "Company",
       links: [
         { href: "/about", text: "About", icon: null },
+        { href: "/design-partners", text: "Design partners", icon: null },
         { href: "/blog", text: "Blog", icon: null },
         { href: "/status", text: "Status", icon: null },
         { href: "/privacy", text: "Privacy Policy", icon: null },
