@@ -1,4 +1,5 @@
 import { siteConfig } from "@/lib/config";
+import type { EventSourcingPattern } from "@/lib/event-sourcing-patterns";
 import type { Catalog } from "@/lib/pricing-catalog";
 import type { ProductVertical } from "@/lib/product-verticals";
 
@@ -33,7 +34,7 @@ export function organizationSchema() {
       url: `${siteConfig.url}/logo.svg`,
     },
     description:
-      "Developer infrastructure for durable event history and AI-agent memory, built on an Apache-2.0 Rust event-store core. Published Core reference results: 469K events/sec ingestion and 11.9us p99 indexed reads.",
+      "Purpose-built event store database for immutable streams, replay, projections, snapshots, schema governance, temporal queries, and durable consumers. Published Core reference results: 469K events/sec batch ingestion and 11.9us p99 indexed reads.",
     disambiguatingDescription:
       "Developer infrastructure published at all-source.xyz; unrelated to Esri ArcGIS AllSource, the all-source intelligence discipline, and other companies using AllSource or Allsource.",
     sameAs,
@@ -190,10 +191,10 @@ export function softwareApplicationSchema(catalog?: Catalog | null) {
     alternateName: siteConfig.name,
     url: siteConfig.url,
     applicationCategory: "DeveloperApplication",
-    applicationSubCategory: "Event store / agent memory",
+    applicationSubCategory: "Event store database",
     operatingSystem: "Linux, macOS, Windows",
     description:
-      "AllSource Event Store records state changes as immutable events and lets applications or agents query prior state. Its Apache-2.0 Rust core uses a CRC32-checked write-ahead log, Parquet persistence, and concurrent indexed reads.",
+      "AllSource is a purpose-built event store database for event sourcing. Its Apache-2.0 Rust core records immutable streams with a CRC32-checked write-ahead log, Parquet persistence, snapshots, schema governance, temporal reconstruction, and durable consumers.",
     disambiguatingDescription:
       "The developer product at all-source.xyz, not Esri ArcGIS AllSource or the all-source intelligence discipline.",
     sameAs: [siteConfig.links.github, "https://crates.io/crates/allsource-core"],
@@ -216,6 +217,50 @@ export function productVerticalListSchema(verticals: readonly ProductVertical[])
       name: vertical.name,
       description: vertical.directAnswer,
     })),
+  };
+}
+
+export function eventSourcingPatternListSchema(patterns: readonly EventSourcingPattern[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "Production event-sourcing patterns",
+    description:
+      "Implementation guides for aggregate streams, concurrency, projections, replay, schemas, temporal queries, tenancy, and durable consumers.",
+    numberOfItems: patterns.length,
+    itemListElement: patterns.map((pattern, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: `${siteConfig.url}/event-sourcing/patterns/${pattern.slug}`,
+      name: pattern.title,
+      description: pattern.directAnswer,
+    })),
+  };
+}
+
+export function techArticleSchema(pattern: EventSourcingPattern, wordCount: number) {
+  const url = `${siteConfig.url}/event-sourcing/patterns/${pattern.slug}`;
+  return {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: pattern.title,
+    description: pattern.description,
+    url,
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    datePublished: "2026-09-10",
+    dateModified: "2026-09-10",
+    inLanguage: "en",
+    articleSection: "Event sourcing patterns",
+    keywords: pattern.keywords,
+    wordCount,
+    proficiencyLevel: "Expert",
+    about: [
+      { "@type": "Thing", name: "Event sourcing" },
+      { "@type": "Thing", name: "Event store database" },
+      { "@type": "SoftwareApplication", "@id": `${siteConfig.url}/#software` },
+    ],
+    author: { "@id": FOUNDER_ID },
+    publisher: { "@id": ORG_ID },
   };
 }
 

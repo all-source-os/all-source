@@ -10,7 +10,7 @@ function HeroPill() {
       className="flex min-h-12 w-fit items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary sm:text-sm"
     >
       <span className="h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
-      What is AllSource Event Store?
+      Purpose-built event store database
       <span aria-hidden="true">→</span>
     </Link>
   );
@@ -20,12 +20,12 @@ function HeroTitles() {
   return (
     <div className="flex w-full flex-col gap-5 pt-8">
       <h1 className="text-balance text-4xl font-semibold leading-tight text-foreground sm:text-5xl lg:text-left lg:text-6xl">
-        AI-native event store for system history and agent memory.
+        Event store database built for event sourcing.
       </h1>
       <p className="max-w-2xl text-balance text-lg leading-8 text-muted-foreground sm:text-xl lg:text-left">
-        AllSource Event Store records decisions and state changes as immutable events. Core keeps
-        durable history; Query Service separates HTTP, realtime, analytics, and projection reads;
-        Prime gives agents cross-session memory backed by source events.
+        AllSource records application state as ordered, immutable event streams. Rebuild
+        projections, replay production history, query point-in-time state, and expose same durable
+        record to AI agents through Prime.
       </p>
     </div>
   );
@@ -43,7 +43,7 @@ function HeroCTA({ indiePrice }: { indiePrice: string }) {
           )}
         >
           <Icons.logo className="h-5 w-5" />
-          Start 14-day trial
+          Start event store trial
         </Link>
         <Link
           href={siteConfig.links.github}
@@ -56,13 +56,13 @@ function HeroCTA({ indiePrice }: { indiePrice: string }) {
           Self-host on GitHub
         </Link>
         <Link
-          href="/examples#capability-workbench"
+          href="/event-sourcing/patterns"
           className={cn(
             buttonVariants({ variant: "ghost" }),
             "min-h-12 w-full gap-2 px-5 sm:w-auto"
           )}
         >
-          Explore demo →
+          Explore patterns →
         </Link>
       </div>
       <p className="mt-4 text-sm text-muted-foreground">

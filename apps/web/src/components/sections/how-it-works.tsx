@@ -28,9 +28,9 @@ const steps = [
 export default function HowItWorks() {
   return (
     <Section
-      title="From event write to durable context"
-      subtitle="The data path"
-      description="One ordered history supports application state, operational analysis, and agent memory."
+      title="From event write to queryable state"
+      subtitle="The event-store data path"
+      description="One ordered history supports application state, operational analysis, and higher-level uses such as agent memory."
     >
       <ol className="grid gap-6 lg:grid-cols-3">
         {steps.map((step) => (

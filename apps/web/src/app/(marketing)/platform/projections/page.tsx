@@ -104,8 +104,11 @@ export default function ProjectionsPage() {
       </section>
 
       <div className="flex flex-col gap-4 border-t border-border pt-10 sm:flex-row">
-        <Link href="/event-replay-debugging" className={cn(buttonVariants(), "min-h-12")}>
-          Study replay analysis <ArrowRight className="ml-2 size-4" />
+        <Link
+          href="/event-sourcing/patterns/projections-read-models"
+          className={cn(buttonVariants(), "min-h-12")}
+        >
+          Read projection pattern <ArrowRight className="ml-2 size-4" />
         </Link>
         <Link href="/examples" className={cn(buttonVariants({ variant: "outline" }), "min-h-12")}>
           Open interactive demo

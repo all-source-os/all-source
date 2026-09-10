@@ -1,11 +1,11 @@
 # AllSource Event Store
 
-> AllSource is developer infrastructure for durable system history and AI-agent memory. It is created by Decebal Dobrica and published by Wolven Tech.
+> AllSource is a purpose-built event store database for event sourcing. It stores immutable streams for replay, projections, temporal queries, and durable consumers. Prime derives agent memory from the same history.
 
 Canonical site: https://www.all-source.xyz
 Source: https://github.com/all-source-os/all-source
 Detailed machine reference: https://www.all-source.xyz/llms-full.txt
-Last verified: 2026-08-27
+Last verified: 2026-09-10
 
 ## Direct answer
 
@@ -32,6 +32,17 @@ Benchmark reference: 11.9us p99 indexed reads. Benchmark numbers describe named 
 - Product map: https://www.all-source.xyz/what-is-allsource
 - Event-store definition: https://www.all-source.xyz/what-is-an-event-store
 - Event sourcing: https://www.all-source.xyz/platform/event-sourcing
+- Production event-sourcing patterns: https://www.all-source.xyz/event-sourcing/patterns
+- Aggregate streams: https://www.all-source.xyz/event-sourcing/patterns/aggregate-streams
+- Optimistic concurrency: https://www.all-source.xyz/event-sourcing/patterns/optimistic-concurrency
+- Projections and read models: https://www.all-source.xyz/event-sourcing/patterns/projections-read-models
+- Snapshots and checkpoints: https://www.all-source.xyz/event-sourcing/patterns/snapshots-checkpoints
+- Event replay: https://www.all-source.xyz/event-sourcing/patterns/event-replay
+- Idempotent consumers: https://www.all-source.xyz/event-sourcing/patterns/idempotent-consumers
+- Event schema evolution: https://www.all-source.xyz/event-sourcing/patterns/event-schema-evolution
+- Temporal queries: https://www.all-source.xyz/event-sourcing/patterns/temporal-queries
+- Multi-tenant event streams: https://www.all-source.xyz/event-sourcing/patterns/multi-tenant-event-streams
+- Durable subscriptions: https://www.all-source.xyz/event-sourcing/patterns/durable-subscriptions
 - Query Service: https://www.all-source.xyz/platform/query-service
 - Projections: https://www.all-source.xyz/platform/projections
 - Stream processing: https://www.all-source.xyz/platform/stream-processing

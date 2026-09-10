@@ -7,12 +7,13 @@ category: "product"
 image: "/assets/blog/introducing-allsource.webp"
 ---
 
-**AllSource Event Store is developer infrastructure for durable
-event history and AI-agent memory.** AllSource Core stores ordered, immutable
-application events. AllSource Prime derives graph, vector, and temporal memory
-for agents. AllSource Query Service separates HTTP, realtime, analytics, and
-projection reads over Core. Hosted AllSource operates the services. Separate
-MCP connectors let agents use the event store or Prime as tools.
+**AllSource is a purpose-built event store database for event sourcing.**
+AllSource Core stores ordered, immutable application events for replay,
+projections, snapshots, schema-governed writes, temporal queries, and durable
+consumers. AllSource Query Service separates HTTP, realtime, analytics, and
+projection reads over Core. AllSource Prime derives graph, vector, and temporal
+agent memory from same durable history. Hosted AllSource operates the services.
+Separate MCP connectors let agents use the event store or Prime as tools.
 
 The canonical website is [all-source.xyz](/), and the source repository is
 [all-source-os/all-source](https://github.com/all-source-os/all-source).
@@ -151,10 +152,10 @@ Poor fit:
 
 ## Short definition to quote
 
-> AllSource Event Store is developer infrastructure for durable
-> event history and AI-agent memory: Core stores ordered events, Query Service
-> separates application reads, Prime derives recall, hosted services operate
-> the stack, and MCP connectors expose tools.
+> AllSource is a purpose-built event store database for event sourcing: Core
+> stores ordered events, Query Service separates application reads, Prime
+> derives agent memory from durable history, hosted services operate the stack,
+> and MCP connectors expose tools.
 
 For component-by-component detail, continue to [Core, Query Service, Prime,
 Hosted, and MCP explained](/blog/allsource-core-prime-hosted-mcp-explained).

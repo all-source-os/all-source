@@ -242,7 +242,7 @@ function ResetPasswordContent() {
               <Icons.logo className="h-10 w-10 text-primary" />
               <span className="text-3xl font-bold tracking-tight">AllSource</span>
             </div>
-            <p className="text-muted-foreground">AI-native event store</p>
+            <p className="text-muted-foreground">Purpose-built event store database</p>
           </div>
         </BlurFade>
 
@@ -383,7 +383,7 @@ function ResetPasswordLoading() {
             <Icons.logo className="h-10 w-10 text-primary" />
             <span className="text-3xl font-bold tracking-tight">AllSource</span>
           </div>
-          <p className="text-muted-foreground">AI-native event store</p>
+          <p className="text-muted-foreground">Purpose-built event store database</p>
         </div>
         <Card className="w-full max-w-[420px] border-border/50 bg-background/80 px-2 py-2 backdrop-blur-sm sm:px-4 sm:py-4">
           <CardHeader className="space-y-2 px-6 pb-0 pt-4 text-center sm:px-8 sm:pt-6">

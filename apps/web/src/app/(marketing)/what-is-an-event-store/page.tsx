@@ -120,10 +120,10 @@ export default function WhatIsAnEventStorePage() {
           See AllSource Core <ArrowRight className="ml-2 size-4" aria-hidden="true" />
         </Link>
         <Link
-          href="/event-replay-debugging"
+          href="/event-sourcing/patterns"
           className={cn(buttonVariants({ variant: "outline" }), "min-h-12")}
         >
-          Study replay debugging
+          Explore production patterns
         </Link>
       </footer>
     </article>

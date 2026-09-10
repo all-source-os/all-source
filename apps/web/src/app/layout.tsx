@@ -58,9 +58,9 @@ import "./globals.css";
  */
 
 export const metadata: Metadata = constructMetadata({
-  title: "AllSource — AI-Native Event Store",
+  title: "Event Store Database for Event Sourcing | AllSource",
   description:
-    "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores events; Prime derives memory.",
+    "Purpose-built event store database for immutable streams, replay, projections, snapshots, schemas, temporal queries, and durable consumers.",
   canonical: "/",
   verification: {
     google: "BbHb4BnJ4QZYJmCEPpGhADhmJdSq6eGYRtAteMyjYwU",

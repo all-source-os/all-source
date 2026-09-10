@@ -1,18 +1,18 @@
 import { Card, CardContent, Section } from "@allsource/ui";
-import { Bot, History, Search } from "lucide-react";
+import { GitBranch, History, Search } from "lucide-react";
 
 const problems = [
   {
-    title: "Agent context disappears",
+    title: "Current state hides its history",
     description:
-      "Conversation context ends with a session. Without durable storage, an agent cannot recover prior decisions, evidence, or state after a restart.",
-    icon: Bot,
+      "A row shows what is true now, not which accepted facts produced it. Debugging and audit work then depend on scattered logs and application-specific fixes.",
+    icon: History,
   },
   {
-    title: "Current state hides why",
+    title: "Every read model becomes permanent",
     description:
-      "A row shows what is true now, not which changes produced it. Debugging and audit work then depend on scattered logs and application-specific fixes.",
-    icon: History,
+      "When current-state tables become source of truth, changing a projection means risky migrations. Durable events let teams rebuild new views beside old ones.",
+    icon: GitBranch,
   },
   {
     title: "Historical queries become projects",
@@ -24,7 +24,10 @@ const problems = [
 
 export default function Problem() {
   return (
-    <Section title="What breaks without an event history" subtitle="Why teams add AllSource">
+    <Section
+      title="What breaks without an event store"
+      subtitle="Why event-sourced systems need durable history"
+    >
       <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
         {problems.map((problem) => (
           <Card key={problem.title} className="h-full border-border bg-card shadow-none">

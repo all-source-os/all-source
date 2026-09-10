@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata: Metadata = constructMetadata({
-  title: "Event Sourcing Platform — Immutable Logs with Time-Travel Queries",
+  title: "Event Store Database for Event Sourcing",
   description:
-    "Store accepted state changes as immutable events. Reconstruct historical state with WAL + Parquet persistence. Published Core references: 469K events/sec batch ingest and 11.9us p99 indexed reads.",
+    "Purpose-built event store database with immutable streams, WAL and Parquet durability, snapshots, schema governance, replay, and temporal queries.",
   canonical: "/platform/event-sourcing",
 });
 
