@@ -12,6 +12,19 @@ Rules:
 - One initial message per builder. Follow up only when explicitly marked due.
 - No request for review, endorsement, testimonial, or public mention.
 
+## GitHub contribution policy — effective 2026-09-11
+
+Unsent GitHub outreach batches are retired. New daily research produces a
+ranked contribution queue, not sales comments. A public GitHub interaction must
+lead with a repository-native artifact: reproducer, failing test, benchmark,
+patch, adapter, example, or verified documentation correction. No artifact, no
+comment. Never comment on closed issues or submit unsolicited AI-generated PR
+reviews. Explicit founder approval remains required immediately before any
+public issue, discussion, or pull-request action.
+
+See
+[`docs/plans/2026-09-11-github-contribution-motion-design.md`](../plans/2026-09-11-github-contribution-motion-design.md).
+
 ## Deduplication index
 
 | Builder / handle | Project | First prepared | Channel | Status | Follow-up due |

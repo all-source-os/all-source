@@ -119,6 +119,21 @@ journey.
 Do not mass-post identical copy. Each contribution must answer community question
 before linking AllSource. Founder identity and commercial interest must be clear.
 
+### GitHub contribution rule
+
+GitHub is a product-proof channel, not an unsolicited outreach list. Do not add
+AllSource pitches to other projects' issues or pull requests. Research open
+technical problems, then contribute a minimal reproducer, failing test,
+benchmark, patch, adapter, example, or verified documentation correction. No
+artifact means no comment. Read repository contribution rules first; do not
+comment on resolved issues or submit unsolicited AI-generated PR reviews.
+
+First owned artifact:
+[`langgraph-checkpoint-allsource`](../integrations/langgraph-checkpoint-allsource/README.md),
+a LangGraph checkpoint adapter passing all 58 current base conformance tests.
+External publication requires a live AllSource restart test and founder approval
+at action time.
+
 ## Commercial search coverage system
 
 Ward-derived rule: map commercially relevant demand before producing more
