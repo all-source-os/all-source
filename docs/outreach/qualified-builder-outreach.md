@@ -1294,7 +1294,8 @@ Message (84 words):
 
 ## Batch — 2026-09-11 08:07 UTC
 
-Batch status: **drafted; awaiting founder batch approval.**
+Batch status: **approved; 6 sent and verified, 4 skipped after live-state
+validation on 2026-09-11.**
 
 ### 1. `chernistry` — Bernstein
 
@@ -1552,14 +1553,24 @@ Message (84 words):
 
 ## 2026-09-11 approval and send log
 
-- [ ] Founder approves exact ten recipients and exact drafts.
-- [ ] Send approved messages one at a time through authenticated channels.
-- [ ] Verify each successful send and record canonical URL, timestamp, and
-  outcome below.
+- [x] Founder approved exact ten recipients and exact drafts.
+- [x] Revalidated issue state immediately before each send.
+- [x] Sent six eligible messages one at a time through authenticated public
+  channels.
+- [x] Verified each successful send and recorded canonical URL and outcome.
 
 | Sent time | Recipient | Channel | Public URL | Outcome |
 | --- | --- | --- | --- | --- |
-| — | — | — | — | Awaiting approval |
+| 2026-09-11 08:54 UTC | `chernistry` | GitHub issue reply | <https://github.com/sipyourdrink-ltd/bernstein/issues/2914#issuecomment-5631918220> | Sent; verified |
+| 2026-09-11 08:55 UTC | `75ACOL` | GitHub issue reply | <https://github.com/agentscope-ai/agentscope/issues/1888#issuecomment-5631972684> | Sent; verified |
+| 2026-09-11 08:56 UTC | `yexxx` | GitHub issue reply | <https://github.com/NousResearch/hermes-agent/issues/9055#issuecomment-5631990985> | Sent; verified |
+| 2026-09-11 08:55 UTC | Stefan Wang | GitHub issue reply | <https://github.com/langchain-ai/deepagents/issues/6122#issuecomment-5631974047> | Sent; verified |
+| 2026-09-11 08:55 UTC | Andrew Zhu | GitHub issue reply | <https://github.com/nesquena/hermes-webui/issues/765> | Skipped; issue closed with merged periodic-checkpoint fixes |
+| 2026-09-11 08:55 UTC | `1attila2` | GitHub issue reply | <https://github.com/openclaw/openclaw/issues/95042> | Skipped; issue closed as not planned |
+| 2026-09-11 08:55 UTC | `XueJourney` | GitHub issue reply | <https://github.com/openclaw/openclaw/issues/91910> | Skipped; issue closed as not planned and comments unavailable |
+| 2026-09-11 08:55 UTC | Nelson Sousa | GitHub issue reply | <https://github.com/langchain-ai/deepagentsjs/issues/725#issuecomment-5631975350> | Sent; verified |
+| 2026-09-11 08:57 UTC | Bobby Hansen Jr | X public reply | <https://x.com/ddonprogramming/status/2098335074533900627> | Sent; verified |
+| 2026-09-11 08:55 UTC | Rohit G | GitHub issue reply | <https://github.com/rohitg00/agentmemory/issues/456> | Skipped; issue closed and comments unavailable |
 
 ## Batch — 2026-09-10 08:02 UTC
 
