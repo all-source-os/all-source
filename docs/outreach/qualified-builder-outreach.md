@@ -1305,6 +1305,203 @@ Message (84 words):
 | --- | --- | --- | --- | --- |
 | — | — | — | — | Awaiting approval |
 
+## Contribution queue summary — 2026-09-12 08:01 UTC
+
+Research complete. No public GitHub action taken. Queue ranks smallest useful
+repository-native artifact first. AllSource relevance stays separate from
+maintainer value. Founder approval required before public action.
+
+### 1. `rohitg00/agentmemory` — shutdown persistence race
+
+- Source/status: [issue #1335](https://github.com/rohitg00/agentmemory/issues/1335)
+  is open, unassigned, with no linked development work.
+- Evidence: clean Docker repro shows `save()` returns before `iii` flushes;
+  boot skips reconciliation when index is only partly stale. Newer KV records
+  remain stored but unsearchable.
+- Impact: successful exit and confident search can hide restart data loss.
+- Rules: [CONTRIBUTING.md](https://github.com/rohitg00/agentmemory/blob/main/CONTRIBUTING.md)
+  requires DCO, focused PR, Node 20+, build, and tests.
+- Artifact: failing Docker regression proving store → stop → restart preserves
+  four searchable memories and advances shard generation.
+- Verify: `npm run build`, focused regression, `npm test`, two clean container
+  cycles with exact result counts.
+- AllSource relevance: direct durability/reconciliation/recovery evidence.
+- Promotional risk: low with fixture only; high if AllSource is mentioned.
+
+### 2. `Untrivial-ai/agent-orchestrator` — zombie restored session
+
+- Source/status: [issue #2702](https://github.com/Untrivial-ai/agent-orchestrator/issues/2702)
+  is open with exact tmux, process, and branch evidence.
+- Evidence: restore recreates tmux but not agent process, reports session idle,
+  and keeps branch ownership; recovery requires kill/restart.
+- Impact: false-healthy session blocks branch reuse and loses in-flight work.
+- Rules: [CONTRIBUTING.md](https://github.com/Untrivial-ai/agent-orchestrator/blob/main/CONTRIBUTING.md).
+- Artifact: Go regression around restored runtime whose pane is bare shell;
+  assert session becomes dead and releases branch.
+- Verify: focused lifecycle test, relevant package tests, issue's tmux repro.
+- AllSource relevance: explicit recovery transition and reconstructable state.
+- Promotional risk: low for test-first patch; medium for event-store pitch.
+
+### 3. `microsoft/agent-framework` — workflow/response checkpoint gap
+
+- Source/status: [issue #7809](https://github.com/microsoft/agent-framework/issues/7809)
+  is open, assigned, with no linked branch or PR.
+- Evidence: workflows yielding only at completion restart from beginning after
+  crash; separate gap exists between workflow checkpoint and response persist.
+- Impact: restart can repeat work or omit delivered response state.
+- Rules: [CONTRIBUTING.md](https://github.com/microsoft/agent-framework/blob/main/CONTRIBUTING.md)
+  asks for minimal repro, existing style, pre-commit hooks, focused tests.
+- Artifact: deterministic fault-injection matrix for crash before first yield
+  and between workflow checkpoint and response persistence.
+- Verify: focused Python workflow/FHA tests plus Python quality gates. No fix
+  before maintainer confirms authority boundary.
+- AllSource relevance: atomic event/output commit and replay boundaries.
+- Promotional risk: low for neutral test; high for database integration pitch.
+
+### 4. `modelcontextprotocol/ext-apps` — tool-call initiator provenance
+
+- Source/status: [issue #738](https://github.com/modelcontextprotocol/ext-apps/issues/738)
+  is open, unassigned, with no linked development work.
+- Evidence: server cannot distinguish model-initiated from App-initiated
+  `tools/call`; current metadata identifies Host/View, not per-call origin.
+- Impact: observability, debugging, policy, and rate limits lose attribution.
+- Rules: [CONTRIBUTING.md](https://github.com/modelcontextprotocol/ext-apps/blob/main/CONTRIBUTING.md)
+  requires build, tests, Prettier, atomic change; unapproved examples rejected.
+- Artifact: protocol test vector plus normative diff for one host-attested,
+  low-cardinality initiator field; cover spoof overwrite and absence=`unknown`.
+- Verify: build, Prettier, tests, SDK proxy-path type fixture.
+- AllSource relevance: source attribution for tool events.
+- Promotional risk: low if vendor-neutral; high if product pitch.
+
+### 5. `modelcontextprotocol/servers` — safer memory persistence
+
+- Source/status: [issue #4117](https://github.com/modelcontextprotocol/servers/issues/4117)
+  is open and unassigned.
+- Evidence: package-directory storage, whole-file writes, missing journal and
+  backup, unbounded graphs, weak namespaces, destructive defaults.
+- Impact: updates, concurrent hosts, or mutations can lose/mix memory without
+  reconstructable history.
+- Rules: [CONTRIBUTING.md](https://github.com/modelcontextprotocol/servers/blob/main/CONTRIBUTING.md).
+- Artifact: one regression test and docs warning when resolved memory path sits
+  under `node_modules`; no broad hardening bundle.
+- Verify: server-memory tests plus clean `npx` and explicit-path probes.
+- AllSource relevance: durable history applies later; unsafe default comes first.
+- Promotional risk: medium; issue author already has competing wrapper.
+
+### 6. `vercel-labs/open-agents` — replaying internal execution
+
+- Source/status: [issue #526](https://github.com/vercel-labs/open-agents/issues/526)
+  is open with v1 behavior and acceptance criteria.
+- Evidence: one persisted `useChat` stream mixes final messages, status, tools,
+  and replay; revisiting long runs replays private execution.
+- Impact: slow resume, noisy history, coupled UI/runtime state.
+- Rules: no root guide confirmed; inspect `.agents` and package scripts first.
+- Artifact: failing UI test proving resume renders only finalized messages while
+  active run shows local pending state.
+- Verify: targeted UI tests, typecheck, workspace test/build, browser fixture.
+- AllSource relevance: projection versus authoritative log separation.
+- Promotional risk: low for test; high before v1 transport decision.
+
+### 7. `ImL1s/agent-game-engine` — lossless state deltas
+
+- Source/status: [issue #16](https://github.com/ImL1s/agent-game-engine/issues/16)
+  is open and links state representation to replay, MCP, debugging, and evals.
+- Evidence: random fallback IDs make identical extraction nondeterministic;
+  restricted types and lossy deltas break round trips.
+- Impact: replay comparisons and gates can disagree for identical state.
+- Rules: no root guide confirmed; inspect issue contract and package scripts.
+- Artifact: property-style round-trip fixture asserting extract → delta → apply
+  preserves IDs, custom types, and canonical hash.
+- Verify: extractor tests, seeded repeat, full repo test/build.
+- AllSource relevance: deterministic identity and replay correctness.
+- Promotional risk: low for test-only artifact; medium if scope expands.
+
+### 8. `openai/codex` — structured continuation checkpoint
+
+- Source/status: [issue #36721](https://github.com/openai/codex/issues/36721)
+  is open as context-management enhancement.
+- Evidence: compaction can lose results, decisions, changed files, tests,
+  blockers, and next action; proposal retains structured checkpoint plus raw tail.
+- Impact: agent repeats failed work or resumes without safe evidence.
+- Rules: [CONTRIBUTING.md](https://github.com/openai/codex/blob/main/CONTRIBUTING.md)
+  must be inspected after clone; avoid unsolicited broad implementation.
+- Artifact: standalone fidelity eval with failed attempt, changed file, test
+  result, constraint, and next action; score exact post-compaction recovery.
+- Verify: current compaction path, required-field score, raw-tail boundary.
+- AllSource relevance: append-only operational provenance informs design only.
+- Promotional risk: high. No product mention unless requested.
+
+### 9. `zed-industries/zed` — checkpoint blocks agent prompt
+
+- Source/status: [issue #62283](https://github.com/zed-industries/zed/issues/62283)
+  is open but untriaged.
+- Evidence: 68,856 untracked files block checkpoint before ACP delivery and
+  leave abandoned temporary Git indexes.
+- Impact: infinite spinner, no timeout/progress, leaked temp state.
+- Rules: [CONTRIBUTING.md](https://github.com/zed-industries/zed/blob/main/CONTRIBUTING.md)
+  requires CLA and favors confirmed bugs/small changes.
+- Artifact: deterministic benchmark generating bounded untracked-file sets and
+  recording checkpoint latency plus cleanup.
+- Verify: Windows repro, targeted Rust test, latency/cleanup assertions.
+- AllSource relevance: checkpoint performance and failure evidence only.
+- Promotional risk: high while untriaged; no comment yet.
+
+### 10. `microsoft/vscode` — Agent Host session restore race
+
+- Source/status: [issue #321185](https://github.com/microsoft/vscode/issues/321185)
+  is open, assigned, and on Agent Host Protocol board.
+- Evidence: `chat.restoreLastPanelSession=true` does not restore Agent Host
+  sessions; lazy registration may race session restoration.
+- Impact: persisted agent panels disappear after restart.
+- Rules: [CONTRIBUTING.md](https://github.com/microsoft/vscode/blob/main/CONTRIBUTING.md)
+  asks for correct repo, extension-disabled repro, reactions instead of `+1`.
+- Artifact: extension-disabled reproducibility matrix with activation timing
+  trace; no implementation while assigned/on-deck.
+- Verify: Insiders build, one/multiple sessions, cold/warm restart, trace order.
+- AllSource relevance: temporal ordering and restart reconstruction.
+- Promotional risk: high; comment only if evidence changes diagnosis.
+
+## Top-two artifact-plan summary — approval gate
+
+### A. Agentmemory #1335
+
+1. Fork/clone after approval. Read repo instructions; map bundled
+   `IndexPersistence.save()`, shutdown handler, and `rebuildIndex(kv)` to source.
+2. Add focused Docker regression under existing `test/` conventions: persist
+   four unique records, stop, restart same volume, assert 4/4 searchable and
+   shard generation advanced.
+3. Make smallest proven fix: wait for confirmed engine flush before exit. Keep
+   partial-index reconciliation separate unless fixture requires it.
+4. Run build, focused test, full tests; repeat container cycle twice.
+
+Maintainer-facing note after artifact exists:
+
+> Reproduced #1335 with a focused Docker fixture. It stores four unique
+> memories, stops the container, restarts against the same volume, then checks
+> 4/4 search recovery and shard-generation advance. Patch waits for persistence
+> boundary before exit. Build and full tests pass. No broader reconciliation
+> changes included.
+
+### B. Agent Orchestrator #2702
+
+1. Fork/clone after approval. Inspect `backend/internal/adapters/agent/`, daemon
+   restore, reaper, and worktree release tests.
+2. Add Go regression: restored tmux pane reports bare shell/no agent; assert
+   session cannot remain `idle`/`terminated:false` and branch is released.
+3. Implement narrow dead-session transition. Do not add automatic relaunch
+   until maintainer chooses that behavior.
+4. Run focused backend tests, contributor-guide Go tests, then tmux repro.
+
+Maintainer-facing note after artifact exists:
+
+> Added a focused regression for #2702: runtime restore returns a tmux session
+> whose pane has no agent process. Test proves it cannot remain falsely idle or
+> keep branch ownership. Patch marks it dead and releases resources without
+> adding automatic relaunch. Focused and broader backend tests pass.
+
+Approval state: awaiting founder approval for A and B. No fork, comment, branch,
+pull request, or public product mention created.
+
 ## Batch — 2026-09-11 08:07 UTC
 
 Batch status: **approved; 6 sent and verified, 4 skipped after live-state
