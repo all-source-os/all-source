@@ -1,6 +1,6 @@
 [package]
 name = "allsource-mcp"
-version = "0.14.8"
+version = "0.15.0"
 edition = "2024"
 rust-version = "1.92"
 description = "Lightweight MCP server for local AllSource debugging (stdio transport)"
@@ -17,7 +17,7 @@ name = "allsource-mcp"
 path = "src/main.rs"
 
 [dependencies]
-allsource-core = { version = "0.23.0", path = "../../apps/core", default-features = false, features = ["embedded"] }
+allsource-core = { version = "0.23.1", path = "../../apps/core", default-features = false, features = ["embedded"] }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive", "env"] }

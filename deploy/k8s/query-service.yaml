@@ -37,7 +37,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: query-service
-          image: allsource/query-service:0.23.0
+          image: allsource/query-service:0.24.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
