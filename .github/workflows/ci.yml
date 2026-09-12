@@ -108,6 +108,21 @@ jobs:
           chmod +x scripts/check-versions.sh
           ./scripts/check-versions.sh
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "tooling/crate-version-check -> target"
+          cache-on-failure: true
+
+      # check-versions.sh compares TOOLCHAIN versions. This compares each
+      # intra-repo path dependency's version requirement against the version the
+      # sibling crate actually declares — the v0.24.0 release left allsource-mcp
+      # requiring ^0.23.1 beside a 0.24.0 Core, and nothing failed.
+      - name: Check intra-repo crate version requirements
+        run: cargo run --manifest-path tooling/crate-version-check/Cargo.toml
+
   # ============================================================================
   # Change Detection - Determine which services need to be tested
   # ============================================================================
