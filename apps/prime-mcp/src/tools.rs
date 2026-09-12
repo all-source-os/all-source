@@ -925,8 +925,23 @@ async fn call_history(prime: &Prime, args: &Value) -> Value {
     }
 }
 
+/// One line telling the agent how much of the store semantic recall can see.
+///
+/// Returns `None` at full coverage so a healthy store costs no tokens.
+pub fn recall_coverage_note(total_nodes: usize, unembedded: usize) -> Option<String> {
+    if unembedded == 0 || total_nodes == 0 {
+        return None;
+    }
+    let embedded = total_nodes.saturating_sub(unembedded);
+    Some(format!(
+        "{embedded} of {total_nodes} nodes are embedded — prime_recall cannot see the other \
+         {unembedded}. They are embedded in the background; call prime_embed to prioritise one."
+    ))
+}
+
 fn call_stats(prime: &Prime) -> Value {
     let stats = prime.stats();
+    let unembedded = prime.count_nodes_missing_vectors();
     tool_result(json!({
         "total_nodes": stats.total_nodes,
         "total_edges": stats.total_edges,
@@ -935,6 +950,10 @@ fn call_stats(prime: &Prime) -> Value {
         "event_count": stats.event_count,
         "nodes_by_type": stats.nodes_by_type,
         "edges_by_relation": stats.edges_by_relation,
+        // A node with no vector is unreachable by prime_recall, and an
+        // unembedded store answers identically to an empty one.
+        "nodes_without_vectors": unembedded,
+        "recall_coverage": recall_coverage_note(stats.total_nodes, unembedded),
         // Surface sync state so the agent can tell whether what it just wrote
         // will reach the AllSource dashboard or is stranded local-only.
         "sync": sync_status_json(),
