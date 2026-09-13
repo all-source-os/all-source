@@ -1,7 +1,6 @@
 import { buttonVariants, cn, Icons } from "@allsource/ui";
 import { ChevronDown, Menu } from "lucide-react";
 import Link from "next/link";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { platformNavigationGroups, primaryNavigation, siteConfig } from "@/lib/config";
 
 export default function Header() {
@@ -75,7 +74,6 @@ export default function Header() {
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <ThemeToggle />
           <Link href="/login" className={buttonVariants({ variant: "ghost" })}>
             Sign in
           </Link>
@@ -135,10 +133,6 @@ export default function Header() {
               ))}
             </nav>
             <div className="mt-2 grid gap-2 border-t border-border pt-2">
-              <div className="flex items-center justify-between gap-3 px-1">
-                <span className="text-sm text-muted-foreground">Theme</span>
-                <ThemeToggle />
-              </div>
               <Link href="/login" className={buttonVariants({ variant: "outline" })}>
                 Sign in
               </Link>
