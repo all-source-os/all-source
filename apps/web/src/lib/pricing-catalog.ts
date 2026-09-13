@@ -99,6 +99,24 @@ export function resolveAnnualTotal(cat: CatalogTier | undefined): string | undef
   return cat?.annual?.formatted;
 }
 
+/** The amount actually charged for the selected billing period, never an annual /12 estimate. */
+export function resolveBilledPrice(
+  cat: CatalogTier | undefined,
+  configPrice: string,
+  period: "monthly" | "annual"
+): string {
+  if (isFixedConfigPrice(configPrice)) return configPrice;
+  return period === "annual"
+    ? (resolveAnnualTotal(cat) ?? PriceUnavailable)
+    : resolveMonthly(cat, configPrice);
+}
+
+/** Carry the selected tier and period through sign-up to the billing page. */
+export function pricingSignupHref(tier: string, period: "monthly" | "annual"): string {
+  const destination = `/dashboard/billing?plan=${encodeURIComponent(tier)}&period=${period}`;
+  return `/signup?next=${encodeURIComponent(destination)}`;
+}
+
 /** Index a catalog by tier id for O(1) lookup; tolerant of null. */
 export function indexByTier(catalog: Catalog | null): CatalogByTier {
   const map: CatalogByTier = {};

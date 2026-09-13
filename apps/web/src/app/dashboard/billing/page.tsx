@@ -18,7 +18,13 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import { apiClient } from "@/lib/api/client";
 import { siteConfig } from "@/lib/config";
-import { type Catalog, indexByTier } from "@/lib/pricing-catalog";
+import {
+  type Catalog,
+  indexByTier,
+  PriceUnavailable,
+  resolveBilledPrice,
+  resolveYearlyPerMonth,
+} from "@/lib/pricing-catalog";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { canonicalTier } from "@/lib/tier";
 
@@ -33,6 +39,7 @@ export default function BillingPage() {
   const { tenant, user } = useAuthStore();
   const { stats } = useDashboardStats();
   const [isYearly, setIsYearly] = useState(false);
+  const [requestedTier, setRequestedTier] = useState<string | null>(null);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   // The tier whose checkout is currently being created (button shows a spinner).
   const [upgradingTier, setUpgradingTier] = useState<string | null>(null);
@@ -44,6 +51,11 @@ export default function BillingPage() {
   const [planError, setPlanError] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get("period") === "annual") setIsYearly(true);
+    const requestedPlan = params.get("plan");
+    if (["indie", "studio", "scale"].includes(requestedPlan ?? "")) {
+      setRequestedTier(requestedPlan);
+    }
     if (params.get("checkout") === "success") setCheckoutSuccess(true);
     if (params.get("changed") === "success") setPlanChanged(true);
     if (params.has("checkout") || params.has("changed")) {
@@ -73,10 +85,15 @@ export default function BillingPage() {
   const subscriptionEndsAt = tenant?.subscription_ends_at;
 
   const currentCat = indexByTier(catalog)[planConfig.tier];
-  const displayPrice =
-    tenant?.billing_period === "annual"
-      ? (currentCat?.annual?.per_month ?? planConfig.yearlyPrice)
-      : (currentCat?.monthly?.formatted ?? planConfig.price);
+  const isAnnualPlan = tenant?.billing_period === "annual";
+  const displayPrice = resolveBilledPrice(
+    currentCat,
+    planConfig.price,
+    isAnnualPlan ? "annual" : "monthly"
+  );
+  const annualEquivalent = isAnnualPlan
+    ? resolveYearlyPerMonth(currentCat, planConfig.price)
+    : null;
 
   const handleManageSubscription = async () => {
     setIsLoadingPortal(true);
@@ -271,18 +288,27 @@ export default function BillingPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">
-                    {tenant?.billing_period === "annual" ? "Annual Price" : "Monthly Price"}
+                    {isAnnualPlan ? "Annual list price" : "Monthly list price"}
                   </p>
                   <p className="text-2xl font-bold">
                     {displayPrice}
-                    {displayPrice !== "Custom" && (
+                    {displayPrice !== "Custom" && displayPrice !== PriceUnavailable && (
                       <span className="text-base font-normal text-muted-foreground">
-                        /{planConfig.period}
+                        /{isAnnualPlan ? "year" : "month"}
                       </span>
                     )}
                   </p>
-                  {tenant?.billing_period === "annual" && currentTier !== "self-host" && (
-                    <p className="text-xs text-muted-foreground">billed annually</p>
+                  {isAnnualPlan &&
+                    currentTier !== "self-host" &&
+                    displayPrice !== PriceUnavailable && (
+                      <p className="text-xs text-muted-foreground">
+                        {annualEquivalent}/month equivalent · charged annually
+                      </p>
+                    )}
+                  {displayPrice !== "Custom" && displayPrice !== PriceUnavailable && (
+                    <p className="text-xs text-muted-foreground">
+                      Check your invoice for discounts and tax.
+                    </p>
                   )}
                 </div>
                 {tenant?.billing_period && currentTier !== "self-host" && (
@@ -371,9 +397,6 @@ export default function BillingPage() {
                 )}
               >
                 Yearly
-                <Badge variant="secondary" className="text-[10px]">
-                  Save 20%
-                </Badge>
               </button>
             </div>
           </div>
@@ -381,6 +404,7 @@ export default function BillingPage() {
           <PlanCards
             currentPlan={currentTier}
             isYearly={isYearly}
+            selectedTier={requestedTier}
             catalog={catalog}
             loadingTier={upgradingTier}
             onUpgrade={handleUpgrade}

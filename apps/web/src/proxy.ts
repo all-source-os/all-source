@@ -42,13 +42,21 @@ export function proxy(request: NextRequest) {
   // If trying to access protected route without token, redirect to login
   if (isProtectedRoute && !token) {
     const loginUrl = publicUrl(request, "/login");
-    loginUrl.searchParams.set("redirect", pathname);
+    loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 
   // If logged in and trying to access login/signup, redirect to dashboard
   if (isAuthRoute && token) {
-    return NextResponse.redirect(publicUrl(request, "/dashboard"));
+    const requestedNext = request.nextUrl.searchParams.get("next");
+    const destination =
+      requestedNext?.startsWith("/") &&
+      !requestedNext.startsWith("//") &&
+      !requestedNext.includes("\\") &&
+      !requestedNext.startsWith("/api/")
+        ? requestedNext
+        : "/dashboard";
+    return NextResponse.redirect(publicUrl(request, destination));
   }
 
   return NextResponse.next();

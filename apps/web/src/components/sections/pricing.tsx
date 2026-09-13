@@ -11,8 +11,9 @@ import {
   type Catalog,
   indexByTier,
   PriceUnavailable,
+  pricingSignupHref,
   resolveAnnualTotal,
-  resolveMonthly,
+  resolveBilledPrice,
   resolveYearlyPerMonth,
 } from "@/lib/pricing-catalog";
 
@@ -71,9 +72,6 @@ export default function PricingSection({
             )}
           >
             Yearly
-            <span className="rounded-full bg-emerald-950 px-1.5 py-0.5 text-xs text-emerald-100">
-              -20%
-            </span>
           </button>
         </div>
       </div>
@@ -85,11 +83,14 @@ export default function PricingSection({
           // LemonSqueezy price (source of truth). Paid tiers with no live/
           // cached price render a dash, never a possibly-stale config number.
           const cat = prices[plan.tier];
-          const monthlyStr = resolveMonthly(cat, plan.price);
-          const yearlyStr = resolveYearlyPerMonth(cat, plan.price);
+          const yearlyEquivalent = resolveYearlyPerMonth(cat, plan.price);
           const annualTotal = resolveAnnualTotal(cat);
-          const displayPrice = isMonthly ? monthlyStr : yearlyStr;
-          const isNumericPrice = displayPrice.startsWith("$");
+          const displayPrice = resolveBilledPrice(
+            cat,
+            plan.price,
+            isMonthly ? "monthly" : "annual"
+          );
+          const isNumericPrice = displayPrice !== PriceUnavailable;
           const isPriceUnavailable = displayPrice === PriceUnavailable;
 
           return (
@@ -135,7 +136,7 @@ export default function PricingSection({
                   </span>
                   {isNumericPrice && (
                     <span className="mb-1 text-sm font-semibold leading-6 tracking-wide text-muted-foreground">
-                      /mo
+                      /{isMonthly ? "mo" : "yr"}
                     </span>
                   )}
                 </p>
@@ -146,10 +147,10 @@ export default function PricingSection({
                       ? "Live catalog could not be reached"
                       : isNumericPrice
                         ? isMonthly
-                          ? "billed monthly"
+                          ? "Billed monthly"
                           : annualTotal
-                            ? `billed annually (${annualTotal}/yr)`
-                            : "billed yearly"
+                            ? `${yearlyEquivalent}/mo equivalent · charged annually`
+                            : "Annual price unavailable"
                         : ""}
                 </p>
 
@@ -171,9 +172,9 @@ export default function PricingSection({
 
               <div>
                 <hr className="w-full my-4" />
-                {/* 011: map tier -> price id. For now route to signup / github / mailto. */}
+                {/* Sign-up preserves selected tier and billing period. */}
                 <Link
-                  href={plan.href}
+                  href={pricingSignupHref(plan.tier, isMonthly ? "monthly" : "annual")}
                   className={cn(
                     buttonVariants({ variant: "outline" }),
                     "group relative w-full gap-2 overflow-hidden text-base font-semibold tracking-tight",

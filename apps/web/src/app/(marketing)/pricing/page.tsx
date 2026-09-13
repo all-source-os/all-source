@@ -5,8 +5,10 @@ import { siteConfig } from "@/lib/config";
 import { fetchCatalog, indexByTier, resolveMonthly } from "@/lib/pricing-catalog";
 import { softwareApplicationSchema } from "@/lib/structured-data";
 
-// Revalidate the live LemonSqueezy prices hourly (ISR).
-export const revalidate = 3600;
+// Render at request time: build workers cannot reach the runtime billing service.
+// fetchCatalog caches the provider response for an hour, so this does not call
+// the payment provider on every page view.
+export const revalidate = 0;
 
 // Comparison matrix rows. Each row maps a label to a per-tier cell, keyed by the
 // stable public tier id from siteConfig.pricing. Self-Host is intentionally NOT
