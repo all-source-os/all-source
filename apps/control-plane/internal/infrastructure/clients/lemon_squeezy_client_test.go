@@ -93,6 +93,59 @@ func TestCreateCheckout_APIError(t *testing.T) {
 	}
 }
 
+func TestGetVariant_UsesCurrentPriceModelNotDeprecatedVariantPrice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		switch r.URL.Path {
+		case "/v1/variants/42":
+			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+				Type: "variants", ID: "42",
+				Attributes: mustJSON(t, map[string]any{"name": "Indie annual", "status": "published", "test_mode": false, "price": 18199, "interval": "year"}),
+			}})
+		case "/v1/variants/42/price-model":
+			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+				Type: "prices", ID: "new-price",
+				Attributes: mustJSON(t, map[string]any{"variant_id": 42, "category": "subscription", "scheme": "standard", "unit_price": 19999, "renewal_interval_unit": "year", "renewal_interval_quantity": 1}),
+			}})
+		default:
+			t.Errorf("unexpected request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := newLemonSqueezyClient(server.URL, "test-key", "store-123", nil)
+	variant, err := client.GetVariant(context.Background(), "42")
+	if err != nil {
+		t.Fatalf("GetVariant: %v", err)
+	}
+	if variant.Price != 19999 || variant.Interval != "year" {
+		t.Fatalf("current price = %+v, want 19999 cents/year", variant)
+	}
+}
+
+func TestGetVariant_RejectsUnsupportedPriceModel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/vnd.api+json")
+		if r.URL.Path == "/v1/variants/42" {
+			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+				Type: "variants", ID: "42", Attributes: mustJSON(t, map[string]any{"status": "published", "price": 18199}),
+			}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+			Type: "prices", ID: "new-price",
+			Attributes: mustJSON(t, map[string]any{"variant_id": 42, "category": "subscription", "scheme": "graduated", "unit_price": 19999, "renewal_interval_unit": "year", "renewal_interval_quantity": 1}),
+		}})
+	}))
+	defer server.Close()
+
+	client := newLemonSqueezyClient(server.URL, "test-key", "store-123", nil)
+	if _, err := client.GetVariant(context.Background(), "42"); err == nil {
+		t.Fatal("unsupported price model must not show deprecated variant price")
+	}
+}
+
 func TestGetSubscription_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1/subscriptions/sub-100" {

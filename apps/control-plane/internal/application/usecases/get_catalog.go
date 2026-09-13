@@ -15,7 +15,7 @@ import (
 // the frontend renders those from static config — they are not in the catalog.
 var catalogTiers = []string{"indie", "studio", "scale"}
 
-const catalogTTL = 1 * time.Hour
+const catalogTTL = 5 * time.Minute
 
 // CatalogPrice is one tier+period price, sourced from LemonSqueezy.
 type CatalogPrice struct {
@@ -49,8 +49,8 @@ type GetCatalogUseCase struct {
 }
 
 // NewGetCatalogUseCase creates the catalog use case. ls may be nil (no LS
-// configured) — Execute then returns an empty catalog and the frontend falls
-// back to static config prices.
+// configured) — Execute then returns an empty catalog and the frontend hides
+// paid prices until the Lemon Squeezy catalog is available.
 func NewGetCatalogUseCase(ls clients.LemonSqueezyClient) *GetCatalogUseCase {
 	return &GetCatalogUseCase{ls: ls}
 }
@@ -94,17 +94,18 @@ func (uc *GetCatalogUseCase) Execute(ctx context.Context, now time.Time) (*Catal
 	}
 	uc.mu.Unlock()
 
-	cat := &Catalog{Currency: "USD", Tiers: make([]CatalogTier, 0, len(catalogTiers))}
+	cat := &Catalog{Tiers: make([]CatalogTier, 0, len(catalogTiers))}
 	if uc.ls == nil {
 		return cat, nil
 	}
 
-	// Prices are denominated in the store's currency; format with it (LS store is
-	// GBP → "£18.99", not "$18.99"). Best-effort: fall back to USD on lookup error
-	// so a transient store fetch doesn't blank the whole catalog.
-	if currency, err := uc.ls.GetStoreCurrency(ctx); err == nil && currency != "" {
-		cat.Currency = strings.ToUpper(currency)
+	// Never label an unknown store currency as USD; that could misstate the
+	// amount customers will see at checkout.
+	currency, err := uc.ls.GetStoreCurrency(ctx)
+	if err != nil || currency == "" {
+		return cat, nil
 	}
+	cat.Currency = strings.ToUpper(currency)
 
 	for _, tier := range catalogTiers {
 		entry := CatalogTier{Tier: tier}
@@ -137,7 +138,11 @@ func (uc *GetCatalogUseCase) price(ctx context.Context, tier, period string, ann
 		return nil
 	}
 	v, err := uc.ls.GetVariant(ctx, variantID)
-	if err != nil || v == nil || v.Price <= 0 {
+	expectedInterval := "month"
+	if annual {
+		expectedInterval = "year"
+	}
+	if err != nil || v == nil || v.Price <= 0 || v.Interval != expectedInterval {
 		return nil
 	}
 	p := &CatalogPrice{Cents: v.Price, Formatted: formatCents(v.Price, currency)}

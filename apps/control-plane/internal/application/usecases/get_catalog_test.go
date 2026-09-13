@@ -15,6 +15,7 @@ type catalogMockLS struct {
 	variants map[string]*clients.VariantResponse // variantID → variant
 	getCalls int
 	currency string // store currency; "" → USD
+	currencyErr bool
 }
 
 func (m *catalogMockLS) LookupVariantID(tier, period string) (string, error) {
@@ -43,10 +44,29 @@ func (m *catalogMockLS) GetVariant(_ context.Context, variantID string) (*client
 func (m *catalogMockLS) VariantMap() clients.VariantMap { return nil }
 func (m *catalogMockLS) GetStoreID() string             { return "store" }
 func (m *catalogMockLS) GetStoreCurrency(_ context.Context) (string, error) {
+	if m.currencyErr {
+		return "", fmt.Errorf("store unavailable")
+	}
 	if m.currency != "" {
 		return m.currency, nil
 	}
 	return "USD", nil
+}
+
+func TestGetCatalog_DoesNotMislabelUnknownCurrency(t *testing.T) {
+	ls := &catalogMockLS{
+		variants: map[string]*clients.VariantResponse{
+			"indie:annual": {Price: 18199, Interval: "year"},
+		},
+		currencyErr: true,
+	}
+	cat, err := NewGetCatalogUseCase(ls).Execute(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(cat.Tiers) != 0 {
+		t.Fatalf("unknown currency must not display prices: %+v", cat.Tiers)
+	}
 }
 func (m *catalogMockLS) UpdateSubscription(_ context.Context, _ string, _ int) (*clients.SubscriptionResponse, error) {
 	return nil, fmt.Errorf("not implemented")
@@ -151,7 +171,7 @@ func TestGetCatalog_NilClient_EmptyCatalog(t *testing.T) {
 
 func TestGetCatalog_CachesWithinTTL(t *testing.T) {
 	ls := &catalogMockLS{variants: map[string]*clients.VariantResponse{
-		"indie:monthly": {Price: 1899},
+		"indie:monthly": {Price: 1899, Interval: "month"},
 	}}
 	uc := NewGetCatalogUseCase(ls)
 	base := time.Unix(1_700_000_000, 0)
@@ -164,17 +184,31 @@ func TestGetCatalog_CachesWithinTTL(t *testing.T) {
 		t.Fatal("expected LS GetVariant calls on first Execute")
 	}
 	// Within TTL → served from cache, no new LS calls.
-	if _, err := uc.Execute(context.Background(), base.Add(30*time.Minute)); err != nil {
+	if _, err := uc.Execute(context.Background(), base.Add(2*time.Minute)); err != nil {
 		t.Fatalf("cached Execute: %v", err)
 	}
 	if ls.getCalls != callsAfterFirst {
 		t.Errorf("expected cache hit (no new LS calls); got %d -> %d", callsAfterFirst, ls.getCalls)
 	}
 	// Past TTL → refetch.
-	if _, err := uc.Execute(context.Background(), base.Add(2*time.Hour)); err != nil {
+	if _, err := uc.Execute(context.Background(), base.Add(6*time.Minute)); err != nil {
 		t.Fatalf("refetch Execute: %v", err)
 	}
 	if ls.getCalls == callsAfterFirst {
 		t.Error("expected LS refetch after TTL expiry")
+	}
+}
+
+func TestGetCatalog_RejectsWrongBillingInterval(t *testing.T) {
+	ls := &catalogMockLS{variants: map[string]*clients.VariantResponse{
+		"indie:monthly": {Price: 1899, Interval: "month"},
+		"indie:annual":  {Price: 18199, Interval: "month"},
+	}}
+	cat, err := NewGetCatalogUseCase(ls).Execute(context.Background(), time.Now())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(cat.Tiers) != 1 || cat.Tiers[0].Monthly == nil || cat.Tiers[0].Annual != nil {
+		t.Fatalf("wrong-interval annual price must not be displayed: %+v", cat.Tiers)
 	}
 }
