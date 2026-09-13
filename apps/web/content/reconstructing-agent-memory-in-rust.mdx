@@ -1,6 +1,7 @@
 ---
 title: "Reconstructing Agent Memory in Rust: Events, Provenance, and Point-in-Time State"
 publishedAt: "2026-08-27"
+updatedAt: "2026-09-13"
 summary: "Build durable AI-agent memory as an append-only event stream in Rust, derive current state without destroying history, and reconstruct exactly what an agent knew before a decision."
 author: "Decebal Dobrica"
 image: "/assets/blog/building-agent-memory-in-rust.webp"
@@ -281,6 +282,11 @@ at least one condition holds:
 - replay is part of debugging or recovery.
 
 ## Try one failing memory flow
+
+For a small reproducible check, [run the local restart proof](/agent-memory-restart-proof):
+write one sourced decision, reopen the same data directory, then inspect recall
+and history. [See where AllSource agent memory fits](/solutions/agent-memory)
+before adding another storage layer.
 
 I build AllSource and wrote this article from its current embedded Rust API.
 AllSource is recruiting five design partners with a reproducible cross-session

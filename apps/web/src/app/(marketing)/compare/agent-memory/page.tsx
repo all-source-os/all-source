@@ -34,8 +34,8 @@ const approaches: Approach[] = [
     ],
     loses: [
       "Locked to one vendor — your memory in Claude isn't available in ChatGPT",
-      "No programmatic access — you can't query or export what's been remembered",
-      "Limited or no audit trail / version history",
+      "API and export paths vary by provider and product",
+      "Product memory history is not the same as your application's decision history",
       "Memory shape is decided by the vendor, not you",
     ],
   },
@@ -54,7 +54,7 @@ const approaches: Approach[] = [
       "Similarity is not truth — the top match can be plausible and wrong",
       "Hard to verify what's in the store without querying with the right phrasing",
       "No first-class graph — relationships between facts are not modeled",
-      '"What did I tell you last Tuesday?" requires you to already know what to ask',
+      "Point-in-time reconstruction needs timestamps, versions, and retrieval rules you design",
     ],
   },
   {
@@ -73,7 +73,7 @@ const approaches: Approach[] = [
       "Manual merge conflicts when two agents (or an agent and a human) edit the same file",
       'No structured queries — "all decisions involving Alice" requires grep',
       "No typed relations between facts",
-      "Scales poorly past a few hundred facts — the file becomes a wall of text the model can't parse efficiently",
+      "Search, concurrent edits, and schema become your responsibility as the collection grows",
     ],
   },
   {
@@ -89,9 +89,9 @@ const approaches: Approach[] = [
     ],
     loses: [
       "Every schema change is a migration",
-      "No time-travel without bitemporal columns (`valid_from`, `valid_to`) and your own query layer",
-      "No graph — adjacency requires explicit join tables you maintain",
-      "Vector recall isn't there without bolting on pgvector or a sidecar",
+      "Point-in-time business history needs a history model, not only current rows",
+      "Relationships need schema and query design",
+      "Semantic recall needs an embedding and indexing path",
     ],
   },
   {
@@ -101,8 +101,8 @@ const approaches: Approach[] = [
     blurb:
       "Memory as an append-only log of events. Current state is projected from the log; full history is preserved. AllSource Prime adds a knowledge graph and vector recall on top of the same event spine.",
     wins: [
-      'Time-travel by construction — "what did I know about X as of last Tuesday?" is a query',
-      'Per-field provenance — ask "where did this value come from?" and get the source event, via MCP, REST, or any SDK',
+      "Replayable change history when complete events are captured",
+      "Source-event provenance when writes record their evidence",
       "Graph + vector recall in one query (Prime's `prime_recall`)",
       "Hosted multi-tenant or local-first — same data shape both ways",
       "Cross-tool sync via MCP — same memory in Claude Desktop, the Anthropic CLI, Cursor, OpenCode",
@@ -115,6 +115,44 @@ const approaches: Approach[] = [
     ours: true,
   },
 ];
+
+const decisionMatrix = [
+  {
+    approach: "Platform memory",
+    fit: "Personalization inside one assistant",
+    limit: "Application decision history remains a separate design problem.",
+    source: "OpenAI Memory FAQ",
+    href: "https://help.openai.com/en/articles/8590148",
+  },
+  {
+    approach: "Retrieval / RAG",
+    fit: "Finding relevant passages in a document corpus",
+    limit: "Answer quality depends on content preparation and retrieval configuration.",
+    source: "Microsoft RAG guidance",
+    href: "https://learn.microsoft.com/en-us/azure/foundry/concepts/retrieval-augmented-generation?view=foundry-classic",
+  },
+  {
+    approach: "Files",
+    fit: "Small, inspectable project instructions",
+    limit: "Structured queries and concurrent updates need additional tooling.",
+    source: "Claude Code memory docs",
+    href: "https://code.claude.com/docs/en/memory",
+  },
+  {
+    approach: "Database",
+    fit: "Structured current state and familiar CRUD",
+    limit: "Add application-level history when past decisions must be reconstructed.",
+    source: "Microsoft event sourcing guidance",
+    href: "https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing",
+  },
+  {
+    approach: "Event-sourced",
+    fit: "Replayable changes and inspectable provenance",
+    limit: "Design event schemas and projections; semantic recall is another layer.",
+    source: "Microsoft event sourcing guidance",
+    href: "https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing",
+  },
+] as const;
 
 function Card({ approach }: { approach: Approach }) {
   return (
@@ -199,6 +237,52 @@ export default function CompareAgentMemoryPage() {
         </motion.div>
       </Section>
 
+      <Section className="pb-12">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="text-2xl font-semibold">Choose by evidence need</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            These are approach-level trade-offs, not guarantees about every product. Sources show
+            representative implementations.
+          </p>
+          <div className="mt-6 overflow-hidden rounded-xl border">
+            <table className="w-full table-fixed border-collapse text-left text-sm">
+              <caption className="sr-only">
+                Agent memory approaches, best fits, and limitations
+              </caption>
+              <thead className="bg-muted/40">
+                <tr>
+                  <th scope="col" className="w-1/3 px-4 py-3 font-semibold">
+                    Approach and source
+                  </th>
+                  <th scope="col" className="px-4 py-3 font-semibold">
+                    Best fit and limitation
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {decisionMatrix.map(({ approach, fit, limit, source, href }) => (
+                  <tr key={approach} className="border-t align-top">
+                    <th scope="row" className="break-words px-4 py-4 font-medium">
+                      {approach}
+                      <a
+                        href={href}
+                        className="mt-2 block text-xs font-normal text-primary underline underline-offset-2"
+                      >
+                        {source}
+                      </a>
+                    </th>
+                    <td className="px-4 py-4">
+                      <p className="font-medium">{fit}</p>
+                      <p className="mt-1 text-muted-foreground">{limit}</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Section>
+
       <Section className="pb-16">
         <div className="mx-auto flex max-w-3xl flex-col gap-6">
           {approaches.map((a) => (
@@ -209,35 +293,25 @@ export default function CompareAgentMemoryPage() {
 
       <Section className="pb-24">
         <div className="mx-auto max-w-3xl rounded-xl border bg-muted/20 p-6">
-          <h2 className="mb-3 text-xl font-semibold">How to pick</h2>
-          <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>
-              <strong className="text-foreground">Single-user, single-tool, low volume?</strong>{" "}
-              Platform memory or a CLAUDE.md file. Stop reading, start writing.
-            </li>
-            <li>
-              <strong className="text-foreground">
-                Unstructured content, semantic search is the killer feature?
-              </strong>{" "}
-              Mem0 or Zep. Accept the truthiness tradeoff.
-            </li>
-            <li>
-              <strong className="text-foreground">
-                Structured entities, no time-travel needs?
-              </strong>{" "}
-              Postgres + CRUD. You already know the playbook.
-            </li>
-            <li>
-              <strong className="text-foreground">
-                Multi-tool, multi-user, audit-driven, or you want both graph and vector recall?
-              </strong>{" "}
-              Event-sourced.{" "}
-              <Link href="/prime" className="underline">
-                AllSource Prime
-              </Link>{" "}
-              is one of the few productized options in this category.
-            </li>
-          </ul>
+          <h2 className="text-xl font-semibold">Need to test restart durability?</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            The comparison is a decision aid. Run a local write, restart, recall, and history check
+            before choosing a memory layer for production.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-4 text-sm">
+            <Link
+              href="/agent-memory-restart-proof"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Run the restart proof
+            </Link>
+            <Link
+              href="/solutions/agent-memory"
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Explore the agent-memory solution
+            </Link>
+          </div>
         </div>
       </Section>
     </div>

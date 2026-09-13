@@ -60,40 +60,10 @@ export default function AgentMemoryRestartProofPage() {
     { name: "Agent memory", path: "/solutions/agent-memory" },
     { name: "Restart proof", path: ROUTE },
   ]);
-  const howTo = {
-    "@context": "https://schema.org",
-    "@type": "HowTo",
-    name: "Prove AI-agent memory survives a process restart",
-    description: metadata.description,
-    totalTime: "PT10M",
-    tool: ["Rust 1.92 or newer", "curl", "jq"],
-    step: [
-      {
-        "@type": "HowToStep",
-        name: "Install AllSource Prime",
-        text: "Install the Apache-2.0 AllSource Prime binary from crates.io.",
-        url: "https://www.all-source.xyz/agent-memory-restart-proof#install",
-      },
-      {
-        "@type": "HowToStep",
-        name: "Write one decision and inspect its history",
-        text: "Write one source-bearing decision, embed it, recall it, and inspect its event history.",
-        url: "https://www.all-source.xyz/agent-memory-restart-proof#write",
-      },
-      {
-        "@type": "HowToStep",
-        name: "Restart and verify",
-        text: "Stop the process, reopen the same data directory, then repeat recall and history queries.",
-        url: "https://www.all-source.xyz/agent-memory-restart-proof#verify",
-      },
-    ],
-  };
-
   return (
     <div className="overflow-hidden">
       <RestartProofView />
       <JsonLd value={breadcrumb} />
-      <JsonLd value={howTo} />
 
       <Section className="border-b border-border py-20 sm:py-28">
         <div className="mx-auto max-w-4xl text-center">
