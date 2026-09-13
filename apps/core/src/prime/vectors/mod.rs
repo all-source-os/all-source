@@ -8,8 +8,10 @@
 
 pub mod embedder;
 pub mod index;
+pub mod node_text;
 pub mod types;
 
 pub use embedder::{DEFAULT_EMBEDDING_DIMENSIONS, TextEmbedder};
 pub use index::{SearchHit, VectorIndexConfig, VectorIndexProjection};
+pub use node_text::{NODE_TEXT_VERSION, NODE_TEXT_VERSION_KEY, node_text};
 pub use types::{VectorEntry, VectorSearchResult, event_types, vector_entity_id};
