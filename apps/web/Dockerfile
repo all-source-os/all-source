@@ -57,7 +57,6 @@ COPY apps/web/public apps/web/public
 COPY apps/web/next.config.mjs apps/web/
 COPY apps/web/postcss.config.mjs apps/web/
 COPY apps/web/tsconfig.json apps/web/
-COPY apps/web/next-env.d.ts apps/web/
 COPY apps/web/components.json apps/web/
 COPY apps/web/content apps/web/content
 
