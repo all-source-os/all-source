@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { FaStar } from "react-icons/fa";
+import useSWR from "swr";
 import { staticMotion as motion } from "@/components/ui/static-motion";
 import { siteConfig } from "@/lib/config";
 import {
@@ -25,9 +26,15 @@ import {
 const cardTiers = siteConfig.pricing.filter((p) => !p.isEnterprise && !p.isSelfHost);
 const enterpriseTier = siteConfig.pricing.find((p) => p.isEnterprise);
 
-// `catalog` carries live LemonSqueezy prices (source of truth). When present,
-// its prices win over the static config prices; config is only a fallback for
-// when the catalog is unreachable.
+async function loadCatalog(): Promise<Catalog | null> {
+  const response = await fetch("/api/billing/catalog");
+  if (!response.ok) throw new Error("Pricing catalog unavailable");
+  const catalog = (await response.json()) as Catalog;
+  return catalog?.tiers?.length ? catalog : null;
+}
+
+// `catalog` carries live LemonSqueezy prices (source of truth). On a statically
+// rendered page, load them after paint; never substitute static paid prices.
 export default function PricingSection({
   catalog,
   headingLevel = 2,
@@ -38,7 +45,15 @@ export default function PricingSection({
   title?: string;
 }) {
   const [isMonthly, setIsMonthly] = useState(true);
-  const prices = indexByTier(catalog ?? null);
+  const { data: browserCatalog, isLoading: catalogLoading } = useSWR(
+    catalog ? null : "/api/billing/catalog",
+    loadCatalog,
+    {
+      dedupingInterval: 300_000,
+      revalidateOnFocus: false,
+    }
+  );
+  const prices = indexByTier(catalog ?? browserCatalog ?? null);
 
   return (
     <Section
@@ -144,7 +159,9 @@ export default function PricingSection({
                   {plan.isSelfHost
                     ? plan.period
                     : isPriceUnavailable
-                      ? "Live catalog could not be reached"
+                      ? catalogLoading
+                        ? "Checking current price"
+                        : "Live catalog could not be reached"
                       : isNumericPrice
                         ? isMonthly
                           ? "Billed monthly"

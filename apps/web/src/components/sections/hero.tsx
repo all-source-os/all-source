@@ -1,7 +1,7 @@
 import { buttonVariants, cn, Icons } from "@allsource/ui";
 import Link from "next/link";
 import HeroDemo from "@/components/sections/hero-demo";
-import { indiePrice as defaultIndiePrice, siteConfig } from "@/lib/config";
+import { siteConfig } from "@/lib/config";
 
 function HeroPill() {
   return (
@@ -31,7 +31,7 @@ function HeroTitles() {
   );
 }
 
-function HeroCTA({ indiePrice }: { indiePrice: string }) {
+function HeroCTA() {
   return (
     <>
       <div className="mt-8 flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center lg:justify-start">
@@ -66,20 +66,20 @@ function HeroCTA({ indiePrice }: { indiePrice: string }) {
         </Link>
       </div>
       <p className="mt-4 text-sm text-muted-foreground">
-        Hosted plans from {indiePrice}/month after trial · Apache-2.0 Core available to self-host
+        Hosted prices shown below and before purchase · Apache-2.0 Core available to self-host
       </p>
     </>
   );
 }
 
-export default function Hero({ indiePrice = defaultIndiePrice }: { indiePrice?: string }) {
+export default function Hero() {
   return (
     <section id="hero">
       <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-12 px-4 pt-16 sm:px-6 sm:pt-20 lg:flex-row lg:items-center lg:justify-between lg:gap-16 lg:px-8 lg:pt-24">
         <div className="flex w-full flex-col items-center text-center lg:w-1/2 lg:items-start lg:text-left">
           <HeroPill />
           <HeroTitles />
-          <HeroCTA indiePrice={indiePrice} />
+          <HeroCTA />
         </div>
 
         <div className="flex w-full justify-center lg:w-1/2 lg:justify-end">

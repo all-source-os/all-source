@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { SWRConfig } from "swr";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlanCards } from "@/components/billing/plan-cards";
 import PricingSection from "@/components/sections/pricing";
 import type { Catalog } from "@/lib/pricing-catalog";
@@ -25,7 +26,26 @@ const catalog: Catalog = {
   ],
 };
 
+afterEach(() => vi.unstubAllGlobals());
+
 describe("pricing section", () => {
+  it("loads current prices after a static homepage render", async () => {
+    const fetchCatalog = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => catalog,
+    });
+    vi.stubGlobal("fetch", fetchCatalog);
+
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <PricingSection />
+      </SWRConfig>
+    );
+
+    expect(await screen.findByText("£18.99")).toBeInTheDocument();
+    expect(fetchCatalog).toHaveBeenCalledWith("/api/billing/catalog");
+  });
+
   it("shows annual charges as primary prices and carries annual selection", () => {
     render(<PricingSection catalog={catalog} />);
     fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
