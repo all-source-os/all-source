@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type CatalogTier,
+  minimumAnnualSavingsPercent,
   PriceUnavailable,
   pricingSignupHref,
   resolveBilledPrice,
@@ -31,5 +32,42 @@ describe("billing price presentation", () => {
     const url = new URL(href, "https://www.all-source.xyz");
     expect(url.pathname).toBe("/signup");
     expect(url.searchParams.get("next")).toBe("/dashboard/billing?plan=studio&period=annual");
+  });
+
+  it("derives conservative yearly savings from all provider price pairs", () => {
+    const catalog = {
+      currency: "GBP",
+      tiers: [
+        indie,
+        {
+          tier: "studio",
+          monthly: { cents: 7899, formatted: "£78.99" },
+          annual: { cents: 75799, formatted: "£757.99" },
+        },
+        {
+          tier: "scale",
+          monthly: { cents: 29899, formatted: "£298.99" },
+          annual: { cents: 286999, formatted: "£2869.99" },
+        },
+      ],
+    };
+    const tiers = ["indie", "studio", "scale"];
+
+    expect(minimumAnnualSavingsPercent(catalog, tiers)).toBe(20);
+    expect(minimumAnnualSavingsPercent({ ...catalog, stale: true }, tiers)).toBeNull();
+    expect(minimumAnnualSavingsPercent({ ...catalog, tiers: [indie] }, tiers)).toBeNull();
+    expect(minimumAnnualSavingsPercent(null, tiers)).toBeNull();
+    expect(
+      minimumAnnualSavingsPercent(
+        {
+          ...catalog,
+          tiers: [
+            { ...indie, annual: { cents: 20500, formatted: "£205" } },
+            ...catalog.tiers.slice(1),
+          ],
+        },
+        tiers
+      )
+    ).toBe(10);
   });
 });

@@ -11,6 +11,7 @@ import { siteConfig } from "@/lib/config";
 import {
   type Catalog,
   indexByTier,
+  minimumAnnualSavingsPercent,
   PriceUnavailable,
   pricingSignupHref,
   resolveAnnualTotal,
@@ -24,6 +25,7 @@ import {
 // on /pricing is Indie. (The Apache-2.0 self-host path still lives in the "Why no free
 // plan?" FAQ.) The 14-day trial is how you start without paying immediately.
 const cardTiers = siteConfig.pricing.filter((p) => !p.isEnterprise && !p.isSelfHost);
+const cardTierIds = cardTiers.map((p) => p.tier);
 const enterpriseTier = siteConfig.pricing.find((p) => p.isEnterprise);
 
 async function loadCatalog(): Promise<Catalog | null> {
@@ -56,6 +58,7 @@ export default function PricingSection({
   );
   const activeCatalog = catalog ?? browserCatalog ?? null;
   const prices = indexByTier(activeCatalog);
+  const yearlySavings = minimumAnnualSavingsPercent(activeCatalog, cardTierIds);
 
   return (
     <Section
@@ -89,6 +92,11 @@ export default function PricingSection({
             )}
           >
             Yearly
+            {yearlySavings !== null && (
+              <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-semibold text-emerald-100">
+                Save {yearlySavings}%
+              </span>
+            )}
           </button>
         </div>
       </div>

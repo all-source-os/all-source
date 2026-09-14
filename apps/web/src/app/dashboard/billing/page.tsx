@@ -22,6 +22,7 @@ import { siteConfig } from "@/lib/config";
 import {
   type Catalog,
   indexByTier,
+  minimumAnnualSavingsPercent,
   PriceUnavailable,
   resolveBilledPrice,
   resolveYearlyPerMonth,
@@ -35,6 +36,10 @@ function getPlanConfig(tier: string) {
   const canon = canonicalTier(tier);
   return siteConfig.pricing.find((p) => p.tier === canon) ?? siteConfig.pricing[0]!;
 }
+
+const paidTierIds = siteConfig.pricing
+  .filter((plan) => !plan.isEnterprise && !plan.isSelfHost)
+  .map((plan) => plan.tier);
 
 async function loadBillingCatalog(): Promise<Catalog | null> {
   const response = await fetch("/api/billing/catalog");
@@ -77,6 +82,7 @@ export default function BillingPage() {
     refreshInterval: (latest) => (latest?.tiers?.length ? 300_000 : 5_000),
     revalidateOnFocus: false,
   });
+  const yearlySavings = minimumAnnualSavingsPercent(catalog, paidTierIds);
 
   // Canonical tier id (self-host | indie | studio | scale | enterprise) — the
   // raw backend value is normalized once here so all comparisons below are
@@ -403,6 +409,11 @@ export default function BillingPage() {
                 )}
               >
                 Yearly
+                {yearlySavings !== null && (
+                  <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-semibold text-emerald-100">
+                    Save {yearlySavings}%
+                  </span>
+                )}
               </button>
             </div>
           </div>

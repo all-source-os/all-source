@@ -116,3 +116,39 @@ export function indexByTier(catalog: Catalog | null): CatalogByTier {
   for (const t of catalog?.tiers ?? []) map[t.tier] = t;
   return map;
 }
+
+/**
+ * Minimum whole-percent annual saving across every self-serve tier, compared
+ * with paying its monthly price twelve times. A conservative minimum keeps a
+ * single Yearly-toggle badge truthful for every plan; never infer savings from
+ * config prices, missing variants, or a stale provider snapshot.
+ */
+export function minimumAnnualSavingsPercent(
+  catalog: Catalog | null | undefined,
+  tierIds: readonly string[]
+): number | null {
+  if (!catalog || catalog.stale || tierIds.length === 0) return null;
+  const byTier = indexByTier(catalog);
+  let minimum = 100;
+
+  for (const tierId of tierIds) {
+    const monthlyCents = byTier[tierId]?.monthly?.cents;
+    const annualCents = byTier[tierId]?.annual?.cents;
+    if (
+      !Number.isSafeInteger(monthlyCents) ||
+      !Number.isSafeInteger(annualCents) ||
+      monthlyCents === undefined ||
+      annualCents === undefined ||
+      monthlyCents <= 0 ||
+      annualCents <= 0
+    ) {
+      return null;
+    }
+
+    const twelveMonths = monthlyCents * 12;
+    if (!Number.isSafeInteger(twelveMonths) || annualCents >= twelveMonths) return null;
+    minimum = Math.min(minimum, Math.floor(((twelveMonths - annualCents) * 100) / twelveMonths));
+  }
+
+  return minimum > 0 ? minimum : null;
+}

@@ -48,13 +48,13 @@ describe("pricing section", () => {
 
   it("shows annual charges as primary prices and carries annual selection", () => {
     render(<PricingSection catalog={catalog} />);
-    fireEvent.click(screen.getByRole("button", { name: "Yearly" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Yearly/ }));
 
     expect(screen.getByText("£181.99")).toBeInTheDocument();
     expect(screen.getByText("£757.99")).toBeInTheDocument();
     expect(screen.getByText("£2869.99")).toBeInTheDocument();
     expect(screen.getByText("£15.17/mo equivalent · charged annually")).toBeInTheDocument();
-    expect(screen.queryByText("-20%")).not.toBeInTheDocument();
+    expect(screen.getByText("Save 20%")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Start Indie" })).toHaveAttribute(
       "href",
       "/signup?next=%2Fdashboard%2Fbilling%3Fplan%3Dindie%26period%3Dannual"
@@ -76,5 +76,6 @@ describe("pricing section", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Prices last confirmed with Lemon Squeezy 2026-09-01. Checkout shows the current total before payment."
     );
+    expect(screen.queryByText("Save 20%")).not.toBeInTheDocument();
   });
 });
