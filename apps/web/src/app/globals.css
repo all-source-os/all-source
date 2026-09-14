@@ -133,8 +133,8 @@
   /* Base radius */
   --radius: 0.625rem;
 
-  /* AllSource brand — derived from supplied logo and approved marketing field */
-  --brand-field: #063a6c;
+  /* AllSource brand — field matches the supplied logo PNG's background pixel */
+  --brand-field: #0e1a2a;
   --brand-surface: #07549a;
   --brand-core: #0277bd;
   --brand-signal: #29b6f6;
@@ -185,7 +185,7 @@
   /* Base radius */
   --radius: 0.625rem;
 
-  /* Colors - matching logo background #0E1A2A = rgb(14, 26, 42) */
+  /* Product dark theme (public website uses its own fixed logo field below) */
   --background: oklch(0.18 0.02 250);
   --foreground: oklch(0.95 0 0);
   --card: oklch(0.2 0.025 250);
@@ -225,58 +225,32 @@
 }
 
 /*
- * Public website identity. Scoped so dashboard and auth UI keep product-theme
- * semantics while marketing routes share one approved logo-derived palette.
+ * Public website identity. Fixed to the supplied logo background in every
+ * theme; dashboard and auth keep their independent product-theme semantics.
  */
 .marketing-theme {
-  color-scheme: light;
-  --background: #f7fbff;
-  --foreground: #122033;
-  --card: #ffffff;
-  --card-foreground: #122033;
-  --popover: #ffffff;
-  --popover-foreground: #122033;
-  --primary: #0277bd;
-  --primary-foreground: #ffffff;
-  --secondary: #e1f1fa;
-  --secondary-foreground: #063a6c;
-  --muted: #e7f2f9;
-  --muted-foreground: #4a6178;
-  --accent: #d7effa;
-  --accent-foreground: #063a6c;
-  --border: #afcfe5;
-  --input: #6b91ad;
-  --ring: #0277bd;
-  --chart-1: #0277bd;
-  --chart-2: #29b6f6;
-  --chart-3: #063a6c;
-  --chart-4: #4fc3f7;
-  --chart-5: #122033;
-}
-
-.dark .marketing-theme {
   color-scheme: dark;
-  --background: #063a6c;
-  --foreground: #f7fbff;
-  --card: #07549a;
-  --card-foreground: #f7fbff;
-  --popover: #07549a;
-  --popover-foreground: #f7fbff;
-  --primary: #81d4fa;
-  --primary-foreground: #122033;
-  --secondary: #07549a;
-  --secondary-foreground: #f7fbff;
+  --background: var(--brand-field);
+  --foreground: var(--brand-paper);
+  --card: var(--brand-surface);
+  --card-foreground: var(--brand-paper);
+  --popover: var(--brand-surface);
+  --popover-foreground: var(--brand-paper);
+  --primary: var(--brand-ice);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--brand-surface);
+  --secondary-foreground: var(--brand-paper);
   --muted: #08457d;
   --muted-foreground: #d4e5f7;
   --accent: #0a64ac;
-  --accent-foreground: #f7fbff;
+  --accent-foreground: var(--brand-paper);
   --border: #72afda;
   --input: #72afda;
-  --ring: #81d4fa;
-  --chart-1: #81d4fa;
-  --chart-2: #29b6f6;
+  --ring: var(--brand-ice);
+  --chart-1: var(--brand-ice);
+  --chart-2: var(--brand-signal);
   --chart-3: #4fc3f7;
-  --chart-4: #0277bd;
+  --chart-4: var(--brand-core);
   --chart-5: #d4e5f7;
 }
 

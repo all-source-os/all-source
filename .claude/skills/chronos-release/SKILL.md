@@ -108,16 +108,34 @@ Wait for ALL THREE to complete and verify EACH returned exit code 0.
 
 ### 5. Commit (single squashed commit)
 
-Stage all changes and create exactly ONE commit:
+**NEVER `git add -A` here.** Other agent sessions work this repo concurrently, and
+a release runs long enough for one of them to leave edits in the tree mid-run. On
+2026-09-12 the v0.24.0 release did exactly that: `git add -A` swept another
+session's in-flight manifest edits into the release commit. That release then
+shipped a Core version bump alongside a half-applied dependency change, and
+`allsource-mcp` could not resolve on `main` until the next commit. A release
+commit that silently carries someone else's unfinished work is how a broken
+change ships under a version tag.
+
+First, read the tree and confirm every dirty file is yours:
 
 ```bash
-git add -A
+git status --short
+```
+
+Anything you did not change as part of this release — stop. Ask whose it is
+before going further; do not stage it, and do not revert it either.
+
+Then stage the release's files **by explicit path** and verify the index before
+committing:
+
+```bash
+git add <each file the version bump touched>
+git diff --cached --stat   # read it: this must be exactly the release's files
 git commit -m "$(cat <<'EOF'
 release: v<VERSION> — <brief description of what changed>
 
 <bullet list of key changes>
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```

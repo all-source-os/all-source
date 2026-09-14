@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata: Metadata = constructMetadata({
-  title: "AllSource Prime — Persistent Memory for Claude and MCP Clients",
+  title: "AllSource Prime: Agent Memory for MCP Clients",
   description:
     "Store knowledge-graph relationships, embeddings, provenance, and compressed context for Claude Desktop, Claude Code, and other MCP clients.",
   canonical: "/prime",

@@ -88,7 +88,7 @@ export const allsourceIdentity = {
   shortName: "AllSource",
   domain: "all-source.xyz",
   directAnswer:
-    "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores ordered events; Query Service separates HTTP, realtime, analytics, and projection reads; Prime derives agent memory; hosted services operate the stack; MCP connectors expose tools.",
+    "AllSource is a purpose-built event store database for event sourcing. Core stores ordered, immutable application events; Query Service separates tenant-facing HTTP, realtime, analytics, and projection reads; Prime derives agent memory from same durable history; hosted services operate the stack; MCP connectors expose tools.",
   disambiguation:
     "It is the developer product at all-source.xyz and github.com/all-source-os/all-source. It is not Esri ArcGIS AllSource, the all-source intelligence discipline, or unrelated audience-data and logistics companies using a similar name.",
 } as const;

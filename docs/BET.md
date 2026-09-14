@@ -105,7 +105,7 @@ enterprise sales motion.
 | --- | --- | --- |
 | Core persists events through WAL and Parquet and survives restart | Verified fact | Core architecture, recovery tests, and repository documentation |
 | Published reference throughput is 469K events/sec | Verified benchmark | Reproducible benchmark article and `siteConfig.stats` |
-| Published Core indexed-read latency is 11.9μs p99 | Verified benchmark | Reproducible benchmark evidence and `siteConfig.stats` |
+| Published Core indexed-read latency is 11.9μs p99, not end-to-end memory recall | Verified benchmark | Reproducible benchmark evidence and `siteConfig.stats` |
 | Full deployment exposes 73 MCP tools | Verified product fact | MCP tool registry and `siteConfig.stats` |
 | Indie is £18.99 per month in current GBP catalog | Founder decision and billing fact | Live LemonSqueezy catalog plus current launch plan |
 | One narrow restart and provenance proof creates first value | Recommended default | Smallest complete proof matching buyer trigger |

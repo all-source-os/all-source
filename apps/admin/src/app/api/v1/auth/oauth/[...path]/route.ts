@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getControlPlaneUrl } from "@/lib/auth";
+import { publicOrigin } from "@/lib/public-url";
 
 /**
  * Runtime proxy for OAuth requests to the Control Plane.
@@ -7,20 +8,7 @@ import { getControlPlaneUrl } from "@/lib/auth";
  * request time, not build time.
  */
 
-function getPublicUrl(): string {
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  return "http://localhost:3003";
-}
-
-async function proxyToControlPlane(
-  request: NextRequest,
-  path: string
-): Promise<NextResponse> {
+async function proxyToControlPlane(request: NextRequest, path: string): Promise<NextResponse> {
   const url = new URL(`/api/v1/auth/oauth/${path}`, getControlPlaneUrl());
 
   request.nextUrl.searchParams.forEach((value, key) => {
@@ -29,7 +17,7 @@ async function proxyToControlPlane(
 
   // Tell the Control Plane to redirect back to this admin app after OAuth
   if (!path.includes("callback")) {
-    url.searchParams.set("redirect_to", getPublicUrl());
+    url.searchParams.set("redirect_to", publicOrigin(request));
   }
 
   const headers: Record<string, string> = {};

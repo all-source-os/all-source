@@ -22,6 +22,7 @@ mod core_writer;
 mod dispatch;
 mod doc_extract;
 mod email_ingester;
+mod embed_backfill;
 mod export;
 mod hosted_dispatch;
 #[cfg(test)]
@@ -566,6 +567,14 @@ async fn main() -> Result<()> {
             "failed to hydrate projection registry from event log — agents will need to re-register"
         ),
     }
+
+    // Unconditional: the deficit it closes is local and exists whether or not
+    // the store syncs anywhere.
+    let backfill_prime = Arc::clone(&prime);
+    tokio::spawn(embed_backfill::run_embed_backfill_loop(
+        backfill_prime,
+        std::time::Duration::from_secs(30),
+    ));
 
     // Spawn the push-only sync loop when both --sync-to and --api-key are set.
     // Mismatched flags are a user error worth surfacing rather than silently

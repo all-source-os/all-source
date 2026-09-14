@@ -391,9 +391,9 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 	getOverageSummaryUC := usecases.NewGetOverageSummaryUseCase(tenantRepo)
 	setOverageEnabledUC := usecases.NewSetOverageEnabledUseCase(tenantRepo, auditRepo)
 	getProjectedChargesUC := usecases.NewGetProjectedChargesUseCase(tenantRepo)
-	// Public pricing catalog, read live from LemonSqueezy (source of truth for
-	// charged prices). nil LS client → empty catalog → frontend uses config.
-	getCatalogUC := usecases.NewGetCatalogUseCase(cfg.LSClient)
+	// Provider-confirmed public prices survive process restarts in Core config.
+	// nil LS client yields an empty paid catalog; no static paid-price fallback.
+	getCatalogUC := usecases.NewGetCatalogUseCase(cfg.LSClient, cfg.CoreClient)
 
 	// Initialize use cases — Agent Registration
 	registerAgentUC := usecases.NewRegisterAgentUseCase(createTenantUC, auditRepo, cfg.CoreClient, cfg.KeySigner)

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { decodeJwt, isAdminRole } from "@/lib/auth";
+import { publicUrl } from "@/lib/public-url";
 
 /**
  * Proxy that protects all authenticated routes.
@@ -43,7 +44,7 @@ export function proxy(request: NextRequest) {
 
   // No token — redirect to login
   if (!token) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -53,7 +54,7 @@ export function proxy(request: NextRequest) {
 
   if (!payload) {
     // Token is expired or malformed — clear cookie and redirect to login
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", "invalid_token");
     const response = NextResponse.redirect(loginUrl);
     response.cookies.delete("admin_token");
