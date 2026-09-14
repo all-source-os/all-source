@@ -1305,6 +1305,243 @@ Message (84 words):
 | --- | --- | --- | --- | --- |
 | — | — | — | — | Awaiting approval |
 
+## Contribution queue summary — 2026-09-14
+
+Ten **new issue-specific opportunities** checked against this ledger and live
+GitHub issue/PR state. Scores are contribution value / maintainer receptiveness /
+evidence quality / effort, each 1–5 (higher effort means more work). Open issue
+does not mean an unclaimed fix: reports with existing PRs or reporter-owned
+branches were excluded. No public action taken. Recheck status and repository
+rules immediately before acting; no sales copy or AllSource mention in upstream
+contributions.
+
+Common rules: [OpenClaw CONTRIBUTING](https://github.com/openclaw/openclaw/blob/main/CONTRIBUTING.md)
+accepts focused bug fixes with tests and issue-linked PRs, but rejects
+test-only PRs for known failures; new features and schema/durability changes
+need prior design discussion. [Graphiti CONTRIBUTING](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md)
+prioritizes bug fixes, asks for an issue-discussion approach, and requires RFCs
+for new features or changes over 500 LOC. [MCP Servers CONTRIBUTING](https://github.com/modelcontextprotocol/servers/blob/main/CONTRIBUTING.md)
+welcomes vendor-neutral reference-server bug fixes and Vitest tests.
+[AgentMemory CONTRIBUTING](https://github.com/rohitg00/agentmemory/blob/main/CONTRIBUTING.md)
+requires Node 20+, build/tests, focused PR, and DCO sign-off.
+
+### 1. `openclaw/openclaw` — sender-scoped recall missing identity (5/4/5/3)
+
+- Source/author: [#148033](https://github.com/openclaw/openclaw/issues/148033),
+  `loveprruy`; OpenClaw core maintainers. Open, unassigned; automatic issue
+  implementation stopped without a patch.
+- Evidence: “the context-engine `assemble()` call does not receive a
+  `runtimeContext` containing `senderId`”; `afterTurn()` does. OpenViking recall
+  fails although capture works.
+- Impact: per-user recall can fail or be mis-scoped while writes continue.
+- Rules: OpenClaw guide above; focused bug PR with existing issue, concrete
+  evidence, Node 24.16+/26.1+, build/check/tests. Never expose real sender IDs.
+- Artifact: regression with two synthetic senders, then pass request identity
+  into both embedded and harness context-engine assembly paths.
+- Verify: assembly and after-turn receive matching sender per test turn; absent
+  identity stays absent, never silently maps different senders to one namespace;
+  targeted Vitest, build/check/full test, local extension smoke test.
+- AllSource relevance: tenant-scoped recall and source attribution; upstream
+  fix stands on its own. Promotional risk: low if vendor-neutral; high if pitched.
+
+### 2. `openclaw/openclaw` — embedding errors hide cause (4/4/5/2)
+
+- Source/author: [#146985](https://github.com/openclaw/openclaw/issues/146985),
+  `jzmudzinski`; OpenClaw core maintainers. Open, unassigned, no matching PR.
+  GitHub currently marks this `clawsweeper:no-new-fix-pr` and
+  `clawsweeper:needs-maintainer-review`; do not submit a fix PR without
+  maintainer direction.
+- Evidence: “one error message for six distinct conditions”; duplicate vector
+  indices are reported as “malformed JSON response.”
+- Impact: indexing failures send operators toward wrong diagnosis; recall
+  remains stale until error is identified.
+- Rules: OpenClaw guide above; bug fix must include implementation and tests,
+  not a test-only PR.
+- Artifact: distinguish six existing validation failures with bounded,
+  redacted error details. Do not change retry/batch semantics in this patch.
+- Verify: stub each invalid response, assert correct reason and no raw source
+  text/vector/token leakage; targeted remote-embedding and redaction tests,
+  build/check/full test.
+- AllSource relevance: operational provenance and reliable memory indexing.
+  Promotional risk: low for diagnostic fix.
+
+### 3. `getzep/graphiti` — removed fact survives in summary (5/3/5/3)
+
+- Source/author: [#1837](https://github.com/getzep/graphiti/issues/1837),
+  `bossjoker1`; Getzep maintainers. Open, unassigned, no matching PR.
+- Evidence: “the shared entity's summary still contains the removed fact”
+  after `remove_episode` and client reconstruction.
+- Impact: users can recall deleted facts from surviving entity summaries even
+  when original episode and fact edge are gone.
+- Rules: Graphiti guide above; share proposed test/contract in issue before
+  broad fix; `make test`, `make lint`, `make check` before PR.
+- Artifact: minimal integration regression proving removed marker absent from
+  surviving summary after restart; ask maintainer whether summary retraction or
+  explicit stale-summary marking is intended before changing semantics.
+- Verify: run with local graph backend, count surviving nodes/edges, assert
+  source marker absent or marked stale per accepted contract; rerun after restart.
+- AllSource relevance: correction history and replayable derived views.
+  Promotional risk: low for neutral regression, high for database comparison.
+
+### 4. `modelcontextprotocol/servers` — cross-process memory overwrite (5/3/5/4)
+
+- Source/author: [#4797](https://github.com/modelcontextprotocol/servers/issues/4797),
+  `daichiyasunami-vottia`; MCP reference-server maintainers. Open, no linked
+  PR. Reporter has external benchmark and offers to implement after direction.
+- Evidence: “Two server processes sharing one `MEMORY_FILE_PATH` still discard
+  each other's writes, silently”; issue measures 10/20 retained on current main.
+- Impact: two normal MCP clients can erase another client's whole session.
+- Rules: MCP Servers guide above; vendor-neutral bug fix and Vitest. Do not
+  compete with reporter's pending implementation decision.
+- Artifact: independent two-process stdio regression in repository test suite
+  with one shared temp path and exact entity-set assertion; compare lock and
+  conflict-detection behavior only after maintainer chooses contract.
+- Verify: repeat 20 concurrent writes under two processes across clean temp
+  files; expect all 20 or explicit conflict, never 20 successes with loss.
+- AllSource relevance: atomic event write and multi-writer durability.
+  Promotional risk: high if journal/product proposal; low for neutral test.
+
+### 5. `openclaw/openclaw` — plugin install silently switches memory slot (4/4/4/3)
+
+- Source/author: [#144850](https://github.com/openclaw/openclaw/issues/144850),
+  `DasX`; OpenClaw core maintainers. Open, unassigned, no matching PR.
+- Evidence: “Installing a memory plugin from the Control UI” reassigned
+  `plugins.slots.memory` to unconfigured backend without confirmation.
+- Impact: recall remained unavailable for over three days while operator
+  believed previous memory backend still active.
+- Rules: OpenClaw guide above; focused bug patch and user-visible behavior
+  evidence, no test-only PR.
+- Artifact: install-path regression proving mere installation preserves active
+  slot; require explicit user selection before switching backend.
+- Verify: mocked configured incumbent plus unconfigured new plugin; assert
+  unchanged slot, active recall, and explicit opt-in transition.
+- AllSource relevance: memory lifecycle and activation correctness.
+  Promotional risk: low if no product mention.
+
+### 6. `rohitg00/agentmemory` — current prompt pollutes recall (4/3/4/2)
+
+- Source/author: [#1321](https://github.com/rohitg00/agentmemory/issues/1321),
+  `samwei12`; `rohitg00` maintains repository (last main commit Aug 23).
+  Open, unassigned, no issue-specific PR.
+- Evidence: “a subsequent `/agentmemory/search` in the same turn can return
+  that just-created observation as a top result.”
+- Impact: current input is presented as older memory, displacing relevant
+  prior context.
+- Rules: AgentMemory guide above; DCO-sign focused fix, build/full tests.
+- Artifact: failing same-turn observe→search fixture, then explicit temporal
+  exclusion fence for current-turn observations without hiding prior turns.
+- Verify: current-turn sentinel absent, older matching observation retained,
+  ordinary search unchanged; build and focused/full Vitest.
+- AllSource relevance: point-in-time recall and provenance fencing.
+  Promotional risk: low for repository-native fix.
+
+### 7. `openclaw/openclaw` — bind-mount alias hides memory signal (4/3/4/4)
+
+- Source/author: [#145289](https://github.com/openclaw/openclaw/issues/145289),
+  `jmejia-appropia`; OpenClaw core maintainers. Open, no matching PR.
+- Evidence: workspace state is keyed by “workspace path string ... not by a
+  stable filesystem identity”; same bind mount under another path yields
+  `candidates=0`.
+- Impact: dream/recall signals become orphaned after container path changes.
+- Rules: OpenClaw guide above; state-key/schema migration needs design
+  acceptance, so start with reproducible alias fixture and reversible option.
+- Artifact: synthetic dual-path fixture documenting old/new workspace keys and
+  read behavior; proposed stable-key migration only after maintainer direction.
+- Verify: bind-mount or symlink alias repeats same recall signal; unrelated
+  directories stay isolated; migration preserves old state.
+- AllSource relevance: stable stream identity across restart and deployment.
+  Promotional risk: low for neutral identity test.
+
+### 8. `openclaw/openclaw` — index publish blocks agent writes (5/2/5/5)
+
+- Source/author: [#143640](https://github.com/openclaw/openclaw/issues/143640),
+  `hk31584-alt`; OpenClaw core maintainers. Open, no matching PR; reporter has
+  measurements and independent confirmation.
+- Evidence: “one `IMMEDIATE` transaction” rewrites whole index; a 5-second
+  shared-DB busy timeout lets concurrent session writes fail.
+- Impact: index rebuild can break live agent turns, with failure hidden behind
+  otherwise healthy memory indexing.
+- Rules: OpenClaw guide above; database scheduling/durability design requires
+  explicit maintainer acceptance; no test-only PR for known main failure.
+- Artifact: deterministic concurrent writer/publisher benchmark under real
+  agent DB, with lock-duration and failed-begin count; patch only accepted
+  transaction strategy and include regression.
+- Verify: no lost writes and bounded write latency across small/large index;
+  compare baseline and chosen strategy, run DB-focused plus full tests.
+- AllSource relevance: WAL/consumer write isolation and projection rebuilds.
+  Promotional risk: high if event-store pitch; none required.
+
+### 9. `openclaw/openclaw` — restart leaves agent tool scope closed (3/2/3/3)
+
+- Source/author: [#146265](https://github.com/openclaw/openclaw/issues/146265),
+  `marieldejesus12`; OpenClaw core maintainers. Open, no matching PR. Maintainer
+  reports core paths did **not** reproduce failure; investigate first.
+- Evidence: gateway “health returns OK” while real agent-turn tools report
+  “Async work scope is closed” after restart, per reporter.
+- Impact: memory and DB tools can fail process-wide behind healthy status.
+- Rules: OpenClaw guide above; only share a new redacted runtime trace if it
+  isolates differing extension path, not a speculative patch.
+- Artifact: synthetic agent-turn reproduction that records scope identity
+  before/after restart and contrasts health endpoint with actual tool call.
+- Verify: reproduce in supported Node runtime, isolate extension involved;
+  if not reproducible, mark opportunity stale rather than post.
+- AllSource relevance: durable restart/liveness contract.
+  Promotional risk: medium; contested diagnosis needs restraint.
+
+### 10. `openclaw/openclaw` — session summaries crowd durable recall (3/2/4/4)
+
+- Source/author: [#147433](https://github.com/openclaw/openclaw/issues/147433),
+  `Navras98`; OpenClaw core maintainers. Open as feature request, no PR.
+- Evidence: search “unions the `memory` and `sessions` corpora into a single
+  global ranking” with no per-source balance control.
+- Impact: fresh session chatter can outrank persistent facts on long-lived
+  stores, weakening recall relevance.
+- Rules: OpenClaw guide above; feature/architecture discussion first; no
+  test-only PR for known behavior.
+- Artifact: small reproducible relevance fixture comparing existing rank to a
+  bounded per-source candidate quota, with precision/recall trade-off recorded;
+  offer it in issue only after founder approval and local verification.
+- Verify: same corpus/query seed, stable hit IDs and rank delta, no cross-user
+  data; assess effect on unrelated queries before suggesting code.
+- AllSource relevance: source-aware memory retrieval, not a reason to pitch.
+  Promotional risk: medium if treated as vendor comparison.
+
+## Top two — artifact plans and approval gate
+
+**A. OpenClaw #148033 — sender identity during assembly.** Work in
+`src/agents/embedded-agent-runner/run/attempt-history-prepare.ts` (current
+`assembleHarnessContextEngine` caller) and
+`src/agents/harness/context-engine-lifecycle.ts`; compare existing after-turn
+identity construction in
+`src/agents/embedded-agent-runner/run/attempt-prompt-helpers.ts`.
+Test near `src/agents/embedded-agent-runner/run/attempt.spawn-workspace.context-engine.test.ts`
+and `src/agents/harness/context-engine-lifecycle.test.ts`: two synthetic sender
+IDs, same session setup, assembled memory routed correctly, no identity
+coalescing. Run targeted Vitest, `pnpm build && pnpm check && pnpm test` on
+supported Node, plus local context-engine smoke. Draft maintainer note **after
+artifact exists**: “#148033 reproduces in the embedded assembly caller: capture
+receives sender identity but assemble does not. This patch carries the same
+request-scoped identity to assembly; regression covers two synthetic senders
+and the no-sender case. Validation: [insert actual commands/results].”
+
+**B. OpenClaw #146985 — truthful, redacted indexing errors.** This is a
+research/artifact plan only while `clawsweeper:no-new-fix-pr` applies; seek
+maintainer direction before any PR. Work in
+`packages/memory-host-sdk/src/host/embedding-vectors.ts`; test beside
+`embeddings-remote-fetch.test.ts` and `remote-error-redaction.test.ts`. First
+test all six existing invalid-response branches with synthetic JSON; give each
+distinct bounded reason, never echo source text, raw vector, request body, or
+credential. Leave retry semantics and batch policy untouched. Run focused
+Vitest plus OpenClaw build/check/full tests. Draft maintainer note **after
+artifact exists**: “#146985 conflates six embedding-validation failures under
+one malformed-JSON error. This focused patch reports which condition failed,
+preserves remote-error redaction, and adds six synthetic response fixtures.
+Validation: [insert actual commands/results].”
+
+Approval state: **research only**. No clone/fork, comment, PR, or external
+message. Ask founder for fresh approval before public GitHub action. Recheck
+issue/PR ownership and maintainer rules immediately before acting.
+
 ## Contribution queue summary — 2026-09-12 08:01 UTC
 
 Research complete. No public GitHub action taken. Queue ranks smallest useful
