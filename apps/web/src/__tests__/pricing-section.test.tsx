@@ -67,4 +67,14 @@ describe("pricing section", () => {
     expect(screen.getByText("£63.17/mo equivalent · charged annually")).toBeInTheDocument();
     expect(screen.getByText("Selected from pricing")).toBeInTheDocument();
   });
+
+  it("labels a provider-confirmed price that is now stale", () => {
+    render(
+      <PricingSection catalog={{ ...catalog, stale: true, fetched_at: "2026-09-01T12:00:00Z" }} />
+    );
+    expect(screen.getByText("£18.99")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Prices last confirmed with Lemon Squeezy 2026-09-01. Checkout shows the current total before payment."
+    );
+  });
 });

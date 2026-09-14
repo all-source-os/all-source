@@ -21,6 +21,8 @@ export type CatalogTier = {
 export type Catalog = {
   currency: string;
   tiers: CatalogTier[];
+  fetched_at?: string;
+  stale?: boolean;
 };
 
 export type CatalogByTier = Record<string, CatalogTier>;
@@ -35,7 +37,8 @@ function controlPlaneUrl(): string {
  * Server-side fetch of the pricing catalog from the control plane.
  * On failure, returns null. Callers MUST NOT substitute config prices for a null paid-tier
  * price — render a dash via {@link resolveMonthly}/{@link resolveYearlyPerMonth}.
- * No second cache here; the control plane caches Lemon Squeezy for five minutes.
+ * No second cache here; the control plane refreshes every five minutes and
+ * retains a provider-confirmed last-known-good snapshot for at most 14 days.
  */
 export async function fetchCatalog(): Promise<Catalog | null> {
   try {

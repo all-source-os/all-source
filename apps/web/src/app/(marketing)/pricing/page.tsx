@@ -6,8 +6,8 @@ import { fetchCatalog, indexByTier, resolveMonthly } from "@/lib/pricing-catalog
 import { softwareApplicationSchema } from "@/lib/structured-data";
 
 // Render at request time: build workers cannot reach the runtime billing service.
-// fetchCatalog caches the provider response for an hour, so this does not call
-// the payment provider on every page view.
+// The control plane caches provider prices for five minutes, then refreshes in
+// background while preserving a verified last-known-good snapshot for 14 days.
 export const revalidate = 0;
 
 // Comparison matrix rows. Each row maps a label to a per-tier cell, keyed by the

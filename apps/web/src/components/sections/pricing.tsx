@@ -49,11 +49,13 @@ export default function PricingSection({
     catalog ? null : "/api/billing/catalog",
     loadCatalog,
     {
-      dedupingInterval: 300_000,
+      dedupingInterval: 2_000,
+      refreshInterval: (latest) => (latest?.tiers?.length ? 300_000 : 5_000),
       revalidateOnFocus: false,
     }
   );
-  const prices = indexByTier(catalog ?? browserCatalog ?? null);
+  const activeCatalog = catalog ?? browserCatalog ?? null;
+  const prices = indexByTier(activeCatalog);
 
   return (
     <Section
@@ -90,6 +92,16 @@ export default function PricingSection({
           </button>
         </div>
       </div>
+
+      {activeCatalog?.stale && activeCatalog.fetched_at && (
+        <p
+          className="mx-auto mb-6 max-w-3xl text-center text-sm text-muted-foreground"
+          role="status"
+        >
+          Prices last confirmed with Lemon Squeezy {activeCatalog.fetched_at.slice(0, 10)}. Checkout
+          shows the current total before payment.
+        </p>
+      )}
 
       {/* Three paid card tiers (self-host removed) — a 3-col grid, centered and
           width-capped so the cards don't left-align against an empty 4th column. */}

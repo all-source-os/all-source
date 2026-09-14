@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,10 +13,13 @@ import (
 // catalogMockLS implements clients.LemonSqueezyClient for catalog tests.
 // Only LookupVariantID + GetVariant carry behavior; the rest are stubs.
 type catalogMockLS struct {
-	variants map[string]*clients.VariantResponse // variantID → variant
-	getCalls int
-	currency string // store currency; "" → USD
+	variants    map[string]*clients.VariantResponse // variantID → variant
+	getCalls    int
+	currency    string // store currency; "" → USD
 	currencyErr bool
+	variantMap  clients.VariantMap
+	getGate     chan struct{}
+	getStarted  chan struct{}
 }
 
 func (m *catalogMockLS) LookupVariantID(tier, period string) (string, error) {
@@ -33,6 +37,13 @@ func (m *catalogMockLS) LookupVariantID(tier, period string) (string, error) {
 }
 
 func (m *catalogMockLS) GetVariant(_ context.Context, variantID string) (*clients.VariantResponse, error) {
+	if m.getGate != nil {
+		select {
+		case m.getStarted <- struct{}{}:
+		default:
+		}
+		<-m.getGate
+	}
 	m.getCalls++
 	v, ok := m.variants[variantID]
 	if !ok {
@@ -41,7 +52,7 @@ func (m *catalogMockLS) GetVariant(_ context.Context, variantID string) (*client
 	return v, nil
 }
 
-func (m *catalogMockLS) VariantMap() clients.VariantMap { return nil }
+func (m *catalogMockLS) VariantMap() clients.VariantMap { return m.variantMap }
 func (m *catalogMockLS) GetStoreID() string             { return "store" }
 func (m *catalogMockLS) GetStoreCurrency(_ context.Context) (string, error) {
 	if m.currencyErr {
@@ -170,9 +181,7 @@ func TestGetCatalog_NilClient_EmptyCatalog(t *testing.T) {
 }
 
 func TestGetCatalog_CachesWithinTTL(t *testing.T) {
-	ls := &catalogMockLS{variants: map[string]*clients.VariantResponse{
-		"indie:monthly": {Price: 1899, Interval: "month"},
-	}}
+	ls := fullCatalogMockLS()
 	uc := NewGetCatalogUseCase(ls)
 	base := time.Unix(1_700_000_000, 0)
 
@@ -190,12 +199,152 @@ func TestGetCatalog_CachesWithinTTL(t *testing.T) {
 	if ls.getCalls != callsAfterFirst {
 		t.Errorf("expected cache hit (no new LS calls); got %d -> %d", callsAfterFirst, ls.getCalls)
 	}
-	// Past TTL → refetch.
+	// Past TTL → stale price returns immediately while detached refresh runs.
 	if _, err := uc.Execute(context.Background(), base.Add(6*time.Minute)); err != nil {
 		t.Fatalf("refetch Execute: %v", err)
 	}
+	uc.mu.Lock()
+	wait := uc.refresh
+	uc.mu.Unlock()
+	if wait != nil {
+		<-wait
+	}
 	if ls.getCalls == callsAfterFirst {
 		t.Error("expected LS refetch after TTL expiry")
+	}
+}
+
+type catalogMockStore struct {
+	mu     sync.Mutex
+	entry  *clients.ConfigEntryResponse
+	writes int
+}
+
+func (s *catalogMockStore) GetConfig(_ context.Context, _ string) (*clients.ConfigEntryResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.entry, nil
+}
+
+func (s *catalogMockStore) SetConfig(_ context.Context, req clients.SetConfigRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entry = &clients.ConfigEntryResponse{Key: req.Key, Value: req.Value}
+	s.writes++
+	return nil
+}
+
+func fullCatalogMockLS() *catalogMockLS {
+	return &catalogMockLS{variants: map[string]*clients.VariantResponse{
+		"indie:monthly":  {Price: 1899, Interval: "month"},
+		"indie:annual":   {Price: 18199, Interval: "year"},
+		"studio:monthly": {Price: 7899, Interval: "month"},
+		"studio:annual":  {Price: 75799, Interval: "year"},
+		"scale:monthly":  {Price: 29899, Interval: "month"},
+		"scale:annual":   {Price: 286999, Interval: "year"},
+	}}
+}
+
+func TestGetCatalog_CanceledRequestCannotPoisonCache(t *testing.T) {
+	ls := fullCatalogMockLS()
+	ls.getGate = make(chan struct{})
+	ls.getStarted = make(chan struct{}, 1)
+	uc := NewGetCatalogUseCase(ls)
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan *Catalog, 1)
+	go func() { cat, _ := uc.Execute(ctx, time.Now()); result <- cat }()
+	<-ls.getStarted
+	cancel()
+	if cat := <-result; len(cat.Tiers) != 0 {
+		t.Fatalf("canceled first request should be empty, got %+v", cat.Tiers)
+	}
+	close(ls.getGate)
+	uc.mu.Lock()
+	wait := uc.refresh
+	uc.mu.Unlock()
+	if wait != nil {
+		<-wait
+	}
+	cat, err := uc.Execute(context.Background(), time.Now())
+	if err != nil || !catalogComplete(cat) {
+		t.Fatalf("detached refresh should fill cache: %+v, %v", cat, err)
+	}
+}
+
+func TestGetCatalog_PersistsTwoWeekLastKnownGood(t *testing.T) {
+	base := time.Now().UTC().Truncate(time.Second)
+	store := &catalogMockStore{}
+	first, err := NewGetCatalogUseCase(fullCatalogMockLS(), store).Execute(context.Background(), base)
+	if err != nil || !catalogComplete(first) || store.writes != 1 {
+		t.Fatalf("first provider read must persist complete catalog: %+v, writes=%d, err=%v", first, store.writes, err)
+	}
+
+	offline := fullCatalogMockLS()
+	offline.currencyErr = true
+	second, err := NewGetCatalogUseCase(offline, store).Execute(context.Background(), base.Add(13*24*time.Hour))
+	if err != nil || !catalogComplete(second) || !second.Stale || second.FetchedAt == "" {
+		t.Fatalf("cached prices must survive restart and provider outage: %+v, %v", second, err)
+	}
+
+	third, err := NewGetCatalogUseCase(offline, store).Execute(context.Background(), base.Add(15*24*time.Hour))
+	if err != nil || len(third.Tiers) != 0 {
+		t.Fatalf("prices older than two weeks must not be displayed: %+v, %v", third, err)
+	}
+}
+
+func TestGetCatalog_RejectsChangedVariantMap(t *testing.T) {
+	base := time.Now().UTC().Truncate(time.Second)
+	store := &catalogMockStore{}
+	_, _ = NewGetCatalogUseCase(fullCatalogMockLS(), store).Execute(context.Background(), base)
+	changed := fullCatalogMockLS()
+	changed.currencyErr = true
+	changed.variantMap = clients.VariantMap{"indie:monthly": "replacement"}
+	cat, err := NewGetCatalogUseCase(changed, store).Execute(context.Background(), base.Add(time.Hour))
+	if err != nil || len(cat.Tiers) != 0 {
+		t.Fatalf("different variant map must invalidate stored prices: %+v, %v", cat, err)
+	}
+}
+
+func waitForCatalogRefresh(uc *GetCatalogUseCase) {
+	uc.mu.Lock()
+	wait := uc.refresh
+	uc.mu.Unlock()
+	if wait != nil {
+		<-wait
+	}
+}
+
+func TestGetCatalog_PriceChangePersistsWithoutWaitingADay(t *testing.T) {
+	base := time.Now().UTC().Truncate(time.Second)
+	store := &catalogMockStore{}
+	ls := fullCatalogMockLS()
+	uc := NewGetCatalogUseCase(ls, store)
+	_, _ = uc.Execute(context.Background(), base)
+	ls.variants["indie:monthly"] = &clients.VariantResponse{Price: 2199, Interval: "month"}
+	_, _ = uc.Execute(context.Background(), base.Add(6*time.Minute))
+	waitForCatalogRefresh(uc)
+	if store.writes != 2 {
+		t.Fatalf("changed provider price must persist immediately; writes=%d", store.writes)
+	}
+	restarted := NewGetCatalogUseCase(fullCatalogMockLS(), store)
+	cat, _ := restarted.Execute(context.Background(), base.Add(7*time.Minute))
+	if cat.Tiers[0].Monthly.Formatted != "$21.99" {
+		t.Fatalf("restart must load changed provider price, got %+v", cat.Tiers[0].Monthly)
+	}
+}
+
+func TestGetCatalog_PartialRefreshKeepsLastCompleteSnapshot(t *testing.T) {
+	base := time.Now().UTC().Truncate(time.Second)
+	store := &catalogMockStore{}
+	ls := fullCatalogMockLS()
+	uc := NewGetCatalogUseCase(ls, store)
+	_, _ = uc.Execute(context.Background(), base)
+	delete(ls.variants, "scale:annual")
+	_, _ = uc.Execute(context.Background(), base.Add(6*time.Minute))
+	waitForCatalogRefresh(uc)
+	cat, _ := uc.Execute(context.Background(), base.Add(6*time.Minute+time.Second))
+	if !catalogComplete(cat) || store.writes != 1 {
+		t.Fatalf("partial provider result must not overwrite full catalog: %+v, writes=%d", cat, store.writes)
 	}
 }
 

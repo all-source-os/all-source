@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +16,14 @@ import (
 // the frontend renders those from static config — they are not in the catalog.
 var catalogTiers = []string{"indie", "studio", "scale"}
 
-const catalogTTL = 5 * time.Minute
+const (
+	catalogTTL          = 5 * time.Minute
+	catalogRetryDelay   = 30 * time.Second
+	catalogMaxStale     = 14 * 24 * time.Hour
+	catalogPersistEvery = 24 * time.Hour
+	catalogFetchTimeout = 45 * time.Second
+	catalogStoreKey     = "billing:lemon_squeezy:catalog:v1"
+)
 
 // CatalogPrice is one tier+period price, sourced from LemonSqueezy.
 type CatalogPrice struct {
@@ -33,26 +41,35 @@ type CatalogTier struct {
 
 // Catalog is the public pricing catalog, read live from LemonSqueezy.
 type Catalog struct {
-	Currency string        `json:"currency"`
-	Tiers    []CatalogTier `json:"tiers"`
+	Currency  string        `json:"currency"`
+	Tiers     []CatalogTier `json:"tiers"`
+	FetchedAt string        `json:"fetched_at,omitempty"`
+	Stale     bool          `json:"stale,omitempty"`
 }
 
-// GetCatalogUseCase serves the pricing catalog from LemonSqueezy (the source of
-// truth for what customers are actually charged), with a short in-memory TTL
-// cache so a price page render doesn't fan out to LS on every request.
+// GetCatalogUseCase serves a two-week last-known-good Lemon Squeezy snapshot.
+// Refresh runs beyond an HTTP request deadline; empty results never replace it.
 type GetCatalogUseCase struct {
-	ls clients.LemonSqueezyClient
+	ls    clients.LemonSqueezyClient
+	store CatalogStore
 
+	loadOnce sync.Once
 	mu       sync.Mutex
 	cached   *Catalog
 	cachedAt time.Time
+	complete bool
+	savedAt  time.Time
+	nextTry  time.Time
+	refresh  chan struct{}
 }
 
-// NewGetCatalogUseCase creates the catalog use case. ls may be nil (no LS
-// configured) — Execute then returns an empty catalog and the frontend hides
-// paid prices until the Lemon Squeezy catalog is available.
-func NewGetCatalogUseCase(ls clients.LemonSqueezyClient) *GetCatalogUseCase {
-	return &GetCatalogUseCase{ls: ls}
+// store is optional for tests and installations without persistent Core config.
+func NewGetCatalogUseCase(ls clients.LemonSqueezyClient, store ...CatalogStore) *GetCatalogUseCase {
+	uc := &GetCatalogUseCase{ls: ls}
+	if len(store) > 0 {
+		uc.store = store[0]
+	}
+	return uc
 }
 
 // currencySymbol maps an ISO currency code to its display symbol; unknown codes
@@ -83,27 +100,78 @@ func formatCents(cents int, currency string) string {
 	return fmt.Sprintf("%s%.2f", sym, float64(cents)/100)
 }
 
-// Execute returns the catalog, using the TTL cache when warm. `now` is injected
-// for testability; callers pass time.Now().
+// Execute serves cached prices immediately. On a cold cache it waits for one
+// detached refresh until the caller's deadline; that refresh continues if the
+// browser disconnects, ready for the next request.
 func (uc *GetCatalogUseCase) Execute(ctx context.Context, now time.Time) (*Catalog, error) {
+	if uc.ls == nil {
+		return &Catalog{Tiers: []CatalogTier{}}, nil
+	}
+	uc.loadOnce.Do(func() {
+		loadCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		uc.loadSnapshot(loadCtx, now)
+	})
+
 	uc.mu.Lock()
+	maxAge := catalogMaxStale
+	if !uc.complete {
+		maxAge = catalogRetryDelay
+	}
+	if uc.cached != nil && now.Sub(uc.cachedAt) > maxAge {
+		uc.cached = nil
+	}
 	if uc.cached != nil && now.Sub(uc.cachedAt) < catalogTTL {
-		c := uc.cached
+		c := uc.response(now)
 		uc.mu.Unlock()
 		return c, nil
 	}
+	if uc.refresh == nil && !now.Before(uc.nextTry) {
+		uc.refresh = make(chan struct{})
+		go uc.refreshCatalog(now)
+	}
+	if uc.cached != nil {
+		c := uc.response(now)
+		uc.mu.Unlock()
+		return c, nil
+	}
+	wait := uc.refresh
 	uc.mu.Unlock()
 
-	cat := &Catalog{Tiers: make([]CatalogTier, 0, len(catalogTiers))}
-	if uc.ls == nil {
-		return cat, nil
+	if wait != nil {
+		select {
+		case <-wait:
+		case <-ctx.Done():
+		}
 	}
+	uc.mu.Lock()
+	defer uc.mu.Unlock()
+	if uc.cached != nil && now.Sub(uc.cachedAt) <= maxAge {
+		return uc.response(now), nil
+	}
+	return &Catalog{Tiers: []CatalogTier{}}, nil
+}
 
+// response copies response metadata; cached price tiers remain immutable.
+func (uc *GetCatalogUseCase) response(now time.Time) *Catalog {
+	cat := *uc.cached
+	cat.FetchedAt = uc.cachedAt.UTC().Format(time.RFC3339)
+	cat.Stale = now.Sub(uc.cachedAt) >= 24*time.Hour
+	return &cat
+}
+
+// fetchProvider never populates a cache itself. Its caller decides whether a
+// response is complete enough to become a durable last-known-good snapshot.
+func (uc *GetCatalogUseCase) fetchProvider(ctx context.Context) *Catalog {
+	cat := &Catalog{Tiers: make([]CatalogTier, 0, len(catalogTiers))}
 	// Never label an unknown store currency as USD; that could misstate the
 	// amount customers will see at checkout.
 	currency, err := uc.ls.GetStoreCurrency(ctx)
 	if err != nil || currency == "" {
-		return cat, nil
+		if err != nil {
+			log.Printf("billing catalog currency lookup failed: %v", err)
+		}
+		return nil
 	}
 	cat.Currency = strings.ToUpper(currency)
 
@@ -121,11 +189,7 @@ func (uc *GetCatalogUseCase) Execute(ctx context.Context, now time.Time) (*Catal
 		}
 	}
 
-	uc.mu.Lock()
-	uc.cached = cat
-	uc.cachedAt = now
-	uc.mu.Unlock()
-	return cat, nil
+	return cat
 }
 
 // price resolves one tier+period to a CatalogPrice. Returns nil (skipped, not
@@ -135,6 +199,7 @@ func (uc *GetCatalogUseCase) Execute(ctx context.Context, now time.Time) (*Catal
 func (uc *GetCatalogUseCase) price(ctx context.Context, tier, period string, annual bool, currency string) *CatalogPrice {
 	variantID, err := uc.ls.LookupVariantID(tier, period)
 	if err != nil || variantID == "" {
+		log.Printf("billing catalog variant missing: tier=%s period=%s", tier, period)
 		return nil
 	}
 	v, err := uc.ls.GetVariant(ctx, variantID)
@@ -143,6 +208,7 @@ func (uc *GetCatalogUseCase) price(ctx context.Context, tier, period string, ann
 		expectedInterval = "year"
 	}
 	if err != nil || v == nil || v.Price <= 0 || v.Interval != expectedInterval {
+		log.Printf("billing catalog price unresolved: tier=%s period=%s", tier, period)
 		return nil
 	}
 	p := &CatalogPrice{Cents: v.Price, Formatted: formatCents(v.Price, currency)}

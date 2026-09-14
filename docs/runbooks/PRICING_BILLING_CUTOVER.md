@@ -19,6 +19,35 @@ Source of truth: `apps/control-plane/internal/domain/entities/subscription.go`
 (`TierQuotaMap`, `QuotasForTier`, `MapRetiredTier`). Public tier copy lives in
 `apps/web/src/lib/config.ts` (`siteConfig.pricing`, prompt 010).
 
+## Live price catalog resilience (2026-09-14)
+
+The table above records the original 011 plan, **not today's checkout price**.
+Paid list prices come only from live Lemon Squeezy variants. `/api/v1/billing/catalog`
+on the control plane refreshes them every five minutes. A complete six-price
+snapshot (Indie/Studio/Scale × monthly/annual) persists in Core's existing
+event-sourced config store under `billing:lemon_squeezy:catalog:v1`. No new Fly
+volume or static paid-price fallback is used.
+
+- A canceled web request cannot cancel the provider refresh or cache an empty
+  result. Incomplete/failed refreshes leave the last complete snapshot intact.
+- Provider-confirmed prices remain available for at most **14 days** after the
+  last successful check, across control-plane restarts and deploys. A changed
+  store/variant map invalidates that snapshot immediately. Price changes persist
+  immediately; unchanged prices are re-saved at most daily.
+- After one day without a successful check, pricing UI labels the verification
+  date. Checkout always uses Lemon Squeezy's current price and shows the final
+  amount before payment; the display cache never authorizes or calculates a charge.
+- On a first deployment with no snapshot, public UI retries its empty catalog
+  every five seconds while the detached provider fetch warms. It never guesses
+  a paid price from `siteConfig`.
+
+Check both public endpoints after deploy: `https://api.all-source.xyz/api/v1/billing/catalog`
+and `https://www.all-source.xyz/api/billing/catalog`. Both should show six
+positive provider prices, `fetched_at`, and `currency`. If the control plane is
+empty, check `BillingConfigCheck` and Lemon Squeezy lookup errors in Fly logs;
+if only web is empty, check the web-to-control-plane proxy and its two-second
+deadline. Do not treat an HTTP 200 with `tiers:[]` as a healthy catalog.
+
 > ⚠️ **Storage model:** subscription + entitlement state is persisted as **Core
 > tenant-metadata JSON**, not Postgres columns. The new entitlement fields
 > (`x402_allowance`, `retention_days`, `max_streams`, `mcp_scope`,

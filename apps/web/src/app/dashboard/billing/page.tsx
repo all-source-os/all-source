@@ -12,6 +12,7 @@ import {
 import { cn } from "@allsource/ui/utils";
 import { Calendar, Check, CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { PlanCards } from "@/components/billing/plan-cards";
 import { UsageChart } from "@/components/billing/usage-chart";
 import { FadeIn } from "@/components/ui/fade-in";
@@ -33,6 +34,13 @@ function getPlanConfig(tier: string) {
   // then match purely on the canonical `tier` — no legacy billingTier matching.
   const canon = canonicalTier(tier);
   return siteConfig.pricing.find((p) => p.tier === canon) ?? siteConfig.pricing[0]!;
+}
+
+async function loadBillingCatalog(): Promise<Catalog | null> {
+  const response = await fetch("/api/billing/catalog");
+  if (!response.ok) return null;
+  const catalog = (await response.json()) as Catalog;
+  return catalog?.tiers?.length ? catalog : null;
 }
 
 export default function BillingPage() {
@@ -64,13 +72,11 @@ export default function BillingPage() {
     }
   }, []);
   // Live LemonSqueezy prices (source of truth) fetched via the catalog proxy.
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  useEffect(() => {
-    fetch("/api/billing/catalog")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setCatalog)
-      .catch(() => {});
-  }, []);
+  const { data: catalog = null } = useSWR("/api/billing/catalog", loadBillingCatalog, {
+    dedupingInterval: 2_000,
+    refreshInterval: (latest) => (latest?.tiers?.length ? 300_000 : 5_000),
+    revalidateOnFocus: false,
+  });
 
   // Canonical tier id (self-host | indie | studio | scale | enterprise) — the
   // raw backend value is normalized once here so all comparisons below are
@@ -409,6 +415,12 @@ export default function BillingPage() {
             loadingTier={upgradingTier}
             onUpgrade={handleUpgrade}
           />
+          {catalog?.stale && catalog.fetched_at && (
+            <p className="text-sm text-muted-foreground" role="status">
+              Prices last confirmed with Lemon Squeezy {catalog.fetched_at.slice(0, 10)}. Checkout
+              shows the current total before payment.
+            </p>
+          )}
         </div>
       </FadeIn>
 
