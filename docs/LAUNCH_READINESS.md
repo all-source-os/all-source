@@ -1,7 +1,7 @@
 # AllSource launch readiness
 
-Status: Sunday Club submission blocked by account sign-in; existing production
-release not re-audited in this pass.
+Status: Sunday Club submission reported by founder on 2026-09-14; receipt and
+publication unverified. Existing production release not re-audited in this pass.
 
 Source of truth: [`BET.md`](BET.md). This record tracks operational readiness;
 it does not change or satisfy the commercial promotion gate. An unchecked item
@@ -10,13 +10,17 @@ means no direct verification was captured in this pass, not a known failure.
 ## Sunday Club listing, 2026-09-14
 
 - Target: <https://sundayclub.so/submit>
-- Submission status: not submitted. The form redirects to sign-in. Browser
-  review blocked access to the separate Google account origin; no account
-  credentials, form answers, or external attestation were supplied.
+- Submission status: founder reported submitting through the signed-in browser
+  on 2026-09-14. No confirmation ID, receipt, or public listing URL was captured
+  in this workspace. Treat this as a founder-reported submission, not verified
+  editorial acceptance or publication.
+- Preparation: site prefill supplied the cover image and basic fields; tagline
+  and description were revised against [`BET.md`](BET.md). Final submitted copy
+  was not independently captured. Founder completed the submission action.
 - Product name: AllSource
 - Product URL: <https://www.all-source.xyz/>
-- Suggested tagline: Durable event history and provenance for stateful AI agents.
-- Suggested description: AllSource records ordered agent events so builders can
+- Prepared tagline: Durable event history and provenance for stateful AI agents.
+- Prepared description: AllSource records ordered agent events so builders can
   recover useful state after a restart, inspect past state, replay what happened,
   and trace recalled facts to source events. Run a reproducible restart proof,
   self-host Apache-2.0 Core, or try the hosted service with a real workload.
@@ -24,11 +28,9 @@ means no direct verification was captured in this pass, not a known failure.
 - Suggested category, if offered: Developer Tools or AI Infrastructure.
 - Claim source: [`BET.md`](BET.md); no customer count, retention claim, benchmark,
   or unsupported comparison included.
-- Founder action: sign in to Sunday Club directly, then hand control back for
-  form inspection and submission. Any listing terms or legal attestation need
-  founder review before acceptance.
 - Outcome evidence still needed: accepted listing URL or submission receipt.
   Referral clicks or praise do not satisfy the bet gate.
+- Follow-up: Chronis task `t-d4ac6d` tracks receipt and public listing verification.
 
 ## Applicability
 
@@ -128,13 +130,13 @@ legal checks not re-audited in this pass.
 - [ ] Marketing, analytics-accuracy, and applicable value-delivery records match
       production behaviour and [`BET.md`](BET.md).
 
-Release decision: Sunday Club submission blocked on sign-in; no new product
-release decision made.
+Release decision: Sunday Club submission founder-reported; listing publication
+unknown. No new product release decision made.
 
 Commercial gate: unproven; three qualifying non-founder hosted customers must
 complete the real-workload proof, pay, and renew without refund or chargeback.
 
 Founder actions remaining:
 
-- Sign in to Sunday Club directly and return to the submission form.
-- Review any binding listing terms or legal attestation before acceptance.
+- Provide or retain the Sunday Club confirmation receipt or public listing URL
+  when available, so submission and publication states can be verified.
