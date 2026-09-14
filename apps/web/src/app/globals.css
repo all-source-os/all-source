@@ -44,6 +44,13 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand-field: var(--brand-field);
+  --color-brand-surface: var(--brand-surface);
+  --color-brand-core: var(--brand-core);
+  --color-brand-signal: var(--brand-signal);
+  --color-brand-ice: var(--brand-ice);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-paper: var(--brand-paper);
 
   /* Container */
   --container-padding: 2rem;
@@ -126,6 +133,15 @@
   /* Base radius */
   --radius: 0.625rem;
 
+  /* AllSource brand — field matches the supplied logo PNG's background pixel */
+  --brand-field: #0e1a2a;
+  --brand-surface: #07549a;
+  --brand-core: #0277bd;
+  --brand-signal: #29b6f6;
+  --brand-ice: #81d4fa;
+  --brand-ink: #122033;
+  --brand-paper: #f7fbff;
+
   /* Colors - light theme with blue accents matching logo */
   --background: oklch(0.99 0.005 250);
   --foreground: oklch(0.18 0.02 250);
@@ -169,7 +185,7 @@
   /* Base radius */
   --radius: 0.625rem;
 
-  /* Colors - matching logo background #0E1A2A = rgb(14, 26, 42) */
+  /* Product dark theme (public website uses its own fixed logo field below) */
   --background: oklch(0.18 0.02 250);
   --foreground: oklch(0.95 0 0);
   --card: oklch(0.2 0.025 250);
@@ -206,6 +222,36 @@
   --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(0.3 0.03 250);
   --sidebar-ring: oklch(0.5 0.1 220);
+}
+
+/*
+ * Public website identity. Fixed to the supplied logo background in every
+ * theme; dashboard and auth keep their independent product-theme semantics.
+ */
+.marketing-theme {
+  color-scheme: dark;
+  --background: var(--brand-field);
+  --foreground: var(--brand-paper);
+  --card: var(--brand-surface);
+  --card-foreground: var(--brand-paper);
+  --popover: var(--brand-surface);
+  --popover-foreground: var(--brand-paper);
+  --primary: var(--brand-ice);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--brand-surface);
+  --secondary-foreground: var(--brand-paper);
+  --muted: #08457d;
+  --muted-foreground: #d4e5f7;
+  --accent: #0a64ac;
+  --accent-foreground: var(--brand-paper);
+  --border: #72afda;
+  --input: #72afda;
+  --ring: var(--brand-ice);
+  --chart-1: var(--brand-ice);
+  --chart-2: var(--brand-signal);
+  --chart-3: #4fc3f7;
+  --chart-4: var(--brand-core);
+  --chart-5: #d4e5f7;
 }
 
 @layer base {

@@ -1,3 +1,4 @@
+import { EarlyAccessBanner } from "@/components/early-access-banner";
 import Blog from "@/components/sections/blog";
 import CTA from "@/components/sections/cta";
 import FAQ from "@/components/sections/faq";
@@ -10,21 +11,16 @@ import Pricing from "@/components/sections/pricing";
 import Problem from "@/components/sections/problem";
 import SocialProof from "@/components/sections/social-proof";
 import StatStrip from "@/components/sections/stat-strip";
-import { indiePrice as defaultIndiePrice } from "@/lib/config";
-import { fetchCatalog, indexByTier } from "@/lib/pricing-catalog";
+// Public HTML is cacheable; live prices load after paint from the catalog proxy.
+// Keep the freshness bound used by other bet marketing sites.
+export const revalidate = 300;
 
-// Revalidate live LemonSqueezy prices hourly (ISR).
-export const revalidate = 3600;
-
-export default async function Home() {
-  // Live LemonSqueezy prices (source of truth) for the hero CTA + pricing cards.
-  const catalog = await fetchCatalog();
-  const indiePrice = indexByTier(catalog).indie?.monthly?.formatted ?? defaultIndiePrice;
-
+export default function Home() {
   return (
-    <main className="relative overflow-hidden">
+    <main className="marketing-theme dark relative min-h-screen overflow-hidden bg-background text-foreground">
+      <EarlyAccessBanner />
       <Header />
-      <Hero indiePrice={indiePrice} />
+      <Hero />
       {/* Stats demoted below the fold — final values painted, never "0K" flash */}
       <StatStrip />
       {/* Logos section hidden - needs real partner logos */}
@@ -35,7 +31,7 @@ export default async function Home() {
       {/* <TestimonialsCarousel /> */}
       <Features />
       <SocialProof />
-      <Pricing catalog={catalog} />
+      <Pricing />
       <FAQ />
       <Blog />
       <CTA />

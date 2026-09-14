@@ -9,6 +9,7 @@ import { constructMetadata } from "@/lib/utils";
 export const metadata = constructMetadata({
   title: "SDKs",
   description: `Official ${siteConfig.name} client SDKs in Rust, TypeScript, Python, and Go.`,
+  canonical: "/sdks",
 });
 
 const sdks = [

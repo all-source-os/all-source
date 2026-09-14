@@ -72,6 +72,28 @@ export function VsPageBody({ competitor }: { competitor: Competitor }) {
         </p>
       </Section>
 
+      <Section className="pb-12">
+        <div className="mx-auto max-w-3xl border-y border-border py-6">
+          <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Primary sources checked
+          </h2>
+          <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm">
+            {competitor.sources.map((source) => (
+              <li key={source.href}>
+                <Link
+                  href={source.href}
+                  target={source.href.startsWith("http") ? "_blank" : undefined}
+                  rel={source.href.startsWith("http") ? "noopener noreferrer" : undefined}
+                  className="inline-flex min-h-12 items-center text-primary underline underline-offset-4"
+                >
+                  {source.label} ↗
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
       {/* When to pick which */}
       <Section className="pb-12">
         <div className="mx-auto grid max-w-4xl gap-6 md:grid-cols-2">

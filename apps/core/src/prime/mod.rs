@@ -28,11 +28,15 @@ pub mod hosted;
 #[cfg(feature = "prime-recall")]
 pub mod http_core;
 pub mod import_export;
+pub mod lexical;
 #[cfg(feature = "prime-recall")]
 pub mod projection_bundle;
 pub mod projections;
 #[cfg(feature = "prime-recall")]
 pub mod recall;
+// In the lib, not tests/: the only job that runs core tests is `--lib`.
+#[cfg(all(test, feature = "prime-vectors"))]
+mod recall_degradation_tests;
 pub mod schema;
 pub mod sync;
 #[cfg(feature = "prime-recall")]

@@ -8,6 +8,7 @@ import { constructMetadata } from "@/lib/utils";
 export const metadata = constructMetadata({
   title: "Changelog",
   description: `Release history and updates for ${siteConfig.name}.`,
+  canonical: "/changelog",
 });
 
 interface ChangelogEntry {

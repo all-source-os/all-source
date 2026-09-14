@@ -1,7 +1,12 @@
 import { Button, Icons } from "@allsource/ui";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { OnboardingWizard } from "@/app/dashboard/demo/onboarding/page";
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function OnboardingPage() {
   return (

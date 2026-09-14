@@ -1,0 +1,67 @@
+{
+  "cache_type": "audit-scores",
+  "analyzed_at": "2026-08-29T01:59:14Z",
+  "domain": "www.all-source.xyz",
+  "business_type": "saas",
+  "industry": "software",
+  "overall_score": 78,
+  "category_scores": {
+    "technical": 87,
+    "content": 74,
+    "on_page": 80,
+    "schema": 92,
+    "performance": 35,
+    "geo": 80,
+    "images": 98
+  },
+  "priority_issues": [
+    {
+      "severity": "critical",
+      "issue": "Performance: INP is above target at 390ms."
+    },
+    {
+      "severity": "critical",
+      "issue": "Performance: LCP is above target at 4.94s."
+    },
+    {
+      "severity": "critical",
+      "issue": "Performance: Real-user/PageSpeed performance data was unavailable, so the report uses deterministic lab heuristics."
+    },
+    {
+      "severity": "high",
+      "issue": "Schema: Recommended schema type(s) are missing: WebPage."
+    },
+    {
+      "severity": "high",
+      "issue": "Technical: IndexNow support was not detected."
+    },
+    {
+      "severity": "medium",
+      "issue": "Geo: No strong 134-167 word self-contained answer block was detected."
+    },
+    {
+      "severity": "medium",
+      "issue": "Images: 1 below-the-fold sampled image(s) are not lazy loaded."
+    },
+    {
+      "severity": "medium",
+      "issue": "On_Page: 23 page(s) have title tags longer than 60 characters."
+    },
+    {
+      "severity": "medium",
+      "issue": "On_Page: 50 page(s) have meta descriptions longer than 160 characters."
+    },
+    {
+      "severity": "medium",
+      "issue": "Schema: FAQPage is present on a non-government/non-healthcare page and should not be positioned as a Google rich-result tactic."
+    },
+    {
+      "severity": "medium",
+      "issue": "Technical: INP is above target at 390ms."
+    },
+    {
+      "severity": "medium",
+      "issue": "Technical: LCP is above target at 5.07s."
+    }
+  ]
+}

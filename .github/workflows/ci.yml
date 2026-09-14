@@ -108,6 +108,21 @@ jobs:
           chmod +x scripts/check-versions.sh
           ./scripts/check-versions.sh
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "tooling/crate-version-check -> target"
+          cache-on-failure: true
+
+      # check-versions.sh compares TOOLCHAIN versions. This compares each
+      # intra-repo path dependency's version requirement against the version the
+      # sibling crate actually declares — the v0.24.0 release left allsource-mcp
+      # requiring ^0.23.1 beside a 0.24.0 Core, and nothing failed.
+      - name: Check intra-repo crate version requirements
+        run: cargo run --manifest-path tooling/crate-version-check/Cargo.toml
+
   # ============================================================================
   # Change Detection - Determine which services need to be tested
   # ============================================================================
@@ -181,6 +196,27 @@ jobs:
               - 'tooling/recall-bench/**'
             workflows:
               - '.github/workflows/**'
+
+  # ============================================================================
+  # Public web brand contract - logo backdrop must not drift with theme changes
+  # ============================================================================
+  web-brand:
+    name: Web Brand Color
+    needs: [workflow-lint, workflow-validate, changes]
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.1
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify public backdrop matches supplied logo
+        run: bun --cwd apps/web test src/__tests__/brand-background.test.ts
 
   # ============================================================================
   # Rust Quality Gates (Core Service)
@@ -296,32 +332,54 @@ jobs:
         working-directory: apps/prime-mcp
         run: cargo fmt --check
 
+      # --no-default-features skips baking the 86 MB model into every check
+      # binary. The default (bundled) build is exercised by "Build release".
       - name: Run Clippy
         working-directory: apps/prime-mcp
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+
+      - name: Run tests
+        working-directory: apps/prime-mcp
+        run: cargo test --bins --no-default-features
 
       - name: Build release
         working-directory: apps/prime-mcp
         run: cargo build --release
 
-      # Fresh-container embedder canary (issue #200): on a runner with NO
-      # model cache, the first prime_embed must succeed end to end — this is
-      # what breaks the "works offline" claim if the HF model-fetch path
-      # regresses (URL/sha/layout change, upstream gone). `--mode warm` does a
-      # real prime_add → embed → exits non-zero on any failure. We point
-      # FASTEMBED_CACHE_DIR at an empty temp dir to guarantee a cold fetch.
-      - name: Embedder warm canary (cold cache)
+      # The reported failure: a Claude Desktop client whose embedder could not
+      # fetch model.onnx. Reproduce the shipped conditions rather than
+      # configuring them away — no reachable network, no model cache, and a cwd
+      # the process cannot write to, since `.fastembed_cache` is a RELATIVE
+      # default and Claude Desktop sets an arbitrary cwd.
+      - name: Embedder works with no network (default build)
         working-directory: apps/prime-mcp
         run: |
           set -euo pipefail
+          BIN="$PWD/target/release/allsource-prime"
+          DATA_DIR="$(mktemp -d)"
+          RO_CWD="$(mktemp -d)"
+          chmod a-w "$RO_CWD"
+          cd "$RO_CWD"
+          HF_ENDPOINT=http://127.0.0.1:1 \
+          FASTEMBED_CACHE_DIR="$(mktemp -d)" \
+            "$BIN" --data-dir "$DATA_DIR" --mode warm
+
+      # The `--no-default-features` fallback still fetches from HuggingFace, and
+      # that path is what a `cargo install --no-default-features` user and the
+      # shipped tarballs rely on. Issue #200: it must keep working, and the
+      # second run must reuse the cache rather than downloading again.
+      - name: HuggingFace fetch path still works (cold cache)
+        working-directory: apps/prime-mcp
+        run: |
+          set -euo pipefail
+          cargo build --no-default-features
           DATA_DIR="$(mktemp -d)"
           FASTEMBED_CACHE_DIR="$(mktemp -d)"
           export FASTEMBED_CACHE_DIR
           echo "Cold fetch into $FASTEMBED_CACHE_DIR"
-          ./target/release/allsource-prime --data-dir "$DATA_DIR" --mode warm
-          # Second run must reuse the now-populated cache (no second download).
+          ./target/debug/allsource-prime --data-dir "$DATA_DIR" --mode warm
           DATA_DIR2="$(mktemp -d)"
-          ./target/release/allsource-prime --data-dir "$DATA_DIR2" --mode warm
+          ./target/debug/allsource-prime --data-dir "$DATA_DIR2" --mode warm
 
       - name: Build recall-bench
         working-directory: tooling/recall-bench
@@ -346,7 +404,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: apps/control-plane/go.sum
 
       - name: Download dependencies
@@ -557,7 +615,9 @@ jobs:
       - workflow-validate
       - version-check
       - changes
+      - web-brand
       - rust-quality
+      - prime-quality
       - go-quality
       - elixir-query-quality
       - elixir-mcp-quality
@@ -602,7 +662,9 @@ jobs:
             # back empty, every `required` below evaluates false, and the whole
             # suite is waved through green.
             check_job "Detect Changes" "${{ needs.changes.result }}" "true"
+            check_job "Web Brand Color" "${{ needs.web-brand.result }}" "${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Rust Quality" "${{ needs.rust-quality.result }}" "${{ needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' }}"
+            check_job "Prime MCP Quality" "${{ needs.prime-quality.result }}" "${{ needs.changes.outputs.prime == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Go Quality" "${{ needs.go-quality.result }}" "${{ needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Elixir Query" "${{ needs.elixir-query-quality.result }}" "${{ needs.changes.outputs.elixir == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Elixir MCP" "${{ needs.elixir-mcp-quality.result }}" "${{ needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' }}"

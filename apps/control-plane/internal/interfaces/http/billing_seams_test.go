@@ -45,7 +45,13 @@ func (s *stubLS) LookupVariantID(tier, period string) (string, error) {
 }
 func (s *stubLS) GetVariant(_ context.Context, variantID string) (*clients.VariantResponse, error) {
 	if c, ok := s.prices[variantID]; ok {
-		return &clients.VariantResponse{ID: variantID, Price: c}, nil
+		interval := "month"
+		for key, id := range s.variants {
+			if id == variantID && strings.HasSuffix(key, ":annual") {
+				interval = "year"
+			}
+		}
+		return &clients.VariantResponse{ID: variantID, Price: c, Interval: interval}, nil
 	}
 	return nil, nil
 }

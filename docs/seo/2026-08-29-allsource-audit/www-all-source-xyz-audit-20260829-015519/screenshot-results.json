@@ -1,0 +1,32 @@
+{
+  "screenshots": [
+    {
+      "url": "https://www.all-source.xyz/",
+      "output": "/Users/decebaldobrica/Projects/founder-mode/all-source/docs/seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/screenshots/www-all-source-xyz-desktop.png",
+      "viewport": "desktop",
+      "success": true,
+      "error": null
+    },
+    {
+      "url": "https://www.all-source.xyz/",
+      "output": "/Users/decebaldobrica/Projects/founder-mode/all-source/docs/seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/screenshots/www-all-source-xyz-laptop.png",
+      "viewport": "laptop",
+      "success": true,
+      "error": null
+    },
+    {
+      "url": "https://www.all-source.xyz/",
+      "output": "/Users/decebaldobrica/Projects/founder-mode/all-source/docs/seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/screenshots/www-all-source-xyz-tablet.png",
+      "viewport": "tablet",
+      "success": true,
+      "error": null
+    },
+    {
+      "url": "https://www.all-source.xyz/",
+      "output": "/Users/decebaldobrica/Projects/founder-mode/all-source/docs/seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/screenshots/www-all-source-xyz-mobile.png",
+      "viewport": "mobile",
+      "success": true,
+      "error": null
+    }
+  ]
+}

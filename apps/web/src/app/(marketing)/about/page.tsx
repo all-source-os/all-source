@@ -8,6 +8,7 @@ import { constructMetadata } from "@/lib/utils";
 export const metadata = constructMetadata({
   title: "About",
   description: `Why we're building ${siteConfig.productName}: durable event history in Core, agent memory in Prime, and a managed hosted route.`,
+  canonical: "/about",
 });
 
 const principles = [
@@ -40,6 +41,11 @@ export default function AboutPage() {
 
       <FadeIn delay={0.2} inView>
         <div className="prose prose-invert mt-10 max-w-none text-muted-foreground">
+          <p>
+            AllSource is created by Decebal Dobrica and published by Wolven Tech. Product claims on
+            this site link back to public source, runnable benchmark instructions, or explicit scope
+            notes so evaluators can distinguish measured evidence from roadmap work.
+          </p>
           <p>
             AllSource exists because the data layer underneath modern applications — and especially
             agentic ones — often treats history as secondary. Current-state systems can preserve

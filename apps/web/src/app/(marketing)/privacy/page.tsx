@@ -4,22 +4,23 @@ import { constructMetadata } from "@/lib/utils";
 export const metadata = constructMetadata({
   title: "Privacy Policy",
   description: `Privacy Policy for ${siteConfig.name} - how we collect, use, and protect your data.`,
+  canonical: "/privacy",
 });
 
 export default function PrivacyPolicy() {
   return (
     <div className="mx-auto w-full max-w-screen-md px-4 lg:px-8 py-24">
       <h1 className="text-3xl font-bold text-foreground sm:text-4xl mb-2">Privacy Policy</h1>
-      <p className="text-sm text-muted-foreground mb-10">Last updated: February 12, 2026</p>
+      <p className="text-sm text-muted-foreground mb-10">Last updated: August 27, 2026</p>
 
       <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">1. Introduction</h2>
           <p className="text-muted-foreground leading-relaxed">
             AllSource (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;) operates the AllSource
-            platform, including the Chronos event store, query service, MCP server, and web
-            dashboard (collectively, the &quot;Service&quot;). This Privacy Policy explains how we
-            collect, use, disclose, and safeguard your information when you use our Service.
+            platform, including AllSource Core, Query Service, MCP servers, and web dashboard
+            (collectively, the &quot;Service&quot;). This Privacy Policy explains how we collect,
+            use, disclose, and safeguard your information when you use our Service.
           </p>
         </section>
 
@@ -77,6 +78,28 @@ export default function PrivacyPolicy() {
             ask AI assistants before finding us, and what to write next. They are not used for
             advertising, are not sold, and are not shared with third parties. Ask us and we will
             delete yours — see the Contact section below.
+          </p>
+
+          <h3
+            id="design-partner-applications"
+            className="scroll-mt-24 text-lg font-medium text-foreground mt-4 mb-2"
+          >
+            2.6 Design Partner Applications
+          </h3>
+          <p className="text-muted-foreground leading-relaxed">
+            If you apply to the design partner program, we collect your name, work email, a short
+            description of what you are building and its current memory problem, campaign
+            attribution parameters, consent version, and submission time. We use this information
+            only to assess fit, contact you about the program, support an accepted integration, and
+            evaluate which campaign sources produce qualified applications.
+          </p>
+          <p className="text-muted-foreground leading-relaxed mt-2">
+            Application details are stored in a private administrative event stream. We do not put
+            applicant contact details or answers in public analytics properties, campaign URLs,
+            GitHub issues, or public event streams. Rejected and waitlisted applications receive a
+            retention deadline 90 days after the decision. Accepted applications receive a retention
+            deadline 90 days after the 60-day program. You can request earlier removal using the
+            contact address below.
           </p>
         </section>
 
@@ -168,9 +191,13 @@ export default function PrivacyPolicy() {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">8. Cookies</h2>
           <p className="text-muted-foreground leading-relaxed">
-            We use essential cookies for authentication and session management. We do not use
-            advertising or tracking cookies. Analytics, if enabled, use privacy-respecting methods
-            without third-party trackers.
+            We use essential cookies for authentication and session management. Google Analytics 4
+            receives cookieless measurement pings with analytics and advertising storage denied by
+            default. We remove URL query strings and referrer query strings, disable Google Signals
+            and advertising personalisation, and do not set advertising cookies. Enhanced
+            measurement covers aggregate interactions such as scrolls, outbound links, forms,
+            videos, and downloads; automatic browser-history page views and site-search capture are
+            disabled.
           </p>
         </section>
 

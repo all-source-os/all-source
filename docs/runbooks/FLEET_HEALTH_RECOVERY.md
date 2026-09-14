@@ -89,15 +89,13 @@ order, then remove the fixture:**
    `ALLSOURCE_CONTROL_URL` + `ALLSOURCE_ADMIN_JWT` (so it reaches `/api/v1/admin/*`) and register
    it in your MCP client config. Set `ALLSOURCE_SYSTEM_ADMIN=true` **only** where `recovery_*`
    mutations should be allowed (off by default).
-3. **Admin app** (`apps/admin`) — ✅ **deployed** to its **own** Vercel project `allsource-admin`
-   (prebuilt-deploy; NOT the public web frontend), `NEXT_PUBLIC_API_URL=https://api.all-source.xyz`.
-   **Cross-origin login still needs three things** (the app loads but login won't complete until all hold):
-   (a) add custom domain **`admin.all-source.xyz`** to the Vercel project (shares the `.all-source.xyz`
-   parent with `api.all-source.xyz` for the `admin_token` cookie); (b) **CORS** — `admin.all-source.xyz`
-   is in the Control Plane `ALLOWED_FRONTEND_URLS` (shipped in `fly.toml`; redeploy to apply — see
-   [`CONTROL_PLANE_CORS.md`](./CONTROL_PLANE_CORS.md)); (c) **OAuth** — add the admin domain to the
-   Google/GitHub authorized redirect URIs (external console). Vercel **Deployment Protection** is also
-   ON for the project (extra login wall) — keep or disable in project settings.
+3. **Admin app** (`apps/admin`) — ✅ **deployed** to Fly app `allsource-admin`, with
+   `NEXT_PUBLIC_API_URL=https://api.all-source.xyz` and private Control Plane routing through
+   `http://allsource-control-plane.internal:3901`. Cross-origin login requires: (a) custom domain
+   **`admin.all-source.xyz`** on the Fly app so it shares `.all-source.xyz` with the API cookie;
+   (b) **CORS** — `admin.all-source.xyz` in Control Plane `ALLOWED_FRONTEND_URLS`; and (c) **OAuth** —
+   admin domain in Google/GitHub authorized redirect URIs. See
+   [`CONTROL_PLANE_CORS.md`](./CONTROL_PLANE_CORS.md) and [`FLY_FRONTENDS.md`](./FLY_FRONTENDS.md).
 4. **Verify live**, then **remove the fixture fallback** from `fleet/page.tsx` and
    `fleet/[id]/page.tsx` (the `FIXTURE_FLEET` / `fixtureTenantHealth` blocks + the
    `usingFixture` banners). Once the endpoints answer, the fixture is dead weight and must

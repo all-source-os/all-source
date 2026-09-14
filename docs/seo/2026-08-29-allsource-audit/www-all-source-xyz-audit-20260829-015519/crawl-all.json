@@ -1,0 +1,598 @@
+{
+  "pages": [
+    {
+      "url": "https://www.all-source.xyz/",
+      "status": 200,
+      "title_length": 33,
+      "meta_description_length": 138
+    },
+    {
+      "url": "https://www.all-source.xyz/about",
+      "status": 200,
+      "title_length": 5,
+      "meta_description_length": 123
+    },
+    {
+      "url": "https://www.all-source.xyz/architecture",
+      "status": 200,
+      "title_length": 58,
+      "meta_description_length": 247
+    },
+    {
+      "url": "https://www.all-source.xyz/blog",
+      "status": 200,
+      "title_length": 49,
+      "meta_description_length": 168
+    },
+    {
+      "url": "https://www.all-source.xyz/changelog",
+      "status": 200,
+      "title_length": 9,
+      "meta_description_length": 42
+    },
+    {
+      "url": "https://www.all-source.xyz/compare/agent-memory",
+      "status": 200,
+      "title_length": 35,
+      "meta_description_length": 187
+    },
+    {
+      "url": "https://www.all-source.xyz/compare/eventstoredb",
+      "status": 200,
+      "title_length": 46,
+      "meta_description_length": 150
+    },
+    {
+      "url": "https://www.all-source.xyz/connect",
+      "status": 200,
+      "title_length": 25,
+      "meta_description_length": 93
+    },
+    {
+      "url": "https://www.all-source.xyz/design-partners",
+      "status": 200,
+      "title_length": 38,
+      "meta_description_length": 106
+    },
+    {
+      "url": "https://www.all-source.xyz/docs",
+      "status": 200,
+      "title_length": 13,
+      "meta_description_length": 97
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/api",
+      "status": 200,
+      "title_length": 13,
+      "meta_description_length": 93
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/chronis",
+      "status": 200,
+      "title_length": 31,
+      "meta_description_length": 112
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/mcp",
+      "status": 200,
+      "title_length": 48,
+      "meta_description_length": 116
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/prime",
+      "status": 200,
+      "title_length": 27,
+      "meta_description_length": 117
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/prime/concepts",
+      "status": 200,
+      "title_length": 14,
+      "meta_description_length": 101
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/prime/embedded",
+      "status": 200,
+      "title_length": 29,
+      "meta_description_length": 103
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/prime/http",
+      "status": 200,
+      "title_length": 14,
+      "meta_description_length": 91
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/prime/mcp",
+      "status": 200,
+      "title_length": 15,
+      "meta_description_length": 117
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/prime/quickstart",
+      "status": 200,
+      "title_length": 16,
+      "meta_description_length": 58
+    },
+    {
+      "url": "https://www.all-source.xyz/docs/tenant-setup",
+      "status": 200,
+      "title_length": 65,
+      "meta_description_length": 166
+    },
+    {
+      "url": "https://www.all-source.xyz/ecosystem",
+      "status": 200,
+      "title_length": 42,
+      "meta_description_length": 247
+    },
+    {
+      "url": "https://www.all-source.xyz/event-replay-debugging",
+      "status": 200,
+      "title_length": 45,
+      "meta_description_length": 157
+    },
+    {
+      "url": "https://www.all-source.xyz/event-sourcing-for-ai-agents",
+      "status": 200,
+      "title_length": 28,
+      "meta_description_length": 158
+    },
+    {
+      "url": "https://www.all-source.xyz/examples",
+      "status": 200,
+      "title_length": 85,
+      "meta_description_length": 142
+    },
+    {
+      "url": "https://www.all-source.xyz/install",
+      "status": 200,
+      "title_length": 37,
+      "meta_description_length": 169
+    },
+    {
+      "url": "https://www.all-source.xyz/platform/event-sourcing",
+      "status": 200,
+      "title_length": 65,
+      "meta_description_length": 196
+    },
+    {
+      "url": "https://www.all-source.xyz/platform/prime",
+      "status": 200,
+      "title_length": 67,
+      "meta_description_length": 142
+    },
+    {
+      "url": "https://www.all-source.xyz/platform/projections",
+      "status": 200,
+      "title_length": 65,
+      "meta_description_length": 145
+    },
+    {
+      "url": "https://www.all-source.xyz/platform/query-service",
+      "status": 200,
+      "title_length": 67,
+      "meta_description_length": 148
+    },
+    {
+      "url": "https://www.all-source.xyz/platform/stream-processing",
+      "status": 200,
+      "title_length": 52,
+      "meta_description_length": 152
+    },
+    {
+      "url": "https://www.all-source.xyz/pricing",
+      "status": 200,
+      "title_length": 46,
+      "meta_description_length": 170
+    },
+    {
+      "url": "https://www.all-source.xyz/prime",
+      "status": 200,
+      "title_length": 62,
+      "meta_description_length": 139
+    },
+    {
+      "url": "https://www.all-source.xyz/privacy",
+      "status": 200,
+      "title_length": 14,
+      "meta_description_length": 74
+    },
+    {
+      "url": "https://www.all-source.xyz/sdks",
+      "status": 200,
+      "title_length": 4,
+      "meta_description_length": 67
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/agent-memory",
+      "status": 200,
+      "title_length": 30,
+      "meta_description_length": 166
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/audit-compliance",
+      "status": 200,
+      "title_length": 59,
+      "meta_description_length": 141
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/financial-services",
+      "status": 200,
+      "title_length": 63,
+      "meta_description_length": 132
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/iot-telemetry",
+      "status": 200,
+      "title_length": 59,
+      "meta_description_length": 155
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/multi-tenant-saas",
+      "status": 200,
+      "title_length": 69,
+      "meta_description_length": 185
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/quant-intelligence",
+      "status": 200,
+      "title_length": 30,
+      "meta_description_length": 163
+    },
+    {
+      "url": "https://www.all-source.xyz/solutions/real-time-analytics",
+      "status": 200,
+      "title_length": 60,
+      "meta_description_length": 156
+    },
+    {
+      "url": "https://www.all-source.xyz/status",
+      "status": 200,
+      "title_length": 38,
+      "meta_description_length": 171
+    },
+    {
+      "url": "https://www.all-source.xyz/terms",
+      "status": 200,
+      "title_length": 16,
+      "meta_description_length": 73
+    },
+    {
+      "url": "https://www.all-source.xyz/use-cases",
+      "status": 200,
+      "title_length": 48,
+      "meta_description_length": 149
+    },
+    {
+      "url": "https://www.all-source.xyz/vs/letta",
+      "status": 200,
+      "title_length": 18,
+      "meta_description_length": 155
+    },
+    {
+      "url": "https://www.all-source.xyz/vs/mem0",
+      "status": 200,
+      "title_length": 17,
+      "meta_description_length": 155
+    },
+    {
+      "url": "https://www.all-source.xyz/vs/stoolap",
+      "status": 200,
+      "title_length": 20,
+      "meta_description_length": 387
+    },
+    {
+      "url": "https://www.all-source.xyz/vs/zep",
+      "status": 200,
+      "title_length": 16,
+      "meta_description_length": 156
+    },
+    {
+      "url": "https://www.all-source.xyz/what-is-allsource",
+      "status": 200,
+      "title_length": 62,
+      "meta_description_length": 143
+    },
+    {
+      "url": "https://www.all-source.xyz/what-is-an-event-store",
+      "status": 200,
+      "title_length": 56,
+      "meta_description_length": 164
+    },
+    {
+      "url": "https://www.all-source.xyz/install/claude-code",
+      "status": 200,
+      "title_length": 29,
+      "meta_description_length": 199
+    },
+    {
+      "url": "https://www.all-source.xyz/install/claude-desktop",
+      "status": 200,
+      "title_length": 32,
+      "meta_description_length": 224
+    },
+    {
+      "url": "https://www.all-source.xyz/install/cursor",
+      "status": 200,
+      "title_length": 24,
+      "meta_description_length": 187
+    },
+    {
+      "url": "https://www.all-source.xyz/install/windsurf",
+      "status": 200,
+      "title_length": 26,
+      "meta_description_length": 208
+    },
+    {
+      "url": "https://www.all-source.xyz/install/vscode",
+      "status": 200,
+      "title_length": 25,
+      "meta_description_length": 214
+    },
+    {
+      "url": "https://www.all-source.xyz/install/chatgpt",
+      "status": 200,
+      "title_length": 25,
+      "meta_description_length": 191
+    },
+    {
+      "url": "https://www.all-source.xyz/install/codex",
+      "status": 200,
+      "title_length": 23,
+      "meta_description_length": 198
+    },
+    {
+      "url": "https://www.all-source.xyz/install/opencode",
+      "status": 200,
+      "title_length": 26,
+      "meta_description_length": 202
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/12-microsecond-agent-memory",
+      "status": 200,
+      "title_length": 42,
+      "meta_description_length": 173
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/agent-memory-security-poisoning",
+      "status": 200,
+      "title_length": 64,
+      "meta_description_length": 150
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/agent-self-provisioning-allsource",
+      "status": 200,
+      "title_length": 60,
+      "meta_description_length": 134
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/ai-agents-need-memory",
+      "status": 200,
+      "title_length": 44,
+      "meta_description_length": 135
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/allsource-as-cms-from-claude-desktop",
+      "status": 200,
+      "title_length": 44,
+      "meta_description_length": 265
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/allsource-core-prime-hosted-mcp-explained",
+      "status": 200,
+      "title_length": 63,
+      "meta_description_length": 143
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/allsource-for-startups-dev-to-prod",
+      "status": 200,
+      "title_length": 66,
+      "meta_description_length": 194
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/allsource-vs-stoolap",
+      "status": 200,
+      "title_length": 67,
+      "meta_description_length": 264
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/audit-trails-soc2-event-sourcing",
+      "status": 200,
+      "title_length": 60,
+      "meta_description_length": 190
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/building-agent-memory-in-rust",
+      "status": 200,
+      "title_length": 66,
+      "meta_description_length": 185
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/building-an-ai-native-event-store-in-rust",
+      "status": 200,
+      "title_length": 41,
+      "meta_description_length": 211
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/chronis-0-8-0-web-viewer",
+      "status": 200,
+      "title_length": 38,
+      "meta_description_length": 269
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/compressed-index-doubles-cross-domain-recall",
+      "status": 200,
+      "title_length": 50,
+      "meta_description_length": 122
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/connecting-without-an-sdk",
+      "status": 200,
+      "title_length": 38,
+      "meta_description_length": 207
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/connection-path",
+      "status": 200,
+      "title_length": 69,
+      "meta_description_length": 272
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/crash-safe-agents-write-before-execute",
+      "status": 200,
+      "title_length": 55,
+      "meta_description_length": 183
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/event-sourcing-ai-agent-memory-guide",
+      "status": 200,
+      "title_length": 53,
+      "meta_description_length": 191
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/event-store-vs-database",
+      "status": 200,
+      "title_length": 54,
+      "meta_description_length": 121
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/from-zerodex-to-allsource",
+      "status": 200,
+      "title_length": 42,
+      "meta_description_length": 143
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/how-allsource-core-works",
+      "status": 200,
+      "title_length": 51,
+      "meta_description_length": 156
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/introducing-allsource",
+      "status": 200,
+      "title_length": 33,
+      "meta_description_length": 151
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/mammoth-durable-agent-memory",
+      "status": 200,
+      "title_length": 57,
+      "meta_description_length": 255
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/mcp-memory-server-guide",
+      "status": 200,
+      "title_length": 63,
+      "meta_description_length": 170
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/mcp-tools-claude-integration",
+      "status": 200,
+      "title_length": 24,
+      "meta_description_length": 77
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/multi-agent-coordination-event-stream",
+      "status": 200,
+      "title_length": 55,
+      "meta_description_length": 165
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/prime-0-21-4-text-vectors-and-tenant-memory",
+      "status": 200,
+      "title_length": 54,
+      "meta_description_length": 206
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/prime-stateless-over-core",
+      "status": 200,
+      "title_length": 30,
+      "meta_description_length": 263
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/real-time-dashboards-without-etl",
+      "status": 200,
+      "title_length": 62,
+      "meta_description_length": 189
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/reconstructing-agent-memory-in-rust",
+      "status": 200,
+      "title_length": 80,
+      "meta_description_length": 180
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/reproduce-the-469k-events-benchmark",
+      "status": 200,
+      "title_length": 54,
+      "meta_description_length": 266
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/rust-event-store-guide",
+      "status": 200,
+      "title_length": 53,
+      "meta_description_length": 173
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/temporal-ai-future-of-rag",
+      "status": 200,
+      "title_length": 51,
+      "meta_description_length": 124
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/tiered-context-loading-for-agent-loops",
+      "status": 200,
+      "title_length": 75,
+      "meta_description_length": 225
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/time-travel-queries",
+      "status": 200,
+      "title_length": 29,
+      "meta_description_length": 75
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/turbovec-vs-allsource",
+      "status": 200,
+      "title_length": 63,
+      "meta_description_length": 297
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/what-is-allsource-event-store",
+      "status": 200,
+      "title_length": 69,
+      "meta_description_length": 168
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/why-event-sourcing-2026",
+      "status": 200,
+      "title_length": 49,
+      "meta_description_length": 143
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/why-saas-needs-event-sourcing",
+      "status": 200,
+      "title_length": 56,
+      "meta_description_length": 190
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/why-your-agents-memory-returned-nothing",
+      "status": 200,
+      "title_length": 73,
+      "meta_description_length": 314
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/your-voice-file-shouldnt-be-dead-markdown",
+      "status": 200,
+      "title_length": 49,
+      "meta_description_length": 321
+    },
+    {
+      "url": "https://www.all-source.xyz/blog/zer0dex-vs-allsource-recall",
+      "status": 200,
+      "title_length": 54,
+      "meta_description_length": 165
+    }
+  ]
+}

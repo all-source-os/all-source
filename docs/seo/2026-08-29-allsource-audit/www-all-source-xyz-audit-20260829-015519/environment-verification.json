@@ -1,0 +1,147 @@
+{
+  "python": {
+    "ok": true,
+    "version": "3.12.9",
+    "required": "3.10+"
+  },
+  "dependencies": [
+    {
+      "package": "beautifulsoup4",
+      "module": "bs4",
+      "ok": true,
+      "version": "4.15.0"
+    },
+    {
+      "package": "defusedxml",
+      "module": "defusedxml",
+      "ok": true,
+      "version": "0.7.1"
+    },
+    {
+      "package": "google-analytics-data",
+      "module": "google.analytics.data",
+      "ok": true,
+      "version": "0.23.0"
+    },
+    {
+      "package": "google-auth",
+      "module": "google.auth",
+      "ok": true,
+      "version": "2.57.0"
+    },
+    {
+      "package": "google-auth-httplib2",
+      "module": "google_auth_httplib2",
+      "ok": true,
+      "version": null
+    },
+    {
+      "package": "google-auth-oauthlib",
+      "module": "google_auth_oauthlib",
+      "ok": true,
+      "version": null
+    },
+    {
+      "package": "google-api-python-client",
+      "module": "googleapiclient",
+      "ok": true,
+      "version": null
+    },
+    {
+      "package": "lxml",
+      "module": "lxml",
+      "ok": true,
+      "version": "6.1.2"
+    },
+    {
+      "package": "Markdown",
+      "module": "markdown",
+      "ok": true,
+      "version": "3.10.3"
+    },
+    {
+      "package": "matplotlib",
+      "module": "matplotlib",
+      "ok": true,
+      "version": "3.11.1"
+    },
+    {
+      "package": "openpyxl",
+      "module": "openpyxl",
+      "ok": true,
+      "version": "3.1.5"
+    },
+    {
+      "package": "Pillow",
+      "module": "PIL",
+      "ok": true,
+      "version": "12.3.0"
+    },
+    {
+      "package": "requests",
+      "module": "requests",
+      "ok": true,
+      "version": "2.34.2"
+    },
+    {
+      "package": "playwright",
+      "module": "playwright.sync_api",
+      "ok": true,
+      "version": null
+    },
+    {
+      "package": "rapidocr-onnxruntime",
+      "module": "rapidocr_onnxruntime",
+      "ok": false,
+      "error": "No module named 'rapidocr_onnxruntime'"
+    },
+    {
+      "package": "validators",
+      "module": "validators",
+      "ok": true,
+      "version": "0.35.0"
+    },
+    {
+      "package": "weasyprint",
+      "module": "weasyprint",
+      "ok": true,
+      "version": "69.0"
+    }
+  ],
+  "playwright_browser": {
+    "ok": true
+  },
+  "paths": {
+    "cache": {
+      "ok": true,
+      "path": "/Users/decebaldobrica/.codex/skills/seo/.seo-cache"
+    },
+    "output": {
+      "ok": true,
+      "path": "/Users/decebaldobrica/.codex/skills/seo/output"
+    }
+  },
+  "target": {
+    "ok": true,
+    "url": "https://www.all-source.xyz/",
+    "status_code": 200
+  },
+  "capabilities": {
+    "core_ready": true,
+    "visual_ready": true,
+    "premium_report_ready": true,
+    "google_api_package_ready": true,
+    "full_ready": true
+  },
+  "missing_required": [],
+  "missing_visual": [],
+  "missing_report": [],
+  "missing_google_api": [],
+  "missing_optional": [
+    "rapidocr-onnxruntime"
+  ],
+  "ready": true,
+  "notes": [
+    "Missing optional packages: rapidocr-onnxruntime."
+  ]
+}

@@ -4,8 +4,7 @@
 // from hardcoded numbers, so they can never drift from the real charge.
 //
 // `siteConfig.pricing` remains the source for tier METADATA (names, features,
-// MCP verbs, x402 allowances) and as a price FALLBACK only when the catalog is
-// unreachable — never as the authoritative price when the catalog is present.
+// MCP verbs, x402 allowances). Paid prices never fall back to static config.
 
 export type CatalogPrice = {
   cents: number;
@@ -22,43 +21,41 @@ export type CatalogTier = {
 export type Catalog = {
   currency: string;
   tiers: CatalogTier[];
+  fetched_at?: string;
+  stale?: boolean;
 };
 
 export type CatalogByTier = Record<string, CatalogTier>;
+
+const CATALOG_FETCH_TIMEOUT_MS = 2_000;
 
 function controlPlaneUrl(): string {
   return process.env.CONTROL_PLANE_INTERNAL_URL || "http://localhost:3901";
 }
 
-// Last-known-good catalog, kept per server instance. When the control plane /
-// LS is briefly unreachable (e.g. during ISR revalidation) we serve the most
-// recent successful catalog instead of falling back to config prices, which
-// could diverge from what LS actually charges (t-3ff5f6).
-let lastGoodCatalog: Catalog | null = null;
-
 /**
  * Server-side fetch of the pricing catalog from the control plane.
- * On failure, returns the last-known-good catalog if we've ever fetched one,
- * else null. Callers MUST NOT substitute config prices for a null paid-tier
+ * On failure, returns null. Callers MUST NOT substitute config prices for a null paid-tier
  * price — render a dash via {@link resolveMonthly}/{@link resolveYearlyPerMonth}.
- * Cached for an hour (prices change rarely; the control plane also caches).
+ * No second cache here; the control plane refreshes every five minutes and
+ * retains a provider-confirmed last-known-good snapshot for at most 14 days.
  */
 export async function fetchCatalog(): Promise<Catalog | null> {
   try {
     const res = await fetch(`${controlPlaneUrl()}/api/v1/billing/catalog`, {
-      next: { revalidate: 3600 },
+      cache: "no-store",
+      signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS),
     });
-    if (!res.ok) return lastGoodCatalog;
+    if (!res.ok) return null;
     const catalog = (await res.json()) as Catalog;
-    if (catalog?.tiers?.length) lastGoodCatalog = catalog;
-    return catalog;
+    return catalog?.tiers?.length ? catalog : null;
   } catch {
-    return lastGoodCatalog;
+    return null;
   }
 }
 
 // PriceUnavailable is shown when a paid tier's live price can't be resolved
-// (catalog + last-good cache both empty). Never fall back to a config number.
+// from Lemon Squeezy. Never fall back to a config number.
 export const PriceUnavailable = "—";
 
 /**
@@ -77,8 +74,7 @@ export function isFixedConfigPrice(price: string | undefined): boolean {
 /**
  * resolveMonthly returns the monthly price string to display for a tier. Fixed
  * tiers return their config price; paid tiers return the live/last-good catalog
- * price, or {@link PriceUnavailable} — NEVER the config price (which could be
- * stale relative to LS).
+ * price, or {@link PriceUnavailable} — NEVER the config price.
  */
 export function resolveMonthly(cat: CatalogTier | undefined, configPrice: string): string {
   if (isFixedConfigPrice(configPrice)) return configPrice;
@@ -96,9 +92,63 @@ export function resolveAnnualTotal(cat: CatalogTier | undefined): string | undef
   return cat?.annual?.formatted;
 }
 
+/** The amount actually charged for the selected billing period, never an annual /12 estimate. */
+export function resolveBilledPrice(
+  cat: CatalogTier | undefined,
+  configPrice: string,
+  period: "monthly" | "annual"
+): string {
+  if (isFixedConfigPrice(configPrice)) return configPrice;
+  return period === "annual"
+    ? (resolveAnnualTotal(cat) ?? PriceUnavailable)
+    : resolveMonthly(cat, configPrice);
+}
+
+/** Carry the selected tier and period through sign-up to the billing page. */
+export function pricingSignupHref(tier: string, period: "monthly" | "annual"): string {
+  const destination = `/dashboard/billing?plan=${encodeURIComponent(tier)}&period=${period}`;
+  return `/signup?next=${encodeURIComponent(destination)}`;
+}
+
 /** Index a catalog by tier id for O(1) lookup; tolerant of null. */
 export function indexByTier(catalog: Catalog | null): CatalogByTier {
   const map: CatalogByTier = {};
   for (const t of catalog?.tiers ?? []) map[t.tier] = t;
   return map;
+}
+
+/**
+ * Minimum whole-percent annual saving across every self-serve tier, compared
+ * with paying its monthly price twelve times. A conservative minimum keeps a
+ * single Yearly-toggle badge truthful for every plan; never infer savings from
+ * config prices, missing variants, or a stale provider snapshot.
+ */
+export function minimumAnnualSavingsPercent(
+  catalog: Catalog | null | undefined,
+  tierIds: readonly string[]
+): number | null {
+  if (!catalog || catalog.stale || tierIds.length === 0) return null;
+  const byTier = indexByTier(catalog);
+  let minimum = 100;
+
+  for (const tierId of tierIds) {
+    const monthlyCents = byTier[tierId]?.monthly?.cents;
+    const annualCents = byTier[tierId]?.annual?.cents;
+    if (
+      !Number.isSafeInteger(monthlyCents) ||
+      !Number.isSafeInteger(annualCents) ||
+      monthlyCents === undefined ||
+      annualCents === undefined ||
+      monthlyCents <= 0 ||
+      annualCents <= 0
+    ) {
+      return null;
+    }
+
+    const twelveMonths = monthlyCents * 12;
+    if (!Number.isSafeInteger(twelveMonths) || annualCents >= twelveMonths) return null;
+    minimum = Math.min(minimum, Math.floor(((twelveMonths - annualCents) * 100) / twelveMonths));
+  }
+
+  return minimum > 0 ? minimum : null;
 }

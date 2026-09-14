@@ -14,7 +14,7 @@
 //     services have zero PostgreSQL dependency.
 //   • The 5 Fly.io backends are: allsource-core, allsource-query,
 //     allsource-control-plane, allsource-auth, allsource-prime.
-//     The web frontend is on Vercel (www.all-source.xyz).
+//     The web frontend is on Fly.io (www.all-source.xyz).
 //   • Topology: Clients → Control Plane / Query Service → Core. Control Plane
 //     owns public auth + billing; Query Service owns tenant-facing read paths.
 //
@@ -142,7 +142,7 @@ const contextNodes: C4Node[] = [
     id: "vercel",
     name: "Vercel",
     type: "external",
-    description: "Hosts the Next.js web frontend at www.all-source.xyz.",
+    description: "Hosts the Next.js web frontend on Fly.io at www.all-source.xyz.",
   },
   {
     id: "billing",

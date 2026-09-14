@@ -12,8 +12,8 @@ export default async function BlogSection() {
   return (
     <Section title="Recent product and engineering notes" subtitle="From the AllSource team">
       <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-        {articles.map((data, idx) => (
-          <BlogCard key={data.slug} data={data} priority={idx <= 1} />
+        {articles.map((data) => (
+          <BlogCard key={data.slug} data={data} />
         ))}
       </div>
       <div className="mt-8 flex justify-center">

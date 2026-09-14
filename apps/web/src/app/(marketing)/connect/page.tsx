@@ -6,6 +6,7 @@ import { ConnectClient } from "./connect-client";
 export const metadata = constructMetadata({
   title: "Connect to Claude Desktop",
   description: `Mint an API key and copy a ready-to-paste config to wire ${siteConfig.name} Prime into Claude Desktop.`,
+  canonical: "/connect",
 });
 
 export default function ConnectPage() {

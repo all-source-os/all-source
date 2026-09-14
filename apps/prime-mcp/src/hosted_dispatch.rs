@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use crate::{
     protocol::{self, Request, Response},
     tools,
+    wire::{Fields, Page, node_row, paged},
 };
 
 /// Dispatch one JSON-RPC request against a tenant-scoped [`HostedPrime`].
@@ -138,12 +139,6 @@ fn tool_error(msg: &str) -> Value {
     })
 }
 
-/// Shape a [`Node`](allsource_core::prime::Node) the same way the embedded
-/// tools do (`{id, type, properties}`), so hosted results are wire-identical.
-fn node_json(n: &allsource_core::prime::Node) -> Value {
-    json!({ "id": n.id.as_str(), "type": n.node_type, "properties": n.properties })
-}
-
 // ── Tool implementations (mirroring tools.rs arg parsing + result shaping) ──
 
 async fn call_add_node(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value {
@@ -206,8 +201,11 @@ async fn call_neighbors(hosted: &HostedPrime, tenant: &str, args: &Value) -> Val
     // graph traversal and is not available on the hosted backend yet.
     match hosted.neighbors(tenant, node_id, relation, direction).await {
         Ok(nodes) => {
-            let nodes_json: Vec<Value> = nodes.iter().map(node_json).collect();
-            tool_result(json!({ "nodes": nodes_json }))
+            let fields = Fields::from_args(args, Fields::Full);
+            let page = Page::from_args(args);
+            let (nodes, total) = page.apply(nodes);
+            let nodes_json: Vec<Value> = nodes.iter().map(|n| node_row(n, fields)).collect();
+            tool_result(paged("nodes", nodes_json, page, total))
         }
         Err(e) => tool_error(&e.to_string()),
     }
@@ -219,8 +217,11 @@ async fn call_search(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value 
     };
     match hosted.search(tenant, node_type).await {
         Ok(nodes) => {
-            let nodes_json: Vec<Value> = nodes.iter().map(node_json).collect();
-            tool_result(json!({ "nodes": nodes_json }))
+            let fields = Fields::from_args(args, Fields::Summary);
+            let page = Page::from_args(args);
+            let (nodes, total) = page.apply(nodes);
+            let nodes_json: Vec<Value> = nodes.iter().map(|n| node_row(n, fields)).collect();
+            tool_result(paged("nodes", nodes_json, page, total))
         }
         Err(e) => tool_error(&e.to_string()),
     }
@@ -264,12 +265,9 @@ async fn call_recall(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value 
             let nodes_json: Vec<Value> = results
                 .iter()
                 .map(|(n, score)| {
-                    json!({
-                        "id": n.id.as_str(),
-                        "type": n.node_type,
-                        "properties": n.properties,
-                        "score": score,
-                    })
+                    let mut row = node_row(n, Fields::Full);
+                    row["score"] = json!(score);
+                    row
                 })
                 .collect();
             tool_result(json!({ "nodes": nodes_json }))

@@ -1,0 +1,55 @@
+# AllSource public website. Build context must be repository root:
+#   flyctl deploy . --config apps/web/fly.toml
+
+app = "allsource-web"
+primary_region = "iad"
+
+[build]
+  # Resolved relative to this fly.toml; build context remains repository root.
+  dockerfile = "Dockerfile"
+
+  [build.args]
+    NEXT_PUBLIC_APP_URL = "https://www.all-source.xyz"
+    NEXT_PUBLIC_API_URL = "https://api.all-source.xyz"
+    NEXT_PUBLIC_CONTROL_PLANE_URL = "https://api.all-source.xyz"
+    NEXT_PUBLIC_WS_URL = "wss://allsource-query.fly.dev"
+    NEXT_PUBLIC_GA_MEASUREMENT_ID = "G-3347JLG51K"
+
+[env]
+  PORT = "3000"
+  HOSTNAME = "0.0.0.0"
+  NEXT_PUBLIC_APP_URL = "https://www.all-source.xyz"
+  NEXT_PUBLIC_API_URL = "https://api.all-source.xyz"
+  NEXT_PUBLIC_CONTROL_PLANE_URL = "https://api.all-source.xyz"
+  NEXT_PUBLIC_WS_URL = "wss://allsource-query.fly.dev"
+  NEXT_PUBLIC_GA_MEASUREMENT_ID = "G-3347JLG51K"
+  CONTROL_PLANE_INTERNAL_URL = "http://allsource-control-plane.internal:3901"
+  CONTROL_PLANE_URL = "https://api.all-source.xyz"
+  QUERY_SERVICE_URL = "http://allsource-query.internal:3902"
+  AUTH_SERVICE_URL = "http://allsource-auth.internal:3903"
+  ALLSOURCE_API_URL = "https://api.all-source.xyz"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/healthz"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

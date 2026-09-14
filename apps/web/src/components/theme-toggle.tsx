@@ -18,7 +18,9 @@ export function ThemeToggle() {
       <Button
         variant="ghost"
         size="icon"
-        className="fixed bottom-4 right-4 z-50 h-10 w-10 rounded-full border bg-background/80 backdrop-blur-sm shadow-lg"
+        className="h-12 w-12 shrink-0 rounded-md border bg-background"
+        aria-label="Loading theme control"
+        disabled
       >
         <span className="h-5 w-5" />
       </Button>
@@ -31,7 +33,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="fixed bottom-4 right-4 z-50 h-10 w-10 rounded-full border bg-background/80 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110"
+      className="h-12 w-12 shrink-0 rounded-md border bg-background transition-colors"
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
       <Sun
@@ -40,7 +42,7 @@ export function ThemeToggle() {
       <Moon
         className={`h-5 w-5 text-primary transition-all duration-300 ${isDark ? "scale-100 rotate-0 opacity-100" : "scale-0 -rotate-90 opacity-0"} absolute`}
       />
-      <span className="sr-only">Toggle theme</span>
+      <span className="sr-only">Use {isDark ? "light" : "dark"} theme</span>
     </Button>
   );
 }

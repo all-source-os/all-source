@@ -261,9 +261,13 @@ jobs:
           workspaces: "apps/prime-mcp -> target"
           key: ${{ matrix.target }}
 
+      # --no-default-features leaves the 86 MB model OUT of the binary. The
+      # .dxt ships it once alongside both binaries instead of baking a copy
+      # into each; the crate default stays bundled so `cargo install` works
+      # with no network.
       - name: Build
         working-directory: apps/prime-mcp
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --no-default-features --target ${{ matrix.target }}
 
       - name: Package binary
         run: |
@@ -311,12 +315,30 @@ jobs:
           tar -xzf prime-artifacts/allsource-prime-macos-aarch64.tar.gz -C extracted
           ls -la extracted/
 
+      # Produce the model dir by running the real fetch path, so a broken
+      # upstream fails the release here instead of shipping a bundle whose
+      # embedder dies on the user's first recall. The snapshot dir is located
+      # by finding model.onnx rather than by revision, so a fastembed cache
+      # layout or pin change cannot silently miss it.
+      - name: Fetch embedding model
+        run: |
+          set -euo pipefail
+          chmod +x extracted/allsource-prime-linux-x86_64
+          FASTEMBED_CACHE_DIR="$PWD/model-cache"
+          export FASTEMBED_CACHE_DIR
+          ./extracted/allsource-prime-linux-x86_64 \
+            --data-dir "$(mktemp -d)" --mode warm
+          ONNX="$(find "$FASTEMBED_CACHE_DIR" -name model.onnx -print -quit)"
+          [ -n "$ONNX" ] || { echo "no model.onnx under $FASTEMBED_CACHE_DIR" >&2; exit 1; }
+          echo "MODEL_DIR=$(dirname "$ONNX")" >> "$GITHUB_ENV"
+
       - name: Build .dxt
         run: |
           apps/prime-mcp/scripts/build-dxt.sh \
             --version "v${{ needs.validate.outputs.version }}" \
             --darwin-binary extracted/allsource-prime-macos-aarch64 \
             --linux-binary  extracted/allsource-prime-linux-x86_64 \
+            --model-dir     "$MODEL_DIR" \
             --out dist/allsource-prime.dxt
 
       - name: Validate manifest against MCPB spec
@@ -361,7 +383,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: apps/control-plane/go.sum
 
       - name: Build

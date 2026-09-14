@@ -1,10 +1,61 @@
 export const BLUR_FADE_DELAY = 0.15;
 
+export const platformNavigationGroups = [
+  {
+    id: "core",
+    label: "Core",
+    items: [
+      {
+        href: "/what-is-allsource",
+        label: "Platform overview",
+        description: "Core, Query Service, Prime, hosted services, and MCP.",
+      },
+      {
+        href: "/platform/event-sourcing",
+        label: "Core event store",
+        description: "Immutable streams, replay, snapshots, and schemas.",
+      },
+      {
+        href: "/platform/query-service",
+        label: "Query Service",
+        description: "Tenant-scoped HTTP, realtime, analytics, and projections.",
+      },
+    ],
+  },
+  {
+    id: "build-with-it",
+    label: "Build with it",
+    items: [
+      {
+        href: "/prime",
+        label: "Prime agent memory",
+        description: "Graph, vector, and temporal memory over Core history.",
+      },
+      {
+        href: "/event-sourcing/patterns",
+        label: "Production patterns",
+        description: "Ten practical event-sourcing implementation guides.",
+      },
+      {
+        href: "/examples",
+        label: "Live demo",
+        description: "Inspect timelines, replay, projections, and MCP access.",
+      },
+    ],
+  },
+] as const;
+
+export const primaryNavigation = [
+  { href: "/use-cases", label: "Use cases" },
+  { href: "/docs", label: "Docs" },
+  { href: "/pricing", label: "Pricing" },
+] as const;
+
 export const siteConfig = {
   name: "AllSource",
   productName: "AllSource Event Store",
   description:
-    "AllSource Event Store is developer infrastructure for durable system history and AI-agent memory, built on an Apache-2.0 Rust core.",
+    "AllSource is a purpose-built event store database for immutable streams, replay, projections, temporal queries, and durable consumers.",
   // Single source of truth for the headline performance numbers. Both the
   // homepage demo chrome and the below-the-fold stat strip read from here so
   // the values can never desync — and so they can be rendered at their FINAL
@@ -27,10 +78,15 @@ export const siteConfig = {
   // Override in `.env.local` if you want localhost in dev OG tags.
   url: process.env.NEXT_PUBLIC_APP_URL || "https://www.all-source.xyz",
   keywords: [
+    "Event Store Database",
     "Event Sourcing",
     "Event Store",
+    "Event Sourcing Database",
+    "Immutable Event Streams",
+    "Event Store Projections",
+    "Event Store Snapshots",
+    "Durable Subscriptions",
     "Temporal Data",
-    "AI-Native",
     "Stream Processing",
     "Real-time Analytics",
     "CQRS",
@@ -58,100 +114,50 @@ export const siteConfig = {
       content: {
         main: {
           icon: "logo" as const,
-          title: "Event Store Engine",
-          description: "Event sourcing with a published 469K events/sec batch-ingest reference.",
-          href: "/platform/event-sourcing",
+          title: "Platform overview",
+          description: "Core, Query Service, Prime, hosted services, and MCP.",
+          href: "/what-is-allsource",
         },
         items: [
           {
             href: "/platform/event-sourcing",
-            title: "Event Sourcing",
-            description: "Immutable event logs with time-travel queries.",
+            title: "Core event store",
+            description: "Immutable streams, replay, snapshots, and schemas.",
           },
           {
-            href: "/platform/stream-processing",
-            title: "Stream Processing",
-            description: "Real-time pipelines with filter, map, and reduce.",
-          },
-          {
-            href: "/docs/mcp",
-            title: "MCP Tools for Agents",
-            description: "55 tenant tools by default; 73 with fleet and admin controls.",
+            href: "/platform/query-service",
+            title: "Query Service",
+            description: "Tenant-scoped HTTP, realtime, analytics, and projections.",
           },
           {
             href: "/prime",
-            title: "Prime — Memory for Claude",
-            description: "Persistent agent memory over MCP with in-process embeddings.",
+            title: "Prime agent memory",
+            description: "Graph, vector, and temporal memory over Core history.",
           },
           {
-            href: "/solutions/quant-intelligence",
-            title: "Quant Intelligence",
-            description: "Bars, correlations, forecasts, and regime summaries from event history.",
+            href: "/event-sourcing/patterns",
+            title: "Production patterns",
+            description: "Ten practical event-sourcing implementation guides.",
+          },
+          {
+            href: "/examples",
+            title: "Live demo",
+            description: "Inspect timelines, replay, projections, and MCP access.",
           },
         ],
       },
     },
     {
-      trigger: "Solutions",
-      content: {
-        items: [
-          {
-            title: "Audit & Compliance",
-            href: "/solutions/audit-compliance",
-            description: "Complete audit trails with immutable event history.",
-          },
-          {
-            title: "Real-time Analytics",
-            href: "/solutions/real-time-analytics",
-            description: "11.9μs p99 reads in the published reference benchmark.",
-          },
-          {
-            title: "AI Agents",
-            href: "/solutions/agent-memory",
-            description: "MCP server integration for autonomous workflows.",
-          },
-          {
-            title: "Financial Services",
-            href: "/solutions/financial-services",
-            description: "Transaction logs with temporal consistency.",
-          },
-          {
-            title: "IoT & Telemetry",
-            href: "/solutions/iot-telemetry",
-            description: "High-throughput ingestion for sensor data.",
-          },
-          {
-            title: "Multi-tenant SaaS",
-            href: "/solutions/multi-tenant-saas",
-            description: "Secure isolation with RBAC and policy enforcement.",
-          },
-          {
-            title: "Quant Intelligence",
-            href: "/solutions/quant-intelligence",
-            description: "Market-event storage and reproducible analytical summaries.",
-          },
-        ],
-      },
+      href: "/use-cases",
+      label: "Use cases",
     },
     {
-      href: "/install",
-      label: "Install",
+      href: "/docs",
+      label: "Docs",
     },
     {
       href: "/pricing",
       label: "Pricing",
-    },
-    {
-      href: "/ecosystem",
-      label: "Ecosystem",
-    },
-    {
-      href: "/architecture",
-      label: "Architecture",
-    },
-    {
-      href: "/blog",
-      label: "Blog",
     },
   ],
   // Single source of truth for pricing tiers. The /pricing page and the
@@ -336,7 +342,7 @@ export const siteConfig = {
     {
       question: "What is AllSource?",
       answer:
-        "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores ordered application events; Prime derives agent memory; hosted services operate the stack; separate MCP connectors expose event or memory tools.",
+        "AllSource is a purpose-built event store database for event sourcing. Core stores ordered, immutable application events; Query Service builds tenant-facing read paths; Prime derives agent memory from the same history; hosted services operate the stack.",
     },
     {
       question: "Is AllSource the same as ArcGIS AllSource?",
@@ -375,6 +381,7 @@ export const siteConfig = {
       links: [
         { href: "/what-is-allsource", text: "What is AllSource?", icon: null },
         { href: "/platform/event-sourcing", text: "Event Store", icon: null },
+        { href: "/event-sourcing/patterns", text: "Event-Sourcing Patterns", icon: null },
         { href: "/platform/stream-processing", text: "Stream Processing", icon: null },
         { href: "/platform/prime", text: "Prime (agent memory)", icon: null },
         { href: "/docs/mcp", text: "MCP Server", icon: null },
@@ -422,6 +429,7 @@ export const siteConfig = {
       title: "Company",
       links: [
         { href: "/about", text: "About", icon: null },
+        { href: "/design-partners", text: "Design partners", icon: null },
         { href: "/blog", text: "Blog", icon: null },
         { href: "/status", text: "Status", icon: null },
         { href: "/privacy", text: "Privacy Policy", icon: null },

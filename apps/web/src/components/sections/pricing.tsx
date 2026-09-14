@@ -5,14 +5,17 @@ import { Check } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { FaStar } from "react-icons/fa";
+import useSWR from "swr";
 import { staticMotion as motion } from "@/components/ui/static-motion";
 import { siteConfig } from "@/lib/config";
 import {
   type Catalog,
   indexByTier,
+  minimumAnnualSavingsPercent,
   PriceUnavailable,
+  pricingSignupHref,
   resolveAnnualTotal,
-  resolveMonthly,
+  resolveBilledPrice,
   resolveYearlyPerMonth,
 } from "@/lib/pricing-catalog";
 
@@ -22,11 +25,18 @@ import {
 // on /pricing is Indie. (The Apache-2.0 self-host path still lives in the "Why no free
 // plan?" FAQ.) The 14-day trial is how you start without paying immediately.
 const cardTiers = siteConfig.pricing.filter((p) => !p.isEnterprise && !p.isSelfHost);
+const cardTierIds = cardTiers.map((p) => p.tier);
 const enterpriseTier = siteConfig.pricing.find((p) => p.isEnterprise);
 
-// `catalog` carries live LemonSqueezy prices (source of truth). When present,
-// its prices win over the static config prices; config is only a fallback for
-// when the catalog is unreachable.
+async function loadCatalog(): Promise<Catalog | null> {
+  const response = await fetch("/api/billing/catalog");
+  if (!response.ok) throw new Error("Pricing catalog unavailable");
+  const catalog = (await response.json()) as Catalog;
+  return catalog?.tiers?.length ? catalog : null;
+}
+
+// `catalog` carries live LemonSqueezy prices (source of truth). On a statically
+// rendered page, load them after paint; never substitute static paid prices.
 export default function PricingSection({
   catalog,
   headingLevel = 2,
@@ -37,7 +47,18 @@ export default function PricingSection({
   title?: string;
 }) {
   const [isMonthly, setIsMonthly] = useState(true);
-  const prices = indexByTier(catalog ?? null);
+  const { data: browserCatalog, isLoading: catalogLoading } = useSWR(
+    catalog ? null : "/api/billing/catalog",
+    loadCatalog,
+    {
+      dedupingInterval: 2_000,
+      refreshInterval: (latest) => (latest?.tiers?.length ? 300_000 : 5_000),
+      revalidateOnFocus: false,
+    }
+  );
+  const activeCatalog = catalog ?? browserCatalog ?? null;
+  const prices = indexByTier(activeCatalog);
+  const yearlySavings = minimumAnnualSavingsPercent(activeCatalog, cardTierIds);
 
   return (
     <Section
@@ -71,10 +92,24 @@ export default function PricingSection({
             )}
           >
             Yearly
-            <span className="text-xs bg-green-500 text-white px-1.5 py-0.5 rounded-full">-20%</span>
+            {yearlySavings !== null && (
+              <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-semibold text-emerald-100">
+                Save {yearlySavings}%
+              </span>
+            )}
           </button>
         </div>
       </div>
+
+      {activeCatalog?.stale && activeCatalog.fetched_at && (
+        <p
+          className="mx-auto mb-6 max-w-3xl text-center text-sm text-muted-foreground"
+          role="status"
+        >
+          Prices last confirmed with Lemon Squeezy {activeCatalog.fetched_at.slice(0, 10)}. Checkout
+          shows the current total before payment.
+        </p>
+      )}
 
       {/* Three paid card tiers (self-host removed) — a 3-col grid, centered and
           width-capped so the cards don't left-align against an empty 4th column. */}
@@ -83,11 +118,14 @@ export default function PricingSection({
           // LemonSqueezy price (source of truth). Paid tiers with no live/
           // cached price render a dash, never a possibly-stale config number.
           const cat = prices[plan.tier];
-          const monthlyStr = resolveMonthly(cat, plan.price);
-          const yearlyStr = resolveYearlyPerMonth(cat, plan.price);
+          const yearlyEquivalent = resolveYearlyPerMonth(cat, plan.price);
           const annualTotal = resolveAnnualTotal(cat);
-          const displayPrice = isMonthly ? monthlyStr : yearlyStr;
-          const isNumericPrice = displayPrice.startsWith("$");
+          const displayPrice = resolveBilledPrice(
+            cat,
+            plan.price,
+            isMonthly ? "monthly" : "annual"
+          );
+          const isNumericPrice = displayPrice !== PriceUnavailable;
           const isPriceUnavailable = displayPrice === PriceUnavailable;
 
           return (
@@ -114,8 +152,10 @@ export default function PricingSection({
             >
               {plan.isPopular && (
                 <div className="absolute top-0 right-0 bg-primary py-0.5 px-2 rounded-bl-xl rounded-tr-xl flex items-center">
-                  <FaStar className="text-white" />
-                  <span className="text-white ml-1 font-sans font-semibold">Popular</span>
+                  <FaStar className="text-primary-foreground" />
+                  <span className="ml-1 font-sans font-semibold text-primary-foreground">
+                    Popular
+                  </span>
                 </div>
               )}
               <div>
@@ -131,7 +171,7 @@ export default function PricingSection({
                   </span>
                   {isNumericPrice && (
                     <span className="mb-1 text-sm font-semibold leading-6 tracking-wide text-muted-foreground">
-                      /mo
+                      /{isMonthly ? "mo" : "yr"}
                     </span>
                   )}
                 </p>
@@ -139,13 +179,15 @@ export default function PricingSection({
                   {plan.isSelfHost
                     ? plan.period
                     : isPriceUnavailable
-                      ? "Live catalog could not be reached"
+                      ? catalogLoading
+                        ? "Checking current price"
+                        : "Live catalog could not be reached"
                       : isNumericPrice
                         ? isMonthly
-                          ? "billed monthly"
+                          ? "Billed monthly"
                           : annualTotal
-                            ? `billed annually (${annualTotal}/yr)`
-                            : "billed yearly"
+                            ? `${yearlyEquivalent}/mo equivalent · charged annually`
+                            : "Annual price unavailable"
                         : ""}
                 </p>
 
@@ -167,14 +209,16 @@ export default function PricingSection({
 
               <div>
                 <hr className="w-full my-4" />
-                {/* 011: map tier -> price id. For now route to signup / github / mailto. */}
+                {/* Sign-up preserves selected tier and billing period. */}
                 <Link
-                  href={plan.href}
+                  href={pricingSignupHref(plan.tier, isMonthly ? "monthly" : "annual")}
                   className={cn(
                     buttonVariants({ variant: "outline" }),
                     "group relative w-full gap-2 overflow-hidden text-base font-semibold tracking-tight",
-                    "transform-gpu ring-offset-current transition-all duration-300 ease-out hover:ring-2 hover:ring-primary hover:ring-offset-1 hover:bg-primary hover:text-white",
-                    plan.isPopular ? "bg-primary text-white" : "bg-background text-foreground"
+                    "transform-gpu ring-offset-current transition-all duration-300 ease-out hover:ring-2 hover:ring-primary hover:ring-offset-1 hover:bg-primary hover:text-primary-foreground",
+                    plan.isPopular
+                      ? "!bg-[#075985] !text-white hover:!bg-[#064E75]"
+                      : "bg-background text-foreground"
                   )}
                 >
                   {plan.buttonText}
@@ -188,7 +232,7 @@ export default function PricingSection({
 
       {/* Enterprise — quieter strip below, width-matched to the cards above. */}
       {enterpriseTier && (
-        <div className="mx-auto mt-6 flex max-w-5xl flex-col items-start justify-between gap-4 rounded-2xl border border-border bg-foreground px-8 py-6 text-background sm:flex-row sm:items-center">
+        <div className="mx-auto mt-6 flex max-w-5xl flex-col items-start justify-between gap-4 rounded-2xl border border-border bg-[#0E2E4F] px-8 py-6 text-[#F1F7FB] sm:flex-row sm:items-center">
           <div>
             <p className="text-lg font-semibold">{enterpriseTier.name}</p>
             <p className="text-sm opacity-80">
@@ -201,7 +245,7 @@ export default function PricingSection({
             href={enterpriseTier.href}
             className={cn(
               buttonVariants({ variant: "outline" }),
-              "shrink-0 bg-background text-foreground hover:bg-background/90"
+              "shrink-0 !bg-[#F1F7FB] !text-[#0E2E4F] hover:!bg-white"
             )}
           >
             {enterpriseTier.buttonText}

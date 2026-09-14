@@ -101,12 +101,26 @@ per-tenant projection compute (overridable only via an inline
 
 ## Production Deployment Topology
 
-**Backend → Fly.io. Frontend → Vercel. Never mix these up.**
+**Everything runs on Fly.io, in the `allsource` organization.** Frontends moved
+off Vercel on 2026-09-02 (`fc601012`); `docs/runbooks/FLY_FRONTENDS.md` is the
+authority for the frontend half.
 
-- **Fly.io** hosts the 5 backend apps: `allsource-core`, `allsource-query`, `allsource-control-plane`, `allsource-auth`, `allsource-prime`. Deploy with `fly deploy` (see each app's `fly.toml`).
-- **Vercel** hosts the web frontend at `https://www.all-source.xyz` (apex + www). There is **no** `allsource-web` Fly app — it was destroyed on 2026-04-15 after being accidentally redeployed. **Do NOT** run `fly deploy` for anything under `apps/web/`. There is intentionally no `apps/web/fly.toml`. Frontend changes ship via `git push origin main` (Vercel auto-build) or `vercel --prod`.
-- Vercel env vars (`NEXT_PUBLIC_API_URL`, `CONTROL_PLANE_INTERNAL_URL`, OAuth client IDs) are configured in the Vercel dashboard, not in any `fly.toml`.
-- If `allsource-web` ever appears in `fly apps list`, that's a regression — flag it and destroy it.
+| Fly app | Surface | Deploy |
+|---|---|---|
+| `allsource-core` | event store | `fly deploy --config apps/core/fly.toml` from the repo **root** |
+| `allsource-query` | Query Service | `fly deploy --config apps/query-service/fly.toml` |
+| `allsource-control-plane` | `api.all-source.xyz` | `fly deploy` from `apps/control-plane` |
+| `allsource-auth` | Rust auth service | `fly deploy --config apps/auth/fly.toml` |
+| `allsource-prime` | Prime MCP | `fly deploy --config apps/prime-mcp/fly.toml --dockerfile apps/prime-mcp/Dockerfile` from the root |
+| `allsource-web` | `all-source.xyz` + `www` | `fly deploy . --config apps/web/fly.toml --remote-only --ha=false` |
+| `allsource-admin` | `admin.all-source.xyz` | `fly deploy . --config apps/admin/fly.toml --remote-only --ha=false` |
+
+Build context differs per app and is not guessable — a wrong context fails the
+Docker build in a way that reads as a missing file. Follow the table.
+
+Public values are build arguments in each `fly.toml`; server-only URLs and
+tokens are Fly secrets or runtime env. Unstoppable Domains DNS points the apex,
+`www`, `admin` and `api` records straight at Fly.
 
 ## Core API
 

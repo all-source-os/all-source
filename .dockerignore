@@ -32,6 +32,8 @@
 # single session. Core builds with the repo ROOT as its context, so without
 # this every `fly deploy` uploads all of it.
 .claude/
+.chronis/
+proofshot-artifacts/
 
 # Documentation (but keep content for blogs and changelog)
 *.md

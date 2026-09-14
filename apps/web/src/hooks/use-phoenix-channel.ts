@@ -21,7 +21,7 @@ let currentToken: string | null = null;
  * only read server-side and is undefined in the browser. WebSockets can't be
  * tunneled through a Next.js route handler, so without an explicit
  * `NEXT_PUBLIC_WS_URL` there is no backend to reach. Previously this fell back
- * to `window.location.host` — the Vercel frontend (www.all-source.xyz), which
+ * to `window.location.host` — the frontend (www.all-source.xyz), which
  * has no Phoenix endpoint — producing an endless `wss://.../ws → 404` reconnect
  * storm in the console. Only fall back to the page origin for local dev, where
  * the dev server fronts the Query Service.

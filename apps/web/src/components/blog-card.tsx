@@ -19,6 +19,7 @@ export default function BlogCard({ data, priority }: { data: Post; priority?: bo
             height={630}
             alt={data.title}
             priority={priority}
+            sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
           />
         )}
         {!data.image && <div className="bg-gray-200 h-[180px] mb-4 rounded" />}

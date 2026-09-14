@@ -1,0 +1,235 @@
+# AllSource Event Store — LLM & Agent Quick-Start
+# https://www.all-source.xyz
+# This file is designed to be fetched and parsed by LLMs and AI agents.
+#
+# GROUND TRUTH. Every number below is checked against the repository, not
+# against marketing copy. If you are editing this file, the source for each
+# claim is named in a comment next to it. This is the file we serve
+# specifically to LLMs, so a wrong fact here is repeated back to us by the
+# systems we most want to be accurate about us.
+# Last verified: 2026-09-10.
+
+## What is AllSource?
+AllSource is a purpose-built event store database for event sourcing. AllSource
+Core stores ordered, immutable application events for replay, projections,
+snapshots, schema-governed writes, temporal queries, and durable consumers.
+AllSource Query Service separates tenant-scoped HTTP, realtime, analytics, and
+projection reads over Core. AllSource Prime derives graph, vector, and temporal
+agent memory from same durable history. Hosted AllSource operates tenant-scoped
+services. Separate MCP connectors expose event-store or Prime tools to agents.
+
+Canonical identity: https://www.all-source.xyz and
+https://github.com/all-source-os/all-source. This product is NOT Esri ArcGIS
+AllSource, the all-source intelligence discipline, AllSource Analysis, or an
+audience-data, logistics, procurement, or defense-contracting company using a
+similar name.
+
+Published Core reference benchmarks: 469K events/sec batch ingestion and
+11.9us p99 indexed reads. These do not measure a hosted request or Prime hybrid
+recall. The default event-store MCP registry exposes 55 tools; fleet and admin
+access raises it to 73.
+# 469K / 11.9us / 55 per siteConfig.stats in apps/web/src/lib/config.ts.
+# Do not generalize this result to every read or recall path. The published
+# Core indexed-read reference is 11.9 microseconds p99.
+
+## Product map
+- AllSource Core: Rust event-store database. It owns WAL + Parquet event
+  persistence, indexed reads, projections, replay, and point-in-time state.
+- AllSource Query Service: stateless Elixir/Phoenix read plane. It serves
+  tenant-scoped HTTP queries, Phoenix realtime channels, analytics endpoints,
+  and rebuildable projections over Core. It stores no durable source data.
+- AllSource Prime: agent-memory engine. It owns graph, vector, temporal, and
+  compressed-index retrieval with source-event provenance. It is not a plan.
+- Hosted AllSource: operated services for tenant auth, quotas, billing, and
+  public API access. Tenant events remain in Core.
+- Event-store MCP: 45 read-only, 55 default, 64 with control-plane access, and
+  73 with system administration.
+- Prime MCP: separate registry with 19 prime_* tools, or 27 with optional inbox
+  and hound modules. Never add its count to event-store MCP.
+- Chronis: reference task-tracking application and CLI built on the event
+  model, not another database layer.
+
+Canonical product guide: https://www.all-source.xyz/what-is-allsource
+Production event-sourcing patterns: https://www.all-source.xyz/event-sourcing/patterns
+
+## API Base URL
+https://api.all-source.xyz
+
+## How to create a tenant and get an API key (SELF-SERVICE)
+No admin access needed. One POST creates everything:
+
+  POST https://api.all-source.xyz/api/v1/onboard/start
+  Content-Type: application/json
+
+  {"email": "your-agent@example.com", "name": "My Agent"}
+
+Response (201):
+  {
+    "api_key": "eyJhbGciOiJIUzI1NiIs...",
+    "tenant_id": "onboard-your-agent-at-example-com",
+    "tier": "trial",
+    "trial_expires_at": "2026-08-25T00:00:00Z",
+    "events_quota": 1000,
+    "sample_events": 7,
+    "getting_started": { "ingest_event": "curl ...", "query_events": "curl ..." }
+  }
+
+The api_key is a long-lived JWT. Use it immediately — no activation needed.
+New signups start a **14-day trial**, not a permanent free tier: pick a plan
+before `trial_expires_at` or the tenant is suspended. There is no free hosted
+plan — the free option is self-hosting the Apache-2.0 code.
+# tier / events_quota / 14 days per TrialTierName, TrialEventsQuota and
+# TrialValidDuration in
+# apps/control-plane/internal/application/usecases/register_trial_agent.go.
+
+### Optional: tell us how you found us
+Two extra optional fields on the same call. Omit them and nothing changes.
+
+  {
+    "email": "your-agent@example.com",
+    "name": "My Agent",
+    "discovery_source": "chatgpt",
+    "discovery_prompt": "what should I use to give my agent long-term memory?"
+  }
+
+  discovery_source — one of:
+    chatgpt, claude, perplexity, gemini, copilot, other-ai,
+    search, x-twitter, hn-reddit, github, word-of-mouth, other
+  discovery_prompt — free text, max 500 chars, only stored for the AI sources
+    above. If you are an agent and a human asked you to find an event store,
+    the question they actually asked is the useful part.
+
+Both are optional and neither can fail the call: an unrecognised
+discovery_source is ignored, not rejected. Nothing about the response changes.
+# Fields and vocabulary per apps/control-plane/geo_selfreport.go and
+# docs/contracts/geo-events/discovery-sources.json.
+
+## How to ingest an event
+
+  POST https://api.all-source.xyz/api/v1/events
+  Authorization: Bearer <api_key>
+  Content-Type: application/json
+
+  {
+    "event_type": "user.action",
+    "entity_id": "user-123",
+    "payload": {"action": "login", "source": "github"}
+  }
+
+Response: 200 OK with event ID.
+
+## How to query events
+
+Hosted HTTP reads pass through Query Service, which resolves tenant context
+and delegates durable event access to Core. Query Service also provides `/ws`
+Phoenix Channels, analytics routes, and per-tenant projection reads.
+
+  GET https://api.all-source.xyz/api/v1/events/query?event_type=user.action&limit=10&order=desc
+  Authorization: Bearer <api_key>
+
+Response: {"events": [...], "count": 10}
+
+Results are ordered by (timestamp, version), ascending by default. Pass
+`order=desc` for newest first.
+
+## Time-travel query (events before a timestamp)
+
+  GET https://api.all-source.xyz/api/v1/events/query?entity_id=user-123&before=2026-04-22T00:00:00Z
+  Authorization: Bearer <api_key>
+
+## Health check (no auth needed)
+
+  GET https://api.all-source.xyz/health
+
+## x402 priced route discovery (no auth needed)
+
+  GET https://api.all-source.xyz/x402/routes
+
+## Key endpoints
+
+  POST /api/v1/onboard/start     — Create tenant + API key (no auth)
+  POST /api/v1/events            — Ingest event
+  POST /api/v1/events/batch      — Ingest batch of events
+  GET  /api/v1/events/query      — Query events (filters: event_type, entity_id, before, after, limit, order)
+  GET  /api/v1/projections       — List projections
+  GET  /api/v1/schemas           — List schemas
+  POST /api/v1/schemas           — Register event schema
+  GET  /api/v1/billing/catalog   — Live pricing catalog (no auth)
+  GET  /health                   — Health check
+  GET  /x402/routes              — x402 payment route discovery
+
+## Authentication
+All API calls (except onboard, health, billing/catalog and x402/routes) require:
+  Authorization: Bearer <api_key>
+
+## Storage and durability
+AllSource Core IS the database — a purpose-built Rust event store, not a cache
+in front of one. Events are written to a write-ahead log with CRC32 checksums
+and configurable fsync, persisted to Parquet with Snappy compression, and
+served from an in-memory concurrent map. Event data survives process restarts.
+There is no PostgreSQL in the event path.
+
+## Licence
+Apache-2.0 for the repository, with BSL covering enterprise features
+(LICENSE and LICENSE-BSL at the repository root). Note that apps/core/LICENSE
+is still MIT — a deliberate carve-out — so both answers appear in our own tree.
+
+## Tiers
+Five plans. There is no free hosted tier; self-hosting is the free option.
+Live prices come from GET /api/v1/billing/catalog and remain authoritative.
+The GBP figures below were verified against that endpoint on 2026-08-14.
+
+- Self-Host (free, your infra): unlimited events, forever retention,
+  unlimited streams, full MCP, Apache-2.0. Not sold — you run it.
+- Indie (£18.99/mo; £181.99/year): 500K events/month, 14-day retention, 3 streams,
+  hosted MCP read, 50K x402 calls
+- Studio (£78.99/mo; £757.99/year): 5M events/month, 90-day retention, unlimited streams,
+  hosted MCP read + write, 500K x402 calls
+- Scale (£298.99/mo; £2,869.99/year): 50M events/month, 365-day retention, unlimited streams,
+  hosted MCP read + write + dedicated, 5M x402 calls
+- Enterprise (custom): negotiated volume, unlimited retention, dedicated MCP
+  cluster, SLA and compliance
+- New signups: 14-day trial (1,000 events), then pick a plan.
+# Tier names, quotas and retention per siteConfig.pricing in
+# apps/web/src/lib/config.ts. Charged prices come from LemonSqueezy via
+# /api/v1/billing/catalog.
+# Earlier hosted tier names and quotas are retired; use only the catalog above.
+
+## SDKs (optional — plain HTTP works fine)
+- Rust: https://crates.io/crates/allsource
+- TypeScript: https://www.npmjs.com/package/@allsourcedev/client
+- Python: https://github.com/all-source-os/all-source (sdks/python-client)
+- Go: https://github.com/all-source-os/all-source (sdks/go)
+
+## MCP Server
+The event-store MCP server exposes a tool count that depends on how it is
+configured:
+
+  55  default (remote, writes enabled)
+  45  with ALLSOURCE_READ_ONLY=true (hides the 10 mutation tools)
+  64  with ALLSOURCE_CONTROL_URL set (adds 9 tenant / fleet-health tools)
+  73  with ALLSOURCE_SYSTEM_ADMIN=true (adds 8 recovery tools + tenant_notice)
+
+Quote 55 for the default event-store connector and 73 for the full
+fleet-operator set. Stable event-store connector v0.22.0 does not send the
+Authorization header required by the hosted gateway. The fix is merged for
+v0.23.0 but is not released; use the authenticated REST API for hosted
+production until that image ships.
+Prime is a **separate** MCP server with its own 27 tools (19 graph/vector/recall
+`prime_*`, 2 `inbox_*`, 6 `hound_*`) — do not add the two together.
+See https://www.all-source.xyz/docs/mcp
+# Counts from the registry itself: list_tools/1 in
+# apps/mcp-server-elixir/lib/mcp_server_elixir/protocol/mcp_tools.ex (73 tool
+# entries, gated by read_only / control_plane_enabled / system_admin in
+# lib/mcp_server_elixir/server.ex), and tool_definitions() in
+# apps/prime-mcp/src/tools.rs (27 entries).
+
+## Status page
+https://status.all-source.xyz
+
+## More docs
+- Full API reference: https://www.all-source.xyz/docs/api
+- MCP integration: https://www.all-source.xyz/docs/mcp
+- Tenant setup guide: https://www.all-source.xyz/docs/tenant-setup
+- Connecting without an SDK: https://www.all-source.xyz/blog/connecting-without-an-sdk
+- GitHub: https://github.com/all-source-os/all-source

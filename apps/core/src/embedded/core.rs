@@ -23,7 +23,7 @@ use crate::{
 
 use super::{
     config::EmbeddedConfig,
-    types::{DurabilityStatus, EventView, IngestEvent, Query},
+    types::{DurabilityStatus, EventView, IngestEvent, Query, QueryPage},
 };
 
 /// High-level facade over [`EventStore`] for embedded (library) use.
@@ -480,6 +480,51 @@ impl EmbeddedCore {
         Ok(events.iter().map(EventView::from).collect())
     }
 
+    /// Query one stable window and report whether more matches exist.
+    pub async fn query_page(&self, query: Query) -> Result<QueryPage> {
+        if query.limit == Some(0) {
+            return Err(crate::error::AllSourceError::InvalidInput(
+                "query page limit must be greater than zero".to_string(),
+            ));
+        }
+        let offset = query.offset;
+        let descending = query.descending;
+        let requested_limit = query.limit;
+        let request = QueryEventsRequest {
+            entity_id: query.entity_id,
+            event_type: query.event_type,
+            tenant_id: query.tenant_id,
+            as_of: None,
+            since: query.since,
+            until: query.until,
+            limit: requested_limit,
+            event_type_prefix: query.event_type_prefix,
+            exclude_event_type_prefix: query.exclude_event_type_prefix,
+            payload_filter: None,
+        };
+
+        let store = Arc::clone(&self.store);
+        let (events, total_count) =
+            tokio::task::spawn_blocking(move || store.query_window(&request, offset, descending))
+                .await
+                .map_err(|e| {
+                    crate::error::AllSourceError::InvalidInput(format!(
+                        "spawn_blocking failed: {e}"
+                    ))
+                })??;
+
+        let returned = events.len();
+        let next_offset = offset.checked_add(returned);
+        let has_more = next_offset.is_some_and(|next| next < total_count);
+
+        Ok(QueryPage {
+            events: events.iter().map(EventView::from).collect(),
+            total_count,
+            has_more,
+            next_offset: has_more.then_some(next_offset.unwrap_or(offset)),
+        })
+    }
+
     /// Query events and return the result in TOON (Token-Oriented Object Notation).
     ///
     /// TOON is a compact text format that uses ~50% fewer tokens than JSON for
@@ -509,6 +554,11 @@ impl EmbeddedCore {
     /// Get basic statistics about this store instance.
     pub fn stats(&self) -> StoreStats {
         self.store.stats()
+    }
+
+    /// Get exact statistics for one tenant.
+    pub fn stats_for_tenant(&self, tenant_id: &str) -> crate::store::TenantStoreStats {
+        self.store.stats_for_tenant(tenant_id)
     }
 
     /// Get durability status — compares in-memory, WAL, and Parquet layers.

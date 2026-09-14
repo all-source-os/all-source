@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { publicUrl } from "@/lib/public-url";
 
 // Routes that require authentication
 const protectedRoutes = ["/dashboard", "/onboarding"];
@@ -18,6 +19,16 @@ const _publicRoutes = [
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = request.headers.get("host")?.split(":", 1)[0]?.toLowerCase();
+
+  // Keep one canonical origin after moving DNS from Vercel to Fly.io.
+  if (hostname === "all-source.xyz") {
+    const canonicalUrl = request.nextUrl.clone();
+    canonicalUrl.protocol = "https";
+    canonicalUrl.hostname = "www.all-source.xyz";
+    canonicalUrl.port = "";
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
 
   // Check if the route is protected
   const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
@@ -30,14 +41,22 @@ export function proxy(request: NextRequest) {
 
   // If trying to access protected route without token, redirect to login
   if (isProtectedRoute && !token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
+    const loginUrl = publicUrl(request, "/login");
+    loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(loginUrl);
   }
 
   // If logged in and trying to access login/signup, redirect to dashboard
   if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    const requestedNext = request.nextUrl.searchParams.get("next");
+    const destination =
+      requestedNext?.startsWith("/") &&
+      !requestedNext.startsWith("//") &&
+      !requestedNext.includes("\\") &&
+      !requestedNext.startsWith("/api/")
+        ? requestedNext
+        : "/dashboard";
+    return NextResponse.redirect(publicUrl(request, destination));
   }
 
   return NextResponse.next();

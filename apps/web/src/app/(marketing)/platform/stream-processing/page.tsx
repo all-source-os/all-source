@@ -221,7 +221,7 @@ export default function StreamProcessingPage() {
   ]);
 
   return (
-    <main className="overflow-hidden">
+    <div className="overflow-hidden">
       <JsonLd value={breadcrumb} />
       <JsonLd value={faqPageSchema(streamProcessingFaqs)} />
 
@@ -555,6 +555,6 @@ export default function StreamProcessingPage() {
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

@@ -1,0 +1,54 @@
+---
+title: "MCP memory server guide: durable tools for cross-session agents"
+publishedAt: "2026-08-27"
+summary: Separate event-store tools from Prime memory tools, choose local or hosted transport, scope credentials, and verify provenance before an agent relies on recalled context.
+author: "Decebal Dobrica"
+category: "use-cases"
+image: "/assets/blog/mcp-tools-claude-integration.webp"
+---
+
+An MCP memory server gives an assistant tools for writing and recalling context outside its model window. That does not make every memory durable, trustworthy, or correctly scoped. Those properties come from storage and tool contracts behind MCP.
+
+AllSource has two separate connectors:
+
+- **Event-store MCP** exposes tenant-scoped history, timelines, reconstruction, analytics, schemas, and operations.
+- **Prime MCP** exposes graph, vector, temporal, and provenance-oriented memory tools.
+
+They are separate registries because they serve different jobs. “List events” and “recall related decisions” should not become one ambiguous tool.
+
+## Pick connector by question
+
+Use event-store tools when an agent must answer what happened to one entity, what state existed at a timestamp, which event changed a field, or whether ingestion failed.
+
+Use Prime tools when an agent must find related decisions, inspect entity relationships, load context for one turn, or trace a recalled fact to source events.
+
+See [canonical product map](/what-is-allsource) for exact boundaries.
+
+## Transport and storage
+
+Local stdio keeps connector on same machine as MCP client. Hosted access adds tenant authentication and network policy. Neither transport is storage: connectors call Core, hosted gateway, or Prime. Core owns event durability; Prime owns derived memory indexes and provenance links.
+
+Follow [current MCP setup guide](/docs/mcp) because released connector authentication can differ from current `main`. Do not copy unreleased configuration into production.
+
+## Credential scope
+
+Create one named key per agent or environment. Give read-only tools to analysis agents. Give write tools only where workflow needs them. Keep system-administration tools out of normal tenant connectors. Never place API keys in prompts, screenshots, public event payloads, or client-side environment variables.
+
+Safe check is behavioural: start client, list available tools, call one scoped read, verify tenant identity, then inspect resulting audit event. Successful process start does not prove hosted authentication works.
+
+## Memory write contract
+
+Write memory only when it has concrete subject, source observation, timestamp, tenant scope, durable value, and correction path. Avoid raw chain-of-thought, secrets, speculative conclusions, or duplicate summaries. Prefer short decision with source links over unbounded transcript.
+
+## Recall contract
+
+Treat recalled memory as evidence to inspect, not truth to obey. Ask for source event IDs, timestamps, graph neighbours, or provenance before applying consequential memory. Bound result counts and tenant scope. When result is absent, distinguish no matching memory from authentication, indexing, or filter failure.
+
+This is why event-backed memory differs from loose vector note: agent can move from semantic match to event sequence that produced it.
+
+## Verify end to end
+
+- [Configure MCP](/docs/mcp)
+- [Set up tenant and agent keys](/docs/tenant-setup)
+- [Explore timeline and graph demos](/examples)
+- [Read memory security guidance](/blog/agent-memory-security-poisoning)

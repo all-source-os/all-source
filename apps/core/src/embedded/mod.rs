@@ -44,4 +44,4 @@ mod types;
 pub use self::core::EmbeddedCore;
 pub use crate::{domain::entities::Event, infrastructure::persistence::backup::BackupMetadata};
 pub use config::{ConfigBuilder, EmbeddedConfig as Config};
-pub use types::{DurabilityStatus, EventView, IngestEvent, Query};
+pub use types::{DurabilityStatus, EventView, IngestEvent, Query, QueryPage};

@@ -278,6 +278,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn query_page_rejects_zero_limit() {
+        let core = open_in_memory_core().await;
+
+        let error = core
+            .query_page(Query::new().limit(0))
+            .await
+            .expect_err("zero-size pages cannot make pagination progress");
+
+        assert!(
+            error
+                .to_string()
+                .contains("limit must be greater than zero")
+        );
+    }
+
+    #[tokio::test]
     async fn query_returns_event_view_with_plain_strings() {
         let core = open_in_memory_core().await;
 

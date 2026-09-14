@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata: Metadata = constructMetadata({
-  title: "Agent Memory: 5 Approaches Compared",
+  title: "Agent Memory: Five Approaches Compared",
   description:
-    "An honest comparison of five approaches to AI agent memory — platform memory, RAG / retrieval, file-based, database, and event-sourced. Where each wins, where each loses, and how to pick.",
+    "Compare platform memory, RAG, files, databases, and event-sourced memory by use case and trade-off, with primary sources and a local restart proof.",
   canonical: "/compare/agent-memory",
 });
 

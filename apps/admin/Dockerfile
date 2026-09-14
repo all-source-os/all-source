@@ -15,6 +15,8 @@ FROM oven/bun:${BUN_VERSION}-alpine AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown
+ARG NEXT_PUBLIC_APP_URL=https://admin.all-source.xyz
+ARG NEXT_PUBLIC_API_URL=https://api.all-source.xyz
 
 RUN apk add --no-cache libc6-compat
 
@@ -56,7 +58,9 @@ COPY apps/admin/next-env.d.ts apps/admin/
 # Environment for build
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
-    NEXT_PUBLIC_VERSION=${VERSION}
+    NEXT_PUBLIC_VERSION=${VERSION} \
+    NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
 # Build the admin application
 WORKDIR /app/apps/admin

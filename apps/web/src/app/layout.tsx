@@ -1,11 +1,11 @@
 import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
-import { EarlyAccessBanner } from "@/components/early-access-banner";
 import { GeoReferralTracker } from "@/components/geo-referral-tracker";
+import { GoogleAnalytics } from "@/components/google-analytics";
 import { TailwindIndicator } from "@/components/tailwind-indicator";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
 import {
+  founderSchema,
   organizationSchema,
   softwareApplicationSchema,
   websiteSchema,
@@ -20,21 +20,27 @@ import "./globals.css";
  * Vercel-hosted Next.js App Router; must expose the raw referrer and user
  * agent; must not force a cookie-banner rewrite.
  *
- * Chosen: **Vercel Web Analytics** (`@vercel/analytics`) for site-wide traffic,
- * plus a first-party `<GeoReferralTracker />` beacon for the GEO event stream.
+ * Chosen: **Vercel Web Analytics** (`@vercel/analytics`) for cookieless
+ * site-wide traffic, a first-party `<GeoReferralTracker />` beacon for the GEO
+ * event stream, and GA4 with denied-by-default storage for Search Console and
+ * cross-product acquisition reporting.
  *
- * Why the pair rather than one product:
+ * Why three measurement paths rather than one product:
  * - Vercel Web Analytics is cookieless and privacy-preserving, so it adds no
  *   consent-banner obligation the site did not already have. It is served from
- *   `/_vercel/insights/*` on our own origin, so the existing strict CSP
- *   (`script-src 'self'`, `connect-src 'self'`) needs no widening — a
- *   third-party script host would have meant editing the CSP in
- *   `next.config.mjs` for every vendor domain. It needs no env var and no
- *   account setup beyond enabling it in the Vercel dashboard.
+ *   `/_vercel/insights/*` on our own origin, so it needs no third-party CSP
+ *   entries, env var, or account setup beyond enabling it in the Vercel
+ *   dashboard. GA4 uses narrowly scoped script and collection origins in
+ *   `next.config.mjs`.
  * - It does NOT satisfy the second constraint. Vercel shows referrers in *its*
  *   dashboard; it gives us no programmatic access to the raw referrer and user
  *   agent, and it cannot join an arrival to a conversion inside AllSource.
  *   That is precisely what layer 1 is for, hence the beacon.
+ * - GA4 supplies channel, landing-page, and Google Search Console reporting
+ *   shared with the other Wolven Tech products. It runs with analytics and ad
+ *   storage denied, strips query strings, and disables Google Signals.
+ *   First-party GEO events remain authoritative for AI referrals because GA4
+ *   may group them as Direct or Referral.
  *
  * Rejected:
  * - **PostHog** — the richest option, but it sets cookies by default and would
@@ -42,28 +48,28 @@ import "./globals.css";
  * - **Plausible / Fathom** — cookieless and good, but a paid third-party
  *   script host (CSP widening) for aggregate numbers Vercel already gives us
  *   free, and still no raw referrer in our own pipeline.
- * - **GA4** — consent banner, cookie policy, and its channel grouping is the
- *   very thing the GEO framework says misattributes AI referrals as Direct.
  *
  * Env vars to set by hand: Vercel Web Analytics needs NONE (enable it in
- * Project Settings -> Analytics). The referral route needs `ALLSOURCE_API_KEY`
- * (and optionally `ALLSOURCE_API_URL`) set in the Vercel dashboard — server
- * scope only, never `NEXT_PUBLIC_`. See docs/runbooks/GEO_MEASUREMENT.md.
+ * Project Settings -> Analytics). GA4 uses `NEXT_PUBLIC_GA_MEASUREMENT_ID`,
+ * with a canonical-host fallback for production. The referral route needs
+ * `ALLSOURCE_API_KEY` (and optionally `ALLSOURCE_API_URL`) set in the Vercel
+ * dashboard — server scope only, never `NEXT_PUBLIC_`. See
+ * docs/runbooks/GEO_MEASUREMENT.md.
  */
 
 export const metadata: Metadata = constructMetadata({
-  title: "AllSource — AI-Native Event Store",
+  title: "Event Store Database for Event Sourcing | AllSource",
   description:
-    "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores events; Prime derives memory.",
+    "Purpose-built event store database for immutable streams, replay, projections, snapshots, schemas, temporal queries, and durable consumers.",
   canonical: "/",
+  verification: {
+    google: "BbHb4BnJ4QZYJmCEPpGhADhmJdSq6eGYRtAteMyjYwU",
+  },
 });
 
 export const viewport: Viewport = {
   colorScheme: "dark",
-  themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "black" },
-    { media: "(prefers-color-scheme: light)", color: "white" },
-  ],
+  themeColor: "#0E1A2A",
 };
 
 export default function RootLayout({
@@ -82,6 +88,11 @@ export default function RootLayout({
         <script
           type="application/ld+json"
           // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD structured data requires dangerouslySetInnerHTML
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(founderSchema()) }}
+        />
+        <script
+          type="application/ld+json"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD structured data requires dangerouslySetInnerHTML
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema()) }}
         />
         <script
@@ -91,13 +102,12 @@ export default function RootLayout({
         />
       </head>
       <body className={cn("min-h-screen bg-background antialiased w-full mx-auto scroll-smooth")}>
+        <GoogleAnalytics />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <EarlyAccessBanner />
           {children}
-          <ThemeToggle />
           <TailwindIndicator />
           <GeoReferralTracker />
-          <Analytics />
+          {process.env.VERCEL ? <Analytics /> : null}
         </ThemeProvider>
       </body>
     </html>

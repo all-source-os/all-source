@@ -1,23 +1,9 @@
-"use client";
-
-import { cn } from "@allsource/ui";
-import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { siteConfig } from "@/lib/config";
 
 /**
- * Self-contained, pseudo-live homepage demo. Two panes:
- *   1. Events streaming into Core (JSON, scripted loop).
- *   2. An agent recalling those events through a low-latency projection.
- *
- * This is intentionally a leaf client component so it never blocks the hero
- * text (the LCP element). The animation is scripted/looped for v1 — the
- * `SCRIPTED_EVENTS` array and `referenceReadLatency` are the only seams a real
- * Core/MCP feed has to replace later.
- *
- * Respects `prefers-reduced-motion`: with motion reduced, the full event log
- * and the answered recall render immediately, no looping.
+ * Server-rendered product proof. Complete event history and recalled answer
+ * appear in initial HTML; homepage meaning never waits for timers or hydration.
  */
 
 type DemoEvent = {
@@ -37,8 +23,6 @@ const SCRIPTED_EVENTS: DemoEvent[] = [
   { type: "cart.checkout", payload: { user: "u_8f21", total: 1900 }, ts: "15:02:03" },
 ];
 
-const STEP_MS = 1100;
-
 function EventLine({ event }: { event: DemoEvent }) {
   return (
     <div className="font-mono text-[11px] leading-relaxed sm:text-xs">
@@ -57,62 +41,6 @@ function EventLine({ event }: { event: DemoEvent }) {
 }
 
 export default function HeroDemo() {
-  const reduceMotion = useReducedMotion();
-
-  // When motion is reduced, render the complete, settled state on first paint.
-  const [visibleCount, setVisibleCount] = useState(reduceMotion ? SCRIPTED_EVENTS.length : 0);
-  const [answered, setAnswered] = useState(reduceMotion);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      setVisibleCount(SCRIPTED_EVENTS.length);
-      setAnswered(true);
-      return;
-    }
-
-    let cancelled = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    const run = () => {
-      if (cancelled) return;
-      setAnswered(false);
-      setVisibleCount(0);
-
-      SCRIPTED_EVENTS.forEach((_, i) => {
-        timers.push(
-          setTimeout(
-            () => {
-              if (!cancelled) setVisibleCount(i + 1);
-            },
-            STEP_MS * (i + 1)
-          )
-        );
-      });
-
-      // Agent answers shortly after the last event lands.
-      timers.push(
-        setTimeout(
-          () => {
-            if (!cancelled) setAnswered(true);
-          },
-          STEP_MS * (SCRIPTED_EVENTS.length + 1)
-        )
-      );
-
-      // Loop.
-      timers.push(setTimeout(run, STEP_MS * (SCRIPTED_EVENTS.length + 4)));
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-      timers.forEach(clearTimeout);
-    };
-  }, [reduceMotion]);
-
-  const shown = SCRIPTED_EVENTS.slice(0, visibleCount);
-
   return (
     <div className="w-full max-w-xl rounded-xl border border-border bg-card/80 shadow-xl shadow-primary/5 backdrop-blur-sm">
       {/* Window chrome with the headline throughput stat baked into it */}
@@ -136,15 +64,10 @@ export default function HeroDemo() {
           </span>
         </div>
         <div className="min-h-[7.5rem] space-y-1 overflow-hidden">
-          {shown.map((event) => (
-            <motion.div
-              key={`${event.ts}-${event.type}`}
-              initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-            >
+          {SCRIPTED_EVENTS.map((event) => (
+            <div key={`${event.ts}-${event.type}`}>
               <EventLine event={event} />
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
@@ -160,27 +83,16 @@ export default function HeroDemo() {
           </p>
         </div>
 
-        <div
-          className={cn(
-            "rounded-lg border border-border bg-background/60 px-3 py-2 transition-opacity duration-300",
-            answered ? "opacity-100" : "opacity-40"
-          )}
-        >
-          {answered ? (
-            <div className="space-y-1.5">
-              <p className="text-xs text-foreground sm:text-sm">
-                At <span className="font-mono">15:00</span> they checked out a{" "}
-                <span className="font-semibold">$49</span> cart, then the agent decided to upsell.
-              </p>
-              <p className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-500 dark:text-emerald-400 sm:text-xs">
-                published Core read benchmark: {siteConfig.referenceReadLatency}
-              </p>
-            </div>
-          ) : (
-            <p className="font-mono text-[10px] text-muted-foreground sm:text-xs">
-              recalling from event log…
+        <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
+          <div className="space-y-1.5">
+            <p className="text-xs text-foreground sm:text-sm">
+              At <span className="font-mono">15:00</span> they checked out a{" "}
+              <span className="font-semibold">$49</span> cart, then the agent decided to upsell.
             </p>
-          )}
+            <p className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-500 dark:text-emerald-400 sm:text-xs">
+              published Core read benchmark: {siteConfig.referenceReadLatency}
+            </p>
+          </div>
         </div>
         <Link
           href="/examples#capability-workbench"

@@ -3,7 +3,7 @@ title: "An Agent That Provisions Its Own Persistence in One API Call"
 publishedAt: "2026-04-25"
 updatedAt: "2026-08-14"
 summary: Your agent doesn't need a dashboard session to set up storage. One POST creates a trial tenant and API key for immediate event writes.
-author: "all.source team"
+author: "Decebal Dobrica"
 category: "use-cases"
 image: "/assets/blog/connecting-without-an-sdk.webp"
 ---
@@ -103,7 +103,7 @@ If an agent manages multiple instances or serves multiple users, the `email` fie
 
 Each user gets a dedicated tenant; the agent derives the tenant ID deterministically from the user ID without storing it. On restart, reconstruct the tenant ID by the same formula and continue.
 
-For teams with multiple agents sharing one tenant, skip self-provisioning and use the [agent key flow](/docs/agent-auth) instead — an admin creates a named key per agent from Settings → Team → Agent Keys.
+For teams with multiple agents sharing one tenant, skip self-provisioning and use the [tenant and agent setup flow](/docs/tenant-setup) instead — an admin creates a named key per agent from Settings → Team → Agent Keys.
 
 ## From Trial to Paid
 

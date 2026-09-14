@@ -1,0 +1,675 @@
+{
+  "title": "AllSource \u2014 AI-Native Event Store",
+  "meta_description": "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores events; Prime derives memory.",
+  "meta_robots": null,
+  "canonical": "https://www.all-source.xyz",
+  "h1": [
+    "AI-native event store for system history and agent memory."
+  ],
+  "h2": [
+    "What breaks without an event history",
+    "From event write to durable context",
+    "What you can do with stored history",
+    "Claims you can inspect",
+    "Pricing",
+    "FAQ",
+    "Recent product and engineering notes",
+    "Store one real event, then query it back.",
+    "Platform",
+    "Solutions",
+    "Developers",
+    "Compare",
+    "Company",
+    "Connect"
+  ],
+  "h3": [
+    "Agent context disappears",
+    "Current state hides why",
+    "Historical queries become projects",
+    "Write events",
+    "Build useful views",
+    "Query and replay history",
+    "Event Timeline",
+    "Time travel",
+    "Graph visualisation",
+    "Stream pipelines",
+    "Rebuildable projections",
+    "MCP access for agents",
+    "Why no free plan?",
+    "What is AllSource?",
+    "Is AllSource the same as ArcGIS AllSource?",
+    "How does AllSource compare to traditional databases?",
+    "What is the MCP Server integration?",
+    "How secure is my data?",
+    "Can I self-host AllSource?",
+    "What is Quant Intelligence?",
+    "Agent memory security: prevent poisoning and cross-tenant recall",
+    "MCP memory server guide: durable tools for cross-session agents",
+    "Reconstructing Agent Memory in Rust: Events, Provenance, and Point-in-Time State"
+  ],
+  "images": [
+    {
+      "src": "https://www.all-source.xyz/_next/image?url=%2Fassets%2Fblog%2Fai-agents-need-memory.webp&w=3840&q=75",
+      "alt": "Agent memory security: prevent poisoning and cross-tenant recall",
+      "width": "1200",
+      "height": "630",
+      "loading": null
+    },
+    {
+      "src": "https://www.all-source.xyz/_next/image?url=%2Fassets%2Fblog%2Fmcp-tools-claude-integration.webp&w=3840&q=75",
+      "alt": "MCP memory server guide: durable tools for cross-session agents",
+      "width": "1200",
+      "height": "630",
+      "loading": null
+    },
+    {
+      "src": "https://www.all-source.xyz/_next/image?url=%2Fassets%2Fblog%2Fbuilding-agent-memory-in-rust.webp&w=3840&q=75",
+      "alt": "Reconstructing Agent Memory in Rust: Events, Provenance, and Point-in-Time State",
+      "width": "1200",
+      "height": "630",
+      "loading": "lazy"
+    }
+  ],
+  "links": {
+    "internal": [
+      {
+        "href": "https://www.all-source.xyz/design-partners?utm_source=website&utm_medium=banner&utm_campaign=design_partners_2026",
+        "text": "See program \u2192",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/",
+        "text": "AllSource Event Store",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/what-is-allsource",
+        "text": "Product map",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/event-sourcing",
+        "text": "Event store",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/query-service",
+        "text": "Query service",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/prime",
+        "text": "Agent memory",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/design-partners",
+        "text": "Design partners",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/use-cases",
+        "text": "Use cases",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples",
+        "text": "Demo",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/docs",
+        "text": "Docs",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/pricing",
+        "text": "Pricing",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/login",
+        "text": "Sign in",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start 14-day trial",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/what-is-allsource",
+        "text": "Product map",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/event-sourcing",
+        "text": "Event store",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/query-service",
+        "text": "Query service",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/prime",
+        "text": "Agent memory",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/design-partners",
+        "text": "Design partners",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/use-cases",
+        "text": "Use cases",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples",
+        "text": "Demo",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/docs",
+        "text": "Docs",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/pricing",
+        "text": "Pricing",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/login",
+        "text": "Sign in",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start 14-day trial",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/what-is-allsource",
+        "text": "What is AllSource Event Store? \u2192",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start 14-day trial",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#capability-workbench",
+        "text": "Explore demo \u2192",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#capability-workbench",
+        "text": "Open timeline, graph, pipeline, and projection demo \u2192",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#event-timeline",
+        "text": "Event Timeline Read an entity's complete history in order, inspect each payload, and trace which eve",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#time-travel",
+        "text": "Time travel Ask what a stream contained at a sequence or timestamp and reconstruct the matching stat",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#graph-visualisation",
+        "text": "Graph visualisation Explore Prime nodes and relationships with source-event provenance instead of an",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#pipelines",
+        "text": "Stream pipelines Filter, map, reduce, window, or branch accepted events inline while preserving sour",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#projections",
+        "text": "Rebuildable projections Fold existing events into tenant-scoped read models for HTTP, realtime, and ",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples#mcp-data-access",
+        "text": "MCP access for agents Let MCP clients query timelines, reconstruct state, and inspect events through",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/architecture",
+        "text": "Read architecture",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start Indie",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start Studio",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start Scale",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/blog/agent-memory-security-poisoning",
+        "text": "August 27, 2026 (2d ago) Engineering Agent memory security: prevent poisoning and cross-tenant recal",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/blog/mcp-memory-server-guide",
+        "text": "August 27, 2026 (2d ago) Use Cases MCP memory server guide: durable tools for cross-session agents S",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/blog/reconstructing-agent-memory-in-rust",
+        "text": "August 27, 2026 (2d ago) Engineering Reconstructing Agent Memory in Rust: Events, Provenance, and Po",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/blog",
+        "text": "View all articles",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/signup",
+        "text": "Start 14-day trial",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/",
+        "text": "AllSource",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/what-is-allsource",
+        "text": "What is AllSource?",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/event-sourcing",
+        "text": "Event Store",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/stream-processing",
+        "text": "Stream Processing",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/platform/prime",
+        "text": "Prime (agent memory)",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/docs/mcp",
+        "text": "MCP Server",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/docs",
+        "text": "Documentation",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/agent-memory",
+        "text": "Agent Memory",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/real-time-analytics",
+        "text": "Real-Time Analytics",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/audit-compliance",
+        "text": "Audit & Compliance",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/financial-services",
+        "text": "Financial Services",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/multi-tenant-saas",
+        "text": "Multi-Tenant SaaS",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/iot-telemetry",
+        "text": "IoT Telemetry",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/solutions/quant-intelligence",
+        "text": "Quant Intelligence",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/docs",
+        "text": "Getting Started",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/docs/api",
+        "text": "API Reference",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/sdks",
+        "text": "SDKs",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/examples",
+        "text": "Examples",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/changelog",
+        "text": "Changelog",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/event-sourcing-for-ai-agents",
+        "text": "Event Sourcing for AI Agents",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/vs/mem0",
+        "text": "vs mem0",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/vs/letta",
+        "text": "vs Letta",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/vs/zep",
+        "text": "vs Zep",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/vs/stoolap",
+        "text": "vs stoolap",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/about",
+        "text": "About",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/blog",
+        "text": "Blog",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/status",
+        "text": "Status",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/privacy",
+        "text": "Privacy Policy",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/terms",
+        "text": "Terms of Service",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/",
+        "text": "AllSource",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/privacy",
+        "text": "Privacy Policy",
+        "rel": []
+      },
+      {
+        "href": "https://www.all-source.xyz/terms",
+        "text": "Terms of Service",
+        "rel": []
+      }
+    ],
+    "external": [
+      {
+        "href": "https://github.com/all-source-os/all-source",
+        "text": "Self-host on GitHub",
+        "rel": []
+      },
+      {
+        "href": "https://github.com/all-source-os/all-source#benchmarks",
+        "text": "Reproduce benchmarks",
+        "rel": []
+      },
+      {
+        "href": "mailto:sales@all-source.xyz?subject=Enterprise%20Plan%20Inquiry",
+        "text": "Talk to us",
+        "rel": []
+      },
+      {
+        "href": "https://github.com/all-source-os/all-source",
+        "text": "Run it yourself",
+        "rel": []
+      },
+      {
+        "href": "https://github.com/all-source-os/all-source",
+        "text": "GitHub",
+        "rel": []
+      },
+      {
+        "href": "https://x.com/ddonprogramming",
+        "text": "Twitter",
+        "rel": []
+      },
+      {
+        "href": "https://github.com/all-source-os/all-source/discussions",
+        "text": "Community",
+        "rel": []
+      }
+    ]
+  },
+  "schema": [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": "https://www.all-source.xyz/#organization",
+      "name": "AllSource Event Store",
+      "alternateName": [
+        "AllSource",
+        "all-source.xyz",
+        "all-source-os"
+      ],
+      "url": "https://www.all-source.xyz",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://www.all-source.xyz/logo.svg"
+      },
+      "description": "Developer infrastructure for durable event history and AI-agent memory, built on an Apache-2.0 Rust event-store core. Published Core reference results: 469K events/sec ingestion and 11.9us p99 indexed reads.",
+      "disambiguatingDescription": "Developer infrastructure published at all-source.xyz; unrelated to Esri ArcGIS AllSource, the all-source intelligence discipline, and other companies using AllSource or Allsource.",
+      "sameAs": [
+        "https://github.com/all-source-os/all-source",
+        "https://x.com/ddonprogramming"
+      ],
+      "founder": {
+        "@id": "https://www.all-source.xyz/#founder"
+      },
+      "parentOrganization": {
+        "@type": "Organization",
+        "name": "Wolven Tech",
+        "url": "https://wolventech.com"
+      },
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "email": "hello@all-source.xyz",
+        "contactType": "customer service"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "@id": "https://www.all-source.xyz/#founder",
+      "name": "Decebal Dobrica",
+      "url": "https://decebaldobrica.com",
+      "jobTitle": "Founder and product engineer",
+      "worksFor": {
+        "@type": "Organization",
+        "name": "Wolven Tech",
+        "url": "https://wolventech.com"
+      },
+      "knowsAbout": [
+        "Event sourcing",
+        "Rust",
+        "AI agent memory",
+        "Model Context Protocol"
+      ],
+      "sameAs": [
+        "https://github.com/decebal",
+        "https://www.linkedin.com/in/decebaldobrica",
+        "https://x.com/ddonprogramming"
+      ]
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": "https://www.all-source.xyz/#website",
+      "name": "AllSource Event Store",
+      "alternateName": "AllSource",
+      "url": "https://www.all-source.xyz",
+      "description": "AllSource Event Store is developer infrastructure for durable system history and AI-agent memory, built on an Apache-2.0 Rust core.",
+      "inLanguage": "en",
+      "publisher": {
+        "@id": "https://www.all-source.xyz/#organization"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "@id": "https://www.all-source.xyz/#software",
+      "name": "AllSource Event Store",
+      "alternateName": "AllSource",
+      "url": "https://www.all-source.xyz",
+      "applicationCategory": "DeveloperApplication",
+      "applicationSubCategory": "Event store / agent memory",
+      "operatingSystem": "Linux, macOS, Windows",
+      "description": "AllSource Event Store records state changes as immutable events and lets applications or agents query prior state. Its Apache-2.0 Rust core uses a CRC32-checked write-ahead log, Parquet persistence, and concurrent indexed reads.",
+      "disambiguatingDescription": "The developer product at all-source.xyz, not Esri ArcGIS AllSource or the all-source intelligence discipline.",
+      "sameAs": [
+        "https://github.com/all-source-os/all-source",
+        "https://crates.io/crates/allsource-core"
+      ],
+      "publisher": {
+        "@id": "https://www.all-source.xyz/#organization"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Why no free plan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "There is no permanent free hosted plan. The Apache-2.0 Core and community route can be self-hosted; designated enterprise features use BSL 1.1. Hosted pricing covers operated infrastructure."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is AllSource?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores ordered application events; Prime derives agent memory; hosted services operate the stack; separate MCP connectors expose event or memory tools."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is AllSource the same as ArcGIS AllSource?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. AllSource Event Store is the developer product at all-source.xyz and github.com/all-source-os/all-source. ArcGIS AllSource is Esri intelligence-analysis software. The products are unrelated."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does AllSource compare to traditional databases?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Traditional databases can preserve history, but teams usually add audit tables, change-data capture, or application logs. AllSource makes immutable event history the primary record, so replay, point-in-time reconstruction, and provenance use the same ordered stream."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the MCP Server integration?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "AllSource has separate MCP connectors. The event-store connector exposes 45 read-only tools, 55 by default, 64 with control-plane access, and 73 with system administration. Prime exposes 19 prime_* memory tools, or 27 with optional inbox and hound modules. Do not add these registries together."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How secure is my data?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Hosted AllSource separates tenant data and supports JWT authentication, role-based access, policy enforcement, and audit logs. Administrative operations include dry-run previews where the API supports them."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I self-host AllSource?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. The core is Apache-2.0 licensed, while designated enterprise features use BSL 1.1. Docker images, Helm charts, and Kubernetes manifests are available in the repository; hosted plans operate the services for you."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Quant Intelligence?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Quant Intelligence is a solution route using AllSource event history and shipped analytics endpoints for bars, correlations, forecasts, and regime summaries. It is not a separate database, a trading model, or a promise of profitable probabilities."
+          }
+        }
+      ]
+    }
+  ],
+  "open_graph": {
+    "og:title": "AllSource \u2014 AI-Native Event Store",
+    "og:description": "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores events; Prime derives memory.",
+    "og:url": "https://www.all-source.xyz",
+    "og:site_name": "AllSource Event Store",
+    "og:locale": "en_US",
+    "og:image": "https://www.all-source.xyz/og",
+    "og:image:width": "1200",
+    "og:image:height": "630",
+    "og:image:alt": "AllSource \u2014 AI-Native Event Store",
+    "og:type": "website"
+  },
+  "twitter_card": {
+    "twitter:card": "summary_large_image",
+    "twitter:site": "@ddonprogramming",
+    "twitter:creator": "@ddonprogramming",
+    "twitter:title": "AllSource \u2014 AI-Native Event Store",
+    "twitter:description": "AllSource Event Store is developer infrastructure for durable event history and AI-agent memory. Core stores events; Prime derives memory.",
+    "twitter:image": "https://www.all-source.xyz/og"
+  },
+  "word_count": 896,
+  "hreflang": []
+}

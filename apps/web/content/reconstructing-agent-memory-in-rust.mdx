@@ -1,0 +1,301 @@
+---
+title: "Reconstructing Agent Memory in Rust: Events, Provenance, and Point-in-Time State"
+publishedAt: "2026-08-27"
+updatedAt: "2026-09-13"
+summary: "Build durable AI-agent memory as an append-only event stream in Rust, derive current state without destroying history, and reconstruct exactly what an agent knew before a decision."
+author: "Decebal Dobrica"
+image: "/assets/blog/building-agent-memory-in-rust.webp"
+category: "engineering"
+---
+
+An agent's current summary answers one question: **what does it believe now?**
+It cannot reliably answer what it believed before a correction, which source
+supported a recalled fact, or whether a restart discarded part of its state.
+
+Those are history questions. Storing another mutable summary does not answer
+them. An ordered event stream does.
+
+This article builds the smallest useful version of that model with AllSource
+Core's embedded Rust API. The same pattern works with another event store: keep
+accepted observations and corrections immutable, derive current memory as a
+projection, and retain event IDs as provenance.
+
+## Memory needs two layers
+
+Separate authoritative history from retrieval indexes:
+
+```text
+accepted observation ─┐
+correction ────────────┼─> ordered event stream ─> current-memory projection
+decision ──────────────┘              │
+                                      ├─> point-in-time replay
+                                      ├─> graph projection
+                                      └─> vector index
+```
+
+The event stream records what happened. Graph and vector indexes help find
+candidate context. They are rebuildable views, not the only copy of memory.
+
+That distinction matters after a correction. A vector index can replace the
+old embedding, but the event stream still shows what the agent knew when it
+made an earlier decision.
+
+## Open a durable embedded store
+
+AllSource Core runs in-process. Supplying `data_dir` enables its WAL and
+Parquet persistence; omitting it creates an in-memory store suitable for tests,
+not durable agent memory.
+
+```rust
+use allsource_core::embedded::{Config, EmbeddedCore, IngestEvent, Query};
+use chrono::Utc;
+use serde_json::json;
+
+let core = EmbeddedCore::open(
+    Config::builder()
+        .data_dir(".allsource/agent-memory")
+        .build()?,
+)
+.await?;
+```
+
+The default embedded configuration syncs each WAL write. Core also supports a
+coalesced fsync interval when throughput matters more than a zero-length
+configured loss window. Storage hardware and operating-system guarantees still
+define the final durability boundary.
+
+## Record observations instead of overwriting state
+
+Suppose a support agent learns a user's response preference. Record the
+observation with its source:
+
+```rust
+core.ingest(IngestEvent {
+    entity_id: "agent:support-17:user:42",
+    event_type: "agent.memory.observed",
+    payload: json!({
+        "key": "response_style",
+        "value": "concise",
+        "confidence": 0.82
+    }),
+    metadata: Some(json!({
+        "source": "conversation",
+        "source_event_id": "message:8c31",
+        "session_id": "session:104"
+    })),
+    tenant_id: None,
+}).await?;
+```
+
+Three identifiers serve different jobs:
+
+- `entity_id` groups one agent-user memory timeline.
+- generated event ID identifies this immutable observation.
+- `source_event_id` points to evidence outside the memory projection.
+
+Do not put mutable labels such as `latest` or `current` in the event. Current
+state is a read concern.
+
+## Apply corrections without deleting history
+
+Later, the user asks for detailed explanations. Query the first observation so
+the correction can name what it supersedes:
+
+```rust
+let before = core
+    .query(Query::new().entity_id("agent:support-17:user:42"))
+    .await?;
+
+let original = before
+    .last()
+    .expect("the initial observation should exist");
+
+let historical_cutoff = Utc::now();
+
+core.ingest(IngestEvent {
+    entity_id: "agent:support-17:user:42",
+    event_type: "agent.memory.corrected",
+    payload: json!({
+        "key": "response_style",
+        "value": "detailed",
+        "supersedes": original.id
+    }),
+    metadata: Some(json!({
+        "source": "conversation",
+        "source_event_id": "message:b614",
+        "session_id": "session:109"
+    })),
+    tenant_id: None,
+}).await?;
+```
+
+Current-memory projection applies both events and returns `detailed`. Nothing
+rewrites or deletes original observation. That gives correction semantics and
+historical truth at the same time.
+
+## Reconstruct what agent knew
+
+Point-in-time reconstruction uses same entity timeline with upper time bound:
+
+```rust
+let then = core
+    .query(
+        Query::new()
+            .entity_id("agent:support-17:user:42")
+            .until(historical_cutoff),
+    )
+    .await?;
+
+let now = core
+    .query(Query::new().entity_id("agent:support-17:user:42"))
+    .await?;
+```
+
+Fold `then` and answer is `concise`. Fold `now` and answer is `detailed`. Both
+results come from same deterministic projection logic.
+
+A minimal fold can stay deliberately boring:
+
+```rust
+use allsource_core::embedded::EventView;
+
+fn response_style(events: &[EventView]) -> Option<String> {
+    events.iter().fold(None, |current, event| {
+        match event.event_type.as_str() {
+            "agent.memory.observed" | "agent.memory.corrected" => event
+                .payload
+                .get("value")
+                .and_then(|value| value.as_str())
+                .map(str::to_owned)
+                .or(current),
+            _ => current,
+        }
+    })
+}
+```
+
+Production projection should validate schema and handle multiple keys,
+retractions, confidence, and conflicting writers. Core principle stays small:
+events remain immutable; projection owns interpretation.
+
+## Link decisions back to memory
+
+Recording observations is half the job. Record which observations supported
+an action:
+
+```rust
+let active_memory = now
+    .last()
+    .expect("current memory event should exist");
+
+core.ingest(IngestEvent {
+    entity_id: "agent:support-17:run:9001",
+    event_type: "agent.decision.recorded",
+    payload: json!({
+        "action": "generate_detailed_explanation",
+        "memory_event_ids": [active_memory.id],
+        "model": "example-model-version"
+    }),
+    metadata: Some(json!({
+        "correlation_id": "request:51fa"
+    })),
+    tenant_id: None,
+}).await?;
+```
+
+In real code, use IDs from exact events selected for context, including
+correction event when applicable. That makes later questions answerable:
+
+- Which memory affected this action?
+- Which source produced that memory?
+- Had correction arrived when decision was made?
+- Would replay with same historical cutoff select same facts?
+
+Prompt logs alone are weak provenance. They show rendered text, but often lose
+the identity and history of facts that produced it.
+
+## Where vector and graph recall belong
+
+Scanning every event for every prompt will not scale. Retrieval indexes still
+matter:
+
+1. vector search finds semantically related memory nodes;
+2. graph traversal expands related entities;
+3. temporal scoring favors relevant recent state;
+4. source event IDs rehydrate authoritative evidence;
+5. decision event records what was selected.
+
+AllSource Prime implements graph, vector, and temporal recall as projections
+over Core events. In embedded mode, mutations flow through same Core event
+store. Point-in-time graph reconstruction replays node events up to requested
+timestamp.
+
+This does not make every operation strongly consistent. Concurrent updates can
+race, and Prime documents eventual-consistency boundaries for graph mutation.
+Use explicit writer ownership or application-level conflict rules when several
+agents update same entity.
+
+## Restart contract
+
+Durable memory needs explicit restart behavior:
+
+1. open same persisted data directory;
+2. recover Parquet state and replay valid WAL delta;
+3. rebuild projections and retrieval indexes;
+4. query incomplete runs before executing new side effects;
+5. continue from recorded state, not an empty prompt.
+
+Call `shutdown()` for graceful flushes:
+
+```rust
+core.shutdown().await?;
+```
+
+Crash recovery cannot prove whether an external side effect landed between
+`started` and `completed` events. Email, payment, and deployment tools still
+need deterministic idempotency keys or provider-side status checks.
+
+## What event sourcing does not solve
+
+Append-only storage preserves claims; it does not make them true.
+
+- bad source becomes durable bad memory;
+- prompt injection can still produce malicious observations;
+- duplicate observations still need identity or deduplication rules;
+- private data still needs retention and access controls;
+- vector similarity still needs evaluation against real recall tasks.
+
+Use source validation, tenant boundaries, schema enforcement, deletion policy,
+and retrieval benchmarks. Provenance makes these failures inspectable; it does
+not remove them.
+
+## When simpler storage wins
+
+Use mutable state or plain files when memory is disposable, one process owns it,
+and nobody needs historical reconstruction. Event sourcing earns its cost when
+at least one condition holds:
+
+- memory must survive restarts;
+- past decisions must remain explainable;
+- corrections must not erase prior state;
+- several projections need same source history;
+- replay is part of debugging or recovery.
+
+## Try one failing memory flow
+
+For a small reproducible check, [run the local restart proof](/agent-memory-restart-proof):
+write one sourced decision, reopen the same data directory, then inspect recall
+and history. [See where AllSource agent memory fits](/solutions/agent-memory)
+before adding another storage layer.
+
+I build AllSource and wrote this article from its current embedded Rust API.
+AllSource is recruiting five design partners with a reproducible cross-session
+memory failure. Selected teams receive 60 days of hosted Scale access, a
+founder-led integration session, two feedback calls, and direct help reaching
+one working recall flow.
+
+No review, testimonial, endorsement, or public mention is required.
+
+[See fit criteria and apply →](/design-partners?utm_source=allsource_blog&utm_medium=content&utm_campaign=design_partners_2026&utm_content=rust_provenance_article)
+
+Code: [AllSource Core on GitHub](https://github.com/all-source-os/all-source/tree/main/apps/core)

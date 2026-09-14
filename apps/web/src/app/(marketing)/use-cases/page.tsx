@@ -68,8 +68,8 @@ const useCases: readonly UseCase[] = [
       "Published Core reference: 11.9µs p99 indexed reads",
     ],
     products: ["core", "query", "hosted"],
-    href: "/platform/event-sourcing",
-    linkLabel: "See Core replay architecture",
+    href: "/event-replay-debugging",
+    linkLabel: "See event replay debugging",
     icon: RotateCcw,
   },
   {
@@ -489,6 +489,33 @@ export default function UseCasesPage() {
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="design-partners-heading" className="border-b border-border">
+        <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-[1fr_auto] md:items-center lg:px-8">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+              Design-partner program
+            </p>
+            <h2
+              id="design-partners-heading"
+              className="mt-2 text-2xl font-semibold text-foreground"
+            >
+              Have one reproducible agent-memory failure?
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Bring one production or serious pre-production flow. Work directly with AllSource
+              engineering through first source-backed recall.
+            </p>
+          </div>
+          <Link
+            href="/design-partners"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}
+          >
+            Review design-partner program
+            <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+          </Link>
         </div>
       </section>
 

@@ -12,13 +12,21 @@ import {
 import { cn } from "@allsource/ui/utils";
 import { Calendar, Check, CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { PlanCards } from "@/components/billing/plan-cards";
 import { UsageChart } from "@/components/billing/usage-chart";
 import { FadeIn } from "@/components/ui/fade-in";
 import { useDashboardStats } from "@/hooks/use-dashboard-stats";
 import { apiClient } from "@/lib/api/client";
 import { siteConfig } from "@/lib/config";
-import { type Catalog, indexByTier } from "@/lib/pricing-catalog";
+import {
+  type Catalog,
+  indexByTier,
+  minimumAnnualSavingsPercent,
+  PriceUnavailable,
+  resolveBilledPrice,
+  resolveYearlyPerMonth,
+} from "@/lib/pricing-catalog";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { canonicalTier } from "@/lib/tier";
 
@@ -29,10 +37,22 @@ function getPlanConfig(tier: string) {
   return siteConfig.pricing.find((p) => p.tier === canon) ?? siteConfig.pricing[0]!;
 }
 
+const paidTierIds = siteConfig.pricing
+  .filter((plan) => !plan.isEnterprise && !plan.isSelfHost)
+  .map((plan) => plan.tier);
+
+async function loadBillingCatalog(): Promise<Catalog | null> {
+  const response = await fetch("/api/billing/catalog");
+  if (!response.ok) return null;
+  const catalog = (await response.json()) as Catalog;
+  return catalog?.tiers?.length ? catalog : null;
+}
+
 export default function BillingPage() {
   const { tenant, user } = useAuthStore();
   const { stats } = useDashboardStats();
   const [isYearly, setIsYearly] = useState(false);
+  const [requestedTier, setRequestedTier] = useState<string | null>(null);
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   // The tier whose checkout is currently being created (button shows a spinner).
   const [upgradingTier, setUpgradingTier] = useState<string | null>(null);
@@ -44,6 +64,11 @@ export default function BillingPage() {
   const [planError, setPlanError] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get("period") === "annual") setIsYearly(true);
+    const requestedPlan = params.get("plan");
+    if (["indie", "studio", "scale"].includes(requestedPlan ?? "")) {
+      setRequestedTier(requestedPlan);
+    }
     if (params.get("checkout") === "success") setCheckoutSuccess(true);
     if (params.get("changed") === "success") setPlanChanged(true);
     if (params.has("checkout") || params.has("changed")) {
@@ -52,13 +77,12 @@ export default function BillingPage() {
     }
   }, []);
   // Live LemonSqueezy prices (source of truth) fetched via the catalog proxy.
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  useEffect(() => {
-    fetch("/api/billing/catalog")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(setCatalog)
-      .catch(() => {});
-  }, []);
+  const { data: catalog = null } = useSWR("/api/billing/catalog", loadBillingCatalog, {
+    dedupingInterval: 2_000,
+    refreshInterval: (latest) => (latest?.tiers?.length ? 300_000 : 5_000),
+    revalidateOnFocus: false,
+  });
+  const yearlySavings = minimumAnnualSavingsPercent(catalog, paidTierIds);
 
   // Canonical tier id (self-host | indie | studio | scale | enterprise) — the
   // raw backend value is normalized once here so all comparisons below are
@@ -73,10 +97,15 @@ export default function BillingPage() {
   const subscriptionEndsAt = tenant?.subscription_ends_at;
 
   const currentCat = indexByTier(catalog)[planConfig.tier];
-  const displayPrice =
-    tenant?.billing_period === "annual"
-      ? (currentCat?.annual?.per_month ?? planConfig.yearlyPrice)
-      : (currentCat?.monthly?.formatted ?? planConfig.price);
+  const isAnnualPlan = tenant?.billing_period === "annual";
+  const displayPrice = resolveBilledPrice(
+    currentCat,
+    planConfig.price,
+    isAnnualPlan ? "annual" : "monthly"
+  );
+  const annualEquivalent = isAnnualPlan
+    ? resolveYearlyPerMonth(currentCat, planConfig.price)
+    : null;
 
   const handleManageSubscription = async () => {
     setIsLoadingPortal(true);
@@ -271,18 +300,27 @@ export default function BillingPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">
-                    {tenant?.billing_period === "annual" ? "Annual Price" : "Monthly Price"}
+                    {isAnnualPlan ? "Annual list price" : "Monthly list price"}
                   </p>
                   <p className="text-2xl font-bold">
                     {displayPrice}
-                    {displayPrice !== "Custom" && (
+                    {displayPrice !== "Custom" && displayPrice !== PriceUnavailable && (
                       <span className="text-base font-normal text-muted-foreground">
-                        /{planConfig.period}
+                        /{isAnnualPlan ? "year" : "month"}
                       </span>
                     )}
                   </p>
-                  {tenant?.billing_period === "annual" && currentTier !== "self-host" && (
-                    <p className="text-xs text-muted-foreground">billed annually</p>
+                  {isAnnualPlan &&
+                    currentTier !== "self-host" &&
+                    displayPrice !== PriceUnavailable && (
+                      <p className="text-xs text-muted-foreground">
+                        {annualEquivalent}/month equivalent · charged annually
+                      </p>
+                    )}
+                  {displayPrice !== "Custom" && displayPrice !== PriceUnavailable && (
+                    <p className="text-xs text-muted-foreground">
+                      Check your invoice for discounts and tax.
+                    </p>
                   )}
                 </div>
                 {tenant?.billing_period && currentTier !== "self-host" && (
@@ -371,9 +409,11 @@ export default function BillingPage() {
                 )}
               >
                 Yearly
-                <Badge variant="secondary" className="text-[10px]">
-                  Save 20%
-                </Badge>
+                {yearlySavings !== null && (
+                  <span className="rounded-full bg-emerald-950 px-2 py-0.5 text-xs font-semibold text-emerald-100">
+                    Save {yearlySavings}%
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -381,10 +421,17 @@ export default function BillingPage() {
           <PlanCards
             currentPlan={currentTier}
             isYearly={isYearly}
+            selectedTier={requestedTier}
             catalog={catalog}
             loadingTier={upgradingTier}
             onUpgrade={handleUpgrade}
           />
+          {catalog?.stale && catalog.fetched_at && (
+            <p className="text-sm text-muted-foreground" role="status">
+              Prices last confirmed with Lemon Squeezy {catalog.fetched_at.slice(0, 10)}. Checkout
+              shows the current total before payment.
+            </p>
+          )}
         </div>
       </FadeIn>
 

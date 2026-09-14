@@ -1,6 +1,6 @@
 [package]
 name = "allsource-prime"
-version = "0.23.0"
+version = "0.24.0"
 edition = "2024"
 rust-version = "1.92"
 description = "MCP server for AllSource Prime — unified agent memory engine (stdio transport)"
@@ -16,6 +16,11 @@ name = "allsource-prime"
 path = "src/main.rs"
 
 [features]
+# `cargo install allsource-prime` must work on a machine that cannot reach
+# HuggingFace, so the model is baked in by default (+86 MB). Shipped artifacts
+# pass --no-default-features and get the model from the bundle beside them; a
+# contributor who wants a fast build does the same.
+default = ["prime-bundled-model"]
 # In-process CPU profiling endpoint behind /debug/pprof/profile.
 # Gate at the HTTP layer — do NOT ship with this enabled by default.
 profiling = ["dep:pprof"]
@@ -30,7 +35,7 @@ prime-remote-embed = ["allsource-core/prime-remote-embed"]
 prime-bundled-model = ["allsource-core/prime-bundled-model"]
 
 [dependencies]
-allsource-core = { version = "0.23.0", path = "../../apps/core", default-features = false, features = ["prime-recall", "prime-vectors"] }
+allsource-core = { version = "0.24.0", path = "../../apps/core", default-features = false, features = ["prime-recall", "prime-vectors"] }
 anyhow = "1.0"
 axum = { version = "0.8", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }

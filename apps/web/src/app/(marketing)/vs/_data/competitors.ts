@@ -68,6 +68,8 @@ export type Competitor = {
    * the page links to `/blog/<articleSlug>` so the page ↔ article cross-link.
    */
   articleSlug?: string;
+  /** Primary product documentation used to verify competitor claims. */
+  sources: { label: string; href: string }[];
 };
 
 // Rows shared by every competitor — the durable differentiators. Per-competitor
@@ -183,6 +185,10 @@ export const competitors: Record<CompetitorSlug, Competitor> = {
           "AllSource keeps the complete, immutable event log and lets you replay it to any past state. Memory layers like mem0 typically store distilled memories rather than the full provenance.",
       },
     ],
+    sources: [
+      { label: "mem0 open-source overview", href: "https://docs.mem0.ai/open-source/overview" },
+      { label: "mem0 repository", href: "https://github.com/mem0ai/mem0" },
+    ],
   },
 
   letta: {
@@ -231,6 +237,10 @@ export const competitors: Record<CompetitorSlug, Competitor> = {
         answer:
           "Not directly. AllSource replaces the durable persistence and recall layer; you can keep a framework like Letta on top, or drive AllSource directly over HTTP and MCP.",
       },
+    ],
+    sources: [
+      { label: "Letta documentation", href: "https://docs.letta.com/" },
+      { label: "Letta repository", href: "https://github.com/letta-ai/letta" },
     ],
   },
 
@@ -282,6 +292,10 @@ export const competitors: Record<CompetitorSlug, Competitor> = {
           "Yes. AllSource is Apache-2.0 licensed, runs embedded in-process or as a server, and has hosted tiers if you prefer managed. You are never locked into a single hosted memory API.",
       },
     ],
+    sources: [
+      { label: "Zep documentation", href: "https://help.getzep.com/" },
+      { label: "Zep repository", href: "https://github.com/getzep/zep" },
+    ],
   },
 
   // stoolap is a DIFFERENT CATEGORY from the three above: it is an embedded,
@@ -305,6 +319,10 @@ export const competitors: Record<CompetitorSlug, Competitor> = {
     tableNote:
       "Both are Rust and Apache-2.0 (AllSource's enterprise tier is BSL 1.1). stoolap genuinely ships an MCP server (30 SQL tools), native VECTOR/HNSW search, a built-in EMBED() with no external API, and AS OF time-travel — none of those are AllSource-exclusive here. On the only fair head-to-head (single-row in-memory ingest + point reads) the two land in the same order of magnitude; reproduce it with `cargo run --release -p allsource-performance`. stoolap multipliers like 191×/1213× are vendor-reported; an independent Better Stack test measured stoolap's real OLAP edge over SQLite at ~4–6×.",
     articleSlug: "allsource-vs-stoolap",
+    sources: [
+      { label: "stoolap repository", href: "https://github.com/stoolap/stoolap" },
+      { label: "AllSource reproduction notes", href: "/blog/allsource-vs-stoolap" },
+    ],
     pickAllsource: [
       "You need an immutable, replayable store of record — full event provenance and any past state by replay, as an audit ledger (not a garbage-collected MVCC version)",
       "The store must be a shared network service for many clients/agents — a Rust server on :3900 with leader-follower replication — not a library trapped in one process",

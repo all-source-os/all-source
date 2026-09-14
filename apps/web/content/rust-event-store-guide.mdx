@@ -1,0 +1,75 @@
+---
+title: "Rust event store guide: durability, replay, and reads"
+publishedAt: "2026-08-27"
+summary: A code-first map of AllSource Core: where accepted events become durable, how recovery rebuilds indexes, what benchmarks measure, and when an event store is the wrong model.
+author: "Decebal Dobrica"
+category: "engineering"
+image: "/assets/blog/building-an-ai-native-event-store-in-rust.webp"
+---
+
+A Rust event store is useful when history is part of your product contract, not an implementation detail. Account balances, order decisions, agent memories, and audit evidence depend on *how state changed*. Keeping only the latest row makes that sequence somebody else's problem.
+
+AllSource Core stores the sequence directly. This guide maps public claims to source paths, then shows what to measure before choosing the model.
+
+## Storage boundary
+
+An accepted event enters an append-only stream. Core writes it to a CRC32-checked write-ahead log, updates concurrent indexes, and later compacts durable history into Parquet. Recovery replays persisted history to rebuild disposable in-memory state.
+
+- **WAL** controls crash recovery and configurable fsync behaviour.
+- **Parquet** gives compact columnar persistence for scans and analytics.
+- **Concurrent indexes** answer hot reads without becoming another source of truth.
+
+Start with [Core source](https://github.com/all-source-os/all-source/tree/main/apps/core/src), then inspect [architecture explanation](/blog/how-allsource-core-works). Public API sits on top of that storage boundary; it does not replace it with PostgreSQL.
+
+## Event shape
+
+Useful events name a past-tense fact and carry enough identity for deterministic reads:
+
+```json
+{
+  "event_type": "order.payment_failed",
+  "entity_id": "order_7f3a",
+  "stream_id": "orders",
+  "payload": { "attempt": 3, "provider_code": "insufficient_funds" }
+}
+```
+
+Do not use an event as a disguised mutable-row dump. Prefer facts such as `order.placed`, `payment.authorised`, and `payment.failed`. Projection code can fold those facts into current order state while preserving why that state exists.
+
+## Reads are separate jobs
+
+AllSource Query Service separates four read paths over Core history:
+
+1. HTTP queries for request-response application reads.
+2. Realtime channels for live event and projection updates.
+3. Analytics endpoints for aggregates and operational questions.
+4. Rebuildable projections for current-state views.
+
+See [Query Service boundary](/platform/query-service) and [projection lifecycle](/platform/projections). This is practical CQRS: one durable history, several read shapes, no second primary database.
+
+## Replay contract
+
+Replay is not “run everything again” without controls. Production replay needs fixed event scope, time or version boundary, target projection, affected read models, progress evidence, and explicit switch from shadow state to active state.
+
+[Replay debugging guide](/event-replay-debugging) maps those decisions to current SDK fields and operator evidence.
+
+## Benchmark contract
+
+AllSource publishes a 469K events/sec batch-ingest reference and an 11.9µs p99 indexed-read reference. These are different paths. Neither represents hosted HTTP latency, graph recall, vector retrieval, or synchronous single-event durability under every fsync policy.
+
+```bash
+cargo run --release -p allsource-performance
+```
+
+[Benchmark reproduction guide](/blog/reproduce-the-469k-events-benchmark) records hardware, release-mode requirements, and measured stages.
+
+## When not to choose an event store
+
+Use a relational or document database as primary storage when current state and ad-hoc joins dominate, history has no product value, and rebuilding views adds ceremony without benefit. Event sourcing imposes event naming, schema evolution, ordering, concurrency, and projection responsibilities. Those costs need replay, provenance, auditability, or temporal reads—not fashion.
+
+## Evaluate locally
+
+- [Install AllSource Core](/install)
+- [Read API documentation](/docs/api)
+- [Run timeline, graph, projection, and replay demos](/examples)
+- [Inspect source](https://github.com/all-source-os/all-source)

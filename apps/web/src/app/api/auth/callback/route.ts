@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { publicUrl } from "@/lib/public-url";
 
 // Session tokens are minted by the Control Plane and validated by the Query
 // Service's /api/v1/auth/me. NEXT_PUBLIC_API_URL points at the branded gateway
@@ -33,14 +34,14 @@ export async function GET(request: NextRequest) {
 
   // Handle OAuth errors
   if (error) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", error);
     return NextResponse.redirect(loginUrl);
   }
 
   // Token is required
   if (!token) {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", "missing_token");
     return NextResponse.redirect(loginUrl);
   }
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!meResponse.ok) {
-      const loginUrl = new URL("/login", request.url);
+      const loginUrl = publicUrl(request, "/login");
       loginUrl.searchParams.set("error", "invalid_token");
       return NextResponse.redirect(loginUrl);
     }
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     // If the caller specified a safe ?next= target (e.g. /connect), honor it.
     // Otherwise fall back to onboarding (new user) or dashboard.
     const redirectUrl = nextPath ?? (isNewUser ? "/onboarding" : "/dashboard");
-    const response = NextResponse.redirect(new URL(redirectUrl, request.url));
+    const response = NextResponse.redirect(publicUrl(request, redirectUrl));
 
     // Set httpOnly cookie with the token
     response.cookies.set("auth_token", token, {
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     return response;
   } catch {
-    const loginUrl = new URL("/login", request.url);
+    const loginUrl = publicUrl(request, "/login");
     loginUrl.searchParams.set("error", "auth_failed");
     return NextResponse.redirect(loginUrl);
   }

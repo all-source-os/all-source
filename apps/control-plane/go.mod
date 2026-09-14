@@ -1,6 +1,6 @@
 module github.com/allsource/control-plane
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3

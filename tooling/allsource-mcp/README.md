@@ -25,12 +25,19 @@ Add to `~/.claude/settings.json` (or project `.claude/settings.json`):
   "mcpServers": {
     "allsource": {
       "command": "allsource-mcp",
-      "args": ["--data-dir", "/path/to/allsource/data"],
+      "args": [
+        "--data-dir", "/path/to/allsource/data",
+        "--profile", "hosted-tenant",
+        "--tenant-id", "tenant-123",
+        "--source-id", "production-eu"
+      ],
       "env": {}
     }
   }
 }
 ```
+
+`hosted-tenant` fails closed without an immutable `--tenant-id`. Request arguments cannot override this binding. `local` remains default and reports an unbound store as unverified. `operator` is an explicit broad-access profile.
 
 For Longhand on macOS:
 
@@ -65,14 +72,16 @@ Or use the environment variable instead of `--data-dir`:
 
 | Tool | Description |
 |------|-------------|
-| `query_events` | Query events with filters (entity_id, event_type, time range, limit) |
-| `sample_events` | Sample recent events across all entities |
-| `quick_stats` | Event store summary: counts, date range, event type distribution |
-| `get_snapshot` | Get latest projection/snapshot state for an entity |
-| `event_timeline` | Chronological event timeline for an entity |
+| `query_events` | Tenant-bound paginated events with completeness metadata |
+| `sample_events` | Recent events inside the configured tenant boundary |
+| `quick_stats` | Exact scoped counts, freshness, and durability |
+| `get_snapshot` | Named authoritative projection state; no guessed fallback |
+| `event_timeline` | Paginated chronological entity timeline |
 | `explain_entity` | Human-readable lifecycle summary of an entity |
-| `reconstruct_state` | Fold all events to reconstruct current entity state |
-| `analyze_changes` | Analyze changes within a time window |
+| `reconstruct_state` | Deprecated, explicitly non-authoritative payload-fold preview |
+| `analyze_changes` | Paginated changes within a strict RFC 3339 window |
+
+Every successful result includes JSON `structuredContent`, tenant/source provenance, freshness, and completeness. Existing pretty-JSON text content remains for older clients.
 
 ## Example Session
 

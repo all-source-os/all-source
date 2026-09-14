@@ -33,7 +33,7 @@ var openAPIYAML []byte
 // Control plane configuration constants.
 const (
 	// Version is the current version of the control plane.
-	Version = "0.23.0"
+	Version = "0.24.0"
 	// DefaultPort is the default port the control plane listens on.
 	DefaultPort = "3901"
 	// CoreServiceURL is the URL of the core event store service.
@@ -481,6 +481,13 @@ func (cp *ControlPlane) setupRoutes() {
 	onboard.Use(IPRateLimitMiddleware(onboardLimiter))
 	onboard.POST("/start", cp.OnboardHandler)
 
+	// Design-partner applications are public, spam-checked, body-limited, and
+	// rate-limited before applicant PII reaches the private Core stream.
+	designPartnerLimiter := NewIPRateLimiter(5, time.Hour)
+	designPartners := cp.router.Group("/api/v1/design-partners")
+	designPartners.Use(IPRateLimitMiddleware(designPartnerLimiter))
+	designPartners.POST("/applications", MaxBodySize(16*1024), cp.DesignPartnerApplyHandler)
+
 	// Agent registration (public, no auth required)
 	agents := cp.router.Group("/api/v1/agents")
 	agents.POST("/register", cp.AgentRegisterHandler)
@@ -738,6 +745,11 @@ func (cp *ControlPlane) setupRoutes() {
 	// AI-grounded draft generation (045): thread + contact recall → Claude → body.
 	admin.POST("/inbox/draft/generate", cp.container.InboxAdminHandler.GenerateDraft)
 	admin.POST("/inbox/send", cp.container.InboxAdminHandler.Send)
+
+	// Private design-partner application review. Status updates append events;
+	// applicant fields never enter public or tenant-facing routes.
+	admin.GET("/design-partners/applications", cp.DesignPartnerApplicationsHandler)
+	admin.PUT("/design-partners/applications/:id/status", cp.DesignPartnerStatusHandler)
 
 	// Recovery — diagnose (Safe, read-only) + guarded/destructive actions.
 	// reactivate/suspend/edit_quotas are NOT re-implemented — they keep using the

@@ -15,6 +15,12 @@ FROM oven/bun:${BUN_VERSION}-alpine AS builder
 
 ARG VERSION=dev
 ARG REVISION=unknown
+ARG NEXT_PUBLIC_APP_URL=https://www.all-source.xyz
+ARG NEXT_PUBLIC_API_URL=https://api.all-source.xyz
+ARG NEXT_PUBLIC_CONTROL_PLANE_URL=https://api.all-source.xyz
+ARG NEXT_PUBLIC_WS_URL=wss://allsource-query.fly.dev
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID=G-3347JLG51K
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 
 RUN apk add --no-cache libc6-compat
 
@@ -51,7 +57,6 @@ COPY apps/web/public apps/web/public
 COPY apps/web/next.config.mjs apps/web/
 COPY apps/web/postcss.config.mjs apps/web/
 COPY apps/web/tsconfig.json apps/web/
-COPY apps/web/next-env.d.ts apps/web/
 COPY apps/web/components.json apps/web/
 COPY apps/web/content apps/web/content
 
@@ -61,7 +66,13 @@ COPY docs/CHANGELOG.md docs/
 # Environment for build
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production \
-    NEXT_PUBLIC_VERSION=${VERSION}
+    NEXT_PUBLIC_VERSION=${VERSION} \
+    NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
+    NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_CONTROL_PLANE_URL=${NEXT_PUBLIC_CONTROL_PLANE_URL} \
+    NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL} \
+    NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID} \
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
 
 # Build the web application (run next build directly, not turbo)
 WORKDIR /app/apps/web
@@ -112,7 +123,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/healthz || exit 1
 
 # Use tini for signal handling
 ENTRYPOINT ["/sbin/tini", "-g", "--"]

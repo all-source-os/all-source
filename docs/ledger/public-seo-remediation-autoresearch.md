@@ -1,0 +1,15 @@
+# Public SEO remediation autoresearch ledger
+
+| Run | Change | Rubric result | Decision |
+| --- | --- | --- | --- |
+| 0 | 27 August live audit baseline | 81/100 SEO health; canonical, link, mobile CLS/LCP, authority, and intent gaps | Baseline |
+| 1 | Render design-partner banner from request cookie, move theme control into header, enlarge touch targets, replace bitmap logo delivery | Mobile ProofShot: 390 px layout, no horizontal overflow, zero console/server errors; Lighthouse CLS 0 across 3 runs (visual baseline 0.1133) | Keep |
+| 2 | Normalize sitemap/canonicals, noindex private flows, repair broken internal paths, tighten production CSP | 98 sitemap URLs tested; 98 returned 200; critical pages expose self-canonicals; auth routes redirect to noindex login | Keep |
+| 3 | Add founder/publisher entity graph, concise `llms.txt`, detailed `llms-full.txt`, and disambiguation from ArcGIS AllSource | GEO fact contract passes; canonical product, pricing, MCP-registry, and benchmark claims remain test-enforced | Keep |
+| 4 | Publish event-store definition, Query Service read-lane page, projection lifecycle, three evidence-led guides, and primary-source comparison citations | Production build emits 99 routes; 106 web tests pass; new pages expose answer-first H1s and JSON-LD | Keep |
+| 5 | Final mobile and lab verification | Median Lighthouse: Performance 92, Accessibility 96, SEO 100, FCP 1.06 s, LCP 3.39 s, CLS 0 | Keep |
+| 6 | Tighten buyer-near metadata and proof paths; cite the five-way agent-memory comparison; remove deprecated HowTo JSON-LD | Six route titles/descriptions and self-canonicals pass regression checks; five cited rows render with accessible table semantics; comparison links to local restart proof and solution hub; two engineering articles link to both; all 133 web tests and TypeScript check pass. Production build could not complete here: Turbopack PostCSS worker failed to bind a local port (`Operation not permitted`), including with explicit escalation. | Keep code; production verification pending |
+
+External evidence gates remain unknown until observed: Search Console recrawl, CrUX field data, independent citations, approved customer proof, and third-party video/review publication. Do not score these as zero or claim uplift before production recrawl.
+
+Run 6 deliberately reuses the frozen rubric. It improves metadata, internal paths, and claim sourcing without adding new keyword pages. The 2 September cached SEO score of 89 is not a fresh ranking or crawl result; this run does not claim score or traffic uplift. The comparison sources are official [OpenAI memory](https://help.openai.com/en/articles/8590148), [Claude Code memory](https://code.claude.com/docs/en/memory), [Microsoft RAG](https://learn.microsoft.com/en-us/azure/foundry/concepts/retrieval-augmented-generation?view=foundry-classic), and [Microsoft event sourcing](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing) guidance. Google [deprecated HowTo rich results](https://developers.google.com/search/blog/2023/08/howto-faq-changes), so visible restart steps remain while HowTo JSON-LD is gone.

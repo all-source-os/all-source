@@ -160,6 +160,44 @@ export default function CompareEventStoreDBPage() {
         </div>
       </Section>
 
+      <Section className="pb-12">
+        <div className="mx-auto max-w-3xl border-y border-border py-6">
+          <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+            Primary sources checked
+          </h2>
+          <ul className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm">
+            <li>
+              <Link
+                href="https://docs.kurrent.io/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-12 items-center text-primary underline underline-offset-4"
+              >
+                EventStoreDB / Kurrent documentation ↗
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="https://github.com/EventStore/EventStore/blob/master/LICENSE.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-12 items-center text-primary underline underline-offset-4"
+              >
+                EventStoreDB licence ↗
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/blog/reproduce-the-469k-events-benchmark"
+                className="inline-flex min-h-12 items-center text-primary underline underline-offset-4"
+              >
+                Reproduce AllSource benchmark
+              </Link>
+            </li>
+          </ul>
+        </div>
+      </Section>
+
       {/* When to pick which */}
       <Section className="pb-16">
         <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-2">
@@ -217,7 +255,7 @@ export default function CompareEventStoreDBPage() {
             EventStoreDB.
           </p>
           <div className="mt-6">
-            <Link href="/docs/quickstart" className={cn(buttonVariants({ variant: "default" }))}>
+            <Link href="/docs/tenant-setup" className={cn(buttonVariants({ variant: "default" }))}>
               Quickstart <ChevronRight className="ml-1 h-4 w-4" />
             </Link>
           </div>

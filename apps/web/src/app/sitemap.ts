@@ -1,105 +1,84 @@
 import type { MetadataRoute } from "next";
 import { getBlogPosts } from "@/lib/blog";
 import { siteConfig } from "@/lib/config";
+import { eventSourcingPatterns } from "@/lib/event-sourcing-patterns";
 import { integrations } from "@/lib/integrations";
 
+const STATIC_PATHS = [
+  "",
+  "/about",
+  "/architecture",
+  "/agent-memory-restart-proof",
+  "/blog",
+  "/changelog",
+  "/compare/agent-memory",
+  "/compare/eventstoredb",
+  "/connect",
+  "/design-partners",
+  "/docs",
+  "/docs/api",
+  "/docs/chronis",
+  "/docs/mcp",
+  "/docs/prime",
+  "/docs/prime/concepts",
+  "/docs/prime/embedded",
+  "/docs/prime/http",
+  "/docs/prime/mcp",
+  "/docs/prime/quickstart",
+  "/docs/tenant-setup",
+  "/ecosystem",
+  "/event-replay-debugging",
+  "/event-sourcing/patterns",
+  "/event-sourcing-for-ai-agents",
+  "/examples",
+  "/install",
+  "/platform/event-sourcing",
+  "/platform/prime",
+  "/platform/projections",
+  "/platform/query-service",
+  "/platform/stream-processing",
+  "/pricing",
+  "/prime",
+  "/privacy",
+  "/sdks",
+  "/solutions/agent-memory",
+  "/solutions/audit-compliance",
+  "/solutions/financial-services",
+  "/solutions/iot-telemetry",
+  "/solutions/multi-tenant-saas",
+  "/solutions/quant-intelligence",
+  "/solutions/real-time-analytics",
+  "/status",
+  "/terms",
+  "/use-cases",
+  "/vs/letta",
+  "/vs/mem0",
+  "/vs/stoolap",
+  "/vs/zep",
+  "/what-is-allsource",
+  "/what-is-an-event-store",
+] as const;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const allPosts = await getBlogPosts();
-  // Stable canonical host prevents preview or malformed Host headers from
-  // splitting the entity across sitemap URLs. Update only when public content
-  // changes; request time is not a truthful last-modified signal.
-  const base = siteConfig.url;
-  const contentUpdatedAt = new Date("2026-08-14T00:00:00Z");
+  const posts = await getBlogPosts();
 
-  // Static marketing pages
-  const staticPages = [
-    { url: base, priority: 1.0, changeFrequency: "weekly" as const },
-    { url: `${base}/pricing`, priority: 0.9, changeFrequency: "monthly" as const },
-    { url: `${base}/blog`, priority: 0.8, changeFrequency: "weekly" as const },
-    { url: `${base}/docs`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/api`, priority: 0.7, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/mcp`, priority: 0.7, changeFrequency: "monthly" as const },
-    { url: `${base}/what-is-allsource`, priority: 1.0, changeFrequency: "weekly" as const },
-    { url: `${base}/docs/tenant-setup`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/chronis`, priority: 0.6, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/prime`, priority: 0.9, changeFrequency: "weekly" as const },
-    { url: `${base}/docs/prime/quickstart`, priority: 0.9, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/prime/concepts`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/prime/mcp`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/prime/http`, priority: 0.7, changeFrequency: "monthly" as const },
-    { url: `${base}/docs/prime/embedded`, priority: 0.7, changeFrequency: "monthly" as const },
-    { url: `${base}/use-cases`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/compare/eventstoredb`, priority: 0.7, changeFrequency: "monthly" as const },
-    {
-      url: `${base}/event-sourcing-for-ai-agents`,
-      priority: 0.9,
-      changeFrequency: "weekly" as const,
-    },
-    { url: `${base}/vs/mem0`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/vs/letta`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/vs/zep`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/vs/stoolap`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/platform/event-sourcing`, priority: 0.9, changeFrequency: "monthly" as const },
-    {
-      url: `${base}/platform/stream-processing`,
-      priority: 0.8,
-      changeFrequency: "monthly" as const,
-    },
-    { url: `${base}/platform/prime`, priority: 0.8, changeFrequency: "monthly" as const },
-    { url: `${base}/prime`, priority: 0.9, changeFrequency: "weekly" as const },
-    { url: `${base}/install`, priority: 0.9, changeFrequency: "weekly" as const },
-    { url: `${base}/solutions/agent-memory`, priority: 0.9, changeFrequency: "monthly" as const },
-    {
-      url: `${base}/solutions/audit-compliance`,
-      priority: 0.8,
-      changeFrequency: "monthly" as const,
-    },
-    {
-      url: `${base}/solutions/real-time-analytics`,
-      priority: 0.8,
-      changeFrequency: "monthly" as const,
-    },
-    {
-      url: `${base}/solutions/financial-services`,
-      priority: 0.7,
-      changeFrequency: "monthly" as const,
-    },
-    { url: `${base}/solutions/iot-telemetry`, priority: 0.7, changeFrequency: "monthly" as const },
-    {
-      url: `${base}/solutions/multi-tenant-saas`,
-      priority: 0.7,
-      changeFrequency: "monthly" as const,
-    },
-    {
-      url: `${base}/solutions/quant-intelligence`,
-      priority: 0.7,
-      changeFrequency: "monthly" as const,
-    },
-    { url: `${base}/changelog`, priority: 0.5, changeFrequency: "weekly" as const },
-    { url: `${base}/privacy`, priority: 0.3, changeFrequency: "yearly" as const },
-    { url: `${base}/terms`, priority: 0.3, changeFrequency: "yearly" as const },
-    { url: `${base}/status`, priority: 0.4, changeFrequency: "daily" as const },
-  ];
+  const staticPages = STATIC_PATHS.map((path) => ({
+    url: `${siteConfig.url}${path}`,
+  }));
 
-  // Per-tool install pages — derived from the integration data module so a new
-  // tool lands in the sitemap with no edit here.
   const installPages = integrations.map((integration) => ({
-    url: `${base}/install/${integration.slug}`,
-    priority: 0.8,
-    changeFrequency: "monthly" as const,
+    url: `${siteConfig.url}/install/${integration.slug}`,
   }));
 
-  // Blog posts
-  const blogPages = allPosts.map((post) => ({
-    url: `${base}/blog/${post.slug}`,
+  const eventSourcingPatternPages = eventSourcingPatterns.map((pattern) => ({
+    url: `${siteConfig.url}/event-sourcing/patterns/${pattern.slug}`,
+    lastModified: new Date("2026-09-10"),
+  }));
+
+  const blogPages = posts.map((post) => ({
+    url: `${siteConfig.url}/blog/${post.slug}`,
     lastModified: new Date(post.updatedAt || post.publishedAt),
-    priority: 0.7,
-    changeFrequency: "monthly" as const,
   }));
 
-  return [
-    ...staticPages.map((p) => ({ ...p, lastModified: contentUpdatedAt })),
-    ...installPages.map((p) => ({ ...p, lastModified: contentUpdatedAt })),
-    ...blogPages,
-  ];
+  return [...staticPages, ...eventSourcingPatternPages, ...installPages, ...blogPages];
 }

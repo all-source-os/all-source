@@ -165,6 +165,7 @@ type Container struct {
 	RegisterTrialAgentUC  *usecases.RegisterTrialAgentUseCase
 	ClaimTrialAgentUC     *usecases.ClaimTrialAgentUseCase
 	AgentPaymentHistoryUC *usecases.GetAgentPaymentHistoryUseCase
+	DesignPartnerUC       *usecases.DesignPartnerUseCase
 
 	// Use Cases — Webhooks
 	ProcessLSWebhookUC     *usecases.ProcessLemonSqueezyWebhookUseCase
@@ -390,9 +391,9 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 	getOverageSummaryUC := usecases.NewGetOverageSummaryUseCase(tenantRepo)
 	setOverageEnabledUC := usecases.NewSetOverageEnabledUseCase(tenantRepo, auditRepo)
 	getProjectedChargesUC := usecases.NewGetProjectedChargesUseCase(tenantRepo)
-	// Public pricing catalog, read live from LemonSqueezy (source of truth for
-	// charged prices). nil LS client → empty catalog → frontend uses config.
-	getCatalogUC := usecases.NewGetCatalogUseCase(cfg.LSClient)
+	// Provider-confirmed public prices survive process restarts in Core config.
+	// nil LS client yields an empty paid catalog; no static paid-price fallback.
+	getCatalogUC := usecases.NewGetCatalogUseCase(cfg.LSClient, cfg.CoreClient)
 
 	// Initialize use cases — Agent Registration
 	registerAgentUC := usecases.NewRegisterAgentUseCase(createTenantUC, auditRepo, cfg.CoreClient, cfg.KeySigner)
@@ -402,6 +403,7 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 	registerTrialAgentUC := usecases.NewRegisterTrialAgentUseCase(createTenantUC, auditRepo, cfg.CoreClient, cfg.KeySigner)
 	claimTrialAgentUC := usecases.NewClaimTrialAgentUseCase(tenantRepo, auditRepo, cfg.CoreClient)
 	agentPaymentHistoryUC := usecases.NewGetAgentPaymentHistoryUseCase(cfg.CoreClient)
+	designPartnerUC := usecases.NewDesignPartnerUseCase(cfg.CoreClient)
 
 	// Initialize use cases — Webhooks. WithCoreClient lets the apply path emit the
 	// subscription.activated / subscription.upgraded signal the comms-efficiency
@@ -732,6 +734,7 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 		RegisterTrialAgentUC:         registerTrialAgentUC,
 		ClaimTrialAgentUC:            claimTrialAgentUC,
 		AgentPaymentHistoryUC:        agentPaymentHistoryUC,
+		DesignPartnerUC:              designPartnerUC,
 		AlertHandler:                 alertHandler,
 		SLOHandler:                   sloHandler,
 		AdminTenantHandler:           adminTenantHandler,

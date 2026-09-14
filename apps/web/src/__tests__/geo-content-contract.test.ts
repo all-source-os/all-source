@@ -33,6 +33,10 @@ describe("GEO canonical product facts", () => {
     expect(organization.name).toBe("AllSource Event Store");
     expect(organization.alternateName).toContain("AllSource");
     expect(organization.disambiguatingDescription).toContain("Esri ArcGIS AllSource");
+    expect(organization.sameAs).toEqual([
+      "https://github.com/all-source-os/all-source",
+      "https://x.com/ddonprogramming",
+    ]);
 
     const productMap = productVerticalListSchema(productVerticals);
     expect(productMap.numberOfItems).toBe(5);

@@ -37,6 +37,8 @@ func TestAuthMiddleware_PublicPathAllowlist(t *testing.T) {
 		{"agents prefix is not blanket-public", http.MethodGet, "/api/v1/agents/me/payments", false},
 		{"health is public", http.MethodGet, pathHealth, true},
 		{"onboard prefix is public", http.MethodPost, "/api/v1/onboard/start", true},
+		{"design partner application is public", http.MethodPost, "/api/v1/design-partners/applications", true},
+		{"design partner list is not public", http.MethodGet, "/api/v1/design-partners/applications", false},
 	}
 
 	for _, tc := range cases {

@@ -224,7 +224,8 @@ pub struct FullGraph {
 /// Query for hybrid recall combining vector similarity, graph proximity, and temporal recency.
 #[derive(Debug, Clone)]
 pub struct RecallQuery {
-    /// Optional text description (for logging/debugging).
+    /// Query text. Used for lexical scoring when `vector` is `None`, so a
+    /// caller whose embedder is unavailable still gets a ranked answer.
     pub text: Option<String>,
     /// Query vector for similarity search.
     pub vector: Option<Vec<f32>>,
@@ -274,6 +275,31 @@ pub struct ScoredNode {
     pub components: ScoreComponents,
 }
 
+/// What actually drove a recall's ranking.
+///
+/// A caller cannot tell a lexical answer from a semantic one by looking at the
+/// nodes, and the two are not interchangeable — so recall states which it did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Retrieval {
+    /// Nothing to search on, or nothing matched.
+    #[default]
+    Empty,
+    /// Vector similarity ranked the results.
+    Semantic,
+    /// Query text matched against node properties — no query vector was given.
+    Lexical,
+    /// Every node of a type, ranked by recency. No query text to match.
+    TypeScan,
+}
+
+impl Retrieval {
+    /// Whether this is a fallback for semantic recall rather than the real thing.
+    pub fn is_degraded(self) -> bool {
+        matches!(self, Self::Lexical | Self::TypeScan)
+    }
+}
+
 /// Result of a hybrid recall query.
 #[derive(Debug, Clone, Default)]
 pub struct RecallResult {
@@ -281,6 +307,8 @@ pub struct RecallResult {
     #[cfg(feature = "prime-vectors")]
     pub vectors: Vec<super::vectors::VectorSearchResult>,
     pub edges: Vec<Edge>,
+    /// How `nodes` were retrieved — see [`Retrieval`].
+    pub retrieval: Retrieval,
 }
 
 // =============================================================================

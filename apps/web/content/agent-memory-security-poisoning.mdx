@@ -1,0 +1,65 @@
+---
+title: "Agent memory security: prevent poisoning and cross-tenant recall"
+publishedAt: "2026-08-27"
+summary: A concrete threat model for durable agent memory: scoped writers, provenance, tenant isolation, correction events, bounded recall, and audit evidence.
+author: "Decebal Dobrica"
+category: "engineering"
+image: "/assets/blog/ai-agents-need-memory.webp"
+---
+
+Persistent memory turns one bad write into a future input. Memory poisoning is not only a prompt-injection problem: it is a storage, identity, provenance, and retrieval problem.
+
+This guide covers controls AllSource users can verify. It does not claim an event store makes hostile content safe by itself.
+
+## Threat model
+
+Four failures matter most:
+
+1. **Untrusted writer:** a user, tool, document, or compromised agent writes a false instruction as durable memory.
+2. **Cross-tenant recall:** a query returns another tenant's events or derived memory.
+3. **Provenance loss:** a summary survives but observation and transformation that created it cannot be inspected.
+4. **Over-broad recall:** a semantically similar result enters a high-impact workflow without scope or verification.
+
+## Separate observation from instruction
+
+Store external text as observation with source identity. Do not silently promote it into instruction. A document saying “ignore previous policy” is evidence about that document, not authority over agent.
+
+Use distinct event types for observed content, approved decisions, and policy changes. Restrict policy-changing writers more tightly than ordinary memory writers.
+
+## Scope every operation
+
+Every write and read needs tenant identity, entity or workspace scope, and tool-level authorization. Prefer one named key per agent. Analysis agents usually need read-only history; ingestion workers need narrow write surface; administration belongs in separate connector and credential.
+
+Test isolation with negative cases. Attempt read using another tenant identifier and verify rejection. Do not infer isolation from successful same-tenant query.
+
+## Preserve provenance
+
+A recalled item should point to source events, timestamps, and transformations. If memory is summary, retain references to observations it summarizes. If decision changes, append correction or superseding event instead of rewriting history.
+
+Provenance supports correction and investigation. Current memory can derive from latest valid decision while original sequence remains available to show how poisoned state entered system.
+
+## Bound recall
+
+Set result limits, event-type filters, time windows, entity scope, and minimum relevance. Broad “give me anything similar” queries are unsafe in consequential workflows. Financial, legal, permission, or deployment decisions should require source inspection before action.
+
+Handle “no result” explicitly. Empty recall can mean no memory, stale projection, failed embedding, wrong tenant, expired key, or overly strict filters. [MCP memory server guide](/blog/mcp-memory-server-guide) separates those checks.
+
+## Audit writes and tool calls
+
+Record who wrote memory, which tool accepted it, source identity, tenant, timestamp, and correlation ID. Monitor repeated writes, unusual event types, sudden graph expansion, privilege changes, and cross-workspace lookup attempts.
+
+Event history helps because investigation does not depend on attacker leaving current state untouched. Replay still needs controlled scope; use [replay analysis contract](/event-replay-debugging).
+
+## Response checklist
+
+When poisoning is suspected:
+
+1. revoke affected writer credentials,
+2. identify first untrusted event and downstream derivations,
+3. append correction or invalidation events,
+4. rebuild affected projections or memory indexes,
+5. verify active generation against known-good events,
+6. retain audit evidence according to policy,
+7. add regression test for input path.
+
+Durability makes evidence available. Scoped identity, provenance, and controlled replay make that evidence operationally useful.

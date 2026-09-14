@@ -4,6 +4,8 @@ Unified agent memory engine — vectors + graph + events in one binary.
 
 MCP server (stdio) and HTTP REST API for AI agents that need persistent, cross-domain memory with temporal reasoning.
 
+- MCP Registry: `mcp-name: io.github.all-source-os/allsource-prime`
+
 ## Install
 
 ```bash
@@ -172,10 +174,17 @@ calls take ~1–3 ms.
 
 ### Offline embeddings (no network on first use)
 
-The model is auto-downloaded from HuggingFace **on first use**, so a brand-new
-install behind a proxy, on a flight, or in a region where HF is blocked will fail
-the *first* `prime_embed`/`prime_recall` with an actionable error. Three ways to
-make it truly offline:
+**A default build already works offline** — `prime-bundled-model` is on by
+default, so the weights are baked into the binary and the embedder never touches
+the network. That covers `cargo install allsource-prime` and the Claude Desktop
+`.dxt`, which ships the model alongside its binaries and points at it with
+`PRIME_EMBED_MODEL_DIR`.
+
+A build with `--no-default-features` (which is what the release tarballs are,
+to keep them small) downloads the model from HuggingFace **on first use**, so
+behind a proxy, on a flight, or in a region where HF is blocked it fails the
+*first* `prime_embed`/`prime_recall` with an actionable error. Three ways to
+make that build offline too:
 
 1. **Warm the cache ahead of time.** Run once where network is available:
 
@@ -213,20 +222,28 @@ make it truly offline:
 honored by fastembed for the download path. A stale/partial download is fixed by
 deleting the cache dir and retrying.
 
-### Bundled model — offline with zero setup (`prime-bundled-model`)
+### Bundled model — the default (`prime-bundled-model`)
 
-Build with the model baked into the binary, so the embedder works fully offline
-at runtime with no warm step, no `PRIME_EMBED_MODEL_DIR`, no first-use fetch:
+On by default. The model is baked into the binary, so the embedder works fully
+offline at runtime with no warm step, no `PRIME_EMBED_MODEL_DIR`, no first-use
+fetch.
 
 ```bash
-cargo build --release --features prime-bundled-model
+cargo build --release                      # bundled: ~138 MB binary
+cargo build --release --no-default-features # unbundled: ~51 MB, fetches on first use
 # offline build: vendor the 5 files once and skip the build-time HF download
-ALLSOURCE_PRIME_MODELS_SRC=/path/to/vendored cargo build --release --features prime-bundled-model
+ALLSOURCE_PRIME_MODELS_SRC=/path/to/vendored cargo build --release
 ```
 
-The weights (~22 MB) are fetched once at **build** time by the
+The weights (86 MB) are fetched once at **build** time by the
 [`allsource-prime-models`](../../crates/allsource-prime-models) crate and
 `include_bytes!`'d. Runtime never touches the network for the model.
+
+The released tarballs and the `.dxt` are built `--no-default-features`: baking
+86 MB into each of two platform binaries would put the model in the bundle
+twice. The `.dxt` ships it once under `server/model/` instead and sets
+`PRIME_EMBED_MODEL_DIR` in its manifest, which is embedder precedence step 2 —
+so a Desktop install is offline-capable at ~129 MB rather than ~220 MB.
 
 ### Remote / pluggable embedder (`prime-remote-embed`)
 

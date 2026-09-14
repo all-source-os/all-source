@@ -113,8 +113,15 @@ tasks
 /_build/
 /deps/
 /mix.lock
+# This repo's OWN skills are tracked and were force-added past this rule; see
+# `git ls-files .claude/skills`. The rule stays because the directory also holds
+# the vendored gstack tree — 797MB of node_modules and prebuilt binaries, which
+# does not belong in a public repo's permanent history — plus ~41 SKILL.md
+# symlinks into it that would clone as dangling links.
+# Adding a new first-party skill therefore needs `git add -f`.
 .claude/skills/
 .gstack/
+.seo-cache/
 
 # npm auth tokens — never commit
 .npmrc

@@ -54,7 +54,7 @@ C4Context
 ```
 
 **People & externals**
-- **Dashboard user** → `www.all-source.xyz` (Vercel).
+- **Dashboard user** → `www.all-source.xyz` (`allsource-web` on Fly.io).
 - **Developer/agent** → local `allsource-prime` stdio binary + an MCP client; optionally syncs to the hosted backend.
 - External: Google/GitHub OAuth, LemonSqueezy billing.
 
@@ -67,7 +67,7 @@ C4Container
   title Containers — AllSource (prod)
   Person(user, "Dashboard user")
   Person(dev, "Developer / agent")
-  Container(web, "Web", "Next.js / Vercel", "www.all-source.xyz — dashboard + marketing. Browser uses relative URLs → Next route-handler proxies")
+  Container(web, "Web", "Next.js / Fly.io", "www.all-source.xyz — dashboard + marketing. Browser uses relative URLs → Next route-handler proxies")
   Container(cp, "Control Plane", "Go / Fly :3901", "Single public auth ingress; JWT + key minting; billing; delegates to Core/QS/Prime with a service JWT")
   Container(qs, "Query Service", "Elixir / Fly :3902", "Gateway: events, prime graph (GraphFold), tenant, api-keys; api.all-source.xyz")
   Container(core, "Core", "Rust / Fly :3900", "Event store (WAL+Parquet+DashMap). Source of truth for events AND users/tenants/keys (event-sourced). prime feature NOT built.")

@@ -2,7 +2,7 @@
 
 **Status:** stub — targets and alerting wiring are TODO. Owner: Decebal.
 
-This runbook defines the service-level objectives (SLOs) and alerting for AllSource's hosted stack (Core + Query Service + Control Plane on Fly.io, Web on Vercel). Pair with `docs/launch/LAUNCH_CHECKLIST.md` — the Phase F items live here, not in the checklist.
+This runbook defines the service-level objectives (SLOs) and alerting for AllSource's hosted stack on Fly.io. Pair with `docs/launch/LAUNCH_CHECKLIST.md` — the Phase F items live here, not in the checklist.
 
 ## Scope
 
@@ -13,16 +13,18 @@ Applies to the production deployments of:
 - `allsource-control-plane` (Fly) — public API gateway at `https://api.all-source.xyz`
 - `allsource-prime` (Fly)
 - `allsource-auth` (Fly)
-- Web frontend on Vercel (`https://all-source.xyz`)
+- `allsource-web` (Fly) — marketing site and dashboard at `https://www.all-source.xyz`
+- `allsource-admin` (Fly) — admin console at `https://admin.all-source.xyz`
 
 ### Custom domains
 
 | Domain | Points to | DNS provider | Record type |
 |---|---|---|---|
-| `all-source.xyz` / `www.all-source.xyz` | Vercel (web frontend) | Vercel DNS | Managed by Vercel |
-| `api.all-source.xyz` | `allsource-control-plane` on Fly | Vercel DNS | A `66.241.125.106` + AAAA `2a09:8280:1::d4:42b8:0` |
+| `all-source.xyz` / `www.all-source.xyz` | `allsource-web` on Fly | Unstoppable Domains | A `66.241.125.155` + AAAA `2a09:8280:1::180:38b1:0` |
+| `admin.all-source.xyz` | `allsource-admin` on Fly | Unstoppable Domains | A `66.241.124.175` + AAAA `2a09:8280:1::180:38b2:0` |
+| `api.all-source.xyz` | `allsource-control-plane` on Fly | Unstoppable Domains | A `66.241.125.106` + AAAA `2a09:8280:1::d4:42b8:0` |
 
-Fly manages TLS for `api.all-source.xyz` via `fly certs`. Check status: `fly certs show api.all-source.xyz -a allsource-control-plane`.
+Fly manages TLS for all four public hosts via `fly certs`. See `docs/runbooks/FLY_FRONTENDS.md` for frontend deploy, verification, and rollback commands.
 
 ## SLO targets — TODO
 

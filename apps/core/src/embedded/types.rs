@@ -31,6 +31,8 @@ pub struct Query {
     pub(crate) limit: Option<usize>,
     pub(crate) since: Option<DateTime<Utc>>,
     pub(crate) until: Option<DateTime<Utc>>,
+    pub(crate) offset: usize,
+    pub(crate) descending: bool,
 }
 
 impl Query {
@@ -79,6 +81,18 @@ impl Query {
         self.until = Some(t);
         self
     }
+
+    /// Skip the first `n` matching events after stable ordering.
+    pub fn offset(mut self, n: usize) -> Self {
+        self.offset = n;
+        self
+    }
+
+    /// Return newest matching events first. Default is chronological order.
+    pub fn descending(mut self, enabled: bool) -> Self {
+        self.descending = enabled;
+        self
+    }
 }
 
 /// A single event returned from [`EmbeddedCore::query`](super::EmbeddedCore::query).
@@ -94,6 +108,15 @@ pub struct EventView {
     pub metadata: Option<serde_json::Value>,
     pub timestamp: DateTime<Utc>,
     pub version: i64,
+}
+
+/// Stable, bounded query page with truthful continuation metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryPage {
+    pub events: Vec<EventView>,
+    pub total_count: usize,
+    pub has_more: bool,
+    pub next_offset: Option<usize>,
 }
 
 /// Durability status comparing in-memory, WAL, and Parquet layers.

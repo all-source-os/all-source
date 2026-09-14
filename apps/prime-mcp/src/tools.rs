@@ -5,8 +5,10 @@
 
 use std::sync::OnceLock;
 
-use allsource_core::prime::{Prime, recall::RecallEngine};
+use allsource_core::prime::{Prime, recall::RecallEngine, types::Retrieval};
 use serde_json::{Value, json};
+
+use crate::wire::{Fields, Page, node_row, paged};
 
 /// Encoding for the text payload of MCP tool results.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,18 +127,24 @@ pub fn tool_definitions() -> Value {
                     "node_id": { "type": "string", "description": "Starting node entity_id" },
                     "relation": { "type": "string", "description": "Filter to edges of this type only" },
                     "direction": { "type": "string", "enum": ["incoming", "outgoing", "both"], "description": "Edge direction (default: both)" },
-                    "depth": { "type": "integer", "description": "BFS depth: 1 = immediate neighbors, 2+ = multi-hop (default: 1)" }
+                    "depth": { "type": "integer", "description": "BFS depth: 1 = immediate neighbors, 2+ = multi-hop (default: 1)" },
+                    "limit": { "type": "integer", "description": "Max rows to return (default: 50, max: 500)" },
+                    "offset": { "type": "integer", "description": "Rows to skip — use the 'next_offset' from the previous call (default: 0)" },
+                    "fields": { "type": "string", "enum": ["summary", "full"], "description": "'summary' returns {id, type, name, at}; 'full' (default at depth 1) returns every property. Depth > 1 defaults to 'summary' because the frontier grows fast." }
                 },
                 "required": ["node_id"]
             }
         },
         {
             "name": "prime_search",
-            "description": "Find all nodes of a given type. Use for broad queries like 'list all projects' or 'show me every person'. For semantic queries ('find things related to X'), use prime_recall instead.",
+            "description": "List nodes of a given type. Use for broad queries like 'list all projects' or 'show me every person'. For semantic queries ('find things related to X'), use prime_recall instead. Returns at most 50 rows by default and reports the true 'total' — on a code graph a type can hold thousands, so read 'total' and page with 'offset' rather than raising 'limit'. Each row's 'id' is the entity_id every other tool accepts, so drill into a row with prime_neighbors or prime_history instead of asking for 'fields: full' over the whole type.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "type": { "type": "string", "description": "Node type to search for (e.g. 'person', 'project')" }
+                    "type": { "type": "string", "description": "Node type to search for (e.g. 'person', 'project')" },
+                    "limit": { "type": "integer", "description": "Max rows to return (default: 50, max: 500)" },
+                    "offset": { "type": "integer", "description": "Rows to skip — use the 'next_offset' from the previous call (default: 0)" },
+                    "fields": { "type": "string", "enum": ["summary", "full"], "description": "'summary' (default) returns {id, type, name, at}; 'full' returns every property and is much larger" }
                 },
                 "required": ["type"]
             }
@@ -242,7 +250,7 @@ pub fn tool_definitions() -> Value {
         },
         {
             "name": "prime_recall",
-            "description": "Hybrid recall: vectors + graph + temporal recency. Your PRIMARY tool for 'what do I know about X?' questions. Finds semantically similar facts via embedding, then expands through graph connections to discover related context. Supply 'text' alone and the server embeds it in-process via fastembed (AllMiniLML6V2, 384 dims) — no client-side embedding model required. Supply 'vector' if you already have a precomputed query embedding. Set depth=0 for vector-only, depth=1+ to include graph neighbors. For cross-domain questions, use prime_context instead (it adds the compressed index).",
+            "description": "Hybrid recall: vectors + graph + temporal recency. Your PRIMARY tool for 'what do I know about X?' questions. Finds semantically similar facts via embedding, then expands through graph connections to discover related context. Supply 'text' alone and the server embeds it in-process via fastembed (AllMiniLML6V2, 384 dims) — no client-side embedding model required. Supply 'vector' if you already have a precomputed query embedding. Set depth=0 for vector-only, depth=1+ to include graph neighbors. Every result names its 'retrieval' mode: 'semantic' means vectors ranked it, 'lexical' means the embedder was unavailable and text was matched against node properties instead, 'type_scan' means nothing matched and these are the most recent nodes of the type. A 'degraded' field appears with the reason whenever the answer is not semantic — keep using this tool, do NOT fall back to prime_search. For cross-domain questions, use prime_context instead (it adds the compressed index).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -692,13 +700,7 @@ fn call_inbox_recall_thread(prime: &Prime, args: &Value) -> Value {
         let neighbors: Vec<Value> = prime
             .neighbors(&eid, None, allsource_core::prime::Direction::Both)
             .iter()
-            .map(|nb| {
-                json!({
-                    "id": node_eid(&nb.node_type, nb.id.as_str()),
-                    "type": nb.node_type,
-                    "properties": nb.properties,
-                })
-            })
+            .map(|nb| node_row(nb, Fields::Full))
             .collect();
         interactions.push(json!({
             "id": eid,
@@ -837,20 +839,26 @@ fn call_neighbors(prime: &Prime, args: &Value) -> Value {
     };
     let depth = args.get("depth").and_then(Value::as_u64).unwrap_or(1) as usize;
 
+    let page = Page::from_args(args);
+
     if depth <= 1 {
-        let nodes = prime.neighbors(node_id, relation, direction);
-        let nodes_json: Vec<Value> = nodes
-            .iter()
-            .map(|n| json!({"id": n.id.as_str(), "type": n.node_type, "properties": n.properties}))
-            .collect();
-        tool_result(json!({ "nodes": nodes_json }))
+        let fields = Fields::from_args(args, Fields::Full);
+        let (nodes, total) = page.apply(prime.neighbors(node_id, relation, direction));
+        let nodes_json: Vec<Value> = nodes.iter().map(|n| node_row(n, fields)).collect();
+        tool_result(paged("nodes", nodes_json, page, total))
     } else {
-        let results = prime.neighbors_within(node_id, depth, relation, direction);
+        let fields = Fields::from_args(args, Fields::Summary);
+        let (results, total) =
+            page.apply(prime.neighbors_within(node_id, depth, relation, direction));
         let nodes_json: Vec<Value> = results
             .iter()
-            .map(|(n, d)| json!({"id": n.id.as_str(), "type": n.node_type, "properties": n.properties, "depth": d}))
+            .map(|(n, d)| {
+                let mut row = node_row(n, fields);
+                row["depth"] = json!(d);
+                row
+            })
             .collect();
-        tool_result(json!({ "nodes": nodes_json }))
+        tool_result(paged("nodes", nodes_json, page, total))
     }
 }
 
@@ -858,12 +866,11 @@ fn call_search(prime: &Prime, args: &Value) -> Value {
     let Some(node_type) = args.get("type").and_then(Value::as_str) else {
         return tool_error("missing 'type'");
     };
-    let nodes = prime.nodes_by_type(node_type);
-    let nodes_json: Vec<Value> = nodes
-        .iter()
-        .map(|n| json!({"id": n.id.as_str(), "type": n.node_type, "properties": n.properties}))
-        .collect();
-    tool_result(json!({ "nodes": nodes_json }))
+    let fields = Fields::from_args(args, Fields::Summary);
+    let page = Page::from_args(args);
+    let (nodes, total) = page.apply(prime.nodes_by_type(node_type));
+    let nodes_json: Vec<Value> = nodes.iter().map(|n| node_row(n, fields)).collect();
+    tool_result(paged("nodes", nodes_json, page, total))
 }
 
 fn call_shortest_path(prime: &Prime, args: &Value) -> Value {
@@ -877,10 +884,7 @@ fn call_shortest_path(prime: &Prime, args: &Value) -> Value {
 
     match prime.shortest_path(from, to, relation) {
         Some(path) => {
-            let path_json: Vec<Value> = path
-                .iter()
-                .map(|n| json!({"id": n.id.as_str(), "type": n.node_type, "properties": n.properties}))
-                .collect();
+            let path_json: Vec<Value> = path.iter().map(|n| node_row(n, Fields::Full)).collect();
             tool_result(json!({ "path": path_json }))
         }
         None => tool_result(json!({ "path": null, "message": "No path found" })),
@@ -921,8 +925,23 @@ async fn call_history(prime: &Prime, args: &Value) -> Value {
     }
 }
 
+/// One line telling the agent how much of the store semantic recall can see.
+///
+/// Returns `None` at full coverage so a healthy store costs no tokens.
+pub fn recall_coverage_note(total_nodes: usize, unembedded: usize) -> Option<String> {
+    if unembedded == 0 || total_nodes == 0 {
+        return None;
+    }
+    let embedded = total_nodes.saturating_sub(unembedded);
+    Some(format!(
+        "{embedded} of {total_nodes} nodes are embedded — prime_recall cannot see the other \
+         {unembedded}. They are embedded in the background; call prime_embed to prioritise one."
+    ))
+}
+
 fn call_stats(prime: &Prime) -> Value {
     let stats = prime.stats();
+    let unembedded = prime.count_nodes_missing_vectors();
     tool_result(json!({
         "total_nodes": stats.total_nodes,
         "total_edges": stats.total_edges,
@@ -931,6 +950,10 @@ fn call_stats(prime: &Prime) -> Value {
         "event_count": stats.event_count,
         "nodes_by_type": stats.nodes_by_type,
         "edges_by_relation": stats.edges_by_relation,
+        // A node with no vector is unreachable by prime_recall, and an
+        // unembedded store answers identically to an empty one.
+        "nodes_without_vectors": unembedded,
+        "recall_coverage": recall_coverage_note(stats.total_nodes, unembedded),
         // Surface sync state so the agent can tell whether what it just wrote
         // will reach the AllSource dashboard or is stranded local-only.
         "sync": sync_status_json(),
@@ -1218,6 +1241,10 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
         .and_then(Value::as_str)
         .map(String::from);
 
+    // An unavailable embedder is not a reason to answer nothing: `text` is
+    // still a retrieval input, so fall through with no vector and let recall
+    // score lexically. The reason travels to the client on the result.
+    let mut embed_failure: Option<String> = None;
     let vector: Option<Vec<f32>> = if let Some(arr) = args.get("vector").and_then(|v| v.as_array())
     {
         Some(
@@ -1228,13 +1255,16 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
     } else if let Some(ref t) = text {
         match prime.embed_text(t) {
             Ok(v) => Some(v),
-            Err(e) => return tool_error(&format!("server-side embedding failed: {e}")),
+            Err(e) => {
+                embed_failure = Some(e.to_string());
+                None
+            }
         }
     } else {
         None
     };
 
-    if vector.is_none() && node_type.is_none() {
+    if vector.is_none() && node_type.is_none() && text.is_none() {
         return tool_error(
             "missing input — supply 'text', 'vector', or 'node_type' so recall has something to search on",
         );
@@ -1257,17 +1287,15 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
 
     match prime.recall(query).await {
         Ok(result) => {
+            let fields = Fields::from_args(args, Fields::Full);
             let nodes_json: Vec<Value> = result
                 .nodes
                 .iter()
                 .map(|sn| {
-                    json!({
-                        "id": sn.node.id.as_str(),
-                        "type": sn.node.node_type,
-                        "properties": sn.node.properties,
-                        "score": sn.score,
-                        "depth": sn.depth,
-                    })
+                    let mut row = node_row(&sn.node, fields);
+                    row["score"] = json!(sn.score);
+                    row["depth"] = json!(sn.depth);
+                    row
                 })
                 .collect();
             let vectors_json: Vec<Value> = result
@@ -1282,14 +1310,42 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
                 })
                 .collect();
 
-            tool_result(json!({
+            let mut out = json!({
                 "nodes": nodes_json,
                 "vectors": vectors_json,
                 "edges": result.edges.len(),
-            }))
+                "retrieval": result.retrieval,
+            });
+            if let Some(note) = degraded_note(result.retrieval, embed_failure.as_deref()) {
+                out["degraded"] = json!(note);
+            }
+            tool_result(out)
         }
         Err(e) => tool_error(&e.to_string()),
     }
+}
+
+/// One line telling the model these results are not semantic, so it does not
+/// read a lexical answer as a meaning-based one.
+pub fn degraded_note(retrieval: Retrieval, embed_failure: Option<&str>) -> Option<String> {
+    if !retrieval.is_degraded() {
+        return None;
+    }
+    let how = match retrieval {
+        Retrieval::Lexical => "ranked by text match against node properties, not by meaning",
+        Retrieval::TypeScan => {
+            "nothing matched the query text; these are the most recent nodes of \
+                                this type"
+        }
+        _ => return None,
+    };
+    Some(match embed_failure {
+        Some(e) => format!(
+            "{how}. The embedding model is unavailable ({e}) — run `allsource-prime --mode warm` \
+             once with network access, or set PRIME_EMBED_MODEL_DIR to a vendored model directory."
+        ),
+        None => format!("{how}. Pass 'text' with a working embedder for semantic recall."),
+    })
 }
 
 async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Value {
@@ -1368,13 +1424,10 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
                             .nodes
                             .iter()
                             .map(|sn| {
-                                json!({
-                                    "id": sn.node.id.as_str(),
-                                    "type": sn.node.node_type,
-                                    "properties": sn.node.properties,
-                                    "score": sn.score,
-                                    "depth": sn.depth,
-                                })
+                                let mut row = node_row(&sn.node, Fields::Full);
+                                row["score"] = json!(sn.score);
+                                row["depth"] = json!(sn.depth);
+                                row
                             })
                             .collect();
                         (Value::Array(v), Value::Array(n))
@@ -1756,6 +1809,145 @@ mod tests {
                 .unwrap()
                 .len()
                 >= 2
+        );
+    }
+
+    // ─── Result windowing and the drill-down contract ────────────────────
+
+    /// Add `n` symbol nodes and return the `Prime` holding them.
+    async fn prime_with_symbols(n: usize) -> Prime {
+        let prime = Prime::open_in_memory().await.unwrap();
+        for i in 0..n {
+            prime
+                .add_node(
+                    "function",
+                    json!({ "name": format!("fn_{i}"), "file": "src/lib.rs", "line": i }),
+                )
+                .await
+                .unwrap();
+        }
+        prime
+    }
+
+    fn parse_result(result: &Value) -> Value {
+        assert_ne!(result.get("isError"), Some(&json!(true)), "{result}");
+        serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn search_caps_rows_but_reports_the_true_total() {
+        let prime = prime_with_symbols(120).await;
+        let parsed = parse_result(&call_search(&prime, &json!({ "type": "function" })));
+
+        assert_eq!(parsed["nodes"].as_array().unwrap().len(), 50);
+        assert_eq!(parsed["total"], json!(120));
+        assert_eq!(parsed["next_offset"], json!(50));
+        assert!(parsed["note"].as_str().unwrap().contains("offset=50"));
+    }
+
+    #[tokio::test]
+    async fn search_offset_walks_to_the_end_and_the_last_page_says_it_is_last() {
+        let prime = prime_with_symbols(120).await;
+        let parsed = parse_result(&call_search(
+            &prime,
+            &json!({ "type": "function", "offset": 100 }),
+        ));
+
+        assert_eq!(parsed["nodes"].as_array().unwrap().len(), 20);
+        assert_eq!(parsed["total"], json!(120));
+        assert!(parsed.get("next_offset").is_none());
+    }
+
+    /// The reported symptom: a search row whose `id` no other tool accepts
+    /// forces the client to keep every row it was given.
+    #[tokio::test]
+    async fn a_search_row_id_is_feedable_straight_back_into_neighbors() {
+        let prime = prime_with_symbols(1).await;
+        let parsed = parse_result(&call_search(&prime, &json!({ "type": "function" })));
+        let id = parsed["nodes"][0]["id"].as_str().unwrap().to_string();
+
+        assert!(id.starts_with("node:function:"), "not a wire id: {id}");
+        assert_ne!(
+            call_neighbors(&prime, &json!({ "node_id": id })).get("isError"),
+            Some(&json!(true)),
+            "the id search returned was rejected by prime_neighbors"
+        );
+    }
+
+    #[tokio::test]
+    async fn search_defaults_to_summary_rows_and_full_is_opt_in() {
+        let prime = prime_with_symbols(1).await;
+
+        let summary = parse_result(&call_search(&prime, &json!({ "type": "function" })));
+        assert_eq!(summary["nodes"][0]["name"], json!("fn_0"));
+        assert_eq!(summary["nodes"][0]["at"], json!("src/lib.rs:0"));
+        assert!(summary["nodes"][0].get("properties").is_none());
+
+        let full = parse_result(&call_search(
+            &prime,
+            &json!({ "type": "function", "fields": "full" }),
+        ));
+        assert_eq!(full["nodes"][0]["properties"]["name"], json!("fn_0"));
+    }
+
+    // ─── Recall degradation ──────────────────────────────────────────────
+
+    /// A `node_type`-only recall takes no embedder path, so this pins the
+    /// MCP-layer shaping (retrieval mode + banner) without a model on disk.
+    /// The lexical arm itself is covered in core's `recall_degradation_tests`.
+    #[tokio::test]
+    async fn a_type_only_recall_reports_its_retrieval_mode_and_banner() {
+        let prime = Prime::open_in_memory().await.unwrap();
+        prime
+            .add_node("person", json!({ "name": "Alice" }))
+            .await
+            .unwrap();
+
+        let parsed = parse_result(&call_recall(&prime, &json!({ "node_type": "person" })).await);
+
+        assert_eq!(parsed["retrieval"], json!("type_scan"));
+        assert_eq!(parsed["nodes"].as_array().unwrap().len(), 1);
+        assert!(
+            parsed["degraded"]
+                .as_str()
+                .unwrap()
+                .contains("nothing matched")
+        );
+    }
+
+    #[tokio::test]
+    async fn recall_with_no_retrieval_input_at_all_still_errors() {
+        let prime = Prime::open_in_memory().await.unwrap();
+        let result = call_recall(&prime, &json!({ "depth": 2 })).await;
+        assert_eq!(result["isError"], json!(true));
+    }
+
+    #[test]
+    fn the_degraded_note_names_the_recovery_command() {
+        let note = degraded_note(Retrieval::Lexical, Some("cannot fetch model.onnx")).unwrap();
+        assert!(note.contains("--mode warm"), "{note}");
+        assert!(note.contains("PRIME_EMBED_MODEL_DIR"), "{note}");
+        assert!(note.contains("cannot fetch model.onnx"), "{note}");
+    }
+
+    #[test]
+    fn a_semantic_retrieval_produces_no_note() {
+        assert!(degraded_note(Retrieval::Semantic, None).is_none());
+        assert!(degraded_note(Retrieval::Empty, None).is_none());
+    }
+
+    #[test]
+    fn search_schema_advertises_the_window_and_the_drill_down() {
+        let defs = tool_definitions();
+        let search = find_tool(&defs, "prime_search");
+        let props = &search["inputSchema"]["properties"];
+        for arg in ["limit", "offset", "fields"] {
+            assert!(!props[arg].is_null(), "prime_search must advertise {arg}");
+        }
+        let desc = search["description"].as_str().unwrap();
+        assert!(
+            desc.contains("total") && desc.contains("offset"),
+            "the description must tell the model how to page: {desc}"
         );
     }
 

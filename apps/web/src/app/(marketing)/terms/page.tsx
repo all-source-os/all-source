@@ -4,6 +4,7 @@ import { constructMetadata } from "@/lib/utils";
 export const metadata = constructMetadata({
   title: "Terms of Service",
   description: `Terms of Service for ${siteConfig.name} - the rules governing use of our platform.`,
+  canonical: "/terms",
 });
 
 export default function TermsOfService() {
@@ -25,8 +26,8 @@ export default function TermsOfService() {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">2. Description of Service</h2>
           <p className="text-muted-foreground leading-relaxed">
-            AllSource provides an event store platform consisting of the Chronos event store engine,
-            query service, MCP server, control plane, and web dashboard. The Service enables event
+            AllSource provides an event store platform consisting of AllSource Core, Query Service,
+            MCP servers, hosted control services, and a web dashboard. The Service enables event
             sourcing, temporal queries, stream processing, and AI-assisted data operations.
           </p>
         </section>

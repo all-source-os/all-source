@@ -24,16 +24,16 @@ const brandSvg = (className: string | undefined, children: React.ReactNode) => (
 
 export const Icons = {
   logo: ({ className, style }: IconProps) => (
-    // eslint-disable-next-line @next/next/no-img-element
+    // biome-ignore lint/performance/noImgElement: shared UI package must remain framework-neutral.
     <img
       src="/logo.png"
-      alt="all.source"
+      alt=""
+      aria-hidden="true"
       className={cn(
         "h-6 w-6 object-contain",
         "drop-shadow-[0_2px_4px_rgba(0,0,0,0.25)]",
         "hover:drop-shadow-[0_4px_12px_rgba(79,195,247,0.5)]",
-        "transition-all duration-300",
-        "hover:scale-110",
+        "transition-shadow duration-200",
         className
       )}
       style={style}

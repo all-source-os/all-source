@@ -1012,16 +1012,17 @@ async fn recall(
         .prime
         .as_ref()
         .expect("embedded prime present when hosted is None");
+    // Matches the MCP path: an unavailable embedder degrades to lexical recall
+    // rather than 500ing, and the response says which it was.
+    let mut embed_failure: Option<String> = None;
     let vector = match req.vector {
         Some(v) => Some(v),
         None => match req.text.as_deref() {
             Some(t) => match prime.embed_text(t) {
                 Ok(v) => Some(v),
                 Err(e) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"error": format!("server-side embedding failed: {e}")})),
-                    );
+                    embed_failure = Some(e.to_string());
+                    None
                 }
             },
             None => None,
@@ -1051,7 +1052,13 @@ async fn recall(
                     })
                 })
                 .collect();
-            (StatusCode::OK, Json(json!({"nodes": nodes})))
+            let mut body = json!({ "nodes": nodes, "retrieval": result.retrieval });
+            if let Some(note) =
+                crate::tools::degraded_note(result.retrieval, embed_failure.as_deref())
+            {
+                body["degraded"] = json!(note);
+            }
+            (StatusCode::OK, Json(body))
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,

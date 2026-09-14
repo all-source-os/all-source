@@ -8,8 +8,9 @@ import { siteConfig } from "@/lib/config";
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata = constructMetadata({
-  title: "Interactive AllSource Demo: Timeline, Time Travel, Graph, Pipelines, Projections, MCP",
-  description: `Use one ${siteConfig.name} event stream to demo event timelines, point-in-time state, graph visualisation, pipelines, projections, and MCP data access.`,
+  title: "AllSource Event Store Demo: Replay, Graph, MCP",
+  description: `Explore one event stream through replay, point-in-time state, graph, pipelines, projections, and MCP access in ${siteConfig.name}'s interactive demo.`,
+  canonical: "/examples",
 });
 
 const codeExamples = [

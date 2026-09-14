@@ -44,13 +44,16 @@ pub const COOKBOOK: &str = "\
 - DON'T use prime_search for semantic queries (use prime_recall — it uses embeddings)
 - DON'T skip the domain tag on nodes (disables cross-domain reasoning)
 - DON'T forget without checking prime_history first (you might lose the only copy)
-- DON'T call prime_recall without an embedding vector (it requires one)
+- DON'T fall back to prime_search when prime_recall reports `degraded` — it
+  already degraded for you, and prime_search cannot rank by relevance at all
 
 ## Token budget
 - prime_index: ~100-500 tokens (scales with knowledge base)
 - prime_context: configurable via max_tokens (default: uncapped)
 - prime_stats: ~50 tokens
 - prime_neighbors: ~100 tokens per node returned
+- prime_search: ~30 tokens per summary row, 50 rows max per call — read `total`
+  and page with `offset` rather than raising `limit`
 ";
 
 /// Dispatch one JSON-RPC request. Returns `None` for notifications (no reply),

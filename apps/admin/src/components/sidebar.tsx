@@ -13,6 +13,7 @@ import {
   LifeBuoy,
   Mail,
   ShieldCheck,
+  UserRoundSearch,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +29,7 @@ interface SidebarProps {
 const navigation = [
   { name: "Tenants", href: "/tenants", icon: Users },
   { name: "Inbox", href: "/inbox", icon: Mail },
+  { name: "Design partners", href: "/design-partners", icon: UserRoundSearch },
   { name: "Fleet", href: "/fleet", icon: HeartPulse },
   { name: "Outreach", href: "/outreach", icon: LifeBuoy },
   { name: "Efficiency", href: "/comms-efficiency", icon: Gauge },

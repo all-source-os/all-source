@@ -1,8 +1,9 @@
 ---
 title: "Why Your Agent's Memory Returned Nothing — and How We Fixed Hybrid Recall"
 publishedAt: "2026-06-02"
+updatedAt: "2026-09-13"
 summary: "AllSource Prime's compressed index reported zero nodes for everything you recorded, and prime_context's L2 tier returned no vectors. Three bugs, one event-sourcing lesson: a projection that isn't fed is a projection that lies. Here's the debugging story, the fix, and the real before/after numbers from the binary."
-author: "all.source team"
+author: "Decebal Dobrica"
 category: "engineering"
 image: "/assets/blog/why-your-agents-memory-returned-nothing.webp"
 ---
@@ -156,6 +157,11 @@ If you build on event sourcing: register and backfill every projection that
 anything reads; assert your projections against the *writer's real output*, not a
 fixture you invented to match the reader; and when a tier claims "full hybrid,"
 make a test prove all three arms come back non-empty.
+
+To test the durability claim yourself, [run the local restart proof](/agent-memory-restart-proof)
+and check both recall and source-event history after reopening the data directory.
+[See the agent-memory solution](/solutions/agent-memory) for the Core and Prime
+roles behind that flow.
 
 Prime's recall — `prime_index`, `prime_context` across all tiers, and
 `prime_recall` — now works end to end. If you're building agent memory on

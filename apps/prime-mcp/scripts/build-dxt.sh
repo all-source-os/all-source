@@ -11,6 +11,11 @@
 #   --version <vX.Y.Z>     Version tag to stamp into the manifest (required)
 #   --darwin-binary <path> Apple Silicon `allsource-prime` binary (required)
 #   --linux-binary <path>  Linux x86_64 `allsource-prime` binary (required)
+#   --model-dir <path>     Directory holding the five embedding-model files
+#                          (required). Staged ONCE at server/model and reached
+#                          via PRIME_EMBED_MODEL_DIR, so neither binary has to
+#                          bake in its own 86 MB copy and neither has to fetch
+#                          from HuggingFace on first recall.
 #   --out <path>           Output .dxt path (default: ./allsource-prime.dxt)
 #
 # DXT spec: github.com/anthropics/dxt — manifest_version 0.3.
@@ -20,11 +25,23 @@ set -euo pipefail
 version=""
 darwin_binary=""
 linux_binary=""
+model_dir=""
 out="./allsource-prime.dxt"
+
+# The files fastembed needs to build the embedder with no network.
+# Keep in sync with crates/allsource-prime-models/build.rs FILES.
+model_files=(
+  model.onnx
+  tokenizer.json
+  config.json
+  special_tokens_map.json
+  tokenizer_config.json
+)
 
 usage() {
   cat <<EOF
-Usage: $0 --version vX.Y.Z --darwin-binary PATH --linux-binary PATH [--out PATH]
+Usage: $0 --version vX.Y.Z --darwin-binary PATH --linux-binary PATH \\
+          --model-dir PATH [--out PATH]
 EOF
   exit 1
 }
@@ -34,6 +51,7 @@ while [ $# -gt 0 ]; do
     --version)        version="$2"; shift 2 ;;
     --darwin-binary)  darwin_binary="$2"; shift 2 ;;
     --linux-binary)   linux_binary="$2"; shift 2 ;;
+    --model-dir)      model_dir="$2"; shift 2 ;;
     --out)            out="$2"; shift 2 ;;
     -h|--help)        usage ;;
     *)                echo "Unknown arg: $1" >&2; usage ;;
@@ -43,6 +61,16 @@ done
 [ -n "$version" ] || { echo "missing --version" >&2; usage; }
 [ -f "$darwin_binary" ] || { echo "darwin binary not found: $darwin_binary" >&2; exit 1; }
 [ -f "$linux_binary"  ] || { echo "linux binary not found: $linux_binary" >&2; exit 1; }
+[ -n "$model_dir" ] || { echo "missing --model-dir" >&2; usage; }
+[ -d "$model_dir" ] || { echo "model dir not found: $model_dir" >&2; exit 1; }
+
+# Fail here rather than shipping a bundle whose embedder dies at first recall.
+for f in "${model_files[@]}"; do
+  [ -s "$model_dir/$f" ] || {
+    echo "model dir $model_dir is missing or has an empty $f" >&2
+    exit 1
+  }
+done
 
 # Strip a leading "v" from the version for the manifest (semver is bare).
 manifest_version="${version#v}"
@@ -54,9 +82,13 @@ trap 'rm -rf "$stage"' EXIT
 #   manifest.json
 #   server/darwin/allsource-prime
 #   server/linux/allsource-prime
-mkdir -p "$stage/server/darwin" "$stage/server/linux"
+#   server/model/{model.onnx,tokenizer.json,...}   — shared by both platforms
+mkdir -p "$stage/server/darwin" "$stage/server/linux" "$stage/server/model"
 install -m 0755 "$darwin_binary" "$stage/server/darwin/allsource-prime"
 install -m 0755 "$linux_binary"  "$stage/server/linux/allsource-prime"
+for f in "${model_files[@]}"; do
+  install -m 0644 "$model_dir/$f" "$stage/server/model/$f"
+done
 
 cat > "$stage/manifest.json" <<MANIFEST
 {
@@ -90,6 +122,9 @@ cat > "$stage/manifest.json" <<MANIFEST
         "--sync-to", "\${user_config.sync_to}",
         "--api-key", "\${user_config.api_key}"
       ],
+      "env": {
+        "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model"
+      },
       "platform_overrides": {
         "linux": {
           "command": "\${__dirname}/server/linux/allsource-prime",
@@ -98,7 +133,10 @@ cat > "$stage/manifest.json" <<MANIFEST
             "--auto-inject",
             "--sync-to", "\${user_config.sync_to}",
             "--api-key", "\${user_config.api_key}"
-          ]
+          ],
+          "env": {
+            "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model"
+          }
         }
       }
     }
