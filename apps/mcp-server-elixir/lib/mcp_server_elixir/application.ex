@@ -25,14 +25,21 @@ defmodule McpServerElixir.Application do
         mode_children(core_mode) ++
         [
           # Conversation context manager for multi-turn queries
-          {McpServerElixir.Context.ConversationContext, []},
-
-          # Start the MCP server process
-          {McpServerElixir.Server, []}
-        ]
+          {McpServerElixir.Context.ConversationContext, []}
+        ] ++ stdio_children()
 
     opts = [strategy: :one_for_one, name: McpServerElixir.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp stdio_children do
+    # ExUnit has no MCP client attached to stdin. Starting the reader there
+    # immediately receives EOF, restarts, and takes down the supervision tree.
+    if Application.get_env(:mcp_server_elixir, :start_stdio_server, true) do
+      [{McpServerElixir.Server, []}]
+    else
+      []
+    end
   end
 
   defp mode_children(:embedded) do

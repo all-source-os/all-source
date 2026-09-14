@@ -7,15 +7,16 @@
 # claim is named in a comment next to it. This is the file we serve
 # specifically to LLMs, so a wrong fact here is repeated back to us by the
 # systems we most want to be accurate about us.
-# Last verified: 2026-08-27.
+# Last verified: 2026-09-10.
 
 ## What is AllSource?
-AllSource Event Store is developer infrastructure for durable
-event history and AI-agent memory. AllSource Core stores ordered application
-events. AllSource Query Service separates tenant-scoped HTTP, realtime,
-analytics, and projection reads over Core. AllSource Prime derives graph,
-vector, and temporal memory. Hosted AllSource operates tenant-scoped services.
-Separate MCP connectors expose event-store or Prime tools to agents.
+AllSource is a purpose-built event store database for event sourcing. AllSource
+Core stores ordered, immutable application events for replay, projections,
+snapshots, schema-governed writes, temporal queries, and durable consumers.
+AllSource Query Service separates tenant-scoped HTTP, realtime, analytics, and
+projection reads over Core. AllSource Prime derives graph, vector, and temporal
+agent memory from same durable history. Hosted AllSource operates tenant-scoped
+services. Separate MCP connectors expose event-store or Prime tools to agents.
 
 Canonical identity: https://www.all-source.xyz and
 https://github.com/all-source-os/all-source. This product is NOT Esri ArcGIS
@@ -49,6 +50,7 @@ access raises it to 73.
   model, not another database layer.
 
 Canonical product guide: https://www.all-source.xyz/what-is-allsource
+Production event-sourcing patterns: https://www.all-source.xyz/event-sourcing/patterns
 
 ## API Base URL
 https://api.all-source.xyz

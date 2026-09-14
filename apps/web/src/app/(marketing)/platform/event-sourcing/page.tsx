@@ -90,11 +90,12 @@ export default function EventSourcingPage() {
             Platform
           </div>
           <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
-            Immutable event storage and point-in-time queries
+            Purpose-built event store database for event sourcing
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
             Append state changes to ordered streams, reconstruct state at a sequence or timestamp,
-            and replay accepted events into new projections.
+            replay accepted events into new projections, and resume durable consumers from
+            acknowledged positions.
           </p>
           <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
             <Link href="/signup" className={cn(buttonVariants({ variant: "default" }))}>
@@ -102,6 +103,12 @@ export default function EventSourcingPage() {
             </Link>
             <Link href="/docs/api" className={cn(buttonVariants({ variant: "outline" }))}>
               API docs
+            </Link>
+            <Link
+              href="/event-sourcing/patterns"
+              className={cn(buttonVariants({ variant: "ghost" }))}
+            >
+              Production patterns
             </Link>
           </div>
         </motion.div>
@@ -133,7 +140,7 @@ export default function EventSourcingPage() {
       {/* Features grid */}
       <Section
         title="Core event-store capabilities"
-        subtitle="Every feature exists to ensure your events are durable, queryable, and correct"
+        subtitle="Database primitives for durable, queryable, and correct event history"
         className="py-16"
       >
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

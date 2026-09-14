@@ -702,6 +702,34 @@ impl Prime {
         }
     }
 
+    /// Live nodes carrying no vector, and so unreachable by semantic recall.
+    ///
+    /// `add_node` does not embed — a node becomes recallable only once
+    /// something embeds it. This is both the work list that closes that gap
+    /// and the number `prime_stats` reports, so the deficit is never silent.
+    pub fn nodes_missing_vectors(&self) -> Vec<Node> {
+        self.node_state
+            .all_nodes()
+            .into_iter()
+            .filter(|n| {
+                let wire = super::types::EntityId::node(&n.node_type, n.id.as_str()).to_wire();
+                !self.vector_presence(&wire).0
+            })
+            .collect()
+    }
+
+    /// Count of [`Self::nodes_missing_vectors`], without building the list.
+    pub fn count_nodes_missing_vectors(&self) -> usize {
+        self.node_state
+            .all_nodes()
+            .into_iter()
+            .filter(|n| {
+                let wire = super::types::EntityId::node(&n.node_type, n.id.as_str()).to_wire();
+                !self.vector_presence(&wire).0
+            })
+            .count()
+    }
+
     /// Report `(has_vector, dimension)` for a node wire-id, without returning
     /// the raw embedding. Always `(false, None)` when the `prime-vectors`
     /// feature is disabled.

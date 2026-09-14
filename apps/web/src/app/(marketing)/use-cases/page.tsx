@@ -492,6 +492,33 @@ export default function UseCasesPage() {
         </div>
       </section>
 
+      <section aria-labelledby="design-partners-heading" className="border-b border-border">
+        <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-[1fr_auto] md:items-center lg:px-8">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+              Design-partner program
+            </p>
+            <h2
+              id="design-partners-heading"
+              className="mt-2 text-2xl font-semibold text-foreground"
+            >
+              Have one reproducible agent-memory failure?
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Bring one production or serious pre-production flow. Work directly with AllSource
+              engineering through first source-backed recall.
+            </p>
+          </div>
+          <Link
+            href="/design-partners"
+            className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}
+          >
+            Review design-partner program
+            <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </section>
+
       <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
         <div className="flex flex-col justify-between gap-8 border-l-2 border-primary pl-6 sm:flex-row sm:items-end sm:pl-8">
           <div>

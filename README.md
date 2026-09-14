@@ -2,7 +2,7 @@
 title: "AllSource Event Store - Monorepo"
 status: CURRENT
 last_updated: 2026-03-30
-version: "0.23.0"
+version: "0.24.0"
 ---
 
 <div align="center">
@@ -258,6 +258,7 @@ Lightweight MCP server that reads WAL + Parquet files directly — no running Co
 ### SDKs — [Rust](sdks/rust/) · [Go](sdks/go/) · [Python](sdks/python-client/) · [TypeScript](sdks/typescript/)
 
 - Rust SDK published to crates.io; TypeScript SDK to npm as `@allsourcedev/client`; Go and Python SDKs distributed via the GitHub registry
+- LangGraph: experimental [`langgraph-checkpoint-allsource`](integrations/langgraph-checkpoint-allsource/) adapter passes all 58 current base conformance tests
 
 ### What's Next
 
