@@ -5,9 +5,9 @@ import { breadcrumbSchema } from "@/lib/structured-data";
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata = constructMetadata({
-  title: "AllSource Query Service: HTTP, Realtime, Analytics, and Read Models",
+  title: "AllSource Query Service: Realtime Reads and Analytics",
   description:
-    "Query Service separates tenant-scoped HTTP queries, Phoenix realtime channels, analytics endpoints, and rebuildable projections over AllSource Core.",
+    "Query Service serves tenant-scoped HTTP queries, realtime channels, analytics, and rebuildable projections over durable AllSource Core events.",
   canonical: "/platform/query-service",
 });
 

@@ -127,25 +127,18 @@ export async function getPost(slug: string) {
   };
 }
 
-async function getAllPosts(dir: string) {
+function getAllPosts(dir: string): Post[] {
   const mdxFiles = getMDXFiles(dir);
-  return Promise.all(
-    mdxFiles.map(async (file) => {
-      const slug = path.basename(file, path.extname(file));
-      const post = await getPost(slug);
-      // getPost only returns null for missing files; these come straight from
-      // the directory listing so they always exist, but narrow for the type checker.
-      if (!post) {
-        throw new Error(`Blog post disappeared during read: ${slug}`);
-      }
-      const { metadata, source } = post;
-      return {
-        ...metadata,
-        slug,
-        source,
-      };
-    })
-  );
+  return mdxFiles.map((file) => {
+    const slug = path.basename(file, path.extname(file));
+    const source = fs.readFileSync(path.join(dir, file), "utf-8");
+    const { data } = parseFrontmatter(source);
+    return {
+      ...data,
+      slug,
+      image: data.image || `${siteConfig.url}/og?title=${encodeURIComponent(data.title)}`,
+    };
+  });
 }
 
 export async function getBlogPosts() {

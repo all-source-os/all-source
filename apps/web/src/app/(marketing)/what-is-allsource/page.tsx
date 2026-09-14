@@ -11,9 +11,9 @@ import { breadcrumbSchema, faqPageSchema, productVerticalListSchema } from "@/li
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata = constructMetadata({
-  title: "What Is AllSource? Core, Query Service, Prime, Hosted, and MCP",
+  title: "What Is AllSource? Event Store Database Explained",
   description:
-    "AllSource combines durable Core events, Query Service read paths, Prime agent memory, hosted operations, and MCP connectors. See each boundary.",
+    "AllSource is an event store database for immutable streams, replay, projections, and temporal queries. See where Core, Query Service, and Prime fit.",
   canonical: "/what-is-allsource",
 });
 
@@ -70,7 +70,7 @@ export default function WhatIsAllSourcePage() {
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">Product map</p>
             <h2 id="product-map-heading" className="mt-3 text-3xl font-semibold text-foreground">
-              One platform. Five precise names.
+              One event store. Five precise layers.
             </h2>
             <p className="mt-4 text-base leading-7 text-muted-foreground">
               “AllSource” names the platform. Use the component name when describing a specific job.

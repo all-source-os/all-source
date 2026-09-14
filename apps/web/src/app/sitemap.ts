@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
 import { getBlogPosts } from "@/lib/blog";
 import { siteConfig } from "@/lib/config";
+import { eventSourcingPatterns } from "@/lib/event-sourcing-patterns";
 import { integrations } from "@/lib/integrations";
 
 const STATIC_PATHS = [
   "",
   "/about",
   "/architecture",
+  "/agent-memory-restart-proof",
   "/blog",
   "/changelog",
   "/compare/agent-memory",
@@ -26,6 +28,7 @@ const STATIC_PATHS = [
   "/docs/tenant-setup",
   "/ecosystem",
   "/event-replay-debugging",
+  "/event-sourcing/patterns",
   "/event-sourcing-for-ai-agents",
   "/examples",
   "/install",
@@ -67,10 +70,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     url: `${siteConfig.url}/install/${integration.slug}`,
   }));
 
+  const eventSourcingPatternPages = eventSourcingPatterns.map((pattern) => ({
+    url: `${siteConfig.url}/event-sourcing/patterns/${pattern.slug}`,
+    lastModified: new Date("2026-09-10"),
+  }));
+
   const blogPages = posts.map((post) => ({
     url: `${siteConfig.url}/blog/${post.slug}`,
     lastModified: new Date(post.updatedAt || post.publishedAt),
   }));
 
-  return [...staticPages, ...installPages, ...blogPages];
+  return [...staticPages, ...eventSourcingPatternPages, ...installPages, ...blogPages];
 }
