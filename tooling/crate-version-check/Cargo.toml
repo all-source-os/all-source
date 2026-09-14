@@ -1,0 +1,16 @@
+# Standalone crate — kept out of the root Cargo workspace (repo convention for
+# tooling/, mirrors tenant-isolation-check/chronis/registry/prime-mcp).
+[workspace]
+
+[package]
+name = "crate-version-check"
+version = "0.1.0"
+edition = "2021"
+description = "CI gate: every intra-repo path dependency's version requirement must match the version the sibling crate actually declares."
+publish = false
+
+[[bin]]
+name = "crate-version-check"
+path = "src/main.rs"
+
+[dependencies]

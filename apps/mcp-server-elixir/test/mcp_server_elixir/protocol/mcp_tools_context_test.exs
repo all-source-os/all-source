@@ -7,13 +7,9 @@ defmodule McpServerElixir.Protocol.McpToolsContextTest do
   @moduletag :mcp_tools_context
 
   setup do
-    # Ensure ConversationContext is running for tests
-    pid =
-      case ConversationContext.start_link(name: McpServerElixir.Context.ConversationContext) do
-        {:ok, pid} -> pid
-        {:error, {:already_started, pid}} -> pid
-      end
-
+    # Application supervision owns this process for the full test suite.
+    pid = Process.whereis(ConversationContext)
+    assert is_pid(pid) and Process.alive?(pid)
     {:ok, pid: pid}
   end
 

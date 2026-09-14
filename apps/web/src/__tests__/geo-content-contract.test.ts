@@ -80,21 +80,6 @@ describe("GEO canonical product facts", () => {
     expect(siteConfig.stats[2]).toMatchObject({ display: "55", label: "default MCP tools" });
   });
 
-  it("keeps public routes on the canonical deep-blue brand theme", () => {
-    const globals = source("src/app/globals.css");
-    const marketingLayout = source("src/app/(marketing)/layout.tsx");
-    const homepage = source("src/app/page.tsx");
-    const rootLayout = source("src/app/layout.tsx");
-
-    expect(globals).toContain("--brand-field: #063a6c;");
-    expect(globals).toMatch(
-      /\.dark \.marketing-theme[\s\S]*?--background: #063a6c;[\s\S]*?--card: #07549a;/
-    );
-    expect(marketingLayout).toContain('className="marketing-theme min-h-screen');
-    expect(homepage).toContain('className="marketing-theme relative min-h-screen');
-    expect(rootLayout).toContain('{ media: "(prefers-color-scheme: dark)", color: "#063A6C" }');
-  });
-
   it("publishes offers only from a live billing catalog", () => {
     const catalog: Catalog = {
       currency: "GBP",

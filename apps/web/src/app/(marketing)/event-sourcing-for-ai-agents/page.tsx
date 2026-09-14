@@ -219,17 +219,20 @@ export default async function EventSourcingForAiAgentsPage() {
 
           {/* CTA */}
           <section className="mt-16 rounded-xl border bg-muted/20 p-8 text-center">
-            <h2 className="text-2xl font-bold">Give your agents memory that survives</h2>
+            <h2 className="text-2xl font-bold">Test memory across a real process restart</h2>
             <p className="mt-4 text-sm text-muted-foreground">
-              Start on the hosted Indie plan, or self-host the whole stack for free under
-              Apache-2.0.
+              Run one local decision through write, recall, source history, restart, and recall
+              again. No account or API key required.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
-              <Link href="/pricing" className={cn(buttonVariants({ variant: "default" }))}>
-                See pricing <ChevronRight className="ml-1 h-4 w-4" />
+              <Link
+                href="/agent-memory-restart-proof"
+                className={cn(buttonVariants({ variant: "default" }))}
+              >
+                Run restart proof <ChevronRight className="ml-1 h-4 w-4" />
               </Link>
-              <Link href="/blog" className={cn(buttonVariants({ variant: "outline" }))}>
-                Read the blog
+              <Link href="/pricing" className={cn(buttonVariants({ variant: "outline" }))}>
+                See hosted pricing
               </Link>
             </div>
           </section>

@@ -33,7 +33,7 @@ type LemonSqueezyClient interface {
 	// LookupVariantID resolves a tier + billing period to a LemonSqueezy variant
 	// ID. period is "monthly" or "annual"; empty defaults to monthly.
 	LookupVariantID(tier, period string) (string, error)
-	// GetVariant fetches a single variant (price in cents, interval) from LS.
+	// GetVariant fetches a variant and its current Price object from LS.
 	GetVariant(ctx context.Context, variantID string) (*VariantResponse, error)
 	// VariantMap returns the configured tier:period → variant-ID map (read-only
 	// copy) so callers can enumerate the catalog.
@@ -56,9 +56,19 @@ type VariantResponse struct {
 
 type variantAttributes struct {
 	Name     string `json:"name"`
-	Price    int    `json:"price"`
-	Interval string `json:"interval"`
 	Status   string `json:"status"`
+	TestMode bool   `json:"test_mode"`
+}
+
+type priceAttributes struct {
+	VariantID               int     `json:"variant_id"`
+	Category                string  `json:"category"`
+	Scheme                  string  `json:"scheme"`
+	UsageAggregation        *string `json:"usage_aggregation"`
+	UnitPrice               *int    `json:"unit_price"`
+	SetupFeeEnabled         bool    `json:"setup_fee_enabled"`
+	RenewalIntervalUnit     string  `json:"renewal_interval_unit"`
+	RenewalIntervalQuantity int     `json:"renewal_interval_quantity"`
 }
 
 // VariantMap maps plan tier names to LemonSqueezy variant IDs.
@@ -485,7 +495,9 @@ func (c *lemonSqueezyClient) GetStoreID() string {
 	return c.storeID
 }
 
-// GetVariant fetches a single variant's pricing detail from LemonSqueezy.
+// GetVariant fetches the variant and its current price-model relationship.
+// Variant.price is deprecated and can diverge from the checkout price after a
+// price edit; historical Price objects must not be used either.
 func (c *lemonSqueezyClient) GetVariant(ctx context.Context, variantID string) (*VariantResponse, error) {
 	var respEnvelope jsonAPIEnvelope
 	resp, err := c.client.R().
@@ -504,12 +516,40 @@ func (c *lemonSqueezyClient) GetVariant(ctx context.Context, variantID string) (
 	if err := json.Unmarshal(respEnvelope.Data.Attributes, &attrs); err != nil {
 		return nil, fmt.Errorf("unmarshal variant response: %w", err)
 	}
+	if respEnvelope.Data.ID != variantID || attrs.Status != "published" || attrs.TestMode {
+		return nil, fmt.Errorf("variant %s is not a published live variant", variantID)
+	}
+
+	var priceEnvelope jsonAPIEnvelope
+	priceResp, err := c.client.R().
+		SetContext(ctx).
+		SetResult(&priceEnvelope).
+		Get("/v1/variants/" + variantID + "/price-model")
+	if err != nil {
+		return nil, fmt.Errorf("get current price request failed: %w", err)
+	}
+	if priceResp.StatusCode() >= 400 {
+		return nil, fmt.Errorf("get current price returned status %d", priceResp.StatusCode())
+	}
+	if priceEnvelope.Data.Type != "prices" {
+		return nil, fmt.Errorf("variant %s has no current Price object", variantID)
+	}
+	var price priceAttributes
+	if err := json.Unmarshal(priceEnvelope.Data.Attributes, &price); err != nil {
+		return nil, fmt.Errorf("unmarshal current price response: %w", err)
+	}
+	if fmt.Sprint(price.VariantID) != variantID || price.Category != "subscription" || price.Scheme != "standard" ||
+		price.UsageAggregation != nil || price.UnitPrice == nil || *price.UnitPrice <= 0 ||
+		price.SetupFeeEnabled || price.RenewalIntervalQuantity != 1 ||
+		(price.RenewalIntervalUnit != "month" && price.RenewalIntervalUnit != "year") {
+		return nil, fmt.Errorf("variant %s has an unsupported current Price model", variantID)
+	}
 
 	return &VariantResponse{
 		ID:       respEnvelope.Data.ID,
 		Name:     attrs.Name,
-		Price:    attrs.Price,
-		Interval: attrs.Interval,
+		Price:    *price.UnitPrice,
+		Interval: price.RenewalIntervalUnit,
 		Status:   attrs.Status,
 	}, nil
 }

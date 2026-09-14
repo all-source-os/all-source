@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { constructMetadata } from "@/lib/utils";
 
 export const metadata: Metadata = constructMetadata({
-  title: "Multi-Tenant SaaS — Secure Isolation with RBAC and Policy Enforcement",
+  title: "Multi-Tenant Event Sourcing with RBAC | AllSource",
   description:
-    "Event sourcing for SaaS platforms. Tenant isolation at the event level. RBAC with 4 roles and 7 permissions. Policy engine for custom authorization rules. Per-tenant quotas and billing.",
+    "Build multi-tenant SaaS on isolated event streams with role-based access, policy rules, quotas, and tenant-scoped API keys on AllSource.",
   canonical: "/solutions/multi-tenant-saas",
 });
 

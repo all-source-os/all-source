@@ -331,13 +331,20 @@ export default function AgentMemoryPage() {
 
         {/* CTA */}
         <Section className="pb-24 text-center">
-          <h2 className="mb-4 text-3xl font-bold">Install Prime locally</h2>
-          <p className="mb-8 text-muted-foreground">One command. No cloud account. No API key.</p>
+          <h2 className="mb-4 text-3xl font-bold">Run the restart proof</h2>
+          <p className="mb-8 text-muted-foreground">
+            Write one decision, restart Prime, recall it, and inspect its source event. Local only;
+            no account or API key.
+          </p>
           <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-            <div className="rounded-lg border bg-muted/50 px-6 py-3 font-mono text-sm">
-              <Terminal className="mr-2 inline h-4 w-4" />
-              cargo install allsource-prime
-            </div>
+            <Link
+              href="/agent-memory-restart-proof"
+              className={cn(buttonVariants({ size: "lg" }), "gap-2")}
+            >
+              <Terminal className="h-4 w-4" />
+              Run restart proof
+              <ChevronRight className="h-4 w-4" />
+            </Link>
           </div>
           <div className="mt-6 flex items-center justify-center gap-6 text-sm text-muted-foreground">
             <Link href="/docs" className="underline">

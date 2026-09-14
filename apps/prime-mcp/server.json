@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.all-source-os/allsource-prime",
+  "title": "AllSource Prime",
+  "description": "Durable cross-session agent memory with provenance, recall, and time-travel.",
+  "repository": {
+    "url": "https://github.com/all-source-os/all-source",
+    "source": "github",
+    "subfolder": "apps/prime-mcp"
+  },
+  "version": "0.23.1",
+  "packages": [
+    {
+      "registryType": "cargo",
+      "identifier": "allsource-prime",
+      "version": "0.23.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
