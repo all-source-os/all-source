@@ -104,6 +104,11 @@ impl Projection for TaskProjection {
                     if let Some(task_type) = payload.get("task_type") {
                         state["task_type"] = task_type.clone();
                     }
+                    // Present-and-null clears the parent; absent leaves it
+                    // alone. `get` distinguishes the two, `as_str` would not.
+                    if let Some(parent) = payload.get("parent") {
+                        state["parent"] = parent.clone();
+                    }
                 }
             }
             "task.dependency.added" => {

@@ -26,6 +26,18 @@ pub enum ChronError {
     #[error("task {0} is not claimed; nothing to release")]
     NotClaimed(String),
 
+    #[error("refusing to re-parent: {0}")]
+    ReparentRefused(#[from] crate::domain::hierarchy::ReparentRefusal),
+
+    #[error(
+        "re-parenting {id} needs --force:\n{}",
+        .warnings.iter().map(|w| format!("  - {w}")).collect::<Vec<_>>().join("\n")
+    )]
+    ReparentNeedsForce {
+        id: String,
+        warnings: Vec<crate::domain::hierarchy::ReparentWarning>,
+    },
+
     #[error(
         "nothing to edit: provide at least one of --title/--description/--append-description/--priority/--type"
     )]

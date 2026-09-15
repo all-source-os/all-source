@@ -130,6 +130,7 @@ Compare to JSON-based tools where the same loop burns ~200+ tokens on structural
 | `cn ready` | `cn r` | Show tasks that are open and unblocked |
 | `cn show <id>` | `cn s` | Task details, children, and event timeline |
 | `cn claim <id>` | `cn c` | Claim a task (uses `CN_AGENT_ID` env var, defaults to "human") |
+| `cn task reparent <id> <parent>` | | Move a task under a new parent (`--root` detaches, `--force` clears warnings) |
 | `cn release <id> [--reason=...]` | | Hand a claimed task back to the pool (status returns to open, claim cleared) |
 | `cn done <id> [--reason=...]` | `cn d` | Mark a task as done |
 | `cn approve <id>` | | Approve a task |
@@ -370,7 +371,7 @@ All state is derived from these events:
 | Event | Emitted by |
 |-------|-----------|
 | `task.created` | `cn task create` |
-| `task.updated` | (future: `cn task update`) |
+| `task.updated` | `cn task edit`, `cn task reparent` (a present-and-null `parent` clears it) |
 | `task.dependency.added` | `cn dep add` or `--blocked-by` flag |
 | `task.dependency.removed` | `cn dep remove` |
 | `workflow.claimed` | `cn claim` (first-write-wins) |

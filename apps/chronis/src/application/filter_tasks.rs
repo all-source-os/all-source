@@ -6,7 +6,7 @@
 //! `--no-blockers` resolution need to see ancestor/blocker tasks that may not
 //! match the filter themselves.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::domain::task::{Priority, Task, TaskStatus, TaskType};
 
@@ -103,26 +103,7 @@ pub fn apply(universe: &[Task], filter: &TaskFilter) -> Vec<Task> {
 
 /// All transitive descendants of `root` (children, grandchildren, …),
 /// excluding `root` itself. Cycle-safe via the visited set.
-fn descendants(universe: &[Task], root: &str) -> HashSet<String> {
-    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
-    for t in universe {
-        if let Some(p) = t.parent.as_deref() {
-            children.entry(p).or_default().push(t.id.as_str());
-        }
-    }
-    let mut out = HashSet::new();
-    let mut stack = vec![root];
-    while let Some(id) = stack.pop() {
-        if let Some(kids) = children.get(id) {
-            for &k in kids {
-                if out.insert(k.to_string()) {
-                    stack.push(k);
-                }
-            }
-        }
-    }
-    out
-}
+use crate::domain::hierarchy::descendants;
 
 #[cfg(test)]
 mod tests {

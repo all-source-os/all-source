@@ -7,7 +7,8 @@ use crate::{
         add_dependency, approve_task, archive_task, claim_task, complete_task, create_task,
         edit_task,
         filter_tasks::{self, ArchivedScope, ClaimState, TaskFilter},
-        get_task, list_tasks, migrate_beads, release_task, remove_dependency, sync_http,
+        get_task, list_tasks, migrate_beads, release_task, remove_dependency, reparent_task,
+        sync_http,
     },
     domain::{
         error::ChronError,
@@ -38,9 +39,16 @@ fn collect_cascade_ids(
     if !cascade {
         return Ok(vec![root_id.to_string()]);
     }
+    // The visited set is what makes this terminate. `cn task reparent` refuses
+    // to write a cycle, but data written before that check existed can still
+    // hold one, and an unguarded walk would spin forever on it.
     let mut ids = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     let mut stack = vec![root_id.to_string()];
     while let Some(id) = stack.pop() {
+        if !seen.insert(id.clone()) {
+            continue;
+        }
         let children = repo.children_of(&id)?;
         for child in &children {
             stack.push(child.id.clone());
@@ -192,6 +200,29 @@ pub async fn dispatch(
                         "Created {} {}: {}",
                         create_args.task_type, output.id, create_args.title
                     );
+                }
+            }
+            TaskCommands::Reparent(args) => {
+                let new_parent = if args.root {
+                    None
+                } else {
+                    args.new_parent.as_deref()
+                };
+                let universe = repo.list_tasks_all(None)?;
+                let warnings =
+                    reparent_task::reparent_task(repo, &universe, &args.id, new_parent, args.force)
+                        .await?;
+
+                if toon_mode {
+                    print!("{}", toon::action("reparented", &args.id));
+                } else {
+                    for w in &warnings {
+                        println!("warning: {w}");
+                    }
+                    match new_parent {
+                        Some(p) => println!("Moved task {} under {p}", args.id),
+                        None => println!("Detached task {} to standalone", args.id),
+                    }
                 }
             }
             TaskCommands::Edit(edit_args) => {

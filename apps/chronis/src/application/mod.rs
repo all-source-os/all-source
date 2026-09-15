@@ -11,5 +11,6 @@ pub mod list_tasks;
 pub mod migrate_beads;
 pub mod release_task;
 pub mod remove_dependency;
+pub mod reparent_task;
 pub mod sync_git;
 pub mod sync_http;

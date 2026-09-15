@@ -295,6 +295,24 @@ impl TaskRepository for CoreTaskRepository {
         Ok(())
     }
 
+    async fn reparent_task(&self, id: &str, new_parent: Option<&str>) -> Result<(), ChronError> {
+        let _ = self.get_task(id)?;
+
+        // `None` serializes to a present-and-null `parent`, which the
+        // projection reads as "clear it" rather than "leave it alone".
+        self.backend
+            .ingest(IngestEvent {
+                entity_id: id,
+                event_type: "task.updated",
+                payload: json!({ "parent": new_parent }),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await?;
+
+        Ok(())
+    }
+
     async fn approve_task(&self, id: &str) -> Result<(), ChronError> {
         let task = self.get_task(id)?;
         if task.status == TaskStatus::Done {

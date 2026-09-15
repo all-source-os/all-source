@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use allsource_core::embedded::{Config, EmbeddedCore};
 use chronis::{
-    application::create_task::{CreateTaskInput, create_task_with_id_gen},
+    application::{
+        create_task::{CreateTaskInput, create_task_with_id_gen},
+        reparent_task::reparent_task,
+    },
     domain::{
         error::ChronError,
-        repository::TaskRepository,
+        repository::{TaskEdit, TaskRepository},
         task::{TaskStatus, TaskType},
     },
     infrastructure::{
@@ -158,6 +161,123 @@ async fn release_done_task_fails() {
         .unwrap_err();
     assert!(matches!(err, ChronError::NotClaimed(_)));
     assert_eq!(repo.get_task("t-0001").unwrap().status, TaskStatus::Done);
+}
+
+#[tokio::test]
+async fn reparent_moves_a_task_between_epics_and_back_to_the_root() {
+    let repo = setup().await;
+    repo.create_task("t-e1", "Epic one", "p1", &[], TaskType::Epic, None, None)
+        .await
+        .unwrap();
+    repo.create_task("t-e2", "Epic two", "p1", &[], TaskType::Epic, None, None)
+        .await
+        .unwrap();
+    repo.create_task(
+        "t-kid",
+        "Child",
+        "p2",
+        &[],
+        TaskType::Task,
+        Some("t-e1"),
+        None,
+    )
+    .await
+    .unwrap();
+
+    repo.reparent_task("t-kid", Some("t-e2")).await.unwrap();
+    assert_eq!(
+        repo.get_task("t-kid").unwrap().parent.as_deref(),
+        Some("t-e2")
+    );
+    assert!(repo.children_of("t-e1").unwrap().is_empty());
+    assert_eq!(repo.children_of("t-e2").unwrap().len(), 1);
+
+    repo.reparent_task("t-kid", None).await.unwrap();
+    assert_eq!(repo.get_task("t-kid").unwrap().parent, None);
+    assert!(repo.children_of("t-e2").unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn an_unrelated_edit_leaves_the_parent_alone() {
+    let repo = setup().await;
+    repo.create_task("t-e1", "Epic", "p1", &[], TaskType::Epic, None, None)
+        .await
+        .unwrap();
+    repo.create_task(
+        "t-kid",
+        "Child",
+        "p2",
+        &[],
+        TaskType::Task,
+        Some("t-e1"),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let edit = TaskEdit {
+        title: Some("Renamed".into()),
+        ..Default::default()
+    };
+    repo.edit_task("t-kid", &edit).await.unwrap();
+
+    let task = repo.get_task("t-kid").unwrap();
+    assert_eq!(task.title, "Renamed");
+    assert_eq!(task.parent.as_deref(), Some("t-e1"));
+}
+
+#[tokio::test]
+async fn a_refused_reparent_emits_no_event() {
+    let repo = setup().await;
+    repo.create_task("t-e1", "Epic", "p1", &[], TaskType::Epic, None, None)
+        .await
+        .unwrap();
+    repo.create_task(
+        "t-kid",
+        "Child",
+        "p2",
+        &[],
+        TaskType::Task,
+        Some("t-e1"),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let universe = repo.list_tasks_all(None).unwrap();
+    let err = reparent_task(&repo, &universe, "t-e1", Some("t-kid"), true)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ChronError::ReparentRefused(_)));
+
+    assert_eq!(repo.get_task("t-e1").unwrap().parent, None);
+    let detail = repo.get_task_detail("t-e1").await.unwrap();
+    assert_eq!(detail.timeline.len(), 1);
+    assert_eq!(detail.timeline[0].event_type, "task.created");
+}
+
+#[tokio::test]
+async fn a_warned_reparent_needs_force() {
+    let repo = setup().await;
+    repo.create_task("t-a", "Plain", "p2", &[], TaskType::Task, None, None)
+        .await
+        .unwrap();
+    repo.create_task("t-b", "Other", "p2", &[], TaskType::Task, None, None)
+        .await
+        .unwrap();
+
+    let universe = repo.list_tasks_all(None).unwrap();
+    let err = reparent_task(&repo, &universe, "t-a", Some("t-b"), false)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ChronError::ReparentNeedsForce { .. }));
+    assert_eq!(repo.get_task("t-a").unwrap().parent, None);
+
+    let warnings = reparent_task(&repo, &universe, "t-a", Some("t-b"), true)
+        .await
+        .unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(repo.get_task("t-a").unwrap().parent.as_deref(), Some("t-b"));
 }
 
 #[tokio::test]

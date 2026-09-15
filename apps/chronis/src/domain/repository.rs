@@ -88,6 +88,15 @@ pub trait TaskRepository: Send + Sync {
         edit: &TaskEdit,
     ) -> impl std::future::Future<Output = Result<(), ChronError>> + Send;
 
+    /// Move `id` under `new_parent`, or to the root when `new_parent` is
+    /// `None`. Assumes the caller has already cleared
+    /// [`crate::domain::hierarchy::check_reparent`].
+    fn reparent_task(
+        &self,
+        id: &str,
+        new_parent: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<(), ChronError>> + Send;
+
     fn approve_task(
         &self,
         id: &str,

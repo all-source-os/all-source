@@ -24,6 +24,7 @@ use crate::domain::task::{Priority, TaskStatus, TaskType};
         QUICK REFERENCE:\n  \
           cn task create <title>   Create task (-p priority, -t type, --parent, --blocked-by, -d desc)\n  \
           cn task edit <id>        Edit a task (--title, -d desc, --append-description, -p, -t)\n  \
+          cn task reparent <id>    Move under a new parent (<new_parent> or --root, --force)\n  \
           cn list [filters]        List tasks (--status, --priority, --type, --claimed-by,\n  \
                                    --unclaimed, --parent [--depth all], --no-blockers,\n  \
                                    --archived, --all, --format toon|json|tsv|table)\n  \
@@ -153,6 +154,27 @@ pub enum TaskCommands {
 
     /// Edit an existing task's title, description, priority, or type
     Edit(EditArgs),
+
+    /// Move a task under a different parent, or detach it to the root
+    Reparent(ReparentArgs),
+}
+
+#[derive(clap::Args)]
+pub struct ReparentArgs {
+    /// Task ID to move
+    pub id: String,
+
+    /// New parent task ID (omit and pass --root to detach)
+    #[arg(required_unless_present = "root", conflicts_with = "root")]
+    pub new_parent: Option<String>,
+
+    /// Detach to standalone instead of moving under a parent
+    #[arg(long)]
+    pub root: bool,
+
+    /// Proceed despite warnings (never overrides a cycle or a missing task)
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(clap::Args)]
