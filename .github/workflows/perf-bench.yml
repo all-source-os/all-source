@@ -111,12 +111,11 @@ jobs:
 
       # iai-callgrind needs its companion runner binary on PATH; without it the
       # bench aborts with "Failed to run benchmarks: No such file or directory".
-      # The runner version MUST match the iai-callgrind crate version (0.14).
       - name: Install iai-callgrind-runner
-        # MUST match the iai-callgrind dev-dependency in apps/core/Cargo.toml and
-        # apps/prime-mcp/Cargo.toml. The runner refuses to run against a newer
-        # crate ("iai-callgrind-runner (x) is older than iai-callgrind (y)"), so
-        # bumping the crate without bumping this reds the bench job.
+        # MUST match the iai-callgrind dev-dependency in EVERY benched crate —
+        # apps/core, apps/prime-mcp and apps/chronis. The runner refuses to run
+        # against a mismatched crate in either direction, so bumping one side
+        # alone reds the bench job for every PR touching that crate's lockfile.
         run: cargo install iai-callgrind-runner --version 0.16.1 --locked
 
       - name: Run iai-callgrind and compare to main baseline
