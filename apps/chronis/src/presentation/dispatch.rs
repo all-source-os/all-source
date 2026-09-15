@@ -435,7 +435,25 @@ pub async fn dispatch(
                 );
             }
         }
-        Command::Sync => {
+        Command::Sync(args) if args.git => {
+            match crate::application::sync_git::sync_git(workspace_root)? {
+                crate::application::sync_git::GitSyncOutcome::NothingToSync => {
+                    if toon_mode {
+                        println!("ok:sync:git:noop");
+                    } else {
+                        println!("No .chronis changes to sync.");
+                    }
+                }
+                crate::application::sync_git::GitSyncOutcome::Synced { branch, files } => {
+                    if toon_mode {
+                        println!("ok:sync:git:{branch}:{files}");
+                    } else {
+                        println!("Synced {files} .chronis file(s) and pushed {branch}.");
+                    }
+                }
+            }
+        }
+        Command::Sync(_) => {
             if config.mode == CoreMode::Remote {
                 if toon_mode {
                     println!("ok:sync:noop");

@@ -102,8 +102,8 @@ pub enum Command {
     /// Migrate issues from .beads/ to chronis
     MigrateBeads(MigrateBeadsArgs),
 
-    /// Sync events with a remote Core (embedded mode only)
-    Sync,
+    /// Sync events with a remote Core (embedded mode only), or with git via --git
+    Sync(SyncArgs),
 
     /// Configure AllSource Prime (agent memory) for this project
     Prime(PrimeArgs),
@@ -124,6 +124,16 @@ pub struct InitArgs {
     /// API key for authenticating with AllSource
     #[arg(long)]
     pub api_key: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct SyncArgs {
+    /// Commit and push `.chronis/` through git instead of syncing to a Core.
+    ///
+    /// Stages only `.chronis/`, never the rest of the working tree, and refuses
+    /// to commit if anything else is already staged. Does not force-push.
+    #[arg(long)]
+    pub git: bool,
 }
 
 #[derive(clap::Args)]
