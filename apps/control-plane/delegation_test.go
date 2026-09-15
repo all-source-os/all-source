@@ -28,6 +28,7 @@ type fakeBackend struct {
 	path   string
 	query  url.Values
 	auth   string
+	tenant string
 	body   []byte
 	respBy func(w http.ResponseWriter, r *http.Request)
 }
@@ -40,6 +41,7 @@ func newFakeBackend(respBy func(w http.ResponseWriter, r *http.Request)) (*fakeB
 		fb.path = r.URL.Path
 		fb.query = r.URL.Query()
 		fb.auth = r.Header.Get("Authorization")
+		fb.tenant = r.Header.Get("X-Tenant-Id")
 		fb.body = body
 		fb.respBy(w, r)
 	}))
@@ -241,6 +243,53 @@ func TestProxyPrime_CatchAllForwardsWithTenantAndJWT(t *testing.T) {
 	}
 	if len(primeHit.body) == 0 {
 		t.Error("upstream body was empty — POST body should forward")
+	}
+}
+
+// The hosted MCP transport: a tenant's API key authenticates at the gateway,
+// and allsource-prime trusts only the X-Tenant-Id the gateway stamps. A caller
+// that sends its own X-Tenant-Id must not reach another tenant's graph.
+func TestProxyPrime_MCPForwardsToPrimeRootWithGatewayTenant(t *testing.T) {
+	t.Setenv("PRIME_API_KEY", "prime-shared-secret")
+	primeHit, srv := newFakeBackend(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`)) //nolint:errcheck // test response
+	})
+	defer srv.Close()
+	cp := newTestCP(t, srv.URL, srv.URL)
+
+	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/prime/mcp", body)
+	req.Header.Set("X-Tenant-Id", "tenant-victim")
+	req.Header.Set("Authorization", "Bearer ask_tenant_real_key")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	c.Set("auth_tenant_id", "tenant-real")
+	c.Set("auth_user_id", "user-x")
+	c.Set("auth_role", entities.RoleServiceAccount)
+	c.Params = gin.Params{{Key: "path", Value: "/mcp"}}
+
+	cp.ProxyPrime(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body=%s)", w.Code, w.Body.String())
+	}
+	if primeHit.path != "/mcp" {
+		t.Errorf("upstream path: got %q, want /mcp", primeHit.path)
+	}
+	if primeHit.tenant != "tenant-real" {
+		t.Errorf("upstream X-Tenant-Id: got %q, want tenant-real (caller-supplied header must not pass through)", primeHit.tenant)
+	}
+	if primeHit.auth != "Bearer prime-shared-secret" {
+		t.Errorf("upstream auth: got %q, want the gateway's PRIME_API_KEY, never the tenant key", primeHit.auth)
+	}
+	if !strings.Contains(string(primeHit.body), `"tools/list"`) {
+		t.Errorf("upstream body: got %q, want the JSON-RPC request unchanged", primeHit.body)
+	}
+	if !strings.Contains(w.Body.String(), `"result"`) {
+		t.Errorf("response: got %q, want the JSON-RPC reply copied back", w.Body.String())
 	}
 }
 

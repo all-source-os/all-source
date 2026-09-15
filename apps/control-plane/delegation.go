@@ -329,6 +329,11 @@ func (cp *ControlPlane) ProxyPrime(c *gin.Context) {
 	// Gin captures the suffix as "*path" — strip the leading slash Gin adds.
 	suffix := strings.TrimPrefix(c.Param("path"), "/")
 	downstreamPath := "/api/v1/prime/" + suffix
+	// allsource-prime serves MCP JSON-RPC at its root, not under /api/v1/prime,
+	// so the hosted MCP URL is api.all-source.xyz/api/v1/prime/mcp.
+	if suffix == "mcp" {
+		downstreamPath = "/mcp"
+	}
 
 	q := c.Request.URL.Query()
 	q.Set("tenant_id", tenantID)
