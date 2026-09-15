@@ -33,10 +33,15 @@ fn walk(dir: &Path, depth_left: usize, found: &mut Vec<PathBuf>) -> Result<()> {
         return Ok(());
     }
     let entries = fs::read_dir(dir).with_context(|| format!("cannot list {}", dir.display()))?;
-    for entry in entries.filter_map(std::result::Result::ok) {
+    for entry in entries {
+        let entry = entry.with_context(|| format!("cannot read an entry of {}", dir.display()))?;
         let path = entry.path();
-        let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
-        if is_dir {
+        // Skipping an unreadable entry would drop a store from the listing, and
+        // the caller reads a short list as "that store does not exist".
+        let kind = entry
+            .file_type()
+            .with_context(|| format!("cannot stat {}", path.display()))?;
+        if kind.is_dir() {
             walk(&path, depth_left - 1, found)?;
         }
     }
@@ -44,31 +49,72 @@ fn walk(dir: &Path, depth_left: usize, found: &mut Vec<PathBuf>) -> Result<()> {
 }
 
 /// File counts only — no store is opened to list it.
-pub fn describe(root: &Path, dir: &Path) -> Value {
-    json!({
+pub fn describe(root: &Path, dir: &Path) -> Result<Value> {
+    Ok(json!({
         "dir": dir,
         "relative": dir.strip_prefix(root).unwrap_or(dir),
-        "parquet_files": count_files(&dir.join("storage"), "parquet"),
-        "wal_files": count_files(&dir.join("wal"), "log"),
-    })
+        "parquet_files": count_files(&dir.join("storage"), "parquet")?,
+        "wal_files": count_files(&dir.join("wal"), "log")?,
+    }))
 }
 
-/// Parquet is partitioned into subdirectories, so this recurses. A missing
-/// directory counts as zero.
-fn count_files(dir: &Path, extension: &str) -> usize {
-    fs::read_dir(dir).map_or(0, |entries| {
-        entries
-            .filter_map(std::result::Result::ok)
-            .map(|entry| {
-                let path = entry.path();
-                if path.is_dir() {
-                    count_files(&path, extension)
-                } else {
-                    usize::from(path.extension().is_some_and(|x| x == extension))
-                }
-            })
-            .sum()
-    })
+/// Parquet is partitioned into subdirectories, so this recurses.
+///
+/// `storage/` and `wal/` are each optional, so a missing directory is a real
+/// zero. Every other failure propagates: reporting an unreadable store as
+/// having zero files reads as an empty store, which is the one answer this
+/// tool exists to make impossible to get by accident.
+fn count_files(dir: &Path, extension: &str) -> Result<usize> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(anyhow::Error::new(e).context(format!("cannot list {}", dir.display()))),
+    };
+    let mut total = 0;
+    for entry in entries {
+        let entry = entry.with_context(|| format!("cannot read an entry of {}", dir.display()))?;
+        let path = entry.path();
+        let kind = entry
+            .file_type()
+            .with_context(|| format!("cannot stat {}", path.display()))?;
+        if kind.is_dir() {
+            total += count_files(&path, extension)?;
+        } else if path.extension().is_some_and(|x| x == extension) {
+            total += 1;
+        }
+    }
+    Ok(total)
+}
+
+/// Renders what `describe` produced, for `--format table`.
+pub fn print_table(stores: &[Value]) {
+    if stores.is_empty() {
+        println!("No stores found.");
+        return;
+    }
+    let mut table = comfy_table::Table::new();
+    table.set_header(vec!["Store", "Parquet files", "WAL files"]);
+    for store in stores {
+        let text = |key: &str| {
+            store
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let count = |key: &str| {
+            store
+                .get(key)
+                .and_then(Value::as_u64)
+                .map_or_else(String::new, |n| n.to_string())
+        };
+        let label = match text("relative").as_str() {
+            "" => text("dir"),
+            relative => relative.to_string(),
+        };
+        table.add_row(vec![label, count("parquet_files"), count("wal_files")]);
+    }
+    println!("{table}");
 }
 
 /// Read-only replica: replays the WAL for reads, never truncates it, rejects

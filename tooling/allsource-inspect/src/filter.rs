@@ -58,6 +58,11 @@ impl<'a> PayloadShape<'a> {
 }
 
 /// One event as a JSON line, with the payload shaped.
+///
+/// `metadata` carries correlation and source identity. Omitting it here while
+/// `wal --format json` still prints it would give the two JSON paths different
+/// event shapes, and a consumer reading correlation IDs from `events` would get
+/// a missing field rather than an error. Only the payload is ever shaped.
 pub fn render(event: &EventView, shape: &PayloadShape<'_>) -> Value {
     json!({
         "id": event.id,
@@ -66,6 +71,7 @@ pub fn render(event: &EventView, shape: &PayloadShape<'_>) -> Value {
         "entity_id": event.entity_id,
         "tenant_id": event.tenant_id,
         "version": event.version,
+        "metadata": event.metadata,
         "payload": shape.apply(&event.payload),
     })
 }

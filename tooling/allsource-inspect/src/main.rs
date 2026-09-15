@@ -14,6 +14,11 @@ use std::path::PathBuf;
 use crate::filter::PayloadShape;
 use crate::lifecycle::LifecycleSpec;
 
+/// Ceiling on events pulled into memory when a filter runs outside the store.
+/// Payloads are multi-KB, so an unbounded scan of a large store is the
+/// difference between a CLI and an out-of-memory kill.
+const SCAN_CAP: usize = 100_000;
+
 /// Every command opens the store read-only, so it is safe to point at a
 /// directory a running application is writing.
 #[derive(Parser)]
@@ -132,10 +137,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     if let Command::Stores { root, max_depth } = &cli.command {
-        for dir in stores::find(root, *max_depth)? {
-            println!("{}", stores::describe(root, &dir));
-        }
-        return Ok(());
+        return cmd_stores(root, *max_depth, &cli.format);
     }
 
     let data_dir = cli
@@ -183,14 +185,23 @@ async fn main() -> anyhow::Result<()> {
             if let Some(dt) = until_dt {
                 query = query.until(dt);
             }
-            // The text filter must see every match before the limit applies.
-            if contains.is_empty() {
-                query = query.limit(limit);
-            }
+            // The text filter runs here, not in the store, so the query cannot
+            // carry `limit` — it would cut candidates before they are tested.
+            // It still carries SCAN_CAP: without one, `--contains x --limit 10`
+            // materializes every event in the store to print ten.
+            let scan_cap = if contains.is_empty() { limit } else { SCAN_CAP };
+            query = query.limit(scan_cap);
 
             let mut events = core.query(query).await?;
+            let scanned = events.len();
             events.retain(|event| filter::payload_contains(&event.payload, &contains));
             events.truncate(limit);
+            if !contains.is_empty() && scanned >= SCAN_CAP && events.len() < limit {
+                eprintln!(
+                    "warning: stopped after scanning {SCAN_CAP} events; \
+                     matches beyond that point are not shown"
+                );
+            }
             print_events(
                 &cli.format,
                 &events,
@@ -210,23 +221,58 @@ async fn main() -> anyhow::Result<()> {
             key_field,
             fields,
         } => {
-            let events = core
-                .query(Query::new().event_type_prefix(&event_type_prefix))
-                .await?;
             let spec = LifecycleSpec {
                 prefix: &event_type_prefix,
                 states: &states,
                 key_field: key_field.as_deref(),
                 fields: &fields,
             };
-            let lines: Vec<_> = lifecycle::fold(&events, &spec)
-                .into_iter()
-                .filter(|line| state.as_deref().is_none_or(|s| line["state"] == s))
-                .collect();
-            print_lifecycle(&cli.format, &lines);
+            cmd_lifecycle(&core, &cli.format, &spec, state.as_deref()).await?;
         }
     }
 
+    Ok(())
+}
+
+async fn cmd_lifecycle(
+    core: &EmbeddedCore,
+    format: &OutputFormat,
+    spec: &LifecycleSpec<'_>,
+    state: Option<&str>,
+) -> anyhow::Result<()> {
+    let events = core
+        .query(Query::new().event_type_prefix(spec.prefix).limit(SCAN_CAP))
+        .await?;
+    // A lifecycle is a fold, so a truncated scan reports a STALE state rather
+    // than a short list — the later events that would have moved an entity on
+    // are the ones dropped. Say so instead of printing a confident wrong answer.
+    if events.len() >= SCAN_CAP {
+        eprintln!(
+            "warning: folded only the first {SCAN_CAP} events; \
+             states may be stale. Narrow with --event-type-prefix."
+        );
+    }
+    let lines: Vec<_> = lifecycle::fold(&events, spec)
+        .into_iter()
+        .filter(|line| state.is_none_or(|s| line["state"] == s))
+        .collect();
+    print_lifecycle(format, &lines);
+    Ok(())
+}
+
+fn cmd_stores(root: &std::path::Path, max_depth: usize, format: &OutputFormat) -> anyhow::Result<()> {
+    let described = stores::find(root, max_depth)?
+        .iter()
+        .map(|dir| stores::describe(root, dir))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    match format {
+        OutputFormat::Json => {
+            for store in &described {
+                println!("{store}");
+            }
+        }
+        OutputFormat::Table => stores::print_table(&described),
+    }
     Ok(())
 }
 
