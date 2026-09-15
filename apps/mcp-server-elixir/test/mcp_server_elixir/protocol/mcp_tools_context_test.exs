@@ -7,10 +7,31 @@ defmodule McpServerElixir.Protocol.McpToolsContextTest do
   @moduletag :mcp_tools_context
 
   setup do
-    # Application supervision owns this process for the full test suite.
-    pid = Process.whereis(ConversationContext)
-    assert is_pid(pid) and Process.alive?(pid)
-    {:ok, pid: pid}
+    # Own the context rather than sharing the application singleton. Sharing it
+    # made this file fail with "no process" whenever anything else brought the
+    # app supervisor down — a failure in a process the test neither starts nor
+    # controls, which is why it flaked under load and never in isolation (#253).
+    name = :"conversation_context_#{System.unique_integer([:positive])}"
+
+    pid =
+      start_supervised!(
+        Supervisor.child_spec(
+          {ConversationContext, name: name, timeout_ms: :timer.seconds(60)},
+          id: name
+        )
+      )
+
+    previous = Application.get_env(:mcp_server_elixir, :conversation_context_server)
+    Application.put_env(:mcp_server_elixir, :conversation_context_server, name)
+
+    on_exit(fn ->
+      case previous do
+        nil -> Application.delete_env(:mcp_server_elixir, :conversation_context_server)
+        value -> Application.put_env(:mcp_server_elixir, :conversation_context_server, value)
+      end
+    end)
+
+    {:ok, pid: pid, server: name}
   end
 
   describe "list_tools/0" do

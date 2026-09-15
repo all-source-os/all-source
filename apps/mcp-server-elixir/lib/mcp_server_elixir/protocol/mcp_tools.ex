@@ -457,6 +457,20 @@ defmodule McpServerElixir.Protocol.McpTools do
   # `Server.guarded_process/2`, at the `handle_info/2` seam. What this buys is
   # per-tool attribution in the log and a clean `{:error, reason}` return, so a
   # handler failure is reported as *that tool* failing.
+  # Resolved per call rather than hardcoded to the module name, so a test can
+  # supervise its own context and stop depending on the application singleton.
+  # A test that shares that singleton fails with "no process" whenever anything
+  # else takes the app supervisor down, which is a failure in a process the test
+  # neither starts nor owns (#253). Unset in production, so the name resolves to
+  # the supervised ConversationContext exactly as before.
+  defp context_server do
+    Application.get_env(
+      :mcp_server_elixir,
+      :conversation_context_server,
+      ConversationContext
+    )
+  end
+
   defp safe_dispatch(tool_name, args, state, format) do
     dispatch_tool(tool_name, args, state, format)
   rescue
@@ -3170,12 +3184,12 @@ defmodule McpServerElixir.Protocol.McpTools do
       end)
 
     # Create or get the session
-    case ConversationContext.get_or_create_session(ConversationContext, session_id) do
+    case ConversationContext.get_or_create_session(context_server(), session_id) do
       {:ok, session} ->
         # Apply initial context if provided
         {:ok, updated_session} =
           if map_size(initial_context) > 0 do
-            ConversationContext.update_session(ConversationContext, session_id, initial_context)
+            ConversationContext.update_session(context_server(), session_id, initial_context)
           else
             {:ok, session}
           end
@@ -3240,10 +3254,10 @@ defmodule McpServerElixir.Protocol.McpTools do
     if map_size(refinement) == 0 do
       {:error, "No refinement parameters provided. Specify at least one filter to add."}
     else
-      case ConversationContext.build_query(ConversationContext, session_id, refinement) do
+      case ConversationContext.build_query(context_server(), session_id, refinement) do
         {:ok, query_params} ->
           # Get updated session for display
-          {:ok, session} = ConversationContext.get_session(ConversationContext, session_id)
+          {:ok, session} = ConversationContext.get_session(context_server(), session_id)
 
           text = """
           ✏️  Query Refined for session "#{session_id}"
@@ -3283,7 +3297,7 @@ defmodule McpServerElixir.Protocol.McpTools do
     session_id = Map.fetch!(args, "session_id")
     include_history = Map.get(args, "include_history", true)
 
-    case ConversationContext.get_session(ConversationContext, session_id) do
+    case ConversationContext.get_session(context_server(), session_id) do
       {:ok, session} ->
         query_params = session_to_display_params(session)
 
