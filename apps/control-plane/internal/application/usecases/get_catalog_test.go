@@ -252,6 +252,8 @@ func TestGetCatalog_CanceledRequestCannotPoisonCache(t *testing.T) {
 	uc := NewGetCatalogUseCase(ls)
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan *Catalog, 1)
+	//nolint:errcheck // the test cancels ctx, so the error is expected; the
+	// assertion is on the catalog the caller still gets back.
 	go func() { cat, _ := uc.Execute(ctx, time.Now()); result <- cat }()
 	<-ls.getStarted
 	cancel()
@@ -295,7 +297,7 @@ func TestGetCatalog_PersistsTwoWeekLastKnownGood(t *testing.T) {
 func TestGetCatalog_RejectsChangedVariantMap(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Second)
 	store := &catalogMockStore{}
-	_, _ = NewGetCatalogUseCase(fullCatalogMockLS(), store).Execute(context.Background(), base)
+	_, _ = NewGetCatalogUseCase(fullCatalogMockLS(), store).Execute(context.Background(), base) //nolint:errcheck // seeds the cache; the assertion is on later state
 	changed := fullCatalogMockLS()
 	changed.currencyErr = true
 	changed.variantMap = clients.VariantMap{"indie:monthly": "replacement"}
@@ -319,15 +321,15 @@ func TestGetCatalog_PriceChangePersistsWithoutWaitingADay(t *testing.T) {
 	store := &catalogMockStore{}
 	ls := fullCatalogMockLS()
 	uc := NewGetCatalogUseCase(ls, store)
-	_, _ = uc.Execute(context.Background(), base)
+	_, _ = uc.Execute(context.Background(), base) //nolint:errcheck // seeds the cache; the assertion is on later state
 	ls.variants["indie:monthly"] = &clients.VariantResponse{Price: 2199, Interval: "month"}
-	_, _ = uc.Execute(context.Background(), base.Add(6*time.Minute))
+	_, _ = uc.Execute(context.Background(), base.Add(6*time.Minute)) //nolint:errcheck // seeds the cache; the assertion is on later state
 	waitForCatalogRefresh(uc)
 	if store.writes != 2 {
 		t.Fatalf("changed provider price must persist immediately; writes=%d", store.writes)
 	}
 	restarted := NewGetCatalogUseCase(fullCatalogMockLS(), store)
-	cat, _ := restarted.Execute(context.Background(), base.Add(7*time.Minute))
+	cat, _ := restarted.Execute(context.Background(), base.Add(7*time.Minute)) //nolint:errcheck // asserts the restarted instance's catalog, not its error
 	if cat.Tiers[0].Monthly.Formatted != "$21.99" {
 		t.Fatalf("restart must load changed provider price, got %+v", cat.Tiers[0].Monthly)
 	}
@@ -338,11 +340,11 @@ func TestGetCatalog_PartialRefreshKeepsLastCompleteSnapshot(t *testing.T) {
 	store := &catalogMockStore{}
 	ls := fullCatalogMockLS()
 	uc := NewGetCatalogUseCase(ls, store)
-	_, _ = uc.Execute(context.Background(), base)
+	_, _ = uc.Execute(context.Background(), base) //nolint:errcheck // seeds the cache; the assertion is on later state
 	delete(ls.variants, "scale:annual")
-	_, _ = uc.Execute(context.Background(), base.Add(6*time.Minute))
+	_, _ = uc.Execute(context.Background(), base.Add(6*time.Minute)) //nolint:errcheck // seeds the cache; the assertion is on later state
 	waitForCatalogRefresh(uc)
-	cat, _ := uc.Execute(context.Background(), base.Add(6*time.Minute+time.Second))
+	cat, _ := uc.Execute(context.Background(), base.Add(6*time.Minute+time.Second)) //nolint:errcheck // asserts the served catalog, not the error
 	if !catalogComplete(cat) || store.writes != 1 {
 		t.Fatalf("partial provider result must not overwrite full catalog: %+v, writes=%d", cat, store.writes)
 	}

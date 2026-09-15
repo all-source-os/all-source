@@ -98,12 +98,12 @@ func TestGetVariant_UsesCurrentPriceModelNotDeprecatedVariantPrice(t *testing.T)
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		switch r.URL.Path {
 		case "/v1/variants/42":
-			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{ //nolint:errcheck // test handler
 				Type: "variants", ID: "42",
 				Attributes: mustJSON(t, map[string]any{"name": "Indie annual", "status": "published", "test_mode": false, "price": 18199, "interval": "year"}),
 			}})
 		case "/v1/variants/42/price-model":
-			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{ //nolint:errcheck // test handler
 				Type: "prices", ID: "new-price",
 				Attributes: mustJSON(t, map[string]any{"variant_id": 42, "category": "subscription", "scheme": "standard", "unit_price": 19999, "renewal_interval_unit": "year", "renewal_interval_quantity": 1}),
 			}})
@@ -128,12 +128,12 @@ func TestGetVariant_RejectsUnsupportedPriceModel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.api+json")
 		if r.URL.Path == "/v1/variants/42" {
-			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+			_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{ //nolint:errcheck // test handler
 				Type: "variants", ID: "42", Attributes: mustJSON(t, map[string]any{"status": "published", "price": 18199}),
 			}})
 			return
 		}
-		_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{
+		_ = json.NewEncoder(w).Encode(jsonAPIEnvelope{Data: jsonAPIData{ //nolint:errcheck // test handler
 			Type: "prices", ID: "new-price",
 			Attributes: mustJSON(t, map[string]any{"variant_id": 42, "category": "subscription", "scheme": "graduated", "unit_price": 19999, "renewal_interval_unit": "year", "renewal_interval_quantity": 1}),
 		}})
