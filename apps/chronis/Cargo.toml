@@ -67,7 +67,7 @@ uuid = { version = "1", features = ["serde"] }
 
 [dev-dependencies]
 divan = "0.1"
-iai-callgrind = "0.14"
+iai-callgrind = "0.16"
 tempfile = "3.23"
 
 [[bench]]

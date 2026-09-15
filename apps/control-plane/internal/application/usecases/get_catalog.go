@@ -63,7 +63,8 @@ type GetCatalogUseCase struct {
 	refresh  chan struct{}
 }
 
-// store is optional for tests and installations without persistent Core config.
+// NewGetCatalogUseCase builds the catalog reader. The store is variadic because
+// it is optional for tests and for installations without persistent Core config.
 func NewGetCatalogUseCase(ls clients.LemonSqueezyClient, store ...CatalogStore) *GetCatalogUseCase {
 	uc := &GetCatalogUseCase{ls: ls}
 	if len(store) > 0 {
@@ -128,7 +129,9 @@ func (uc *GetCatalogUseCase) Execute(ctx context.Context, now time.Time) (*Catal
 	}
 	if uc.refresh == nil && !now.Before(uc.nextTry) {
 		uc.refresh = make(chan struct{})
-		go uc.refreshCatalog(now)
+		// Deliberately not request-scoped: refreshCatalog builds its own
+		// timeout so a short web deadline cannot cache a half-fetched catalog.
+		go uc.refreshCatalog(now) //nolint:gosec // G118
 	}
 	if uc.cached != nil {
 		c := uc.response(now)
