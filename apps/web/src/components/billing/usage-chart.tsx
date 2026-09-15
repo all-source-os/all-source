@@ -21,6 +21,7 @@ export function UsageChart({
   history = [],
   emptyLabel = "No data for this period",
 }: UsageChartProps) {
+  const unlimited = quota < 0;
   const percentage = quota > 0 ? (used / quota) * 100 : 0;
   const isWarning = percentage >= 80;
   const isCritical = percentage >= 95;
@@ -46,7 +47,7 @@ export function UsageChart({
           <div>
             <span className="text-3xl font-bold tabular-nums">{formatNumber(used)}</span>
             <span className="ml-1 text-muted-foreground">
-              / {formatNumber(quota)} {unit}
+              {unlimited ? unit : `/ ${formatNumber(quota)} ${unit}`}
             </span>
           </div>
           <span
@@ -59,7 +60,7 @@ export function UsageChart({
                   : "text-muted-foreground"
             )}
           >
-            {percentage.toFixed(1)}%
+            {unlimited ? "Unlimited" : `${percentage.toFixed(1)}%`}
           </span>
         </div>
 

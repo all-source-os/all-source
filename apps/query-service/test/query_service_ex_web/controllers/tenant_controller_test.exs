@@ -89,5 +89,29 @@ defmodule QueryServiceExWeb.TenantControllerTest do
       assert response["queries"]["used"] == 0
       assert response["queries"]["quota"] == 1_000
     end
+
+    test "reports extraction tokens against the allowance", %{conn: conn, tenant: tenant} do
+      quotas =
+        Map.merge(tenant["metadata"]["quotas"], %{
+          "extraction_tokens_quota" => 500_000,
+          "extraction_tokens_used" => 12_000
+        })
+
+      TenantCache.put(tenant["id"], put_in(tenant, ["metadata", "quotas"], quotas))
+
+      response = conn |> get("/api/tenant/usage") |> json_response(200) |> Map.fetch!("data")
+
+      assert response["extraction_tokens"] == %{
+               "used" => 12_000,
+               "quota" => 500_000,
+               "remaining" => 488_000
+             }
+    end
+
+    test "a tenant with no extraction allowance reports zero, not unlimited", %{conn: conn} do
+      response = conn |> get("/api/tenant/usage") |> json_response(200) |> Map.fetch!("data")
+
+      assert response["extraction_tokens"] == %{"used" => 0, "quota" => 0, "remaining" => 0}
+    end
   end
 end

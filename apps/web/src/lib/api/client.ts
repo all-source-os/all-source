@@ -606,6 +606,12 @@ export interface TenantUsage {
     quota: number;
     percentage: number;
   };
+  /** Hosted Hound extraction LLM tokens this period. quota -1 = unlimited, 0 = none included. */
+  extraction_tokens?: {
+    used: number;
+    quota: number;
+    remaining: number;
+  };
   billing_period: {
     reset_at: string;
   };

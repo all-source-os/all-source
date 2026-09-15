@@ -279,6 +279,9 @@ defmodule QueryServiceExWeb.TenantController do
     events_used = quotas["events_used"] || 0
     queries_quota = quotas["queries_quota"] || -1
     queries_used = quotas["queries_used"] || 0
+    # The Control Plane omits a zero extraction allowance, so absent means none.
+    extraction_quota = quotas["extraction_tokens_quota"] || 0
+    extraction_used = quotas["extraction_tokens_used"] || 0
 
     %{
       tenant_id: tenant["id"],
@@ -293,6 +296,11 @@ defmodule QueryServiceExWeb.TenantController do
         used: queries_used,
         quota: queries_quota,
         remaining: remaining(queries_quota, queries_used)
+      },
+      extraction_tokens: %{
+        used: extraction_used,
+        quota: extraction_quota,
+        remaining: remaining(extraction_quota, extraction_used)
       },
       billing_period: %{
         reset_at: nil

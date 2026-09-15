@@ -93,6 +93,7 @@ export default function BillingPage() {
   const eventsQuota = stats.events.quota || tenant?.events_quota || 10000;
   const queriesUsed = stats.queries.used || tenant?.queries_used || 0;
   const queriesQuota = stats.queries.quota || tenant?.queries_quota || 10000;
+  const showExtraction = stats.extraction.quota !== 0 || stats.extraction.used > 0;
   const trialEndsAt = tenant?.trial_ends_at;
   const subscriptionEndsAt = tenant?.subscription_ends_at;
 
@@ -369,6 +370,14 @@ export default function BillingPage() {
           <div className="grid gap-6 md:grid-cols-2">
             <UsageChart title="Events" used={eventsUsed} quota={eventsQuota} />
             <UsageChart title="Queries" used={queriesUsed} quota={queriesQuota} />
+            {showExtraction && (
+              <UsageChart
+                title="Extraction tokens"
+                used={stats.extraction.used}
+                quota={stats.extraction.quota}
+                unit="tokens"
+              />
+            )}
           </div>
         </div>
       </FadeIn>

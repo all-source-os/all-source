@@ -118,7 +118,8 @@ type QuotaMetadata struct {
 	ExtractionTokensQuota int64 `json:"extraction_tokens_quota,omitempty"`
 	// ExtractionTokensUsed is the LLM tokens consumed this period by hosted Hound
 	// doc extraction, metered from prime.extraction.usage events in Core (see
-	// billing.SyncExtractionUsageUseCase). Record-only — not yet wired to billing.
+	// billing.SyncExtractionUsageUseCase). Billed past the allowance by
+	// billing.ReportExtractionOverageUseCase once a rate is configured.
 	ExtractionTokensUsed int64 `json:"extraction_tokens_used,omitempty"`
 	// RetentionDays is the event retention window for the tier. -1 = forever.
 	RetentionDays int64 `json:"retention_days,omitempty"`
@@ -137,6 +138,11 @@ type OverageMetadata struct {
 	QueriesOverage      int64   `json:"queries_overage"`
 	LastReportedEvents  int64   `json:"last_reported_events,omitempty"`  // last reported overage to prevent double-reporting
 	LastReportedQueries int64   `json:"last_reported_queries,omitempty"` // last reported overage to prevent double-reporting
+	// LastReportedExtractionUnits is the extraction overage, in billed units,
+	// already reported for ExtractionReportedPeriod. The extraction meter resets
+	// each period, so a stale period means nothing has been reported yet.
+	LastReportedExtractionUnits int64  `json:"last_reported_extraction_units,omitempty"`
+	ExtractionReportedPeriod    string `json:"extraction_reported_period,omitempty"`
 }
 
 // TenantBillingMetadata is the top-level structure for all billing-related

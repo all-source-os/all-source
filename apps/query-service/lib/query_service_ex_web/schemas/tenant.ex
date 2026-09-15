@@ -129,6 +129,10 @@ defmodule QueryServiceExWeb.Schemas.Tenant do
             subscription_status: %Schema{type: :string},
             events: %Schema{type: :object},
             queries: %Schema{type: :object},
+            extraction_tokens: %Schema{
+              type: :object,
+              description: "Hosted Hound extraction LLM tokens used this billing period"
+            },
             billing_period: %Schema{
               type: :object,
               properties: %{
@@ -146,6 +150,7 @@ defmodule QueryServiceExWeb.Schemas.Tenant do
           subscription_status: "active",
           events: %{used: 50_000, quota: 1_000_000, percentage: 5.0},
           queries: %{used: 5000, quota: 100_000, percentage: 5.0},
+          extraction_tokens: %{used: 12_000, quota: 500_000, remaining: 488_000},
           billing_period: %{reset_at: "2026-03-01T00:00:00Z"}
         }
       }

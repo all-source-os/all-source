@@ -32,6 +32,7 @@ type OperationScheduler struct {
 	syncX402UsageUC       *billing.SyncX402UsageUseCase
 	syncEventsUsageUC     *billing.SyncEventsUsageUseCase
 	syncExtractionUsageUC *billing.SyncExtractionUsageUseCase
+	reportExtractionUC    *billing.ReportExtractionOverageUseCase
 	syncSubsUC            *SyncSubscriptionsUseCase
 	expireTrialsUC        *ExpireTrialsUseCase
 	commsEfficiencyUC     *CommsEfficiencyUseCase
@@ -109,6 +110,12 @@ func (s *OperationScheduler) SetSyncEventsUsageUseCase(uc *billing.SyncEventsUsa
 // use case. Must be called before Start if extraction_usage_sync is enabled.
 func (s *OperationScheduler) SetSyncExtractionUsageUseCase(uc *billing.SyncExtractionUsageUseCase) {
 	s.syncExtractionUsageUC = uc
+}
+
+// SetReportExtractionOverageUseCase sets the extraction overage reporter. It runs
+// after each extraction_usage_sync so it bills from a freshly reconciled meter.
+func (s *OperationScheduler) SetReportExtractionOverageUseCase(uc *billing.ReportExtractionOverageUseCase) {
+	s.reportExtractionUC = uc
 }
 
 // SetSyncSubscriptionsUseCase sets the subscription reconciliation use case.
@@ -366,7 +373,7 @@ func (s *OperationScheduler) executeEventsUsageSync(ctx context.Context) {
 }
 
 // executeExtractionUsageSync reconciles each tenant's extraction_tokens_used
-// meter from prime.extraction.usage events in Core. Record-only (no billing).
+// meter from prime.extraction.usage events in Core, then reports any overage.
 //
 //nolint:dupl // sibling-but-independent usage sync; see executeEventsUsageSync
 func (s *OperationScheduler) executeExtractionUsageSync(ctx context.Context) {
@@ -397,6 +404,22 @@ func (s *OperationScheduler) executeExtractionUsageSync(ctx context.Context) {
 	auditEvent.AddMetadata("skipped", fmt.Sprintf("%d", skipped))
 	auditEvent.AddMetadata("errors", fmt.Sprintf("%d", errored))
 	_ = s.auditRepo.Log(auditEvent) //nolint:errcheck
+
+	s.executeExtractionOverageReport(ctx)
+}
+
+func (s *OperationScheduler) executeExtractionOverageReport(ctx context.Context) {
+	if s.reportExtractionUC == nil {
+		return
+	}
+	for _, r := range s.reportExtractionUC.ExecuteAll(ctx) {
+		switch {
+		case r.Error != nil:
+			log.Printf("Scheduler: extraction overage report failed for tenant %s: %v", r.TenantID, r.Error)
+		case !r.Skipped:
+			log.Printf("Scheduler: reported %d extraction overage units for tenant %s", r.UnitsReported, r.TenantID)
+		}
+	}
 }
 
 // executeSubscriptionSync reconciles each tenant's tracked subscriptions against

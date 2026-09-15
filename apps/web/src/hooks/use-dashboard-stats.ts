@@ -28,6 +28,11 @@ interface DashboardStats {
     quota: number;
     percentage: number;
   };
+  /** Hosted extraction LLM tokens vs the tier allowance (-1 = unlimited, 0 = none). */
+  extraction: {
+    used: number;
+    quota: number;
+  };
   projections: {
     count: number;
     active: number;
@@ -73,6 +78,7 @@ function formatLatency(us: number): string {
 const DEFAULT_STATS: DashboardStats = {
   events: { used: 0, quota: 5000000, percentage: 0, total: 0 },
   queries: { used: 0, quota: 500000, percentage: 0 },
+  extraction: { used: 0, quota: 0 },
   projections: { count: 0, active: 0 },
   store: { streams: 0, eventTypes: 0 },
   latency: { p99_us: 0, formatted: "—" },
@@ -123,6 +129,7 @@ async function fetchDashboardStats(asOfIso: string | null): Promise<DashboardSta
     ...DEFAULT_STATS,
     events: { ...DEFAULT_STATS.events },
     queries: { ...DEFAULT_STATS.queries },
+    extraction: { ...DEFAULT_STATS.extraction },
     projections: { ...DEFAULT_STATS.projections },
     store: { ...DEFAULT_STATS.store },
     latency: { ...DEFAULT_STATS.latency },
@@ -137,6 +144,12 @@ async function fetchDashboardStats(asOfIso: string | null): Promise<DashboardSta
     stats.events.quota = usageResponse.data.events.quota;
     stats.events.percentage = usageResponse.data.events.percentage;
     stats.queries = usageResponse.data.queries;
+    if (usageResponse.data.extraction_tokens) {
+      stats.extraction = {
+        used: usageResponse.data.extraction_tokens.used,
+        quota: usageResponse.data.extraction_tokens.quota,
+      };
+    }
   }
 
   // REAL tenant-scoped totals from the event store.

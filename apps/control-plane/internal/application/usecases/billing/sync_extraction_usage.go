@@ -23,10 +23,7 @@ const eventExtractionUsage = "prime.extraction.usage"
 // the durable event log (per CLAUDE.md, event-shaped usage metering routes
 // through Core, not an in-memory counter).
 //
-// It deliberately RECORDS only — it does not report to LemonSqueezy or charge.
-// Turning the meter into money (a rate, whether extraction is billable, the
-// usage-record call) is a billing decision left to the billing owner; this use
-// case just makes the usage truthful and visible.
+// It records only; ReportExtractionOverageUseCase turns the meter into a charge.
 type SyncExtractionUsageUseCase struct {
 	tenantRepo repositories.TenantRepository
 	auditRepo  repositories.AuditRepository

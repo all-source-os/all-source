@@ -207,6 +207,29 @@ allowance between reconciliations:
 > unbounded "reconcile everything" is the single most dangerous surface, which is
 > exactly why the count-echo + `max_tenants` cap exist.
 
+## Hosted extraction overage (#292)
+
+Hound extraction tokens used past a tier's `extraction_tokens_quota` are billed
+by the Control Plane after each `extraction_usage_sync` (every 5 min). **They are
+reported to the same LemonSqueezy subscription item as event overage**, so tokens
+are converted into billed units first.
+
+| Setting (Control Plane) | Effect |
+|---|---|
+| `EXTRACTION_OVERAGE_TOKENS_PER_UNIT` unset, `0` or malformed | nothing is reported — the default until the rate is decided |
+| `EXTRACTION_OVERAGE_TOKENS_PER_UNIT=1000` | every completed 1,000 overage tokens reports 1 unit, priced at that item's LemonSqueezy unit price |
+
+- Only tenants with overage enabled, a `subscription_item_id`, and a finite
+  allowance are billed; `-1` (unlimited) never is.
+- Reported units are recorded per billing period in
+  `metadata.overage.last_reported_extraction_units` /
+  `extraction_reported_period`, so a restart or re-run does not bill twice and a
+  new period starts from zero.
+- To turn it on: `fly secrets set EXTRACTION_OVERAGE_TOKENS_PER_UNIT=<n> --app
+  allsource-control-plane`. Watch for `billing.extraction.overage_reported` audit
+  events.
+- Tenants see usage against the allowance on `/dashboard/billing`.
+
 ## Verification (test mode)
 
 - [ ] Checkout for indie/studio/scale (monthly + annual) completes; webhook fires;
