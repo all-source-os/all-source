@@ -1,8 +1,20 @@
-//! MCP stdio transport with Content-Length header framing (per MCP spec).
+//! MCP stdio transport: newline-delimited JSON-RPC.
 //!
-//! Reads JSON-RPC messages from stdin using `Content-Length: N\r\n\r\n<body>` framing
-//! (identical to the Language Server Protocol). Falls back to line-delimited JSON
-//! if the first line looks like JSON (for backward compatibility with simple tests).
+//! **One response per line, terminated by `\n`, with no `Content-Length` header.**
+//! The MCP stdio transport is newline-delimited — Content-Length framing belongs
+//! to the Language Server Protocol, and a client reading line by line cannot
+//! parse it: the header, the blank line and a body with no trailing newline each
+//! fail to be a JSON-RPC message, and the next response's header lands on the
+//! same line as the previous body. The visible symptom is
+//! `MCP server connection timed out`, because `initialize` is answered in
+//! milliseconds and the client never manages to read the answer.
+//!
+//! That is #179, and it reached this crate a second time (#285) because the
+//! original fix corrected prime's copy and this one kept the same shape. The
+//! invariant is pinned by a test here now, not by a doc comment.
+//!
+//! Input stays tolerant: `read_message` accepts either framing, so a client that
+//! still sends Content-Length keeps working.
 
 use allsource_core::embedded::EmbeddedCore;
 use anyhow::Result;
@@ -25,14 +37,24 @@ impl StdioTransport {
         Self { core, policy }
     }
 
-    /// Serve framed MCP requests until standard input closes.
+    /// Serve MCP requests until standard input closes.
     pub async fn run(&mut self) -> Result<()> {
         let stdin = std::io::stdin();
         let mut stdout = std::io::stdout();
         let mut reader = std::io::BufReader::new(stdin.lock());
+        self.serve(&mut reader, &mut stdout).await?;
 
+        // No `shutdown()`: the core is opened read-only, and `EmbeddedCore::shutdown`
+        // syncs the WAL and flushes storage with no read-only guard — a write path
+        // beside whichever process owns the data dir (#201).
+        tracing::info!("stdin closed");
+        Ok(())
+    }
+
+    /// The request loop, over any reader and writer, so it can be driven in a test.
+    pub async fn serve(&mut self, reader: &mut impl BufRead, writer: &mut impl Write) -> Result<()> {
         loop {
-            let Some(body) = read_message(&mut reader)? else {
+            let Some(body) = read_message(reader)? else {
                 break; // EOF
             };
 
@@ -47,7 +69,7 @@ impl StdioTransport {
                 Ok(r) => r,
                 Err(e) => {
                     let resp = Response::error(None, -32700, format!("Parse error: {e}"));
-                    write_response(&mut stdout, &resp)?;
+                    write_response(writer, &resp)?;
                     continue;
                 }
             };
@@ -55,12 +77,9 @@ impl StdioTransport {
             let response = self.handle_request(&request).await;
 
             if let Some(resp) = response {
-                write_response(&mut stdout, &resp)?;
+                write_response(writer, &resp)?;
             }
         }
-
-        tracing::info!("stdin closed, shutting down");
-        self.core.shutdown().await?;
         Ok(())
     }
 
@@ -172,11 +191,96 @@ fn read_message(reader: &mut impl BufRead) -> Result<Option<String>> {
     Ok(Some(String::from_utf8_lossy(&body).to_string()))
 }
 
-/// Write one Content-Length-framed JSON-RPC response.
-fn write_response(stdout: &mut impl Write, response: &Response) -> Result<()> {
+#[cfg(test)]
+mod tests {
+    use allsource_core::embedded::{Config, EmbeddedCore};
+
+    use super::StdioTransport;
+    use crate::diagnostics::{AccessProfile, DiagnosticPolicy};
+
+    async fn transport() -> StdioTransport {
+        let core = EmbeddedCore::open(Config::builder().build().expect("valid config"))
+            .await
+            .expect("in-memory core");
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+        StdioTransport::new(core, policy)
+    }
+
+    async fn serve(input: &str) -> String {
+        let mut transport = transport().await;
+        let mut reader = std::io::BufReader::new(input.as_bytes());
+        let mut out: Vec<u8> = Vec::new();
+        transport
+            .serve(&mut reader, &mut out)
+            .await
+            .expect("serve runs to EOF");
+        String::from_utf8(out).expect("responses are utf-8")
+    }
+
+    /// #179, and #285 when the same shape survived into this crate: Content-Length
+    /// framing makes every response unparseable to a newline-delimited client, and
+    /// the only symptom is a connection timeout.
+    #[tokio::test]
+    async fn every_response_is_one_newline_terminated_line_without_a_header() {
+        let out = serve(concat!(
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+            "\n",
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+            "\n",
+        ))
+        .await;
+
+        assert!(
+            !out.contains("Content-Length"),
+            "stdio transport must not emit LSP framing: {out}"
+        );
+        assert!(
+            out.ends_with('\n'),
+            "the last response must be terminated, or it concatenates with the next"
+        );
+
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 2, "one line per response, got {lines:?}");
+        for line in lines {
+            let parsed: serde_json::Value =
+                serde_json::from_str(line).expect("each line parses on its own");
+            assert_eq!(parsed["jsonrpc"], "2.0");
+        }
+    }
+
+    /// Input stays tolerant of the framing this server no longer writes.
+    #[tokio::test]
+    async fn a_content_length_framed_request_is_still_accepted() {
+        let body = r#"{"jsonrpc":"2.0","id":7,"method":"tools/list"}"#;
+        let out = serve(&format!(
+            "Content-Length: {}\r\n\r\n{body}",
+            body.len()
+        ))
+        .await;
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(out.trim_end()).expect("one JSON line back");
+        assert_eq!(parsed["id"], 7);
+    }
+
+    /// A notification has no id and must draw no response at all — a reply to one
+    /// is an unmatched message that desynchronizes the client.
+    #[tokio::test]
+    async fn a_notification_produces_no_output() {
+        let out = serve("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n").await;
+        assert!(out.is_empty(), "expected silence, got {out:?}");
+    }
+}
+
+/// Write one JSON-RPC response as a single newline-terminated line.
+///
+/// `serde_json::to_string` is compact and contains no newline, so the `writeln!`
+/// terminator is the only one in the output and the line stays parseable.
+fn write_response(writer: &mut impl Write, response: &Response) -> Result<()> {
     let json = serde_json::to_string(response)?;
     tracing::debug!("send: {json}");
-    write!(stdout, "Content-Length: {}\r\n\r\n{}", json.len(), json)?;
-    stdout.flush()?;
+    writeln!(writer, "{json}")?;
+    writer.flush()?;
     Ok(())
 }
