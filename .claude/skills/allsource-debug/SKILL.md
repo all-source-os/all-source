@@ -26,18 +26,27 @@ Use MCP tools directly — they read from the data directory without a running s
 ### If allsource-inspect CLI is available
 
 ```bash
-# Find all events for an entity
-allsource-inspect --data-dir <path> --entity-id "workflow:abc-123" --format json
+# Which data directory? An app can keep several (per profile, per workspace)
+allsource-inspect stores --root <app-support-dir>
 
-# Find events by type
-allsource-inspect --data-dir <path> --event-type "workflow_run.*" --format json
+# Find all events for an entity
+allsource-inspect events --data-dir <path> --entity-id "workflow:abc-123" --format json
+
+# Find events by type prefix, printing only the payload keys
+allsource-inspect events --data-dir <path> --event-type-prefix "workflow_run." --keys --format json
+
+# Current state of every run in one pass
+allsource-inspect lifecycle --data-dir <path> --event-type-prefix "workflow_run." \
+  --states started,completed,failed --format json
 
 # Storage summary
 allsource-inspect summary --data-dir <path>
 
-# WAL-only (uncommitted events)
-allsource-inspect --data-dir <path> --wal-only --format json
+# Events still in the WAL
+allsource-inspect wal --data-dir <path> --format json
 ```
+
+Every command opens the store read-only, so it is safe to run while the app is writing.
 
 ### Default data directory locations
 

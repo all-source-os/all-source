@@ -1,24 +1,39 @@
+mod filter;
+mod lifecycle;
+mod stores;
+
 use allsource_core::{
-    embedded::{Config, DurabilityStatus, EmbeddedCore, EventView, Query},
+    embedded::{DurabilityStatus, EmbeddedCore, EventView, Query},
     store::StoreStats,
 };
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
+use crate::filter::PayloadShape;
+use crate::lifecycle::LifecycleSpec;
+
+/// Ceiling on events pulled into memory when a filter runs outside the store.
+/// Payloads are multi-KB, so an unbounded scan of a large store is the
+/// difference between a CLI and an out-of-memory kill.
+const SCAN_CAP: usize = 100_000;
+
+/// Every command opens the store read-only, so it is safe to point at a
+/// directory a running application is writing.
 #[derive(Parser)]
 #[command(
     name = "allsource-inspect",
-    about = "CLI tool for inspecting AllSource Core storage files",
+    about = "Read AllSource Core storage (WAL + Parquet) without a server, read-only",
     version
 )]
 struct Cli {
-    /// Path to the AllSource data directory
-    #[arg(long, env = "ALLSOURCE_DATA_DIR")]
-    data_dir: PathBuf,
+    /// Path to the store's data directory (holds `storage/` and `wal/`)
+    #[arg(long, env = "ALLSOURCE_DATA_DIR", global = true)]
+    data_dir: Option<PathBuf>,
 
     /// Output format
-    #[arg(long, default_value = "table")]
+    #[arg(long, default_value = "table", global = true)]
     format: OutputFormat,
 
     #[command(subcommand)]
@@ -55,15 +70,27 @@ enum Command {
         #[arg(long)]
         until: Option<String>,
 
-        /// Maximum number of events to return
+        /// Maximum number of events to return (oldest first)
         #[arg(long, default_value = "100")]
         limit: usize,
+
+        /// Keep events whose payload text contains this (repeatable; all must match)
+        #[arg(long)]
+        contains: Vec<String>,
+
+        /// Print only these payload fields, as dot paths (e.g. `steps.4.approval`)
+        #[arg(long, value_delimiter = ',')]
+        fields: Vec<String>,
+
+        /// Print the payload's top-level keys instead of the payload
+        #[arg(long)]
+        keys: bool,
     },
     /// Show storage summary and stats
     Summary,
-    /// Show WAL status and recovered events
+    /// Show WAL status and the events still in the WAL
     Wal {
-        /// Show only WAL events (skip events already in parquet)
+        /// Accepted for compatibility; not implemented yet
         #[arg(long)]
         wal_only: bool,
 
@@ -71,16 +98,57 @@ enum Command {
         #[arg(long, default_value = "50")]
         limit: usize,
     },
+    /// List the store data directories under a root (opens none of them)
+    Stores {
+        /// Directory to search, e.g. an application's support directory
+        #[arg(long)]
+        root: PathBuf,
+
+        /// How many directory levels to descend
+        #[arg(long, default_value = "6")]
+        max_depth: usize,
+    },
+    /// Fold each entity's lifecycle events into one line: current state, when, how many events
+    Lifecycle {
+        /// Event type prefix shared by the lifecycle, e.g. `workflow_run.`
+        #[arg(long)]
+        event_type_prefix: String,
+
+        /// Suffixes that set state, e.g. `started,completed,failed`
+        #[arg(long, value_delimiter = ',', required = true)]
+        states: Vec<String>,
+
+        /// Only entities currently in this state
+        #[arg(long)]
+        state: Option<String>,
+
+        /// Payload field naming the entity, when one logical entity spans entity ids
+        #[arg(long)]
+        key_field: Option<String>,
+
+        /// Payload fields (dot paths) to print from each entity's state-setting event
+        #[arg(long, value_delimiter = ',')]
+        fields: Vec<String>,
+    },
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    let config = Config::builder().data_dir(&cli.data_dir).build()?;
-    let core = EmbeddedCore::open(config).await?;
+    if let Command::Stores { root, max_depth } = &cli.command {
+        return cmd_stores(root, *max_depth, &cli.format);
+    }
+
+    let data_dir = cli
+        .data_dir
+        .as_deref()
+        .context("--data-dir (or ALLSOURCE_DATA_DIR) is required for this command")?;
+    eprintln!("reading {} (read-only)", data_dir.display());
+    let core = stores::open_read_only(data_dir).await?;
 
     match cli.command {
+        Command::Stores { .. } => {}
         Command::Events {
             entity_id,
             event_type,
@@ -88,6 +156,9 @@ async fn main() -> anyhow::Result<()> {
             since,
             until,
             limit,
+            contains,
+            fields,
+            keys,
         } => {
             let since_dt = since
                 .as_deref()
@@ -114,10 +185,28 @@ async fn main() -> anyhow::Result<()> {
             if let Some(dt) = until_dt {
                 query = query.until(dt);
             }
-            query = query.limit(limit);
+            // The text filter runs here, not in the store, so the query cannot
+            // carry `limit` — it would cut candidates before they are tested.
+            // It still carries SCAN_CAP: without one, `--contains x --limit 10`
+            // materializes every event in the store to print ten.
+            let scan_cap = if contains.is_empty() { limit } else { SCAN_CAP };
+            query = query.limit(scan_cap);
 
-            let events = core.query(query).await?;
-            print_events(&cli.format, &events);
+            let mut events = core.query(query).await?;
+            let scanned = events.len();
+            events.retain(|event| filter::payload_contains(&event.payload, &contains));
+            events.truncate(limit);
+            if !contains.is_empty() && scanned >= SCAN_CAP && events.len() < limit {
+                eprintln!(
+                    "warning: stopped after scanning {SCAN_CAP} events; \
+                     matches beyond that point are not shown"
+                );
+            }
+            print_events(
+                &cli.format,
+                &events,
+                &PayloadShape::from_flags(keys, &fields),
+            );
         }
         Command::Summary => {
             cmd_summary(&core, &cli.format);
@@ -125,17 +214,107 @@ async fn main() -> anyhow::Result<()> {
         Command::Wal { wal_only, limit } => {
             cmd_wal(&core, &cli.format, wal_only, limit);
         }
+        Command::Lifecycle {
+            event_type_prefix,
+            states,
+            state,
+            key_field,
+            fields,
+        } => {
+            let spec = LifecycleSpec {
+                prefix: &event_type_prefix,
+                states: &states,
+                key_field: key_field.as_deref(),
+                fields: &fields,
+            };
+            cmd_lifecycle(&core, &cli.format, &spec, state.as_deref()).await?;
+        }
     }
 
-    core.shutdown().await?;
     Ok(())
 }
 
-fn print_events(format: &OutputFormat, events: &[EventView]) {
+async fn cmd_lifecycle(
+    core: &EmbeddedCore,
+    format: &OutputFormat,
+    spec: &LifecycleSpec<'_>,
+    state: Option<&str>,
+) -> anyhow::Result<()> {
+    let events = core
+        .query(Query::new().event_type_prefix(spec.prefix).limit(SCAN_CAP))
+        .await?;
+    // A lifecycle is a fold, so a truncated scan reports a STALE state rather
+    // than a short list — the later events that would have moved an entity on
+    // are the ones dropped. Say so instead of printing a confident wrong answer.
+    if events.len() >= SCAN_CAP {
+        eprintln!(
+            "warning: folded only the first {SCAN_CAP} events; \
+             states may be stale. Narrow with --event-type-prefix."
+        );
+    }
+    let lines: Vec<_> = lifecycle::fold(&events, spec)
+        .into_iter()
+        .filter(|line| state.is_none_or(|s| line["state"] == s))
+        .collect();
+    print_lifecycle(format, &lines);
+    Ok(())
+}
+
+fn cmd_stores(root: &std::path::Path, max_depth: usize, format: &OutputFormat) -> anyhow::Result<()> {
+    let described = stores::find(root, max_depth)?
+        .iter()
+        .map(|dir| stores::describe(root, dir))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    match format {
+        OutputFormat::Json => {
+            for store in &described {
+                println!("{store}");
+            }
+        }
+        OutputFormat::Table => stores::print_table(&described),
+    }
+    Ok(())
+}
+
+fn print_lifecycle(format: &OutputFormat, lines: &[serde_json::Value]) {
+    match format {
+        OutputFormat::Json => {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+        OutputFormat::Table => {
+            if lines.is_empty() {
+                println!("No entities reached a named state.");
+                return;
+            }
+            let mut table = comfy_table::Table::new();
+            table.set_header(vec!["Key", "State", "State at", "Events", "Fields"]);
+            for line in lines {
+                let text = |key: &str| {
+                    line[key]
+                        .as_str()
+                        .map_or_else(|| line[key].to_string(), str::to_string)
+                };
+                table.add_row(vec![
+                    text("key"),
+                    text("state"),
+                    text("state_at"),
+                    line["events"].to_string(),
+                    line["fields"].to_string(),
+                ]);
+            }
+            println!("{table}");
+            println!("\n{} entit(ies)", lines.len());
+        }
+    }
+}
+
+fn print_events(format: &OutputFormat, events: &[EventView], shape: &PayloadShape<'_>) {
     match format {
         OutputFormat::Json => {
             for event in events {
-                println!("{}", serde_json::to_string(event).unwrap());
+                println!("{}", filter::render(event, shape));
             }
         }
         OutputFormat::Table => {
@@ -152,9 +331,9 @@ fn print_events(format: &OutputFormat, events: &[EventView]) {
                 "Payload (truncated)",
             ]);
             for event in events {
-                let payload_str = event.payload.to_string();
-                let truncated = if payload_str.len() > 80 {
-                    format!("{}…", &payload_str[..80])
+                let payload_str = shape.apply(&event.payload).to_string();
+                let truncated = if payload_str.chars().count() > 80 {
+                    format!("{}…", payload_str.chars().take(80).collect::<String>())
                 } else {
                     payload_str
                 };
@@ -367,7 +546,7 @@ fn cmd_wal(core: &EmbeddedCore, format: &OutputFormat, _wal_only: bool, limit: u
                         let capped: Vec<&_> = events.iter().take(limit).collect();
                         let event_views: Vec<EventView> =
                             capped.iter().map(|e| EventView::from(*e)).collect();
-                        print_events(&OutputFormat::Table, &event_views);
+                        print_events(&OutputFormat::Table, &event_views, &PayloadShape::Full);
                     }
                     Err(e) => {
                         println!("\nWAL recovery failed: {e}");
