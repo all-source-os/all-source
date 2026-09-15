@@ -17,9 +17,10 @@
 //   • PUBLIC surface ONLY. Public hosts: api.all-source.xyz (Control Plane
 //     gateway), allsource-query.fly.dev (Query Service), www.all-source.xyz
 //     (dashboard). NEVER show *.internal hosts or internal-only services.
-//   • Prime is ALWAYS a local stdio binary: `cargo install allsource-prime`.
-//     "Hosted" = the same binary + `--sync-to https://api.all-source.xyz
-//     --api-key <key>`. There is no hosted MCP transport URL.
+//   • Prime runs two ways: the local stdio binary (`cargo install
+//     allsource-prime`, optionally `--sync-to https://api.all-source.xyz
+//     --api-key <key>`), or the hosted MCP URL
+//     https://api.all-source.xyz/api/v1/prime/mcp with a bearer API key.
 //   • crates.io publishes the Rust crates: allsource-prime (the MCP binary),
 //     allsource (Rust SDK), chronis (the `cn` CLI binary). The TS SDK is on
 //     npm as `@allsourcedev/client`; Python / Go SDKs are GitHub-registry only

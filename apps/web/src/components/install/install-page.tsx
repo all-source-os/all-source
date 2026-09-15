@@ -15,9 +15,8 @@ import {
 // integration data module (lib/integrations.ts); this file owns the LAYOUT
 // only. Adding a tool = one object in the data module, no edit here.
 //
-// Order mirrors the brief and the /connect flow: (1) install the binary,
-// (2) HOSTED first — mint a key via /connect, then paste the sync config,
-// (3) LOCAL fallback — same binary, no account, no sync flags.
+// Order: the hosted MCP URL when the client supports one, then (1) install the
+// binary, (2) hosted sync via --sync-to, (3) LOCAL fallback — no account.
 
 // CopyBlock is intentionally a near-copy of the one in connect-client.tsx so
 // the install pages render identically to /connect. Kept local rather than
@@ -74,6 +73,7 @@ export function InstallPage({ integration }: { integration: Integration }) {
   // path sends the reader to /connect, which mints the key and renders the
   // ready-to-paste config there.
   const hostedContent = withApiKey(integration.hosted.content);
+  const remote = integration.remote;
 
   // Tag the /connect deep-link so minted keys are attributable in
   // /dashboard/api-keys (see the deep-link contract in connect-client.tsx).
@@ -95,11 +95,57 @@ export function InstallPage({ integration }: { integration: Integration }) {
         </h1>
         <p className="text-lg text-muted-foreground">{integration.blurb}</p>
         <p className="mt-3 text-sm text-muted-foreground">
-          Prime runs as a local <code className="rounded bg-muted px-1.5 py-0.5 font-mono">allsource-prime</code>{" "}
-          binary over stdio in {integration.name}. The same store serves every MCP client you wire it
-          into — one source of truth, everywhere your agents work.
+          {remote ? (
+            <>
+              Connect {integration.name} to hosted Prime over HTTPS with nothing to install, or run
+              the
+            </>
+          ) : (
+            <>Prime runs as a</>
+          )}{" "}
+          local <code className="rounded bg-muted px-1.5 py-0.5 font-mono">allsource-prime</code>{" "}
+          binary over stdio. The same store serves every MCP client you wire it into — one source of
+          truth, everywhere your agents work.
         </p>
       </BlurFade>
+
+      {remote && (
+        <BlurFade delay={0.12} inView>
+          <section className="mt-12">
+            <h2 className="mb-2 flex items-center gap-2 text-xl font-semibold text-foreground">
+              <Sparkles className="h-5 w-5" />
+              Hosted MCP URL — nothing to install (recommended)
+            </h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Mint an API key, then point {integration.name} at the hosted endpoint. Memory lives in
+              your AllSource tenant and shows up live in the dashboard.
+            </p>
+            <Card className="mb-4 border-primary/30 bg-primary/5">
+              <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-medium text-foreground">Mint your API key</div>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    We don&apos;t show secrets twice — paste it into the config below.
+                  </p>
+                </div>
+                <Link href={connectHref} className={cn(buttonVariants(), "shrink-0 gap-1.5")}>
+                  Get API key
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </CardContent>
+            </Card>
+            <p className="mb-2 text-sm text-muted-foreground">
+              Then paste this, swapping{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono">&lt;YOUR_API_KEY&gt;</code>{" "}
+              for your key:
+            </p>
+            <ConfigSection block={{ ...remote, content: withApiKey(remote.content) }} />
+            <p className="mt-6 text-sm text-muted-foreground">
+              Prefer a local binary? The steps below run Prime on your machine instead.
+            </p>
+          </section>
+        </BlurFade>
+      )}
 
       {/* Step 1 — install the binary (identical for every client) */}
       <BlurFade delay={0.15} inView>
@@ -120,7 +166,7 @@ export function InstallPage({ integration }: { integration: Integration }) {
         <section className="mt-12">
           <h2 className="mb-2 flex items-center gap-2 text-xl font-semibold text-foreground">
             <Sparkles className="h-5 w-5" />
-            2. Hosted memory (recommended)
+            2. Hosted memory{remote ? " via the local binary" : " (recommended)"}
           </h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Mint an API key, then run Prime with{" "}
@@ -147,8 +193,8 @@ export function InstallPage({ integration }: { integration: Integration }) {
 
           <p className="mb-2 text-sm text-muted-foreground">
             Then paste this, swapping{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">&lt;YOUR_API_KEY&gt;</code> for
-            the key you just minted:
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">&lt;YOUR_API_KEY&gt;</code>{" "}
+            for the key you just minted:
           </p>
           <ConfigSection block={{ ...integration.hosted, content: hostedContent }} />
         </section>
@@ -166,8 +212,8 @@ export function InstallPage({ integration }: { integration: Integration }) {
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono">--sync-to</code> /{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono">--api-key</code> flags and
             memory stays on disk at{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">~/.prime/memory</code>. Nothing
-            leaves your machine.
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono">~/.prime/memory</code>.
+            Nothing leaves your machine.
           </p>
           <ConfigSection block={integration.local} />
         </section>
@@ -179,7 +225,8 @@ export function InstallPage({ integration }: { integration: Integration }) {
           <section className="mt-12">
             <h2 className="mb-2 text-xl font-semibold text-foreground">Or let the agent do it</h2>
             <p className="mb-3 text-sm text-muted-foreground">
-              {integration.name} can edit its own config. Paste this prompt and let it wire Prime up:
+              {integration.name} can edit its own config. Paste this prompt and let it wire Prime
+              up:
             </p>
             <CopyBlock content={integration.agentPrompt} kind="bash" />
           </section>
@@ -234,7 +281,10 @@ export function InstallPage({ integration }: { integration: Integration }) {
           <Link href="/install" className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}>
             ← Other integrations
           </Link>
-          <Link href="/docs/prime/mcp" className={cn(buttonVariants({ variant: "ghost" }), "gap-1.5")}>
+          <Link
+            href="/docs/prime/mcp"
+            className={cn(buttonVariants({ variant: "ghost" }), "gap-1.5")}
+          >
             MCP setup docs
             <ExternalLink className="h-3.5 w-3.5" />
           </Link>
