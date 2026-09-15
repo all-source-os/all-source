@@ -46,8 +46,26 @@ pub async fn run(repo: CoreTaskRepository, port: u16, open_browser: bool) -> any
         .route("/partials/tree", get(handlers::partial_tree))
         .with_state(state);
 
-    let addr = format!("0.0.0.0:{port}");
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    // Loopback, not 0.0.0.0. A wildcard bind COEXISTS with an existing bind to
+    // the specific 127.0.0.1:<port> — BSD dispatches each connection to the most
+    // specific listener — so the viewer would start, report success, and never
+    // receive the loopback traffic it just advertised, while the other process
+    // answered instead. Binding the address we print makes a taken port an
+    // immediate EADDRINUSE. It also stops a local task dashboard being served to
+    // the LAN. This collides in practice: the prime-identity service holds
+    // 127.0.0.1:3905, which is also this default port.
+    let addr = format!("127.0.0.1:{port}");
+    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AddrInUse {
+            anyhow::anyhow!(
+                "port {port} on 127.0.0.1 is already in use — another process owns it.\n\
+                 Find it with `lsof -nP -iTCP:{port} -sTCP:LISTEN`, or pick another port \
+                 with `cn serve -p <port>`."
+            )
+        } else {
+            anyhow::Error::new(e).context(format!("cannot bind 127.0.0.1:{port}"))
+        }
+    })?;
 
     println!("chronis web viewer: http://localhost:{port}");
     println!("Press Ctrl+C to stop");

@@ -5,6 +5,7 @@ use crate::domain::task::{Priority, TaskStatus, TaskType};
 #[derive(Parser)]
 #[command(
     name = "cn",
+    version,
     about = "Chronis — the agent-native task CLI",
     long_about = "Chronis — the agent-native task CLI. Event-sourced, TOON-optimized.\n\n\
         Inspired by beads_rust. Every action is an immutable event.\n\
@@ -44,6 +45,15 @@ pub struct Cli {
     /// Output TOON format (Token-Oriented Object Notation) for agents/scripts — ~50% fewer tokens
     #[arg(long, global = true)]
     pub toon: bool,
+
+    /// Seconds a non-interactive command may run before it gives up (0 disables).
+    ///
+    /// A killed caller does not kill `cn`: the process is reparented to init and
+    /// keeps working for an answer nobody will read. On a loaded machine those
+    /// orphans accumulate and compete with the work that made them slow. A
+    /// status query that cannot answer in time is more useful failing.
+    #[arg(long, global = true, default_value_t = 30, env = "CN_TIMEOUT")]
+    pub timeout: u64,
 
     #[command(subcommand)]
     pub command: Command,
