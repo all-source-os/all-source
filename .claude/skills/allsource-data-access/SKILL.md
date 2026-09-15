@@ -62,13 +62,22 @@ allsource-inspect events --data-dir <path> --format json
 allsource-inspect events --data-dir <path> --event-type-prefix "workflow_run." --fields definition_id --format json
 ```
 
-With Python (if pyarrow available):
-```python
-import pyarrow.parquet as pq
-table = pq.read_table("storage/events-20240115-001.parquet")
-df = table.to_pandas()
-print(df[df.entity_id == "workflow:abc-123"])
-```
+**Do not read the Parquet files directly** — not with `pyarrow`, not with
+`duckdb`, not with `cat`/`grep` over the WAL. It looks like it works and gives a
+wrong answer:
+
+- **It misses the WAL tail.** Events that have not been folded into Parquet yet
+  live only in the WAL. A Parquet-only read silently omits the most recent
+  events, which are usually the ones being asked about.
+- **It knows nothing about tenancy or schema.** No tenant scoping, no
+  value-object semantics — an answer that mixes tenants reads exactly like a
+  correct one.
+- **It leaves no tool behind.** The next session repeats the same detour.
+
+An agent did exactly this — duckdb over `storage/**/*.parquet` to find parked
+workflow runs — and the result was wrong for the first two reasons (#284). If
+the commands above cannot answer the question, extend the tool rather than
+going around it.
 
 With the allsource-mcp MCP server (no extra deps):
 ```

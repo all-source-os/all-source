@@ -39,6 +39,62 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::sync::mpsc;
 
 /// High-performance event store with columnar storage
+/// What a read credential is allowed to see, enforced inside the store.
+///
+/// A read key is otherwise all-or-nothing: "let this tool read the store" and
+/// "let this tool read every credential ever issued" are the same grant. That is
+/// not theoretical — auth events carry session tokens whose value IS the
+/// `entity_id`, so a routine query rendered live bearer tokens into an agent's
+/// context (#265). Redacting on write cannot fix it: the token is the lookup
+/// key.
+///
+/// Deliberately **not** `Deserialize`. This must never be settable from a
+/// request body, or a caller widens its own scope by omitting the field.
+///
+/// Allow-list, not deny-list, on purpose: a stream family added later is
+/// excluded until someone names it, so the failure mode of forgetting is a
+/// missing read rather than a leak.
+#[derive(Debug, Clone, Default)]
+pub struct ReadScope {
+    allow_entity_prefixes: Option<Vec<String>>,
+}
+
+impl ReadScope {
+    /// Everything in the tenant — the behaviour of every read before scopes.
+    pub fn unrestricted() -> Self {
+        Self {
+            allow_entity_prefixes: None,
+        }
+    }
+
+    /// Only entities whose id starts with one of `prefixes`.
+    ///
+    /// An empty list denies everything, which is the safe reading of "scoped to
+    /// nothing" and stops an accidentally-empty config granting full access.
+    pub fn allow_entity_prefixes<I, S>(prefixes: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        Self {
+            allow_entity_prefixes: Some(prefixes.into_iter().map(Into::into).collect()),
+        }
+    }
+
+    /// Whether this scope can see `entity_id`.
+    pub fn permits(&self, entity_id: &str) -> bool {
+        match &self.allow_entity_prefixes {
+            None => true,
+            Some(allowed) => allowed.iter().any(|p| entity_id.starts_with(p.as_str())),
+        }
+    }
+
+    /// True when this scope restricts nothing.
+    pub fn is_unrestricted(&self) -> bool {
+        self.allow_entity_prefixes.is_none()
+    }
+}
+
 pub struct EventStore {
     /// In-memory event storage
     events: Arc<RwLock<Vec<Event>>>,
@@ -1851,6 +1907,16 @@ impl EventStore {
             .map(|(events, _)| events)
     }
 
+    /// [`Self::query`] under a read scope the request body cannot widen.
+    pub fn query_scoped(
+        &self,
+        request: &QueryEventsRequest,
+        scope: &ReadScope,
+    ) -> Result<Vec<Event>> {
+        self.query_window_scoped(request, 0, false, scope)
+            .map(|(events, _)| events)
+    }
+
     /// Query events and return only the requested window, plus the total number
     /// of matches the window was taken from.
     ///
@@ -1873,6 +1939,25 @@ impl EventStore {
         request: &QueryEventsRequest,
         offset: usize,
         descending: bool,
+    ) -> Result<(Vec<Event>, usize)> {
+        self.query_window_scoped(request, offset, descending, &ReadScope::unrestricted())
+    }
+
+    /// [`Self::query_window`] under a [`ReadScope`].
+    ///
+    /// Every read path in this store funnels through here, which is the point:
+    /// a scope enforced in one API surface leaves the others open, and the
+    /// surfaces that matter (HTTP, the embedded API, MCP) all end up on this
+    /// method. The scope is a separate argument rather than a field on
+    /// `QueryEventsRequest` **because that type is deserialized from the
+    /// request body** — a caller could then widen its own scope by omitting the
+    /// field.
+    pub fn query_window_scoped(
+        &self,
+        request: &QueryEventsRequest,
+        offset: usize,
+        descending: bool,
+        scope: &ReadScope,
     ) -> Result<(Vec<Event>, usize)> {
         // Reject a payload filter that cannot be applied, BEFORE doing any
         // work. `apply_filters` parses it per event with `if let Ok(..)`, so an
@@ -1973,6 +2058,7 @@ impl EventStore {
         let mut matches: Vec<(usize, &Event)> = offsets
             .iter()
             .filter_map(|&event_offset| events.get(event_offset))
+            .filter(|event| scope.permits(event.entity_id().as_str()))
             .filter(|event| self.apply_filters(event, request))
             .enumerate()
             .collect();
