@@ -30,6 +30,7 @@ use crate::domain::task::{Priority, TaskStatus, TaskType};
           cn ready                 Open + unblocked tasks\n  \
           cn show <id>             Task detail + event timeline\n  \
           cn claim <id>            Claim task (--cascade for epics)\n  \
+          cn release <id>          Release a claimed task back to open (--reason)\n  \
           cn done <id>             Complete task (--reason, --cascade)\n  \
           cn approve <id>          Approve task\n  \
           cn archive [ids..]       Archive tasks (--all-done, --done-before <days>)\n  \
@@ -82,6 +83,9 @@ pub enum Command {
     /// Claim a task
     #[command(visible_alias = "c")]
     Claim(ClaimArgs),
+
+    /// Release a claimed task back to the pool
+    Release(ReleaseArgs),
 
     /// Mark a task as done
     #[command(visible_alias = "d")]
@@ -295,6 +299,16 @@ pub struct ClaimArgs {
     /// Also claim all children (for epics)
     #[arg(long)]
     pub cascade: bool,
+}
+
+#[derive(clap::Args)]
+pub struct ReleaseArgs {
+    /// Task ID
+    pub id: String,
+
+    /// Why the claim is being released (e.g. "session died")
+    #[arg(long)]
+    pub reason: Option<String>,
 }
 
 #[derive(clap::Args)]

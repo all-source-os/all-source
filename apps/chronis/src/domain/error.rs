@@ -23,6 +23,9 @@ pub enum ChronError {
     #[error("task {0} is already done")]
     AlreadyDone(String),
 
+    #[error("task {0} is not claimed; nothing to release")]
+    NotClaimed(String),
+
     #[error(
         "nothing to edit: provide at least one of --title/--description/--append-description/--priority/--type"
     )]

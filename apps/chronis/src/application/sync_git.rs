@@ -22,20 +22,24 @@ use crate::domain::error::ChronError;
 pub enum GitSyncOutcome {
     /// Nothing changed. Not an error — a session that touched no tasks is normal.
     NothingToSync,
-    Synced { branch: String, files: usize },
+    Synced {
+        branch: String,
+        files: usize,
+    },
 }
 
 /// The only paths this command is allowed to stage.
 const OWNED_PREFIX: &str = ".chronis/";
 
 pub fn sync_git(workspace_root: &Path) -> Result<GitSyncOutcome, ChronError> {
-    let repo_root = git_stdout(workspace_root, &["rev-parse", "--show-toplevel"]).map_err(|_| {
-        ChronError::Sync(format!(
-            "{} is not inside a git repository, so there is nothing to sync to.\n\
+    let repo_root =
+        git_stdout(workspace_root, &["rev-parse", "--show-toplevel"]).map_err(|_| {
+            ChronError::Sync(format!(
+                "{} is not inside a git repository, so there is nothing to sync to.\n\
              Use `cn sync` on its own for HTTP sync to a remote Core.",
-            workspace_root.display()
-        ))
-    })?;
+                workspace_root.display()
+            ))
+        })?;
     let repo_root = Path::new(repo_root.trim());
 
     let branch = current_branch(repo_root)?;
@@ -96,7 +100,11 @@ fn current_branch(repo_root: &Path) -> Result<String, ChronError> {
 
 fn changed_owned_files(repo_root: &Path) -> Result<Vec<String>, ChronError> {
     let out = git_stdout(repo_root, &["status", "--porcelain", "--", OWNED_PREFIX])?;
-    Ok(out.lines().filter(|l| !l.trim().is_empty()).map(String::from).collect())
+    Ok(out
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(String::from)
+        .collect())
 }
 
 fn is_ignored(repo_root: &Path) -> bool {
@@ -223,7 +231,10 @@ mod tests {
     fn a_clean_tree_is_a_successful_no_op() {
         let dir = scratch("clean");
         init_repo(&dir);
-        assert_eq!(sync_git(&dir).expect("clean sync"), GitSyncOutcome::NothingToSync);
+        assert_eq!(
+            sync_git(&dir).expect("clean sync"),
+            GitSyncOutcome::NothingToSync
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -305,7 +316,10 @@ mod tests {
         let err = sync_git(&dir).expect_err("an unsyncable state must not read as success");
         let text = format!("{err}");
         assert!(text.contains("excluded by a gitignore rule"), "got: {text}");
-        assert!(text.contains("check-ignore"), "must name how to find it: {text}");
+        assert!(
+            text.contains("check-ignore"),
+            "must name how to find it: {text}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -315,7 +329,11 @@ mod tests {
         let remote = scratch("push-remote");
         git_ok(&remote, &["init", "--bare", "--initial-branch=main"]).expect("bare init");
         init_repo(&dir);
-        git_ok(&dir, &["remote", "add", "origin", &remote.to_string_lossy()]).expect("remote");
+        git_ok(
+            &dir,
+            &["remote", "add", "origin", &remote.to_string_lossy()],
+        )
+        .expect("remote");
         write(&dir, ".chronis/sync/events.jsonl", "{\"id\":1}\n");
 
         let outcome = sync_git(&dir).expect("push succeeds");

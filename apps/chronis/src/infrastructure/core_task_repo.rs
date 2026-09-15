@@ -205,6 +205,38 @@ impl TaskRepository for CoreTaskRepository {
         Ok(())
     }
 
+    async fn release_task(
+        &self,
+        id: &str,
+        agent_id: &str,
+        reason: Option<&str>,
+    ) -> Result<(), ChronError> {
+        let task = self.get_task(id)?;
+        if task.status != TaskStatus::InProgress {
+            return Err(ChronError::NotClaimed(id.to_string()));
+        }
+
+        let mut payload = json!({ "agent_id": agent_id });
+        if let Some(holder) = task.claimed_by {
+            payload["released_from"] = json!(holder);
+        }
+        if let Some(reason) = reason {
+            payload["reason"] = json!(reason);
+        }
+
+        self.backend
+            .ingest(IngestEvent {
+                entity_id: id,
+                event_type: "workflow.released",
+                payload,
+                metadata: None,
+                tenant_id: None,
+            })
+            .await?;
+
+        Ok(())
+    }
+
     async fn complete_task(&self, id: &str, reason: Option<&str>) -> Result<(), ChronError> {
         let task = self.get_task(id)?;
         if task.status == TaskStatus::Done {

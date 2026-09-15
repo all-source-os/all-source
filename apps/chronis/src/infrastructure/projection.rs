@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 /// Projection that aggregates task lifecycle events into queryable task state.
 ///
 /// Handles: task.created, task.updated, task.dependency.added, task.dependency.removed,
-/// workflow.claimed (first-write-wins), workflow.step.completed,
+/// workflow.claimed (first-write-wins), workflow.released, workflow.step.completed,
 /// workflow.approval.requested, workflow.approval.granted
 pub struct TaskProjection {
     states: DashMap<String, Value>,
@@ -133,6 +133,17 @@ impl Projection for TaskProjection {
                         if let Some(agent) = payload.get("agent_id") {
                             state["claimed_by"] = agent.clone();
                         }
+                    }
+                }
+            }
+            "workflow.released" => {
+                if let Some(mut state) = self.states.get_mut(&entity_id) {
+                    // Only an in-progress task goes back to the pool; a
+                    // release replayed after `done` must not reopen it.
+                    let status = state.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                    if status == "in-progress" {
+                        state["status"] = json!("open");
+                        state["claimed_by"] = json!(null);
                     }
                 }
             }

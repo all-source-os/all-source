@@ -7,7 +7,7 @@ use crate::{
         add_dependency, approve_task, archive_task, claim_task, complete_task, create_task,
         edit_task,
         filter_tasks::{self, ArchivedScope, ClaimState, TaskFilter},
-        get_task, list_tasks, migrate_beads, remove_dependency, sync_http,
+        get_task, list_tasks, migrate_beads, release_task, remove_dependency, sync_http,
     },
     domain::{
         error::ChronError,
@@ -351,6 +351,15 @@ pub async fn dispatch(
                 } else {
                     println!("Claimed task {id} (agent: {agent})");
                 }
+            }
+        }
+        Command::Release(args) => {
+            let agent = crate::infrastructure::agent_id();
+            release_task::release_task(repo, &args.id, &agent, args.reason.as_deref()).await?;
+            if toon_mode {
+                print!("{}", toon::action("released", &args.id));
+            } else {
+                println!("Released task {} (by: {agent})", args.id);
             }
         }
         Command::Done(args) => {

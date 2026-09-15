@@ -3,7 +3,11 @@ use std::sync::Arc;
 use allsource_core::embedded::{Config, EmbeddedCore};
 use chronis::{
     application::create_task::{CreateTaskInput, create_task_with_id_gen},
-    domain::{error::ChronError, repository::TaskRepository, task::TaskType},
+    domain::{
+        error::ChronError,
+        repository::TaskRepository,
+        task::{TaskStatus, TaskType},
+    },
     infrastructure::{
         backend::CoreBackend, core_task_repo::CoreTaskRepository, projection::TaskProjection,
     },
@@ -85,6 +89,75 @@ async fn claim_non_open_task_fails() {
 
     let err = repo.claim_task("t-0001", "b").await.unwrap_err();
     assert!(matches!(err, ChronError::InvalidTransition { .. }));
+}
+
+#[tokio::test]
+async fn release_returns_claimed_task_to_pool() {
+    let repo = setup().await;
+    repo.create_task("t-0001", "Task", "p2", &[], TaskType::Task, None, None)
+        .await
+        .unwrap();
+    repo.claim_task("t-0001", "claude:dead0000").await.unwrap();
+
+    repo.release_task("t-0001", "human", Some("session died"))
+        .await
+        .unwrap();
+
+    let task = repo.get_task("t-0001").unwrap();
+    assert_eq!(task.status, TaskStatus::Open);
+    assert_eq!(task.claimed_by, None);
+    assert!(repo.ready_tasks().unwrap().iter().any(|t| t.id == "t-0001"));
+
+    repo.claim_task("t-0001", "claude:new00000").await.unwrap();
+    let task = repo.get_task("t-0001").unwrap();
+    assert_eq!(task.claimed_by.as_deref(), Some("claude:new00000"));
+
+    let detail = repo.get_task_detail("t-0001").await.unwrap();
+    let types: Vec<&str> = detail
+        .timeline
+        .iter()
+        .map(|e| e.event_type.as_str())
+        .collect();
+    assert_eq!(
+        types,
+        [
+            "task.created",
+            "workflow.claimed",
+            "workflow.released",
+            "workflow.claimed"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn release_unclaimed_task_fails() {
+    let repo = setup().await;
+    repo.create_task("t-0001", "Task", "p2", &[], TaskType::Task, None, None)
+        .await
+        .unwrap();
+
+    let err = repo
+        .release_task("t-0001", "human", None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ChronError::NotClaimed(_)));
+}
+
+#[tokio::test]
+async fn release_done_task_fails() {
+    let repo = setup().await;
+    repo.create_task("t-0001", "Task", "p2", &[], TaskType::Task, None, None)
+        .await
+        .unwrap();
+    repo.claim_task("t-0001", "a").await.unwrap();
+    repo.complete_task("t-0001", None).await.unwrap();
+
+    let err = repo
+        .release_task("t-0001", "human", None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ChronError::NotClaimed(_)));
+    assert_eq!(repo.get_task("t-0001").unwrap().status, TaskStatus::Done);
 }
 
 #[tokio::test]

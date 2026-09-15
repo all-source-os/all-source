@@ -66,6 +66,16 @@ pub trait TaskRepository: Send + Sync {
         agent_id: &str,
     ) -> impl std::future::Future<Output = Result<(), ChronError>> + Send;
 
+    /// Hand a claimed task back to the pool. `agent_id` is the releasing
+    /// actor, recorded for provenance; it need not match the claim holder,
+    /// because the holder is usually a session that no longer exists.
+    fn release_task(
+        &self,
+        id: &str,
+        agent_id: &str,
+        reason: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<(), ChronError>> + Send;
+
     fn complete_task(
         &self,
         id: &str,

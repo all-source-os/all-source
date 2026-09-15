@@ -394,6 +394,44 @@ pub fn render_markdown_html(text: &str) -> String {
     html
 }
 
+fn inline_md(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 32);
+    let mut rest = text;
+
+    while !rest.is_empty() {
+        if let Some(start) = rest.find("**") {
+            out.push_str(&rest[..start]);
+            let after = &rest[start + 2..];
+            if let Some(end) = after.find("**") {
+                out.push_str("<strong>");
+                out.push_str(&after[..end]);
+                out.push_str("</strong>");
+                rest = &after[end + 2..];
+            } else {
+                out.push_str(&rest[start..]);
+                break;
+            }
+        } else if let Some(start) = rest.find('`') {
+            out.push_str(&rest[..start]);
+            let after = &rest[start + 1..];
+            if let Some(end) = after.find('`') {
+                out.push_str("<code>");
+                out.push_str(&after[..end]);
+                out.push_str("</code>");
+                rest = &after[end + 1..];
+            } else {
+                out.push_str(&rest[start..]);
+                break;
+            }
+        } else {
+            out.push_str(rest);
+            break;
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tree_tests {
     use super::*;
@@ -474,42 +512,4 @@ mod tree_tests {
         assert!(html.contains("tree-leaf"));
         assert!(html.contains("t-solo"));
     }
-}
-
-fn inline_md(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 32);
-    let mut rest = text;
-
-    while !rest.is_empty() {
-        if let Some(start) = rest.find("**") {
-            out.push_str(&rest[..start]);
-            let after = &rest[start + 2..];
-            if let Some(end) = after.find("**") {
-                out.push_str("<strong>");
-                out.push_str(&after[..end]);
-                out.push_str("</strong>");
-                rest = &after[end + 2..];
-            } else {
-                out.push_str(&rest[start..]);
-                break;
-            }
-        } else if let Some(start) = rest.find('`') {
-            out.push_str(&rest[..start]);
-            let after = &rest[start + 1..];
-            if let Some(end) = after.find('`') {
-                out.push_str("<code>");
-                out.push_str(&after[..end]);
-                out.push_str("</code>");
-                rest = &after[end + 1..];
-            } else {
-                out.push_str(&rest[start..]);
-                break;
-            }
-        } else {
-            out.push_str(rest);
-            break;
-        }
-    }
-
-    out
 }
