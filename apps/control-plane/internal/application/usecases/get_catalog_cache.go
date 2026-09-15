@@ -54,7 +54,13 @@ func (uc *GetCatalogUseCase) loadSnapshot(ctx context.Context, now time.Time) {
 
 // A changed store or variant map invalidates old prices, even before expiry.
 func (uc *GetCatalogUseCase) fingerprint() string {
-	mapJSON, _ := json.Marshal(uc.ls.VariantMap()) // encoding/json sorts map keys
+	mapJSON, err := json.Marshal(uc.ls.VariantMap()) // encoding/json sorts map keys
+	if err != nil {
+		// Falling back to a constant would collapse every variant map onto one
+		// fingerprint and serve a stale catalog after a store change. %v also
+		// sorts map keys, so the fallback stays deterministic.
+		mapJSON = []byte(fmt.Sprintf("%v", uc.ls.VariantMap()))
+	}
 	sum := sha256.Sum256(append([]byte(uc.ls.GetStoreID()+":"), mapJSON...))
 	return fmt.Sprintf("%x", sum)
 }
@@ -100,11 +106,10 @@ func (uc *GetCatalogUseCase) refreshCatalog(now time.Time) {
 		uc.cachedAt = now
 		uc.complete = complete
 	}
-	if complete {
+	switch {
+	case complete, uc.cached != nil && uc.complete:
 		uc.nextTry = now.Add(catalogTTL)
-	} else if uc.cached != nil && uc.complete {
-		uc.nextTry = now.Add(catalogTTL)
-	} else {
+	default:
 		uc.nextTry = now.Add(catalogRetryDelay)
 	}
 	servingLastGood := uc.cached != nil && uc.complete
