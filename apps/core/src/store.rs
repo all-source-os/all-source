@@ -196,6 +196,11 @@ pub struct EventStore {
     /// the inode the owner is still appending to — issue #201) and rejects
     /// all writes with `AllSourceError::ReadOnly`.
     read_only: bool,
+
+    /// Held shared from an event's WAL append until it is in the Parquet
+    /// batch, and exclusively while `checkpoint` seals the WAL. Without it an
+    /// event can sit in a sealed segment yet miss the flush that retires it.
+    durability_gate: RwLock<()>,
 }
 
 /// A task queued for async webhook delivery
@@ -372,6 +377,7 @@ impl EventStore {
             },
             checkpoint_interval_secs: config.checkpoint_interval_secs,
             read_only: config.read_only,
+            durability_gate: RwLock::new(()),
         };
 
         if config.read_only {
@@ -491,7 +497,14 @@ impl EventStore {
                             drop(events);
                             drop(parquet);
 
-                            if buffered > 0 {
+                            if buffered < wal_new {
+                                tracing::error!(
+                                    "Buffered {} of {} recovered WAL events; leaving the WAL \
+                                     in place so none are lost",
+                                    buffered,
+                                    wal_new
+                                );
+                            } else if buffered > 0 {
                                 if let Err(e) = store.flush_storage() {
                                     tracing::error!("Failed to checkpoint to Parquet: {}", e);
                                 } else if let Err(e) = wal.truncate() {
@@ -568,6 +581,7 @@ impl EventStore {
         self.validate_event(event)?;
 
         let entity_id = event.entity_id_str().to_string();
+        let _durable = self.durability_gate.read();
 
         // Atomic version check + append: hold the DashMap entry lock
         // to prevent TOCTOU races between check and write.
@@ -716,6 +730,8 @@ impl EventStore {
             return Err(e);
         }
 
+        let _durable = self.durability_gate.read();
+
         // Write to WAL FIRST for durability (v0.2 feature)
         // This ensures event is persisted before processing
         if let Some(ref wal) = self.wal
@@ -841,6 +857,8 @@ impl EventStore {
         for event in &batch {
             self.validate_event(event)?;
         }
+
+        let _durable = self.durability_gate.read();
 
         // Phase 2: Write all events to WAL (before write lock, for durability)
         if let Some(ref wal) = self.wal {
@@ -1367,13 +1385,20 @@ impl EventStore {
             return Ok(());
         };
 
-        // Flush before recording the truncation target — both
-        // because flush() may rotate the WAL underneath us and
-        // because we want the truncate point to reflect what's
-        // actually durable on disk.
+        if self.read_only {
+            return Ok(());
+        }
+
+        // Seal under the gate so every event in a sealed segment has already
+        // reached the Parquet batch this flush drains. Events that arrive
+        // after the seal land in the active segment, which is kept.
+        let active = {
+            let _sealing = self.durability_gate.write();
+            wal.seal()?
+        };
         self.flush_storage()?;
-        wal.truncate()?;
-        tracing::debug!("✅ Checkpoint complete: Parquet flushed, WAL truncated");
+        wal.remove_sealed(&active)?;
+        tracing::debug!("✅ Checkpoint complete: Parquet flushed, sealed WAL segments retired");
 
         // Recompute on-disk storage size now that Parquet is flushed and the WAL
         // is truncated — the gauge reflects the post-checkpoint footprint.

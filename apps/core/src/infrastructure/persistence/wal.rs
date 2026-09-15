@@ -6,13 +6,23 @@ use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-/// Write-Ahead Log for durability and crash recovery
+/// Subdirectory of the WAL dir that holds retired segments containing lines
+/// recovery could not read. Nothing lists, replays, or deletes it.
+pub const QUARANTINE_DIR: &str = "quarantine";
+
+/// Write-Ahead Log for durability and crash recovery.
+///
+/// Invariant: a segment is deleted only when every line in it is durable
+/// elsewhere. A segment holding a line recovery could not parse or verify is
+/// moved to [`QUARANTINE_DIR`] instead, so a format this binary cannot read is
+/// never destroyed by it (#287).
 pub struct WriteAheadLog {
     /// Directory where WAL files are stored
     wal_dir: PathBuf,
@@ -33,6 +43,9 @@ pub struct WriteAheadLog {
     /// publishes the entry so the WAL shipper can stream it to followers.
     /// Wrapped in Mutex so it can be set at runtime (e.g. during follower → leader promotion).
     replication_tx: parking_lot::Mutex<Option<tokio::sync::broadcast::Sender<WALEntry>>>,
+
+    /// Segments in which `recover()` met a line it could not read.
+    unreadable_segments: parking_lot::Mutex<HashSet<PathBuf>>,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +130,16 @@ impl WALEntry {
     }
 }
 
+fn ends_with_newline(file: &mut File) -> Result<bool> {
+    let io_err = |e: std::io::Error| {
+        AllSourceError::StorageError(format!("Failed to read WAL file tail: {e}"))
+    };
+    file.seek(SeekFrom::End(-1)).map_err(io_err)?;
+    let mut last = [0u8; 1];
+    file.read_exact(&mut last).map_err(io_err)?;
+    Ok(last[0] == b'\n')
+}
+
 /// Represents an active WAL file
 struct WALFile {
     path: PathBuf,
@@ -127,13 +150,24 @@ struct WALFile {
 
 impl WALFile {
     fn new(path: PathBuf) -> Result<Self> {
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create(true)
+            .read(true)
             .append(true)
             .open(&path)
             .map_err(|e| AllSourceError::StorageError(format!("Failed to open WAL file: {e}")))?;
 
-        let size = file.metadata().map_or(0, |m| m.len() as usize);
+        let mut size = file.metadata().map_or(0, |m| m.len() as usize);
+
+        // A crash can leave a torn final line with no newline. Appending
+        // straight after it would fuse the next entry onto the torn bytes and
+        // make that entry unreadable too.
+        if size > 0 && !ends_with_newline(&mut file)? {
+            file.write_all(b"\n").map_err(|e| {
+                AllSourceError::StorageError(format!("Failed to terminate torn WAL line: {e}"))
+            })?;
+            size += 1;
+        }
 
         Ok(Self {
             path,
@@ -200,6 +234,7 @@ impl WriteAheadLog {
             stats: Arc::new(RwLock::new(WALStats::default())),
             sequence: Arc::new(RwLock::new(0)),
             replication_tx: parking_lot::Mutex::new(None),
+            unreadable_segments: parking_lot::Mutex::new(HashSet::new()),
         })
     }
 
@@ -269,33 +304,91 @@ impl WriteAheadLog {
         stats.current_file_size = 0;
         drop(stats);
 
-        // Clean up old WAL files
-        self.cleanup_old_files()?;
+        self.warn_if_segments_accumulate()?;
 
         Ok(())
     }
 
-    /// Clean up old WAL files beyond the retention limit
-    #[cfg_attr(feature = "hotpath", hotpath::measure)]
-    fn cleanup_old_files(&self) -> Result<()> {
-        let mut wal_files = self.list_wal_files()?;
-        wal_files.sort();
+    /// Rotation never deletes: a segment past `max_wal_files` may hold events
+    /// no checkpoint has flushed yet. Only a checkpoint retires segments.
+    fn warn_if_segments_accumulate(&self) -> Result<()> {
+        let count = self.list_wal_files()?.len();
+        if count > self.config.max_wal_files {
+            tracing::warn!(
+                "WAL holds {} segments (max_wal_files = {}); checkpoints are not keeping up, \
+                 so the WAL keeps growing rather than dropping unflushed events",
+                count,
+                self.config.max_wal_files
+            );
+        }
+        Ok(())
+    }
 
-        if wal_files.len() > self.config.max_wal_files {
-            let to_remove = wal_files.len() - self.config.max_wal_files;
-            let files_to_delete = &wal_files[..to_remove];
-
-            for file_path in files_to_delete {
-                if let Err(e) = fs::remove_file(file_path) {
-                    tracing::warn!("Failed to remove old WAL file {:?}: {}", file_path, e);
-                } else {
-                    tracing::debug!("🗑️ Removed old WAL file: {:?}", file_path);
-                    let mut stats = self.stats.write();
-                    stats.files_cleaned += 1;
-                }
-            }
+    /// Delete a segment, or move it to quarantine if recovery could not read
+    /// every line in it.
+    fn retire_segment(&self, path: &Path) -> Result<()> {
+        if !self.unreadable_segments.lock().remove(path) {
+            fs::remove_file(path).map_err(|e| {
+                AllSourceError::StorageError(format!("Failed to remove WAL file: {e}"))
+            })?;
+            tracing::debug!("Removed WAL file: {:?}", path);
+            return Ok(());
         }
 
+        let quarantine = self.wal_dir.join(QUARANTINE_DIR);
+        fs::create_dir_all(&quarantine).map_err(|e| {
+            AllSourceError::StorageError(format!("Failed to create WAL quarantine: {e}"))
+        })?;
+        let name = path.file_name().map_or_else(
+            || "wal-unknown.log".into(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let target = quarantine.join(format!(
+            "{}-{name}",
+            Utc::now().format("%Y%m%dT%H%M%S%.6fZ")
+        ));
+        fs::rename(path, &target).map_err(|e| {
+            AllSourceError::StorageError(format!("Failed to quarantine WAL file: {e}"))
+        })?;
+        tracing::warn!(
+            "WAL segment {:?} held lines this binary could not read; kept at {:?} instead of \
+             deleting it",
+            path,
+            target
+        );
+        Ok(())
+    }
+
+    /// Start a new segment so every entry appended so far sits in a segment
+    /// older than the returned one. Pair with [`Self::remove_sealed`].
+    ///
+    /// The caller must stop appends to durable storage for the duration of
+    /// this call; otherwise an entry can land in the sealed segment after the
+    /// checkpoint's flush has already run.
+    pub fn seal(&self) -> Result<PathBuf> {
+        let seq = *self.sequence.read();
+        let new_path = Self::generate_wal_filename(&self.wal_dir, seq);
+
+        let mut current = self.current_file.write();
+        current.flush()?;
+        if current.path != new_path {
+            *current = WALFile::new(new_path.clone())?;
+            self.stats.write().current_file_size = current.size;
+        }
+        Ok(new_path)
+    }
+
+    /// Retire every segment older than `active`, the path [`Self::seal`]
+    /// returned. Segments at or after it are kept.
+    pub fn remove_sealed(&self, active: &Path) -> Result<()> {
+        let Some(active_name) = active.file_name() else {
+            return Ok(());
+        };
+        for path in self.list_wal_files()? {
+            if path.file_name().is_some_and(|name| name < active_name) {
+                self.retire_segment(&path)?;
+            }
+        }
         Ok(())
     }
 
@@ -343,6 +436,7 @@ impl WriteAheadLog {
             })?;
 
             let reader = BufReader::new(file);
+            let corrupted_before = corrupted_entries;
 
             for (line_num, line) in reader.lines().enumerate() {
                 let line = match line {
@@ -389,6 +483,12 @@ impl WriteAheadLog {
                         corrupted_entries += 1;
                     }
                 }
+            }
+
+            if corrupted_entries > corrupted_before {
+                self.unreadable_segments
+                    .lock()
+                    .insert(wal_file_path.clone());
             }
         }
 
@@ -453,13 +553,9 @@ impl WriteAheadLog {
         let mut current = self.current_file.write();
         current.flush()?;
 
-        // Remove all WAL files
         let wal_files = self.list_wal_files()?;
         for file_path in wal_files {
-            fs::remove_file(&file_path).map_err(|e| {
-                AllSourceError::StorageError(format!("Failed to remove WAL file: {e}"))
-            })?;
-            tracing::debug!("Removed WAL file: {:?}", file_path);
+            self.retire_segment(&file_path)?;
         }
 
         // Create new WAL file
@@ -488,8 +584,8 @@ impl WriteAheadLog {
     /// *current* on-disk footprint — what we want to report as storage size and as
     /// `allsource_wal_segments_total`.
     ///
-    /// Cheap (one `statx` per segment; `max_wal_files` caps the count, default 10),
-    /// so it's safe to call on the checkpoint cadence. Errors reading the directory
+    /// Cheap (one `statx` per segment; each checkpoint retires sealed segments,
+    /// so the count stays small), so it's safe to call on the checkpoint cadence. Errors reading the directory
     /// surface as `Err`; a per-file metadata error skips that file rather than
     /// aborting the whole tally.
     pub fn on_disk_stats(&self) -> Result<(u64, usize)> {

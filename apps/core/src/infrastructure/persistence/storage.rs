@@ -370,32 +370,19 @@ impl ParquetStorage {
         let batch_count = events_to_write.len();
         let start = Instant::now();
 
-        let record_batch = self.events_to_record_batch(&events_to_write)?;
-
-        let now = chrono::Utc::now();
-        let partition_dir = partition_path_for_tenant(&self.storage_dir, tenant_id, now)?;
-        fs::create_dir_all(&partition_dir).map_err(|e| {
-            AllSourceError::StorageError(format!(
-                "Failed to create tenant partition {}: {e}",
-                partition_dir.display()
-            ))
-        })?;
-        let file_stem = format!(
-            "events-{}-{}",
-            now.format("%Y%m%d-%H%M%S%3f"),
-            uuid::Uuid::new_v4().as_simple()
-        );
-
-        tracing::info!(
-            "Flushing {} events for tenant={} to {}/{}.parquet",
-            batch_count,
-            tenant_id,
-            partition_dir.display(),
-            file_stem
-        );
-
-        let (file_path, file_metadata) =
-            self.write_record_batch_atomic(&partition_dir, &file_stem, &record_batch)?;
+        let written = self.write_tenant_events(tenant_id, &events_to_write);
+        let (file_path, file_metadata) = match written {
+            Ok(written) => written,
+            Err(e) => {
+                // The WAL may be retired by the next successful checkpoint, so
+                // dropping these here would make the failure permanent (#287).
+                let mut batches = self.current_batches.lock().unwrap();
+                let pending = batches.entry(tenant_id.to_string()).or_default();
+                let arrived_during_write = std::mem::replace(pending, events_to_write);
+                pending.extend(arrived_during_write);
+                return Err(e);
+            }
+        };
 
         let duration = start.elapsed();
 
@@ -426,6 +413,38 @@ impl ParquetStorage {
         );
 
         Ok(())
+    }
+
+    fn write_tenant_events(
+        &self,
+        tenant_id: &str,
+        events: &[Event],
+    ) -> Result<(PathBuf, parquet::file::metadata::ParquetMetaData)> {
+        let record_batch = self.events_to_record_batch(events)?;
+
+        let now = chrono::Utc::now();
+        let partition_dir = partition_path_for_tenant(&self.storage_dir, tenant_id, now)?;
+        fs::create_dir_all(&partition_dir).map_err(|e| {
+            AllSourceError::StorageError(format!(
+                "Failed to create tenant partition {}: {e}",
+                partition_dir.display()
+            ))
+        })?;
+        let file_stem = format!(
+            "events-{}-{}",
+            now.format("%Y%m%d-%H%M%S%3f"),
+            uuid::Uuid::new_v4().as_simple()
+        );
+
+        tracing::info!(
+            "Flushing {} events for tenant={} to {}/{}.parquet",
+            events.len(),
+            tenant_id,
+            partition_dir.display(),
+            file_stem
+        );
+
+        self.write_record_batch_atomic(&partition_dir, &file_stem, &record_batch)
     }
 
     /// Write a single record batch atomically to
