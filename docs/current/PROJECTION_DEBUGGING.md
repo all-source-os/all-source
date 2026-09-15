@@ -20,10 +20,10 @@ Events (immutable) ──► Projection (derived, rebuildable)
 
 ```bash
 # Step 1: Query raw events for the entity
-allsource-inspect --data-dir <path> --entity-id "workflow:abc-123" --format json
+allsource-inspect events --data-dir <path> --limit 100000 --entity-id "workflow:abc-123" --format json
 
 # Step 2: Check event types
-allsource-inspect --data-dir <path> --entity-id "workflow:abc-123" --format json \
+allsource-inspect events --data-dir <path> --limit 100000 --entity-id "workflow:abc-123" --format json \
   | jq '.event_type' | sort | uniq -c
 
 # Step 3: Compare with projection state
@@ -45,7 +45,7 @@ allsource-inspect --data-dir <path> --entity-id "workflow:abc-123" --format json
 
 ```bash
 # Check latest event timestamp
-allsource-inspect --data-dir <path> --entity-id "<entity>" --format json \
+allsource-inspect events --data-dir <path> --limit 100000 --entity-id "<entity>" --format json \
   | jq -r '.timestamp' | tail -1
 
 # Check durability status
@@ -84,11 +84,11 @@ allsource-inspect --data-dir <path> --entity-id "<entity>" --format json \
 
 ```bash
 # Check for duplicate event IDs
-allsource-inspect --data-dir <path> --entity-id "<entity>" --format json \
+allsource-inspect events --data-dir <path> --limit 100000 --entity-id "<entity>" --format json \
   | jq -r '.id' | sort | uniq -d
 
 # Check for duplicate timestamps + event types
-allsource-inspect --data-dir <path> --entity-id "<entity>" --format json \
+allsource-inspect events --data-dir <path> --limit 100000 --entity-id "<entity>" --format json \
   | jq -r '[.timestamp, .event_type] | join(" ")' | sort | uniq -d
 ```
 
@@ -104,9 +104,9 @@ allsource-inspect --data-dir <path> --entity-id "<entity>" --format json \
 
 ```bash
 # 1. Find all run events
-allsource-inspect \
-  --data-dir ~/Library/Application\ Support/Longhand/allsource \
-  --event-type "workflow_run" \
+allsource-inspect events \
+  --data-dir <app-data-dir>/allsource \
+  --event-type-prefix "workflow_run." \
   --format json
 
 # Found 5 workflow_run.started events, but entity_id was
@@ -139,10 +139,12 @@ After fixing a projection issue:
 
 | Need | Tool |
 |------|------|
-| See all events for an entity | `query_events` / `allsource-inspect --entity-id` |
+| Find which data directory to read | `allsource-inspect stores --root <dir>` |
+| See all events for an entity | `query_events` / `allsource-inspect events --entity-id` |
 | See event type distribution | `quick_stats` / `allsource-inspect summary` |
 | Compare projection vs events | `get_snapshot` + `reconstruct_state` |
 | Trace entity lifecycle | `event_timeline` / `explain_entity` |
+| Current state of many entities at once | `allsource-inspect lifecycle` |
 | Find changes in time window | `analyze_changes` |
 | Check store health | `quick_stats` (durability section) |
-| Read uncommitted WAL events | `allsource-inspect --wal-only` |
+| Read uncommitted WAL events | `allsource-inspect wal` |

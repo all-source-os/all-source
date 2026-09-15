@@ -136,18 +136,32 @@ System metadata does not use Parquet — it's WAL-only with in-memory replay on 
 
 ### Using allsource-inspect CLI
 
-```bash
-# All events for an entity
-allsource-inspect --data-dir <path> --entity-id "workflow:abc-123"
+Every command opens the store **read-only**: the WAL is replayed for reads and
+never truncated, so it is safe beside a running application.
 
-# Events by type prefix
-allsource-inspect --data-dir <path> --event-type "workflow_run"
+```bash
+# Which data directories exist under an app's support dir (opens none of them)
+allsource-inspect stores --root <app-support-dir>
+
+# All events for an entity
+allsource-inspect events --data-dir <path> --entity-id "workflow:abc-123"
+
+# Events by type prefix, payload narrowed to two fields
+allsource-inspect events --data-dir <path> --event-type-prefix "workflow_run." \
+  --fields definition_id,step.index --format json
+
+# Events whose payload mentions an id
+allsource-inspect events --data-dir <path> --contains "abc-123" --keys --format json
+
+# Current state of every run: newest state-setting event per entity
+allsource-inspect lifecycle --data-dir <path> --event-type-prefix "workflow_run." \
+  --states started,completed,failed --state started --format json
 
 # Storage summary
 allsource-inspect summary --data-dir <path>
 
-# WAL only (uncommitted events)
-allsource-inspect --data-dir <path> --wal-only
+# Events still in the WAL (not yet flushed to Parquet)
+allsource-inspect wal --data-dir <path> --format json
 ```
 
 ### Using allsource-mcp (Claude Code)
