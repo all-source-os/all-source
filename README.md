@@ -185,6 +185,29 @@ Alice's 2-hop subgraph: 3 nodes, 3 edges
 
 See [zer0dex comparison](docs/articles/zer0dex-comparison.md) for how Prime's auto-generated compressed index beats manual markdown indexes on cross-domain recall.
 
+### mammoth — Prime as a one-command plugin
+
+Prime and `chronis` packaged for coding agents, so an agent gets durable memory
+without you wiring an MCP server by hand:
+
+```
+/plugin marketplace add all-source-os/all-source
+/plugin install mammoth
+```
+
+Local-first and no account. Cross-machine sync is opt-in when you want it.
+
+Recall is hybrid: in-process embeddings, plus the graph, plus recency. The
+benchmark lives in [`tooling/mammoth-bench/`](tooling/mammoth-bench/) and scores
+recall against a keyword search-and-grep baseline on deliberately reworded
+queries — hit@5 of 0.90 against 0.83, roughly 3ms. The edge narrows from +0.17
+to +0.07 as the corpus grows, which is published here rather than left out.
+
+**It composes with [caveman](https://github.com/JuliusBrussee/caveman) rather
+than competing with it.** caveman compresses what your agent says; mammoth
+persists what it learned. Running both gives you fewer tokens and a memory that
+survives the session.
+
 ---
 
 ## Project Status & Roadmap (v0.17.3)

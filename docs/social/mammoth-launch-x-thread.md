@@ -53,7 +53,7 @@ curl -fsSL https://.../plugin/mammoth/install.sh | bash
 ```
 or in Claude Code:
 ```
-/plugin marketplace add all-source-os/chronos
+/plugin marketplace add all-source-os/all-source
 /plugin install mammoth
 ```
 free, local, no account. cross-machine sync when you want it.
@@ -64,7 +64,7 @@ your agent says; mammoth persists what it learned. run both: fewer tokens AND a
 memory that survives.
 
 repo + benchmark + docs 👇
-[LINK: github.com/all-source-os/chronos + blog post]
+[LINK: github.com/all-source-os/all-source + blog post]
 
 ---
 
@@ -93,7 +93,7 @@ mammoth persists what it learned.
 
 Plugin layer is MIT; engines (allsource-prime/core) are Apache-2.0, chronis MIT.
 
-Repo: github.com/all-source-os/chronos
+Repo: github.com/all-source-os/all-source
 Benchmark: tooling/mammoth-bench/
 
 ---
