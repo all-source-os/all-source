@@ -4,10 +4,8 @@ package internal
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/allsource/control-plane/internal/application/usecases"
@@ -50,21 +48,6 @@ func buildVariantTierMap() usecases.VariantTierMap {
 		reverseMap[variantID] = tier // variant ID → bare tier (only authority)
 	}
 	return reverseMap
-}
-
-// extractionTokensPerUnit reads EXTRACTION_OVERAGE_TOKENS_PER_UNIT. An unset,
-// malformed or non-positive value returns 0, which disables extraction billing.
-func extractionTokensPerUnit() int64 {
-	raw := os.Getenv("EXTRACTION_OVERAGE_TOKENS_PER_UNIT")
-	if raw == "" {
-		return 0
-	}
-	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-	if err != nil || n <= 0 {
-		log.Print("EXTRACTION_OVERAGE_TOKENS_PER_UNIT is not a positive integer; extraction overage billing stays off")
-		return 0
-	}
-	return n
 }
 
 // Container holds all application dependencies
@@ -474,13 +457,6 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 		syncExtractionUsageUC = billing.NewSyncExtractionUsageUseCase(tenantRepo, auditRepo, cfg.CoreClient)
 	}
 
-	// Extraction overage billing. EXTRACTION_OVERAGE_TOKENS_PER_UNIT is the
-	// billing owner's rate (#292); unset, nothing is reported.
-	var reportExtractionUC *billing.ReportExtractionOverageUseCase
-	if tokensPerUnit := extractionTokensPerUnit(); cfg.LSClient != nil && tokensPerUnit > 0 {
-		reportExtractionUC = billing.NewReportExtractionOverageUseCase(tenantRepo, auditRepo, cfg.LSClient, tokensPerUnit)
-	}
-
 	// Initialize use cases — Billing (events_used backfill, t-dece).
 	// Reconciles the metered events_used counter from the real event count in
 	// Core for tenants whose data was ingested outside the metered QS path.
@@ -568,9 +544,6 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 	}
 	if syncEventsUsageUC != nil {
 		scheduler.SetSyncEventsUsageUseCase(syncEventsUsageUC)
-	}
-	if reportExtractionUC != nil {
-		scheduler.SetReportExtractionOverageUseCase(reportExtractionUC)
 	}
 	if syncExtractionUsageUC != nil {
 		scheduler.SetSyncExtractionUsageUseCase(syncExtractionUsageUC)

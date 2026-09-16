@@ -23,7 +23,8 @@ const eventExtractionUsage = "prime.extraction.usage"
 // the durable event log (per CLAUDE.md, event-shaped usage metering routes
 // through Core, not an in-memory counter).
 //
-// It records only; ReportExtractionOverageUseCase turns the meter into a charge.
+// It records only. Extraction is sold as a fixed add-on that raises
+// extraction_tokens_quota, so this meter gates and displays but never bills.
 type SyncExtractionUsageUseCase struct {
 	tenantRepo repositories.TenantRepository
 	auditRepo  repositories.AuditRepository

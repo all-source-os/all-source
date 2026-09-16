@@ -141,10 +141,35 @@ allowance between reconciliations:
    checkout (`4242 4242 4242 4242`) via `/pricing` fired the webhook, signature
    verified, tenant metadata got the right tier + `billing_period`. **Still
    pending: re-run once on LIVE creds** after the TEST→LIVE swap (#3).
-2. ~~**Set up the `sales@all-source.xyz` inbox.**~~ **DONE (2026-06-28)** — `sales@all-source.xyz`
-   forwards to admin. The `/pricing` Enterprise CTA + dashboard billing page both
-   mailto this address (`config.ts:255`, `billing/page.tsx:102`), so Enterprise
-   leads now land in the admin inbox.
+2. **Set up the `sales@all-source.xyz` inbox.** **STILL OPEN — the 2026-06-28
+   "DONE" was wrong.** Whatever forwarding was configured, the domain has no MX
+   record, so nothing can be delivered to it. Verified 2026-09-16 against the
+   authoritative nameserver:
+
+   ```
+   $ dig ANY all-source.xyz @ns1.unstoppabledomains.com +noall +answer
+   all-source.xyz.  3600  IN  A  66.241.125.155
+   ```
+
+   One A record, no MX, no TXT. With no MX a sender falls back to the A record
+   under RFC 5321, which is the Fly proxy and does not speak SMTP on port 25, so
+   mail to `sales@` bounces at the sending server. **Every Enterprise lead since
+   the pricing relaunch has been dropped**, which is what this item was created
+   to prevent.
+
+   Two ways to close it, both needing access this repo does not have:
+
+   - **Add MX at Unstoppable Domains** pointing at a mail provider, then create
+     the `sales@` alias there. Restores the existing `mailto:` CTA with no code
+     change.
+   - **Stop depending on a mailbox.** Point the Enterprise CTA at a form that
+     posts to the Control Plane, which already has inbound email plumbing
+     (`internal/adapters/clients/emailprovider/resend`). More work, but it makes
+     lead capture a thing with tests rather than a DNS record.
+
+   The CTA is `mailto:` in two places today: `apps/web/src/lib/config.ts` and
+   `apps/web/src/app/dashboard/billing/page.tsx`. Until one of the routes above
+   lands, treat the Enterprise CTA as non-functional.
 3. **Swap TEST → LIVE LemonSqueezy.** **SUBSTANTIALLY DONE (2026-06-28):**
    - [x] Live `LEMON_SQUEEZY_API_KEY` set on `allsource-control-plane`.
    - [x] **Variant map UPDATED to live ids (2026-07-10).** ⚠️ Correction: LS test
@@ -207,28 +232,27 @@ allowance between reconciliations:
 > unbounded "reconcile everything" is the single most dangerous surface, which is
 > exactly why the count-echo + `max_tenants` cap exist.
 
-## Hosted extraction overage (#292)
+## Hosted extraction is a fixed add-on, never metered into money (#292)
 
-Hound extraction tokens used past a tier's `extraction_tokens_quota` are billed
-by the Control Plane after each `extraction_usage_sync` (every 5 min). **They are
-reported to the same LemonSqueezy subscription item as event overage**, so tokens
-are converted into billed units first.
+Hound extraction LLM tokens are metered per tenant
+(`quotas.extraction_tokens_used`, reconciled from `prime.extraction.usage` events
+every 5 min) and the meter does two jobs only: it **gates** — the hard quota check
+refuses extraction past `extraction_tokens_quota` — and it **displays**, on
+`/dashboard/billing` beside events and queries.
 
-| Setting (Control Plane) | Effect |
-|---|---|
-| `EXTRACTION_OVERAGE_TOKENS_PER_UNIT` unset, `0` or malformed | nothing is reported — the default until the rate is decided |
-| `EXTRACTION_OVERAGE_TOKENS_PER_UNIT=1000` | every completed 1,000 overage tokens reports 1 unit, priced at that item's LemonSqueezy unit price |
+**Extraction usage is never reported to LemonSqueezy.** A tenant that wants more
+extraction buys a flat add-on that raises `extraction_tokens_quota`; the price is
+the add-on, not the tokens. A metered reporter was built and reverted once the
+model was settled, so if you find per-token reporting in the history, that is why
+it is not in the tree.
 
-- Only tenants with overage enabled, a `subscription_item_id`, and a finite
-  allowance are billed; `-1` (unlimited) never is.
-- Reported units are recorded per billing period in
-  `metadata.overage.last_reported_extraction_units` /
-  `extraction_reported_period`, so a restart or re-run does not bill twice and a
-  new period starts from zero.
-- To turn it on: `fly secrets set EXTRACTION_OVERAGE_TOKENS_PER_UNIT=<n> --app
-  allsource-control-plane`. Watch for `billing.extraction.overage_reported` audit
-  events.
-- Tenants see usage against the allowance on `/dashboard/billing`.
+Consequences worth knowing before changing it:
+
+- Event overage reports unit counts to ONE LemonSqueezy subscription item, priced
+  per unit there. Any future extraction charge on that item would be priced as
+  events — extraction would need its own usage-based variant first.
+- Raising a tenant's allowance is a metadata change (`extraction_tokens_quota`),
+  not a billing change. The gate picks it up on the next request.
 
 ## Verification (test mode)
 

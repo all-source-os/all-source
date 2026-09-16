@@ -187,12 +187,6 @@ func overageFromMap(m map[string]interface{}) entities.OverageMetadata {
 	if v, ok := m["last_reported_queries"].(float64); ok {
 		o.LastReportedQueries = int64(v)
 	}
-	if v, ok := m["last_reported_extraction_units"].(float64); ok {
-		o.LastReportedExtractionUnits = int64(v)
-	}
-	if v, ok := m["extraction_reported_period"].(string); ok {
-		o.ExtractionReportedPeriod = v
-	}
 	return o
 }
 
