@@ -759,8 +759,12 @@ impl EmbeddedCore {
         };
 
         let self_region = format!("node-{}", hlc.node_id());
-        let since = since_vv.get(&self_region).map(|ts| {
-            chrono::DateTime::from_timestamp_millis(ts.physical_ms as i64).unwrap_or_default()
+        // The version vector names the last event the peer HAS, and the query's
+        // `since` is inclusive, so ask from the next millisecond. Passing the
+        // timestamp itself re-sends every event sharing that millisecond on
+        // every pull — which, at ingest speed, is most of a burst.
+        let since = since_vv.get(&self_region).and_then(|ts| {
+            chrono::DateTime::from_timestamp_millis(ts.physical_ms as i64 + 1)
         });
 
         let store = Arc::clone(&self.store);

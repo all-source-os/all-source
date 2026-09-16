@@ -274,13 +274,23 @@ jobs:
       # upgrade-durability proof and the tenant read-scope tests were
       # indistinguishable from tests that pass.
       #
-      # Feature set is `cold-tier-s3` (which brings in the defaults) rather
-      # than --all-features, because that is the set actually verified green
-      # here; --all-features additionally activates the fastembed-backed prime
-      # suites, whose model-fetch path needs checking before it is trusted in
-      # CI. Widening this is the follow-up, not dropping it.
+      # The feature list is the step's coverage, not decoration: a test file
+      # gated on a feature that is off compiles to an EMPTY binary and reports
+      # "ok. 0 passed", and a target with `required-features` is skipped in
+      # silence. Measured with `cold-tier-s3` alone: 5 suites ran zero tests
+      # (embedded_backup_restore, embedded_cold_parquet_boot — the chronis
+      # 0.7.1 regression guard — prime_hosted_e2e, prime_integration,
+      # replication_integration_tests) and 10 more were never built. Every
+      # feature below is here to wake one of those.
+      #
+      # Deliberately NOT --all-features: that adds the fastembed-backed
+      # prime-vectors suites, which fetch a model. The only coverage lost is
+      # the prime-vectors block in prime_integration.rs.
+      #
+      # Adding a feature-gated test file? Add its feature here, then check the
+      # run really says "N passed" for it.
       - name: Run integration tests
-        run: cargo test --locked --tests --features cold-tier-s3
+        run: cargo test --locked --tests --features embedded-phase2,embedded-sync,embedded-replicant,embedded-streaming,embedded-projections,embedded-toon,prime-recall,replication,multi-tenant,cold-tier-s3
 
       - name: Build release
         run: cargo build --locked --lib --release
