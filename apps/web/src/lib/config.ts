@@ -105,7 +105,9 @@ export const siteConfig = {
     // Rendered as the contact address on /privacy and /terms and emitted as the
     // Organization `email` in JSON-LD. all-source.xyz publishes no MX record, so
     // an address there bounces at the sender with nothing logged on our side.
-    email: "hello@wolventech.com",
+    // sales@ is the only mailbox confirmed to exist on wolventech.com — an MX
+    // record proves the domain accepts mail, not that a given local part does.
+    email: "sales@wolventech.com",
     twitter: "https://x.com/ddonprogramming",
     discord: "https://github.com/all-source-os/all-source/discussions",
     github: "https://github.com/all-source-os/all-source",

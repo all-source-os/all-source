@@ -163,9 +163,14 @@ allowance between reconciliations:
    mail to any `@all-source.xyz` address bounced at the sending server. Every
    Enterprise lead between the pricing relaunch and 2026-09-16 was dropped.
 
-   **`hello@all-source.xyz` is still in `siteConfig` (`config.ts:105`) and is
-   dead for the same reason.** It was left alone because only the sales address
-   was reassigned; move it or remove it before it is advertised anywhere.
+   `siteConfig.links.email` — the contact rendered on `/privacy` and `/terms`
+   and emitted as the Organization `email` in JSON-LD — was
+   `hello@all-source.xyz` and is now `sales@wolventech.com` too.
+
+   **Only `sales@` is known to exist on `wolventech.com`.** An MX record proves
+   the domain accepts mail; it says nothing about which local parts are
+   configured. Do not assume `hello@`, `support@` or `info@` resolve there
+   without checking, and do not introduce one on that basis.
 
    Whoever puts an address on `all-source.xyz` in future has to add MX first. A
    `mailto:` on a domain with no mail records fails silently and only on the
