@@ -102,7 +102,10 @@ export const siteConfig = {
   // blog author chip. `links.twitter` is the profile URL built from it.
   twitterHandle: "ddonprogramming",
   links: {
-    email: "hello@all-source.xyz",
+    // Rendered as the contact address on /privacy and /terms and emitted as the
+    // Organization `email` in JSON-LD. all-source.xyz publishes no MX record, so
+    // an address there bounces at the sender with nothing logged on our side.
+    email: "hello@wolventech.com",
     twitter: "https://x.com/ddonprogramming",
     discord: "https://github.com/all-source-os/all-source/discussions",
     github: "https://github.com/all-source-os/all-source",
