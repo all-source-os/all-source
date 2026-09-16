@@ -1,6 +1,15 @@
 # Agent-Driven Prime Onboarding
 
-## Status: Implemented: gap-1, gap-3 · Remaining: gap-2 (.dxt signing), gap-4 (pre-signed URL), gap-5 + gap-6 (both upstream)
+## Status: NOT PLANNED as of 2026-09-16 · Implemented and kept: gap-1, gap-3 · Closed won't-do: gap-2, gap-4, gap-5, gap-6 (#290, #293)
+
+> **Why it stopped.** Gaps 1 and 3 shipped and stay live. Everything remaining
+> either buys an Apple Developer ID certificate to remove one Gatekeeper click
+> (gap 2), or waits on Anthropic shipping install-from-URL and a signature
+> contract that does not exist yet (gaps 4–6). The install path works today at
+> two human actions; the remaining gaps chase zero. That was judged not to feed a
+> real goal. Reopen gap 2 if signing is wanted for its own sake; reopen 4–6 only
+> if Anthropic ships the protocol handler — the unblock conditions are recorded
+> in #293.
 ## Date: 2026-05-26 (updated 2026-05-29)
 
 > **Shipped so far.** Gap 1 (anonymous-trial mint `POST /api/v1/agents/anonymous-trial` + `/connect?claim=` association) and Gap 3 (`/connect` deep-link params: `source`, `key_name`, `return=close`) are merged and live. The recommended path's unavoidable human actions are now down to **two** — drag the `.dxt` and paste the key — plus the conditional Gatekeeper click (Gap 2, open) and the restart (Gap 6, upstream). Trial-claim records the trial→account association only; event re-keying is still a deferred design call (see Gap 1 detail).

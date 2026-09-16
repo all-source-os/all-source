@@ -1,6 +1,8 @@
 # How Might We: An AI-Empowered Inbox on AllSource
 
-*Status: DECISION + DESIGN proposal. Settled inputs locked (see §2 Framing). Not yet scheduled.*
+*Status: NOT PLANNED as of 2026-09-16 — closed won't-do (#291). The P0 wedge is code-complete on main and keeps working: the `email.*` event contract, the Nylas and Resend connectors behind the `EmailProvider` trait, the CP webhook, the Prime ingester, and the `inbox_recall_thread` / `inbox_draft` verbs. What stopped is P1–P5 and the GA path — the live-mailbox dogfood, triage/send, multi-tenant grants, and the Google CASA / Microsoft verification reviews. Reopen against a real user of the inbox, not as a platform showcase.*
+
+*Original status: DECISION + DESIGN proposal. Settled inputs locked (see §2 Framing). Not yet scheduled.*
 *Date: 2026-06-14*
 *Author: all.source team*
 

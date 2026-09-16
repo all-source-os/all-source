@@ -1,6 +1,14 @@
 # Regional Independence — proposal
 
-**Status:** draft, 2026-04-27
+**Status:** NOT PLANNED as of 2026-09-16 — Steps 3–5 closed won't-do (#288). Steps 1
+and 2 shipped in de2e991 and stay: the tenant entity carries `HomeRegion` and the
+delegation client routes by it, so setting `CORE_SERVICE_URL_<REGION>` activates
+regional routing whenever a second region is actually wanted. What was dropped is
+standing up and paying for that region. Reopen this only against a customer
+requirement for in-region reads or an iad-outage tolerance, not as an
+architecture goal.
+
+**Original status:** draft, 2026-04-27
 **Trigger:** AllSource Core runs single-region (iad). For non-US tenants every read pays trans-Atlantic latency, and any iad outage takes the whole platform down. Sustainable Data Strategy (Steps 1–6, shipped) bounds memory and disk growth on a single node; this proposal addresses the *availability* and *locality* axes that single-node work didn't touch.
 
 ## Implementation status
