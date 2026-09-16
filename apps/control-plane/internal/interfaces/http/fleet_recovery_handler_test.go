@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -568,6 +569,69 @@ func TestRecovery_ApplyWritesAuditEvent(t *testing.T) {
 	}
 	if last.TenantID != usecases.RecoveryAuditTenant {
 		t.Errorf("audit tenant = %s, want %s", last.TenantID, usecases.RecoveryAuditTenant)
+	}
+}
+
+// The dry-run has to answer "is this key safe to revoke?", and a name cannot.
+// Role, last use and expiry are what distinguish a key minted under old rules
+// from one a live consumer depends on.
+func TestRotateKeys_DryRunClassifiesEachKey(t *testing.T) {
+	env := newFleetTestEnv(t, "")
+	seed(t, env.repo, mustActiveTenant("t-cls", "Classify Co", nil))
+	used := time.Now().UTC().Add(-time.Hour)
+	expires := time.Now().UTC().Add(24 * time.Hour)
+	env.core.keysByTenant["t-cls"] = []clients.CoreAPIKeyInfo{
+		// Legacy: off-role and never used. The safe first cohort.
+		{ID: "k1", Name: "old", TenantID: "t-cls", Active: true, Role: "service_account"},
+		// Current: canonical role, expiring, and in active use.
+		{
+			ID: "k2", Name: "live", TenantID: "t-cls", Active: true,
+			Role: string(entities.RoleServiceAccount), ExpiresAt: &expires, LastUsed: &used,
+		},
+	}
+	r := env.router()
+	tok := adminToken(t, entities.RoleAdmin)
+
+	w := doAdmin(t, r, http.MethodPost, "/api/v1/admin/recovery/t-cls/rotate-keys?dry_run=true", tok, map[string]any{"reason": "audit"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("dry-run: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var res usecases.RecoveryResult
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if got := res.Would["legacy_unused"]; fmt.Sprint(got) != "1" {
+		t.Errorf("legacy_unused = %v, want 1", got)
+	}
+	keys, ok := res.Would["keys"].([]any)
+	if !ok || len(keys) != 2 {
+		t.Fatalf("keys = %#v, want 2 entries", res.Would["keys"])
+	}
+
+	byName := map[string]map[string]any{}
+	for _, k := range keys {
+		m, ok := k.(map[string]any)
+		if !ok {
+			t.Fatalf("key entry is not an object: %#v", k)
+		}
+		byName[fmt.Sprint(m["name"])] = m
+	}
+
+	old := byName["old"]
+	if old["legacy"] != true || old["never_used"] != true {
+		t.Errorf("off-role never-used key not flagged: %#v", old)
+	}
+	if fmt.Sprint(old["role"]) != "service_account" {
+		t.Errorf("role dropped on decode: %#v", old["role"])
+	}
+
+	live := byName["live"]
+	if live["legacy"] != false || live["never_used"] != false {
+		t.Errorf("canonical in-use key flagged as legacy: %#v", live)
+	}
+	if fmt.Sprint(live["last_used"]) == "" {
+		t.Errorf("last_used dropped on decode: %#v", live)
 	}
 }
 

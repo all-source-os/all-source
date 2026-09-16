@@ -347,11 +347,40 @@ type CreateCoreAPIKeyResponse struct {
 }
 
 // CoreAPIKeyInfo is summary info about a Core API key.
+//
+// Role, CreatedAt, ExpiresAt and LastUsed are what let an operator tell a
+// legacy key from a current one. Dropping any of them leaves a revocation
+// sweep matching on the key's name, which either misses keys or kills working
+// ones, so do not narrow this struct.
 type CoreAPIKeyInfo struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	TenantID string `json:"tenant_id"`
 	Active   bool   `json:"active"`
+	// Role is the canonical "serviceaccount" on anything minted by the current
+	// path. Any other value predates the fix that made every other value 403.
+	Role      string     `json:"role"`
+	CreatedAt *time.Time `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at"`
+	// LastUsed is nil for a key that has never authenticated a request, which
+	// is the cheapest signal that revoking it costs nothing.
+	LastUsed *time.Time `json:"last_used"`
+}
+
+// IsLegacy reports whether a key looks like it was minted under rules that no
+// longer apply: a role other than the canonical serviceaccount, or no expiry.
+//
+// Advisory, not authoritative. It narrows a revocation sweep to a cohort worth
+// reading; it does not license revoking without reading the dry-run.
+func (k CoreAPIKeyInfo) IsLegacy(canonicalRole string) bool {
+	return (k.Role != "" && k.Role != canonicalRole) || k.ExpiresAt == nil
+}
+
+// NeverUsed reports whether the key has never authenticated a request. A key
+// that is both legacy and never used is the safe first cohort to revoke,
+// because nothing depends on it.
+func (k CoreAPIKeyInfo) NeverUsed() bool {
+	return k.LastUsed == nil
 }
 
 // --- Config types ---

@@ -13,43 +13,26 @@ sit in local configs from when they were issued. Core itself only ever stores
 not in Core's store. It is in the copies that left it at mint time, and in keys
 that outlived their reason to exist.
 
-## Read this first: enumeration is currently blind
+## Identifying a legacy key
 
-The operator surface cannot tell you which keys are legacy.
-`clients.CoreAPIKeyInfo`, what `ListCoreAPIKeys` returns and what the recovery
-dry-run prints, carries exactly four fields:
-
-```go
-type CoreAPIKeyInfo struct {
-    ID       string
-    Name     string
-    TenantID string
-    Active   bool
-}
-```
-
-Core's own `ApiKey` has `role`, `created_at`, `expires_at` and `last_used`. All
-four are dropped at the Control Plane boundary. Those are precisely the fields
-that distinguish a legacy key from a current one, so today the only signal an
-operator has is the key's *name*.
-
-**Fix that before running a revocation sweep**, or the sweep is guesswork:
-widen `CoreAPIKeyInfo` and the Core `GET /api/v1/auth/api-keys` response to
-carry `role`, `created_at` and `last_used`, and show them in the rotate-keys
-dry-run preview. Revoking on name-matching alone will either miss keys or kill
-working ones.
-
-## Identifying a legacy key, once the fields exist
+The rotate-keys dry-run reports these per key, and Core has always returned all
+of them on `GET /api/v1/auth/api-keys`:
 
 | Signal | Why it matters |
 |---|---|
 | `role` is not `serviceaccount` | the canonical role; anything else predates the fix that made every other value 403 |
 | `created_at` predates the current provisioning path | minted under rules that no longer apply |
-| `last_used` is null or very old | nothing depends on it, so revoking is cheap |
+| `last_used` is null | nothing has ever authenticated with it, so revoking is free |
 | `expires_at` is null | a key with no end date is the one worth ending |
 
-A key that is both never-used and off-role is the safe first cohort. A key in
-active use needs its consumer rotated onto the replacement first.
+The preview marks each key `legacy` and `never_used`, and reports
+`legacy_unused` for the cohort that is both. **That cohort is the safe first
+sweep**: off-role, never authenticated, nothing depends on it. A key in active
+use needs its consumer moved onto the replacement first, which is why
+`last_used` is the field to read before anything else.
+
+`legacy` is advisory. It narrows the list worth reading; it does not license
+revoking without reading the dry-run.
 
 ## Revoking
 
@@ -64,9 +47,10 @@ It mints a replacement with the canonical `serviceaccount` role **first**, then
 revokes the old keys, so a failure cannot leave a tenant with no working key.
 
 1. **Dry run.** `{"dry_run": true}`. The response names every key that will stop
-   working and returns a `confirm_token`.
-2. **Read the preview.** `keys_to_invalidate` and `key_names` are the blast
-   radius. If a name you do not recognise appears, stop and find its consumer.
+   working, classifies each one, and returns a `confirm_token`.
+2. **Read the preview.** `keys_to_invalidate` is the blast radius and `keys`
+   carries the per-key detail. Start from `legacy_unused`. If a key you do not
+   recognise has a recent `last_used`, stop and find its consumer.
 3. **Apply.** Echo the `confirm_token` from that dry run. A token from a
    different preview is refused.
 4. **Hand the new key over** through a password manager or `fly secrets set`.
@@ -95,7 +79,8 @@ that reads like an outage.
 
 ## Definition of done
 
-- [ ] `role`, `created_at` and `last_used` reach the operator surface
+- [x] `role`, `created_at`, `expires_at` and `last_used` reach the operator
+      surface, and the dry-run classifies each key
 - [ ] Every tenant's keys enumerated and classified against the table above
 - [ ] Legacy cohort rotated through the guarded flow, dry run read first
 - [ ] Replacement keys delivered through a secret store

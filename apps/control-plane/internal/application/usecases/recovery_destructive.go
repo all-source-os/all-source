@@ -26,15 +26,39 @@ func (uc *RecoveryUseCase) RotateKeys(ctx context.Context, tenantID string, req 
 	}
 
 	existing := uc.listKeys(ctx, t.ID)
+	canonical := string(entities.RoleServiceAccount)
 	keyNames := make([]string, 0, len(existing))
+	// A name alone does not tell an operator whether revoking a key is safe.
+	// Role, age and last use do, so the dry-run reports them per key and
+	// summarizes the cohort that is both legacy and never used, the one that
+	// can be revoked without rotating a consumer first.
+	keys := make([]map[string]any, 0, len(existing))
+	legacyUnused := 0
 	for _, k := range existing {
 		keyNames = append(keyNames, k.Name)
+		legacy := k.IsLegacy(canonical)
+		if legacy && k.NeverUsed() {
+			legacyUnused++
+		}
+		keys = append(keys, map[string]any{
+			"id":         k.ID,
+			"name":       k.Name,
+			"role":       k.Role,
+			"active":     k.Active,
+			"created_at": valueOrEmpty(k.CreatedAt),
+			"expires_at": valueOrEmpty(k.ExpiresAt),
+			"last_used":  valueOrEmpty(k.LastUsed),
+			"never_used": k.NeverUsed(),
+			"legacy":     legacy,
+		})
 	}
 	preview := map[string]any{
 		"tenant_id":          t.ID,
 		"keys_to_invalidate": len(existing),
 		"key_names":          keyNames,
-		"new_role":           string(entities.RoleServiceAccount),
+		"keys":               keys,
+		"legacy_unused":      legacyUnused,
+		"new_role":           canonical,
 		"warning":            "all current keys for this tenant will stop working immediately",
 	}
 
