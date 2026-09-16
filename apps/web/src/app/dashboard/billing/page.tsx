@@ -137,7 +137,7 @@ export default function BillingPage() {
     billingPeriod: "monthly" | "annual" = "monthly"
   ) => {
     if (planTier === "enterprise") {
-      window.open("mailto:sales@all-source.xyz?subject=Enterprise%20Plan%20Inquiry", "_blank");
+      window.open("mailto:sales@wolventech.com?subject=Enterprise%20Plan%20Inquiry", "_blank");
       return;
     }
     setUpgradingTier(planTier);

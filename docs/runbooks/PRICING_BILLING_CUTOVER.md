@@ -141,35 +141,35 @@ allowance between reconciliations:
    checkout (`4242 4242 4242 4242`) via `/pricing` fired the webhook, signature
    verified, tenant metadata got the right tier + `billing_period`. **Still
    pending: re-run once on LIVE creds** after the TEST→LIVE swap (#3).
-2. **Set up the `sales@all-source.xyz` inbox.** **STILL OPEN — the 2026-06-28
-   "DONE" was wrong.** Whatever forwarding was configured, the domain has no MX
-   record, so nothing can be delivered to it. Verified 2026-09-16 against the
-   authoritative nameserver:
+2. ~~**Set up the `sales@all-source.xyz` inbox.**~~ **RESOLVED 2026-09-16 by
+   moving the address, not by adding a mailbox.** The Enterprise CTA now points
+   at `sales@wolventech.com` in `apps/web/src/lib/config.ts` and
+   `apps/web/src/app/dashboard/billing/page.tsx`.
+
+   The 2026-06-28 "DONE" on this item was wrong, and the reason is worth keeping
+   because it is invisible from inside the product. `all-source.xyz` has no MX
+   record at all:
 
    ```
    $ dig ANY all-source.xyz @ns1.unstoppabledomains.com +noall +answer
    all-source.xyz.  3600  IN  A  66.241.125.155
+
+   $ dig +short MX wolventech.com
+   10 inbound-smtp.eu-west-1.amazonaws.com.
    ```
 
-   One A record, no MX, no TXT. With no MX a sender falls back to the A record
+   One A record and nothing else. With no MX a sender falls back to the A record
    under RFC 5321, which is the Fly proxy and does not speak SMTP on port 25, so
-   mail to `sales@` bounces at the sending server. **Every Enterprise lead since
-   the pricing relaunch has been dropped**, which is what this item was created
-   to prevent.
+   mail to any `@all-source.xyz` address bounced at the sending server. Every
+   Enterprise lead between the pricing relaunch and 2026-09-16 was dropped.
 
-   Two ways to close it, both needing access this repo does not have:
+   **`hello@all-source.xyz` is still in `siteConfig` (`config.ts:105`) and is
+   dead for the same reason.** It was left alone because only the sales address
+   was reassigned; move it or remove it before it is advertised anywhere.
 
-   - **Add MX at Unstoppable Domains** pointing at a mail provider, then create
-     the `sales@` alias there. Restores the existing `mailto:` CTA with no code
-     change.
-   - **Stop depending on a mailbox.** Point the Enterprise CTA at a form that
-     posts to the Control Plane, which already has inbound email plumbing
-     (`internal/adapters/clients/emailprovider/resend`). More work, but it makes
-     lead capture a thing with tests rather than a DNS record.
-
-   The CTA is `mailto:` in two places today: `apps/web/src/lib/config.ts` and
-   `apps/web/src/app/dashboard/billing/page.tsx`. Until one of the routes above
-   lands, treat the Enterprise CTA as non-functional.
+   Whoever puts an address on `all-source.xyz` in future has to add MX first. A
+   `mailto:` on a domain with no mail records fails silently and only on the
+   sender's side, so nothing in this repo or in Fly will ever report it.
 3. **Swap TEST → LIVE LemonSqueezy.** **SUBSTANTIALLY DONE (2026-06-28):**
    - [x] Live `LEMON_SQUEEZY_API_KEY` set on `allsource-control-plane`.
    - [x] **Variant map UPDATED to live ids (2026-07-10).** ⚠️ Correction: LS test

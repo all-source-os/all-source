@@ -273,7 +273,10 @@ export const siteConfig = {
     {
       name: "Enterprise",
       tier: "enterprise" as const,
-      href: "mailto:sales@all-source.xyz?subject=Enterprise%20Plan%20Inquiry",
+      // all-source.xyz has no MX record, so every address on it bounces at the
+      // sending server. Contact addresses live on wolventech.com, which does.
+      // Verified 2026-09-16.
+      href: "mailto:sales@wolventech.com?subject=Enterprise%20Plan%20Inquiry",
       price: "Custom",
       period: "month",
       yearlyPrice: "Custom",

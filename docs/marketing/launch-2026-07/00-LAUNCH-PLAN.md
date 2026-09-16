@@ -49,7 +49,7 @@ ordered, and fast enough to query on every message.
 | Repo | github.com/all-source-os/all-source | `siteConfig.links.github` |
 | Site | https://www.all-source.xyz | — |
 | X handle | **@ddonprogramming** | `siteConfig.twitterHandle` |
-| Contact | hello@all-source.xyz · sales@all-source.xyz | `siteConfig.links` |
+| Contact | sales@wolventech.com | `siteConfig.links` |
 | Comparison pages (LIVE — link these) | `/vs/mem0` `/vs/letta` `/vs/zep` `/vs/stoolap` `/event-sourcing-for-ai-agents` | `siteConfig.footer` |
 | Prime | `/prime` — persistent agent memory via MCP, install in 30s, no embedding API | `siteConfig.header` |
 
