@@ -1,6 +1,0 @@
-mode = "embedded"
-instance_id = "chronos-monorepo"
-
-[sync]
-remote_url = "https://api.all-source.xyz"
-api_key = "ask_ExAfFlszDdoiqVo8jk3xQNStqZ_R9faVGrHb0mPtfhs"

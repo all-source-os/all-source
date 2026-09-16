@@ -81,6 +81,11 @@ tasks
 .chronis/storage/
 .chronis/sync/.remote_ids
 .chronis/sync/.local_ids
+# config.toml carries api_key, and this repository is public. A clone puts the
+# working tree on disk, so committing it hands the key to anyone who runs
+# `/plugin marketplace add all-source-os/all-source`. The other three fields
+# (mode, instance_id, remote_url) are per-machine anyway.
+.chronis/config.toml
 
 # Prime MCP local data dir (WAL, Parquet, projection checkpoints)
 .prime/
