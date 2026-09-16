@@ -278,6 +278,10 @@ impl EmbeddedCore {
     /// The merged event inherits the tenant ID from the first token event,
     /// preserving multi-tenant correctness.
     ///
+    /// In-memory only: the token events remain in the WAL and Parquet, so the
+    /// merge does not survive a restart. Ingest the merged event yourself if it
+    /// needs to be durable.
+    ///
     /// Returns `Ok(())` regardless of whether compaction was needed.
     pub async fn compact_tokens(&self, entity_id: &str) -> Result<()> {
         let store = Arc::clone(&self.store);

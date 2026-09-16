@@ -1236,12 +1236,12 @@ impl EventStore {
     /// accumulate state (e.g., counters) should be designed to handle this
     /// (the merged event replaces individual tokens, not adds to them).
     ///
-    /// **Crash safety:** The WAL append happens *after* the in-memory swap
-    /// under the write lock. If the process crashes before the WAL write,
-    /// no change is persisted — WAL replay restores the pre-compaction state.
-    /// If the process crashes after the WAL write, replay sees the merged
-    /// event (and the original tokens, which are idempotent to replay since
-    /// the merged event supersedes them).
+    /// **The merged event is a derived view and is never made durable.**
+    /// Compaction reclaims memory; it does not rewrite history. The token
+    /// events stay in the WAL and Parquet exactly as they were ingested, so a
+    /// restart — or any reader that goes to the durable log — sees the original
+    /// stream, not the merge. A caller that needs the merged result to survive
+    /// must ingest it as an event of its own.
     ///
     /// The write lock is held for the swap + WAL write + index rebuild.
     /// The index rebuild is O(N) over all events, which is acceptable for
@@ -1278,14 +1278,7 @@ impl EventStore {
             !(e.entity_id_str() == entity_id && e.event_type_str() == token_event_type)
         });
 
-        events.push(merged_event.clone());
-
-        // WAL append inside write lock: crash before this line = no change persisted.
-        // Crash after = merged event in WAL, original tokens also in WAL but
-        // superseded by the merged event's entity_id + event_type.
-        if let Some(ref wal) = self.wal {
-            wal.append(merged_event)?;
-        }
+        events.push(merged_event);
 
         // Rebuild entire index since retain() shifted event positions.
         // Errors here indicate a corrupt event (missing entity_id/event_type)
