@@ -307,6 +307,10 @@ struct RecallRequest {
     depth: Option<usize>,
     top_k: Option<usize>,
     text: Option<String>,
+    /// Restrict results to nodes stamped with this `properties.tenant_id`, the
+    /// same marker the local `/graph` route filters on. Only meaningful for
+    /// the embedded backend: the hosted one is already scoped by `X-Tenant-Id`.
+    tenant_id: Option<String>,
 }
 
 // =============================================================================
@@ -1033,6 +1037,7 @@ async fn recall(
         text: req.text,
         vector,
         node_type: req.node_type,
+        tenant: req.tenant_id,
         depth: req.depth.unwrap_or(1),
         top_k: req.top_k.unwrap_or(10),
         ..RecallQuery::default()

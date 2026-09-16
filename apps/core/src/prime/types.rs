@@ -231,6 +231,11 @@ pub struct RecallQuery {
     pub vector: Option<Vec<f32>>,
     /// Filter results to this node type.
     pub node_type: Option<String>,
+    /// Restrict every result to nodes carrying this `properties.tenant_id`,
+    /// matching `Prime::full_graph`'s filter. `None` searches the whole store,
+    /// which is correct only where the tenant boundary is the deployment
+    /// itself (one Prime per tenant).
+    pub tenant: Option<String>,
     /// Graph expansion depth from vector matches.
     pub depth: usize,
     /// Maximum results to return.
@@ -249,6 +254,7 @@ impl Default for RecallQuery {
             text: None,
             vector: None,
             node_type: None,
+            tenant: None,
             depth: 1,
             top_k: 10,
             recency_weight: 0.2,

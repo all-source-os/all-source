@@ -219,8 +219,7 @@ fn cache_dir() -> String {
 fn warn_if_remote_requested() {
     let set = std::env::var("PRIME_EMBED_ENDPOINT")
         .ok()
-        .map(|s| !s.trim().is_empty())
-        .unwrap_or(false);
+        .is_some_and(|s| !s.trim().is_empty());
     if set {
         tracing::warn!(
             "PRIME_EMBED_ENDPOINT is set but this binary was built without the \

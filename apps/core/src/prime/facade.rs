@@ -573,6 +573,29 @@ impl Prime {
             .collect()
     }
 
+    /// Whether a node belongs to `tenant`, the single predicate every
+    /// tenant-scoped read in this file shares.
+    ///
+    /// Prime is a single-store engine — its projections are keyed by
+    /// `entity_id` alone and every Prime event is ingested with
+    /// `tenant_id: None` — so the only tenant marker available at query time
+    /// is the one the writer stamped into `properties`. `None` matches
+    /// everything, which is correct only where the deployment itself is the
+    /// tenant boundary.
+    ///
+    /// Two readers filtering by tenant in two slightly different ways is how a
+    /// leak gets introduced, so `full_graph` and `recall` both call this.
+    fn node_in_tenant(node: &Node, tenant: Option<&str>) -> bool {
+        match tenant {
+            None => true,
+            Some(t) => node
+                .properties
+                .get("tenant_id")
+                .and_then(|v| v.as_str())
+                .is_some_and(|nt| nt == t),
+        }
+    }
+
     /// Materialize the COMPLETE knowledge graph from the live projections —
     /// every node (full properties + vector presence), every edge (relation +
     /// properties), and summary stats — reading the `node_state` and
@@ -607,24 +630,13 @@ impl Prime {
         use super::types::{FullGraph, GraphEdge, GraphNode, GraphStats};
         use std::collections::{BTreeMap, HashSet};
 
-        let node_tenant_matches = |n: &Node| -> bool {
-            match tenant {
-                None => true,
-                Some(t) => n
-                    .properties
-                    .get("tenant_id")
-                    .and_then(|v| v.as_str())
-                    .is_some_and(|nt| nt == t),
-            }
-        };
-
         // 1. Collect live nodes, applying tenant + node_type filters.
         let mut live: Vec<Node> = self
             .node_state
             .all_nodes()
             .into_iter()
             .filter(|n| node_type.is_none_or(|nt| n.node_type == nt))
-            .filter(|n| node_tenant_matches(n))
+            .filter(|n| Self::node_in_tenant(n, tenant))
             .collect();
 
         // Stable ordering so pagination is deterministic.
@@ -1370,6 +1382,15 @@ impl Prime {
     /// Hybrid recall combining vector similarity, graph proximity, and temporal recency.
     ///
     /// Scoring: `similarity_weight * cosine + proximity_weight * 1/(1+depth) + recency_weight * exp_decay`
+    ///
+    /// ## Tenant scoping (security)
+    ///
+    /// `query.tenant` filters on `properties.tenant_id` exactly as
+    /// [`Self::full_graph`] does, through the same [`Self::node_in_tenant`]
+    /// predicate. It applies to vector seeds, lexical and type-scan seeds, and
+    /// graph expansion alike — see the note in the body for why expansion
+    /// cannot be left out. `None` searches the whole store and is correct only
+    /// where the deployment is the tenant boundary.
     #[cfg(feature = "prime-vectors")]
     // Public async API, and one of a family of `pub async fn` methods on the
     // Prime facade that the MCP/HTTP layers call uniformly. Dropping `async`
@@ -1388,6 +1409,10 @@ impl Prime {
         let mut scored: HashMap<String, ScoredNode> = HashMap::new();
         let mut vector_results = Vec::new();
         let mut retrieval = Retrieval::Empty;
+        // Applied to all three arms below. Filtering only the seeds would
+        // still leak: graph expansion walks edges, and an edge can cross into
+        // another tenant's node.
+        let tenant = query.tenant.as_deref();
         // Every seeding arm is capped at this, so graph expansion runs over a
         // bounded frontier no matter which arm produced the seeds.
         let seed_cap = query.top_k * 2;
@@ -1422,7 +1447,10 @@ impl Prime {
             for hit in &hits {
                 // Vector entity_id is "vec:{graph_entity_id}" — strip prefix
                 let graph_id = hit.id.strip_prefix("vec:").unwrap_or(&hit.id);
-                if let Some(node) = self.get_node(graph_id) {
+                if let Some(node) = self
+                    .get_node(graph_id)
+                    .filter(|n| Self::node_in_tenant(n, tenant))
+                {
                     let recency = recency_score(node.updated_at, now);
                     let components = ScoreComponents {
                         similarity: hit.score,
@@ -1453,10 +1481,13 @@ impl Prime {
                 .map(super::lexical::terms)
                 .unwrap_or_default();
 
-            let candidates = match query.node_type {
+            let candidates: Vec<Node> = match query.node_type {
                 Some(ref nt) => self.nodes_by_type(nt),
                 None => self.node_state.all_nodes(),
-            };
+            }
+            .into_iter()
+            .filter(|n| Self::node_in_tenant(n, tenant))
+            .collect();
 
             let mut hits: Vec<(f64, Node)> = if terms.is_empty() {
                 Vec::new()
@@ -1524,6 +1555,9 @@ impl Prime {
                         .as_ref()
                         .is_some_and(|nt| node.node_type != *nt)
                     {
+                        continue;
+                    }
+                    if !Self::node_in_tenant(&node, tenant) {
                         continue;
                     }
                     let proximity = 1.0 / (1.0 + depth as f64);
@@ -3965,6 +3999,167 @@ mod tests {
         assert!(!result.vectors.is_empty());
         // Highest scored should be the closest vector match
         assert!(result.nodes[0].score > 0.0);
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[cfg(feature = "prime-vectors")]
+    #[tokio::test]
+    async fn recall_never_returns_another_tenants_nodes() {
+        use crate::prime::types::RecallQuery;
+
+        let prime = Prime::open_in_memory().await.unwrap();
+
+        let mine = prime
+            .add_node(
+                "interaction",
+                json!({"name": "Invoice", "tenant_id": "t-a"}),
+            )
+            .await
+            .unwrap();
+        let theirs = prime
+            .add_node(
+                "interaction",
+                json!({"name": "Invoice", "tenant_id": "t-b"}),
+            )
+            .await
+            .unwrap();
+        let mine_e = node_entity_id("interaction", mine.as_str());
+        let theirs_e = node_entity_id("interaction", theirs.as_str());
+
+        prime
+            .embed(&mine_e, Some("Invoice"), vec![1.0, 0.0, 0.0, 0.0])
+            .await
+            .unwrap();
+        prime
+            .embed(&theirs_e, Some("Invoice"), vec![1.0, 0.0, 0.0, 0.0])
+            .await
+            .unwrap();
+
+        let scoped = prime
+            .recall(RecallQuery {
+                vector: Some(vec![1.0, 0.0, 0.0, 0.0]),
+                tenant: Some("t-a".into()),
+                top_k: 10,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(!scoped.nodes.is_empty(), "own node must still be found");
+        for n in &scoped.nodes {
+            assert_eq!(
+                n.node.properties.get("tenant_id").and_then(|v| v.as_str()),
+                Some("t-a")
+            );
+        }
+
+        // The same query with no tenant sees both, which is what makes the
+        // assertion above evidence of filtering rather than of an empty store.
+        let unscoped = prime
+            .recall(RecallQuery {
+                vector: Some(vec![1.0, 0.0, 0.0, 0.0]),
+                top_k: 10,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(unscoped.nodes.len() > scoped.nodes.len());
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[cfg(feature = "prime-vectors")]
+    #[tokio::test]
+    async fn recall_expansion_does_not_cross_a_tenant_edge() {
+        use crate::prime::types::RecallQuery;
+
+        let prime = Prime::open_in_memory().await.unwrap();
+
+        let mine = prime
+            .add_node("interaction", json!({"name": "Thread", "tenant_id": "t-a"}))
+            .await
+            .unwrap();
+        let theirs = prime
+            .add_node("interaction", json!({"name": "Secret", "tenant_id": "t-b"}))
+            .await
+            .unwrap();
+        let mine_e = node_entity_id("interaction", mine.as_str());
+        let theirs_e = node_entity_id("interaction", theirs.as_str());
+
+        // An edge that crosses the tenant boundary: seeding on t-a's node and
+        // expanding one hop would reach t-b's node if expansion were unfiltered.
+        prime
+            .add_edge(&mine_e, &theirs_e, "mentions", None)
+            .await
+            .unwrap();
+        prime
+            .embed(&mine_e, Some("Thread"), vec![1.0, 0.0, 0.0, 0.0])
+            .await
+            .unwrap();
+
+        let result = prime
+            .recall(RecallQuery {
+                vector: Some(vec![1.0, 0.0, 0.0, 0.0]),
+                tenant: Some("t-a".into()),
+                depth: 2,
+                top_k: 10,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(!result.nodes.is_empty());
+        assert!(
+            !result
+                .nodes
+                .iter()
+                .any(|n| n.node.id.as_str() == theirs.as_str()),
+            "expansion crossed into another tenant"
+        );
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[cfg(feature = "prime-vectors")]
+    #[tokio::test]
+    async fn lexical_recall_is_tenant_scoped_too() {
+        use crate::prime::types::RecallQuery;
+
+        let prime = Prime::open_in_memory().await.unwrap();
+        prime
+            .add_node(
+                "interaction",
+                json!({"name": "Renewal", "tenant_id": "t-a"}),
+            )
+            .await
+            .unwrap();
+        prime
+            .add_node(
+                "interaction",
+                json!({"name": "Renewal", "tenant_id": "t-b"}),
+            )
+            .await
+            .unwrap();
+
+        // No vector on the query, so this exercises the lexical arm rather
+        // than the vector one.
+        let result = prime
+            .recall(RecallQuery {
+                text: Some("Renewal".into()),
+                tenant: Some("t-b".into()),
+                top_k: 10,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(!result.nodes.is_empty());
+        for n in &result.nodes {
+            assert_eq!(
+                n.node.properties.get("tenant_id").and_then(|v| v.as_str()),
+                Some("t-b")
+            );
+        }
 
         prime.shutdown().await.unwrap();
     }

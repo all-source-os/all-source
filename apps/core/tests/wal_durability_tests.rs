@@ -25,7 +25,8 @@ use tempfile::TempDir;
 /// are synthetic while the checksum is the one that release computed.
 const LEGACY_0_19_LINE: &str = r#"{"sequence":1,"wal_timestamp":"2026-03-07T16:52:51.859568Z","event":{"id":"a4e1f320-4716-4542-9313-4d72e12291c4","event_type":"task.created","entity_id":"task:legacy-1","tenant_id":"default","payload":{"title":"written by 0.19"},"timestamp":"2026-03-07T16:52:51.859370Z","metadata":null,"version":1},"checksum":1822986689}"#;
 
-const UNREADABLE_LINE: &str = r#"{"sequence":2,"format":"from a release this binary does not know"}"#;
+const UNREADABLE_LINE: &str =
+    r#"{"sequence":2,"format":"from a release this binary does not know"}"#;
 
 fn event(entity: &str) -> Event {
     Event::from_strings(
@@ -198,7 +199,10 @@ fn distinct_ids_after_reopen(data_dir: &Path) -> HashSet<uuid::Uuid> {
 #[test]
 fn a_legacy_wal_is_fully_read_and_reaches_parquet_before_it_is_retired() {
     let tmp = TempDir::new().unwrap();
-    write_segment(&tmp.path().join("wal"), &[LEGACY_0_19_LINE, UNREADABLE_LINE]);
+    write_segment(
+        &tmp.path().join("wal"),
+        &[LEGACY_0_19_LINE, UNREADABLE_LINE],
+    );
 
     let first_boot = distinct_ids_after_reopen(tmp.path());
     assert_eq!(first_boot.len(), 1, "the 0.19 entry must be read");

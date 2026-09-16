@@ -257,6 +257,7 @@ pub fn tool_definitions() -> Value {
                     "text": { "type": "string", "description": "Natural language query. Embedded server-side via fastembed when 'vector' is not supplied." },
                     "vector": { "type": "array", "items": { "type": "number" }, "description": "Precomputed query embedding vector. Optional — supply 'text' instead to have the server embed for you." },
                     "node_type": { "type": "string", "description": "Filter to this node type only" },
+                    "tenant_id": { "type": "string", "description": "Restrict results to nodes stamped with this tenant_id. Only needed when one Prime store holds several tenants' nodes; omit for a single-tenant store." },
                     "depth": { "type": "integer", "description": "Graph expansion hops from vector matches (0=vector-only, 1+=include neighbors, default: 1)" },
                     "top_k": { "type": "integer", "description": "Max results (default: 10)" }
                 }
@@ -1274,6 +1275,10 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
         text,
         vector,
         node_type,
+        tenant: args
+            .get("tenant_id")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         depth: args
             .get("depth")
             .and_then(Value::as_u64)

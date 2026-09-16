@@ -110,7 +110,10 @@ fn an_empty_allow_list_denies_everything() {
 
     let seen = store.query_scoped(&query(None), &scope).expect("query");
 
-    assert!(seen.is_empty(), "an empty allow-list must not mean 'allow all'");
+    assert!(
+        seen.is_empty(),
+        "an empty allow-list must not mean 'allow all'"
+    );
     assert!(!scope.is_unrestricted());
 }
 

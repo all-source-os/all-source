@@ -114,6 +114,10 @@ struct RecallReq {
     node_type: Option<String>,
     depth: Option<usize>,
     top_k: Option<usize>,
+    /// Same filter, and same security role, as `?tenant_id=` on `GET /graph`:
+    /// results are restricted to nodes whose `properties.tenant_id` matches.
+    /// Omitting it returns the whole store.
+    tenant_id: Option<String>,
 }
 
 /// Body for `POST /projections`. `field_policies` maps a field name to one
@@ -321,6 +325,7 @@ async fn recall(
     let query = RecallQuery {
         vector: req.vector,
         node_type: req.node_type,
+        tenant: req.tenant_id,
         depth: req.depth.unwrap_or(1),
         top_k: req.top_k.unwrap_or(10),
         ..RecallQuery::default()
@@ -842,6 +847,46 @@ mod tests {
         assert_eq!(body["stats"]["nodes_by_type"]["organization"], 1);
         assert_eq!(body["stats"]["nodes_by_type"]["contact"], 1);
         assert_eq!(body["has_more"], false);
+    }
+
+    /// The same isolation guarantee `full_graph_is_tenant_isolated` pins, on
+    /// the other read that can return nodes. `/graph` grew its `tenant_id`
+    /// filter first and `/recall` did not have one, which on a shared store
+    /// meant a caller scoped out of another tenant's graph could still recall
+    /// its nodes.
+    #[cfg(feature = "prime-vectors")]
+    #[tokio::test]
+    async fn recall_is_tenant_isolated() {
+        let (app, state) = test_app().await;
+
+        let a = seed_tenant_node(&state, "tenant-a", "contact", "Ann").await;
+        let b = seed_tenant_node(&state, "tenant-b", "contact", "Bob").await;
+        state
+            .prime
+            .embed(&a, Some("Ann"), vec![1.0, 0.0, 0.0, 0.0])
+            .await
+            .unwrap();
+        state
+            .prime
+            .embed(&b, Some("Bob"), vec![1.0, 0.0, 0.0, 0.0])
+            .await
+            .unwrap();
+
+        let scoped = json!({"vector": [1.0, 0.0, 0.0, 0.0], "top_k": 10, "tenant_id": "tenant-a"});
+        let (status, body) = send(&app, "POST", "/recall", Some(scoped)).await;
+        assert_eq!(status, StatusCode::OK);
+        let nodes = body["nodes"].as_array().expect("nodes array");
+        assert!(!nodes.is_empty(), "tenant A must still recall its own node");
+        for n in nodes {
+            assert_eq!(n["properties"]["tenant_id"], "tenant-a");
+        }
+
+        let unscoped = json!({"vector": [1.0, 0.0, 0.0, 0.0], "top_k": 10});
+        let (_, body) = send(&app, "POST", "/recall", Some(unscoped)).await;
+        assert!(
+            body["nodes"].as_array().expect("nodes array").len() > nodes.len(),
+            "the unscoped query must see more, or the scoped one proved nothing"
+        );
     }
 
     /// MANDATORY tenant-isolation test: two tenants share the single Prime
