@@ -1,0 +1,21 @@
+# Standalone crate — kept out of the root Cargo workspace (repo convention for
+# tooling/, mirrors tenant-isolation-check/crate-version-check).
+[workspace]
+
+[package]
+name = "fly-disk-alarm"
+version = "0.1.0"
+edition = "2021"
+description = "Alarm gate: fails when any Fly volume in the org is at or above a disk-usage threshold, so a full volume is caught before it takes a service down."
+publish = false
+
+[[bin]]
+name = "fly-disk-alarm"
+path = "src/main.rs"
+
+[dependencies]
+# Transport is `curl`, present on every GitHub runner and on macOS, so the
+# crate pulls in no TLS stack. Parsing is not hand-rolled: a mis-parsed
+# Prometheus response would read as "no volume over threshold", which is the
+# one failure this tool must never produce.
+serde_json = "1"

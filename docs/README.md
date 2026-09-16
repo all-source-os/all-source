@@ -116,6 +116,7 @@ For DevOps and platform engineers.
 
 | Document | Description | Status |
 |----------|-------------|--------|
+| [Alerts](./operations/ALERTS.md) | Repo-defined alarms, their thresholds and escalation | ✅ |
 | [Docker Deployment](./deployment/DOCKER.md) | Container images and configuration | ✅ |
 | [Quality Gates](./current/QUALITY_GATES.md) | CI/CD enforcement standards | ✅ |
 | [Performance Guide](./current/PERFORMANCE.md) | Optimization and tuning | ✅ |

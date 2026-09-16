@@ -1,0 +1,98 @@
+name: Disk Alarm
+
+# The alarm lives here rather than as a rule clicked into Fly's managed
+# Grafana so it is versioned, reviewable, and survives an account change.
+# docs/operations/ALERTS.md carries the setup and the escalation path.
+
+on:
+  schedule:
+    # Every 6 hours. A volume that crosses 70% does not reach 100% inside a
+    # quarter of a day at any ingest rate this fleet has seen.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: "Usage ratio that trips the alarm (0.0-1.0)"
+        required: false
+        default: "0.70"
+
+concurrency:
+  group: disk-alarm
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  volumes:
+    name: Fly volume usage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check every volume against the threshold
+        id: check
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          cargo run --quiet --manifest-path tooling/fly-disk-alarm/Cargo.toml -- \
+            --threshold "${{ github.event.inputs.threshold || '0.70' }}" \
+            | tee report.txt
+        continue-on-error: true
+
+      # Exit 1 means a volume is over the line; exit 2 means usage could not be
+      # read at all. Both need a human, and both must open the issue — an alarm
+      # that goes quiet when it cannot see is the failure mode this guards.
+      - name: Raise an issue when a volume is over the line, or unreadable
+        if: steps.check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report = 'No report captured.';
+            try { report = fs.readFileSync('report.txt', 'utf8'); } catch {}
+
+            const title = 'Fly volume disk alarm';
+            const body = [
+              'The scheduled disk alarm did not pass.',
+              '',
+              '```',
+              report.trim(),
+              '```',
+              '',
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              'Runbook: docs/operations/ALERTS.md',
+            ].join('\n');
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'disk-alarm',
+            });
+
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['disk-alarm'],
+              });
+            }
+
+      - name: Fail the run so the schedule shows red
+        if: steps.check.outcome == 'failure'
+        run: exit 1
