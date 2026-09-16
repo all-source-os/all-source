@@ -703,6 +703,10 @@ endif
 	@sed -i '' 's/allsource-core = { version = "[0-9]*\.[0-9]*\(\.[0-9]*\)\{0,1\}"/allsource-core = { version = "$(VERSION)"/' tooling/recall-bench/Cargo.toml
 	@echo "Updating chronis allsource-core dep (Cargo.toml)..."
 	@sed -i '' 's/allsource-core = { version = "[0-9]*\.[0-9]*\(\.[0-9]*\)\{0,1\}"/allsource-core = { version = "$(VERSION)"/' apps/chronis/Cargo.toml
+	@echo "Updating allsource-mcp allsource-core dep (Cargo.toml)..."
+	@sed -i '' 's/allsource-core = { version = "[0-9]*\.[0-9]*\(\.[0-9]*\)\{0,1\}"/allsource-core = { version = "$(VERSION)"/' tooling/allsource-mcp/Cargo.toml
+	@echo "Updating Control Plane OpenAPI spec (info.version)..."
+	@sed -i '' 's/^  version: [0-9]*\.[0-9]*\.[0-9]*/  version: $(VERSION)/' apps/control-plane/docs/openapi.yaml
 	@echo ""
 	@echo "=== Version $(VERSION) set across all services ==="
 	@echo ""
@@ -718,6 +722,8 @@ endif
 	@echo "  - apps/prime-mcp/Cargo.toml"
 	@echo "  - tooling/recall-bench/Cargo.toml"
 	@echo "  - apps/chronis/Cargo.toml"
+	@echo "  - tooling/allsource-mcp/Cargo.toml"
+	@echo "  - apps/control-plane/docs/openapi.yaml"
 	@echo ""
 	@echo "Run 'make check-versions' to verify consistency"
 
