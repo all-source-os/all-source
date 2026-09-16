@@ -1,6 +1,6 @@
 [package]
 name = "allsource-core"
-version = "0.24.0"
+version = "0.25.0"
 edition = "2024"
 rust-version = "1.92"
 authors = ["AllSource Team"]
@@ -135,7 +135,7 @@ jsonwebtoken = { workspace = true, optional = true }
 mimalloc = { version = "0.1", default-features = false }
 # default-features = false keeps the azure/gcp/http backends out; only the aws
 # client is compiled, and it covers every S3-compatible endpoint we target.
-object_store = { version = "0.13", default-features = false, features = ["aws"], optional = true }
+object_store = { version = "0.14", default-features = false, features = ["aws"], optional = true }
 parking_lot.workspace = true
 parquet.workspace = true
 prometheus.workspace = true
