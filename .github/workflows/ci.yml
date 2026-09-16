@@ -268,6 +268,20 @@ jobs:
       - name: Run tests (community edition)
         run: cargo test --locked --lib --features community
 
+      # Until this step existed, NOTHING in apps/core/tests/ ever ran. Both
+      # steps above are `--lib`, and clippy --all-targets compiles an
+      # integration test without executing it — so ~30 files including the WAL
+      # upgrade-durability proof and the tenant read-scope tests were
+      # indistinguishable from tests that pass.
+      #
+      # Feature set is `cold-tier-s3` (which brings in the defaults) rather
+      # than --all-features, because that is the set actually verified green
+      # here; --all-features additionally activates the fastembed-backed prime
+      # suites, whose model-fetch path needs checking before it is trusted in
+      # CI. Widening this is the follow-up, not dropping it.
+      - name: Run integration tests
+        run: cargo test --locked --tests --features cold-tier-s3
+
       - name: Build release
         run: cargo build --locked --lib --release
 

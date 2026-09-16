@@ -159,10 +159,51 @@ impl CompactionConfig {
     /// Unparseable values log a warning and fall back to defaults
     /// — boot doesn't fail.
     pub fn from_env() -> Self {
-        Self::from_env_vars(
+        let config = Self::from_env_vars(
             std::env::var("ALLSOURCE_SNAPSHOT_INTERVAL_SECONDS").ok(),
             std::env::var("ALLSOURCE_RETENTION_SYSTEM_DAYS").ok(),
-        )
+        );
+        config.with_cold_storage_url(std::env::var("ALLSOURCE_COLD_STORAGE_URL").ok())
+    }
+
+    /// Attach a cold-tier archive from `ALLSOURCE_COLD_STORAGE_URL`
+    /// (`s3://bucket/prefix`). Unset or empty leaves `archive` as `None`,
+    /// which is the default: retention deletes without archiving.
+    ///
+    /// A URL that is set but unusable is a hard error, not a warning. Every
+    /// other env var here falls back to a default because a wrong interval
+    /// costs a slow pass; this one decides whether events are copied somewhere
+    /// before compaction deletes the originals, so degrading to "no archive"
+    /// would turn an operator's typo into silent data loss.
+    #[allow(unused_variables, unused_mut)]
+    pub fn with_cold_storage_url(mut self, url: Option<String>) -> Self {
+        let Some(url) = url.filter(|u| !u.trim().is_empty()) else {
+            return self;
+        };
+
+        #[cfg(feature = "cold-tier-s3")]
+        {
+            match super::cold_tier_s3::S3Archive::from_url(url.trim()) {
+                Ok(archive) => {
+                    tracing::info!(
+                        target = %super::cold_tier::ArchiveTarget::description(&archive),
+                        "cold-tier archive enabled"
+                    );
+                    self.archive = Some(std::sync::Arc::new(archive));
+                }
+                Err(e) => panic!("ALLSOURCE_COLD_STORAGE_URL={url:?} is set but unusable: {e}"),
+            }
+        }
+
+        #[cfg(not(feature = "cold-tier-s3"))]
+        panic!(
+            "ALLSOURCE_COLD_STORAGE_URL={url:?} is set but this binary was built without the \
+             `cold-tier-s3` feature, so nothing would be archived before retention deletes it. \
+             Rebuild with --features cold-tier-s3, or unset the variable."
+        );
+
+        #[cfg(feature = "cold-tier-s3")]
+        self
     }
 
     /// Testable variant of `from_env`. Production calls `from_env`;

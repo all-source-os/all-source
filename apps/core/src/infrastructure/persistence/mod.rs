@@ -5,6 +5,8 @@ pub mod arena_pool;
 pub mod backup;
 pub mod batch_processor;
 pub mod cold_tier;
+#[cfg(feature = "cold-tier-s3")]
+pub mod cold_tier_s3;
 pub mod compaction;
 pub mod index;
 pub mod lock_free;

@@ -80,6 +80,13 @@ prime-remote-embed = ["prime-vectors", "dep:reqwest", "tokio/rt-multi-thread"]
 # Bundle the embedding model in the binary (via the allsource-prime-models crate,
 # fetched at build time) so the embedder works fully offline with no runtime fetch.
 prime-bundled-model = ["prime-vectors", "dep:allsource-prime-models"]
+# Cold-tier archive to any S3-compatible endpoint (AWS S3, Cloudflare R2, MinIO).
+# Gated so the default build never pulls an object-store client or a second TLS
+# stack: the local-fs archive needs neither. `tokio/rt-multi-thread` is required,
+# not incidental — ArchiveTarget::archive is sync and the object-store client is
+# async, so the bridge uses block_in_place, which panics on a current-thread
+# runtime. See cold_tier_s3.rs.
+cold-tier-s3 = ["dep:object_store", "tokio/rt-multi-thread"]
 embedded = ["dep:fs4"]
 embedded-phase2 = ["embedded"]
 embedded-sync = ["embedded", "dep:reqwest"]
@@ -126,6 +133,9 @@ http = { workspace = true, optional = true }
 instant-distance = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 mimalloc = { version = "0.1", default-features = false }
+# default-features = false keeps the azure/gcp/http backends out; only the aws
+# client is compiled, and it covers every S3-compatible endpoint we target.
+object_store = { version = "0.13", default-features = false, features = ["aws"], optional = true }
 parking_lot.workspace = true
 parquet.workspace = true
 prometheus.workspace = true
