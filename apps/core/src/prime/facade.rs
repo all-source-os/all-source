@@ -77,6 +77,10 @@ pub struct Prime {
     /// read-only replicas (another process owns the lock). Dropping it releases
     /// the lock; the OS also releases it automatically on process exit/crash.
     _data_dir_lock: Option<DataDirLock>,
+    /// True when another process owns the data-dir and this instance rejects
+    /// every write. Kept as its own flag rather than derived from the lock:
+    /// an in-memory instance also has no lock and is perfectly writable.
+    read_only: bool,
 }
 
 /// RAII guard holding an exclusive advisory lock on a Prime data-dir.
@@ -228,7 +232,7 @@ impl Prime {
     }
 
     /// Build a `Prime` instance from a configured `EmbeddedCore`.
-    fn from_core(core: EmbeddedCore, data_dir_lock: Option<DataDirLock>) -> Self {
+    fn from_core(core: EmbeddedCore, data_dir_lock: Option<DataDirLock>, read_only: bool) -> Self {
         let store = core.inner();
 
         // Prime's graph projections are its entire queryable surface; unlike
@@ -271,7 +275,20 @@ impl Prime {
             #[cfg(feature = "prime-vectors")]
             embedder: OnceLock::new(),
             _data_dir_lock: data_dir_lock,
+            read_only,
         }
+    }
+
+    /// True when another process owns the data-dir, so this instance serves
+    /// reads of the shared memory and rejects every write.
+    ///
+    /// Losing the writer lock is silent by design — a replica is a correct,
+    /// useful thing to be — which is exactly why a server embedding Prime must
+    /// report this on its health surface. A replica whose health check says
+    /// `ok` looks identical to a working writer right up until someone notices
+    /// that nothing has been ingested.
+    pub fn is_read_only(&self) -> bool {
+        self.read_only
     }
 
     /// Open a durable Prime instance at `path`.
@@ -302,14 +319,14 @@ impl Prime {
             .read_only(read_only)
             .build()?;
         let core = EmbeddedCore::open(config).await?;
-        Ok(Self::from_core(core, lock))
+        Ok(Self::from_core(core, lock, read_only))
     }
 
     /// Open an in-memory Prime instance (no persistence). Useful for testing.
     pub async fn open_in_memory() -> Result<Self> {
         let config = Self::config_builder().build()?;
         let core = EmbeddedCore::open(config).await?;
-        Ok(Self::from_core(core, None))
+        Ok(Self::from_core(core, None, false))
     }
 
     /// Shut down the Prime engine, flushing all pending writes.
@@ -4001,6 +4018,29 @@ mod tests {
         assert!(result.nodes[0].score > 0.0);
 
         prime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_replica_reports_itself_as_read_only() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        let writer = Prime::open(dir.path()).await.expect("writer opens");
+        assert!(!writer.is_read_only(), "the lock owner is writable");
+
+        let replica = Prime::open(dir.path()).await.expect("replica opens");
+        assert!(
+            replica.is_read_only(),
+            "a second process on the same data dir must know it is a replica"
+        );
+
+        // In-memory has no lock either, so deriving read-only from the absence
+        // of a lock would call this one a replica. It is not.
+        let memory = Prime::open_in_memory().await.expect("in-memory opens");
+        assert!(!memory.is_read_only());
+
+        replica.shutdown().await.unwrap();
+        writer.shutdown().await.unwrap();
+        memory.shutdown().await.unwrap();
     }
 
     #[cfg(feature = "prime-vectors")]

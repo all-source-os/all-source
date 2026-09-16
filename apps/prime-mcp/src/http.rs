@@ -317,8 +317,29 @@ struct RecallRequest {
 // Handlers
 // =============================================================================
 
-async fn health() -> impl IntoResponse {
-    Json(json!({"status": "ok"}))
+/// `GET /health`.
+///
+/// Reports `degraded` when this process lost the Prime data-dir writer lock to
+/// another process. That state is silent everywhere else: a replica serves
+/// reads perfectly and rejects every write, so a plain `ok` here would let a
+/// second writer look healthy to Fly while nothing it ingests is ever stored.
+/// The multi-tenant ingest shape runs exactly one writer, which is precisely
+/// when an accidental second one has to be visible.
+///
+/// Still HTTP 200: the process is up and serving reads, and flapping the Fly
+/// health check would replace a diagnosable problem with a restart loop.
+async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let read_only = state.prime.as_ref().is_some_and(|p| p.is_read_only());
+    if read_only {
+        Json(json!({
+            "status": "degraded",
+            "writable": false,
+            "reason": "another process owns the Prime data dir; this instance is a \
+                       read-only replica and rejects writes",
+        }))
+    } else {
+        Json(json!({"status": "ok", "writable": true}))
+    }
 }
 
 /// `GET /api/v1/prime/graph.html` — the self-contained local graph viewer.
