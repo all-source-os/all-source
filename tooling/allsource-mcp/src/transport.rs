@@ -16,25 +16,25 @@
 //! Input stays tolerant: `read_message` accepts either framing, so a client that
 //! still sends Content-Length keeps working.
 
-use allsource_core::embedded::EmbeddedCore;
 use anyhow::Result;
 use std::io::{BufRead, Write};
 
 use crate::{
     diagnostics::DiagnosticPolicy,
     protocol::{self, Request, Response},
+    stores::StoreRegistry,
     tools,
 };
 
 pub struct StdioTransport {
-    core: EmbeddedCore,
+    stores: StoreRegistry,
     policy: DiagnosticPolicy,
 }
 
 impl StdioTransport {
-    /// Create a transport bound to one core and diagnostic policy.
-    pub fn new(core: EmbeddedCore, policy: DiagnosticPolicy) -> Self {
-        Self { core, policy }
+    /// Create a transport bound to one store registry and diagnostic policy.
+    pub fn new(stores: StoreRegistry, policy: DiagnosticPolicy) -> Self {
+        Self { stores, policy }
     }
 
     /// Serve MCP requests until standard input closes.
@@ -52,7 +52,11 @@ impl StdioTransport {
     }
 
     /// The request loop, over any reader and writer, so it can be driven in a test.
-    pub async fn serve(&mut self, reader: &mut impl BufRead, writer: &mut impl Write) -> Result<()> {
+    pub async fn serve(
+        &mut self,
+        reader: &mut impl BufRead,
+        writer: &mut impl Write,
+    ) -> Result<()> {
         loop {
             let Some(body) = read_message(reader)? else {
                 break; // EOF
@@ -125,7 +129,8 @@ impl StdioTransport {
                     .cloned()
                     .unwrap_or(serde_json::json!({}));
 
-                let result = tools::execute_tool(&self.core, &self.policy, tool_name, &args).await;
+                let result =
+                    tools::execute_tool(&self.stores, &self.policy, tool_name, &args).await;
                 Some(Response::success(req.id.clone(), result))
             }
 
@@ -191,12 +196,27 @@ fn read_message(reader: &mut impl BufRead) -> Result<Option<String>> {
     Ok(Some(String::from_utf8_lossy(&body).to_string()))
 }
 
+/// Write one JSON-RPC response as a single newline-terminated line.
+///
+/// `serde_json::to_string` is compact and contains no newline, so the `writeln!`
+/// terminator is the only one in the output and the line stays parseable.
+fn write_response(writer: &mut impl Write, response: &Response) -> Result<()> {
+    let json = serde_json::to_string(response)?;
+    tracing::debug!("send: {json}");
+    writeln!(writer, "{json}")?;
+    writer.flush()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use allsource_core::embedded::{Config, EmbeddedCore};
 
     use super::StdioTransport;
-    use crate::diagnostics::{AccessProfile, DiagnosticPolicy};
+    use crate::{
+        diagnostics::{AccessProfile, DiagnosticPolicy},
+        stores::StoreRegistry,
+    };
 
     async fn transport() -> StdioTransport {
         let core = EmbeddedCore::open(Config::builder().build().expect("valid config"))
@@ -204,7 +224,7 @@ mod tests {
             .expect("in-memory core");
         let policy =
             DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
-        StdioTransport::new(core, policy)
+        StdioTransport::new(StoreRegistry::from_cores(vec![("default", core)]), policy)
     }
 
     async fn serve(input: &str) -> String {
@@ -253,11 +273,7 @@ mod tests {
     #[tokio::test]
     async fn a_content_length_framed_request_is_still_accepted() {
         let body = r#"{"jsonrpc":"2.0","id":7,"method":"tools/list"}"#;
-        let out = serve(&format!(
-            "Content-Length: {}\r\n\r\n{body}",
-            body.len()
-        ))
-        .await;
+        let out = serve(&format!("Content-Length: {}\r\n\r\n{body}", body.len())).await;
 
         let parsed: serde_json::Value =
             serde_json::from_str(out.trim_end()).expect("one JSON line back");
@@ -271,16 +287,4 @@ mod tests {
         let out = serve("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n").await;
         assert!(out.is_empty(), "expected silence, got {out:?}");
     }
-}
-
-/// Write one JSON-RPC response as a single newline-terminated line.
-///
-/// `serde_json::to_string` is compact and contains no newline, so the `writeln!`
-/// terminator is the only one in the output and the line stays parseable.
-fn write_response(writer: &mut impl Write, response: &Response) -> Result<()> {
-    let json = serde_json::to_string(response)?;
-    tracing::debug!("send: {json}");
-    writeln!(writer, "{json}")?;
-    writer.flush()?;
-    Ok(())
 }

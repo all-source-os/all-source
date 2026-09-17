@@ -1,6 +1,10 @@
 //! MCP tool definitions and execution.
 
-use std::fmt::Write;
+use std::{
+    collections::BTreeMap,
+    fmt::Write,
+    time::{Duration, Instant},
+};
 
 use allsource_core::embedded::{EmbeddedCore, Query};
 use anyhow::Result;
@@ -11,13 +15,27 @@ use sha2::{Digest, Sha256};
 use crate::{
     diagnostics::DiagnosticPolicy,
     protocol::{ToolAnnotations, ToolDef, tool_error, tool_result},
+    stores::{DEFAULT_STORE, Store, StoreRegistry},
 };
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 500;
+/// Events read per page while filtering by payload text, which the store cannot do itself.
+const SCAN_PAGE: usize = 500;
+const DEFAULT_MAX_SCAN: usize = 5_000;
+const MAX_SCAN: usize = 50_000;
+/// Longest a watch may hold a request open, so one call can never outlive a caller's timeout.
+const MAX_WAIT_SECONDS: u64 = 55;
+const WATCH_POLL: Duration = Duration::from_millis(500);
 
 /// Build a read-only tool descriptor with shared diagnostic input and annotations.
 fn read_tool(name: &str, title: &str, description: &str, mut input_schema: Value) -> ToolDef {
+    if name != "list_stores" {
+        input_schema["properties"]["store"] = json!({
+            "type": "string",
+            "description": "Which configured store to read; list_stores names them. Defaults to 'default'.",
+        });
+    }
     input_schema["properties"]["diagnostic"] = json!({
         "type": "object",
         "description": "Optional correlation identifiers carried into diagnostic context; never used as tenant authorization.",
@@ -69,6 +87,10 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                 "properties": {
                     "entity_id": { "type": "string", "description": "Filter by entity ID (exact match)" },
                     "event_type": { "type": "string", "description": "Filter by event type prefix (e.g. 'workflow_run' matches 'workflow_run.started')" },
+                    "event_type_exact": { "type": "string", "description": "Filter by one exact event type; unlike event_type it never matches longer types" },
+                    "payload_contains": { "type": "array", "items": { "type": "string" }, "description": "Keep only events whose payload text contains every one of these strings. Scans up to max_scan events, so the page is not cursor-paginated." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project payloads to these dotted paths (e.g. 'run.id'); a path the payload lacks renders null." },
+                    "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN, "description": "Upper bound on events read while filtering by payload_contains." },
                     "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
                     "cursor": { "type": "string", "description": "Opaque cursor returned by a previous identical query" },
                     "order": { "type": "string", "enum": ["asc", "desc"], "default": "asc" },
@@ -89,6 +111,74 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                     "cursor": { "type": "string", "description": "Opaque cursor returned by a previous identical sample" },
                     "payload_mode": { "type": "string", "enum": payload_modes.clone() }
                 }
+            }),
+        ),
+        read_tool(
+            "list_stores",
+            "List readable stores",
+            "Name every store this server may read, with its path and event count.",
+            json!({
+                "type": "object",
+                "properties": {}
+            }),
+        ),
+        read_tool(
+            "watch_events",
+            "Wait for new events",
+            "Return events newer than a checkpoint, waiting up to wait_seconds for one to arrive. The caller loops on the returned checkpoint.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "event_type": { "type": "string", "description": "Event type prefix to watch" },
+                    "entity_id": { "type": "string" },
+                    "checkpoint": { "type": "string", "description": "Checkpoint returned by the previous call. Omit to start from the newest event, so a first call does not replay history." },
+                    "wait_seconds": { "type": "integer", "minimum": 0, "maximum": MAX_WAIT_SECONDS, "default": 0, "description": "How long to wait for the first new event. 0 returns immediately." },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone() },
+                    "fields": { "type": "array", "items": { "type": "string" } }
+                }
+            }),
+        ),
+        read_tool(
+            "fold_entity_lifecycle",
+            "Fold entities by state",
+            "Group a family of events by entity and report each entity's latest state, so a caller never folds a lifecycle by hand.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "event_type": { "type": "string", "description": "Event type prefix that forms the family, e.g. 'workflow_run'" },
+                    "state": { "type": "string", "description": "Keep only entities whose latest state equals this (the segment after the last dot, e.g. 'completed')" },
+                    "entity_id": { "type": "string", "description": "Fold one entity only" },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Dotted payload paths carried from each entity's latest event" },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone(), "description": "Applied to the payload before fields projects out of it" },
+                    "since": { "type": "string", "format": "date-time" },
+                    "until": { "type": "string", "format": "date-time" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN }
+                },
+                "required": ["event_type"]
+            }),
+        ),
+        read_tool(
+            "fold_steps",
+            "Fold work items by key",
+            "Pair start and terminal events that share a payload key, reporting elapsed time and which items are still open.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "event_type": { "type": "string", "description": "Event type prefix that forms the family, e.g. 'step_run'" },
+                    "item_key": { "type": "string", "description": "Payload key identifying one item, e.g. 'step_run_id'" },
+                    "group_key": { "type": "string", "description": "Payload key to filter on, e.g. 'run_id'" },
+                    "group_value": { "type": "string", "description": "Value that group_key must equal" },
+                    "terminal_states": { "type": "array", "items": { "type": "string" }, "description": "Type suffixes that close an item; defaults to completed, failed, cancelled. An item with none stays open, and its elapsed_ms is null." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Dotted payload paths carried from each item's latest event" },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone(), "description": "Applied to the payload before fields projects out of it" },
+                    "since": { "type": "string", "format": "date-time" },
+                    "until": { "type": "string", "format": "date-time" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN }
+                },
+                "required": ["event_type", "item_key"]
             }),
         ),
         read_tool(
@@ -175,12 +265,12 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
 
 /// Execute a tool call and return the MCP result.
 pub async fn execute_tool(
-    core: &EmbeddedCore,
+    stores: &StoreRegistry,
     policy: &DiagnosticPolicy,
     name: &str,
     args: &Value,
 ) -> Value {
-    match execute_tool_inner(core, policy, name, args).await {
+    match execute_tool_inner(stores, policy, name, args).await {
         Ok(mut result) => {
             DiagnosticPolicy::attach_correlation(&mut result, args);
             tool_result(&result)
@@ -211,13 +301,21 @@ pub async fn execute_tool(
 
 /// Dispatch a validated tool call to its implementation.
 async fn execute_tool_inner(
-    core: &EmbeddedCore,
+    stores: &StoreRegistry,
     policy: &DiagnosticPolicy,
     name: &str,
     args: &Value,
 ) -> Result<Value> {
+    if name == "list_stores" {
+        return exec_list_stores(stores, policy);
+    }
+
+    let core = &selected_store(stores, policy, args)?.core;
     match name {
         "query_events" => exec_query_events(core, policy, args).await,
+        "watch_events" => exec_watch_events(core, policy, args).await,
+        "fold_entity_lifecycle" => exec_fold_entity_lifecycle(core, policy, args).await,
+        "fold_steps" => exec_fold_steps(core, policy, args).await,
         "sample_events" => exec_sample_events(core, policy, args).await,
         "quick_stats" => exec_quick_stats(core, policy).await,
         "get_snapshot" => exec_get_snapshot(core, policy, args),
@@ -227,6 +325,54 @@ async fn execute_tool_inner(
         "analyze_changes" => exec_analyze_changes(core, policy, args).await,
         _ => anyhow::bail!("invalid argument: unknown tool '{name}'"),
     }
+}
+
+/// Resolve the store a call selected, refusing selection for a hosted tenant.
+///
+/// A hosted tenant is bound to one store for the life of the process, so letting a
+/// request name another would let it read outside that binding.
+fn selected_store<'a>(
+    stores: &'a StoreRegistry,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<&'a Store> {
+    let requested = args.get("store").and_then(Value::as_str);
+    if requested.is_some_and(|name| name != DEFAULT_STORE) && policy.is_hosted_tenant() {
+        anyhow::bail!("access denied: hosted tenant profiles read only their bound store");
+    }
+    stores.get(requested)
+}
+
+/// List the stores this server may read.
+fn exec_list_stores(stores: &StoreRegistry, policy: &DiagnosticPolicy) -> Result<Value> {
+    if policy.is_hosted_tenant() {
+        anyhow::bail!("access denied: hosted tenant profiles read only their bound store");
+    }
+    let items: Vec<Value> = stores
+        .iter()
+        .map(|(name, store)| {
+            json!({
+                "store": name,
+                "path": store.path.display().to_string(),
+                "events": store.core.event_count(),
+            })
+        })
+        .collect();
+    Ok(json!({
+        "context": policy.context(None),
+        "items": items,
+        "completeness": {
+            "complete": true,
+            "reason": Value::Null,
+            "scanned": items.len(),
+            "matched": items.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": items.len(),
+            "sourcesRead": items.len(),
+            "sourcesSkipped": [],
+        }
+    }))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -302,6 +448,11 @@ fn query_signature(
         policy.source_id(),
         args.get("entity_id").and_then(Value::as_str).unwrap_or(""),
         args.get("event_type").and_then(Value::as_str).unwrap_or(""),
+        // Omitting this would let a cursor issued for one exact type validate
+        // against another and apply its offset to a different result set.
+        args.get("event_type_exact")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
         args.get("since").and_then(Value::as_str).unwrap_or(""),
         args.get("until").and_then(Value::as_str).unwrap_or(""),
         args.get("order").and_then(Value::as_str).unwrap_or("asc"),
@@ -370,6 +521,9 @@ fn scoped_query(
     if let Some(event_type) = args.get("event_type").and_then(|v| v.as_str()) {
         query = query.event_type_prefix(event_type);
     }
+    if let Some(event_type) = args.get("event_type_exact").and_then(|v| v.as_str()) {
+        query = query.event_type(event_type);
+    }
     if let Some(since) = since {
         query = query.since(since);
     }
@@ -378,6 +532,45 @@ fn scoped_query(
     }
 
     Ok((query, signature))
+}
+
+/// Read an optional array-of-strings argument.
+fn string_list(args: &Value, key: &str) -> Result<Vec<String>> {
+    let Some(value) = args.get(key) else {
+        return Ok(Vec::new());
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("invalid argument: {key} must be an array of strings"))?;
+    items
+        .iter()
+        .map(|item| {
+            item.as_str().map(str::to_string).ok_or_else(|| {
+                anyhow::anyhow!("invalid argument: {key} must be an array of strings")
+            })
+        })
+        .collect()
+}
+
+/// Whether a payload's JSON text contains every needle.
+fn payload_contains_all(payload: &Value, needles: &[String]) -> bool {
+    let text = payload.to_string();
+    needles.iter().all(|needle| text.contains(needle.as_str()))
+}
+
+/// Project a payload onto dotted paths; a path the payload lacks renders null.
+fn project_fields(payload: &Value, paths: &[String]) -> Value {
+    let projected: serde_json::Map<String, Value> = paths
+        .iter()
+        .map(|path| {
+            let mut cursor = payload;
+            for segment in path.split('.') {
+                cursor = cursor.get(segment).unwrap_or(&Value::Null);
+            }
+            (path.clone(), cursor.clone())
+        })
+        .collect();
+    Value::Object(projected)
 }
 
 /// Recursively redact values under credential-like object keys.
@@ -415,6 +608,13 @@ fn redact(value: &Value) -> Value {
 }
 
 /// Render an event payload according to selected exposure mode.
+/// The caller's permitted view of one payload.
+///
+/// **Every** read of an event payload goes through here — emitted, projected by
+/// `fields`, grouped by `item_key`, matched by `payload_contains`, or merged into
+/// a folded state. A read that skips it is a leak even when it emits nothing
+/// itself: a filter that matches what the caller may not see is a membership
+/// oracle over exactly the bytes `redact` removes.
 fn event_payload(payload: &Value, mode: PayloadMode) -> Value {
     match mode {
         PayloadMode::None => Value::Null,
@@ -486,24 +686,20 @@ async fn exec_query_events(
 ) -> Result<Value> {
     let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
     let mode = payload_mode(args, policy)?;
+    let fields = string_list(args, "fields")?;
+    let needles = string_list(args, "payload_contains")?;
+
+    if !needles.is_empty() {
+        return scan_query_events(core, policy, args, limit, mode, &fields, &needles).await;
+    }
+
     let (query, signature) = scoped_query(policy, "query_events", args, limit)?;
 
     let page = core.query_page(query).await?;
     let result: Vec<Value> = page
         .events
         .iter()
-        .map(|e| {
-            json!({
-                "id": e.id.to_string(),
-                "entity_id": e.entity_id,
-                "event_type": e.event_type,
-                "tenant_id": e.tenant_id,
-                "timestamp": e.timestamp.to_rfc3339(),
-                "version": e.version,
-                "payload": event_payload(&e.payload, mode),
-                "metadata": e.metadata.as_ref().map(redact),
-            })
-        })
+        .map(|e| render_event(e, mode, &fields))
         .collect();
 
     let items = Value::Array(result);
@@ -518,6 +714,547 @@ async fn exec_query_events(
             force_incomplete: false,
         },
     ))
+}
+
+/// Where a watch resumed from: a timestamp, and how many events at that exact
+/// timestamp were already delivered.
+///
+/// A timestamp alone is not enough. `since` is inclusive, so resuming from it
+/// repeats every event sharing that millisecond; resuming from the millisecond
+/// after it drops the ones that have not been delivered yet.
+struct Checkpoint {
+    at: DateTime<Utc>,
+    delivered_at_same_ms: usize,
+}
+
+impl Checkpoint {
+    /// Parse `v1:<rfc3339>:<count>`.
+    fn parse(raw: &str) -> Result<Self> {
+        let mut parts = raw.splitn(3, '|');
+        let version = parts.next();
+        let at = parts.next().and_then(|value| value.parse().ok());
+        let delivered = parts.next().and_then(|value| value.parse().ok());
+        match (version, at, delivered) {
+            (Some("v1"), Some(at), Some(delivered_at_same_ms)) => Ok(Self {
+                at,
+                delivered_at_same_ms,
+            }),
+            _ => anyhow::bail!("invalid argument: checkpoint is not one this server issued"),
+        }
+    }
+
+    fn encode(at: DateTime<Utc>, delivered_at_same_ms: usize) -> String {
+        format!("v1|{}|{delivered_at_same_ms}", at.to_rfc3339())
+    }
+}
+
+/// Return events after a checkpoint, waiting briefly for the first one.
+///
+/// MCP is request/response, so a watch is a bounded long-poll the caller loops on,
+/// never a stream. With no checkpoint it reports the newest event as the starting
+/// point and returns nothing, so a first call cannot replay the whole store.
+async fn exec_watch_events(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
+    let mode = payload_mode(args, policy)?;
+    let fields = string_list(args, "fields")?;
+    let wait = args
+        .get("wait_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .min(MAX_WAIT_SECONDS);
+
+    let checkpoint = args
+        .get("checkpoint")
+        .and_then(Value::as_str)
+        .map(Checkpoint::parse)
+        .transpose()?;
+
+    let Some(checkpoint) = checkpoint else {
+        return watch_start(core, policy, args).await;
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(wait);
+    loop {
+        // The already-delivered count must be applied as a query OFFSET, never as
+        // a skip over the returned page: the fetch is capped at MAX_LIMIT, so once
+        // one instant holds that many events a skip consumes the whole window and
+        // the checkpoint can never advance past that instant.
+        let query = watch_query(policy, args, limit)
+            .since(checkpoint.at)
+            .offset(checkpoint.delivered_at_same_ms);
+        let page = core.query_page(query).await?;
+
+        let fresh: Vec<&allsource_core::embedded::EventView> = page
+            .events
+            .iter()
+            .filter(|event| event.timestamp >= checkpoint.at)
+            .take(limit)
+            .collect();
+
+        if !fresh.is_empty() || Instant::now() >= deadline {
+            let newest = fresh.last().map_or(checkpoint.at, |event| event.timestamp);
+            let delivered_at_newest = if fresh.is_empty() {
+                checkpoint.delivered_at_same_ms
+            } else {
+                let at_newest = fresh
+                    .iter()
+                    .filter(|event| event.timestamp == newest)
+                    .count();
+                if newest == checkpoint.at {
+                    checkpoint.delivered_at_same_ms + at_newest
+                } else {
+                    at_newest
+                }
+            };
+            let items: Vec<Value> = fresh
+                .iter()
+                .map(|event| render_event(event, mode, &fields))
+                .collect();
+            return Ok(json!({
+                "context": policy.context(Some(newest.to_rfc3339()).as_deref()),
+                "items": items,
+                "checkpoint": Checkpoint::encode(newest, delivered_at_newest),
+                "page": {
+                    "requestedLimit": limit,
+                    "returned": items.len(),
+                    "totalCount": items.len(),
+                    "nextCursor": Value::Null,
+                },
+                "completeness": {
+                    "complete": items.len() < limit,
+                    "reason": if items.len() < limit { Value::Null } else { json!("limit_reached") },
+                    "scanned": page.events.len(),
+                    "matched": items.len(),
+                    "omitted": 0,
+                    "unparsedTimestamps": 0,
+                    "sourcesRequested": 1,
+                    "sourcesRead": 1,
+                    "sourcesSkipped": [],
+                }
+            }));
+        }
+
+        tokio::time::sleep(WATCH_POLL).await;
+    }
+}
+
+/// Answer a watch that carried no checkpoint: report where to start, return nothing.
+async fn watch_start(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let query = watch_query(policy, args, 1).descending(true);
+    let page = core.query_page(query).await?;
+    let newest = page.events.first().map(|event| event.timestamp);
+    let at_newest = usize::from(newest.is_some());
+
+    Ok(json!({
+        "context": policy.context(newest.as_ref().map(DateTime::to_rfc3339).as_deref()),
+        "items": [],
+        "checkpoint": Checkpoint::encode(newest.unwrap_or_else(Utc::now), at_newest),
+        "page": {
+            "requestedLimit": 0,
+            "returned": 0,
+            "totalCount": 0,
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": true,
+            "reason": Value::Null,
+            "scanned": page.events.len(),
+            "matched": 0,
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    }))
+}
+
+/// A tenant-bound query carrying only the filters a watch accepts.
+fn watch_query(policy: &DiagnosticPolicy, args: &Value, limit: usize) -> Query {
+    let mut query = Query::new().limit(limit.min(MAX_LIMIT)).descending(false);
+    if let Some(tenant_id) = policy.tenant_id() {
+        query = query.tenant_id(tenant_id);
+    }
+    if let Some(entity_id) = args.get("entity_id").and_then(Value::as_str) {
+        query = query.entity_id(entity_id);
+    }
+    if let Some(event_type) = args.get("event_type").and_then(Value::as_str) {
+        query = query.event_type_prefix(event_type);
+    }
+    query
+}
+
+/// Read every event of one family, oldest first, bounded by `max_scan`.
+///
+/// A fold has to see a whole family to be correct, so it scans rather than reading
+/// one page, and reports how far it got instead of implying it saw everything.
+async fn scan_family(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+    tool_name: &str,
+) -> Result<(Vec<allsource_core::embedded::EventView>, usize, bool)> {
+    let max_scan = limit_arg(args, "max_scan", DEFAULT_MAX_SCAN, MAX_SCAN)?;
+    let mut events = Vec::new();
+    let mut exhausted = false;
+
+    while events.len() < max_scan {
+        let page_size = SCAN_PAGE.min(max_scan - events.len());
+        let (query, _) = scoped_query(policy, tool_name, args, page_size)?;
+        let page = core.query_page(query.offset(events.len())).await?;
+        if page.events.is_empty() {
+            exhausted = true;
+            break;
+        }
+        let last_page = page.next_offset.is_none();
+        events.extend(page.events);
+        if last_page {
+            exhausted = true;
+            break;
+        }
+    }
+
+    let scanned = events.len();
+    Ok((events, scanned, exhausted))
+}
+
+/// The segment after the last dot of an event type: `workflow_run.started` -> `started`.
+fn state_of(event_type: &str) -> &str {
+    event_type.rsplit('.').next().unwrap_or(event_type)
+}
+
+/// Wrap folded items in the same evidence envelope every other tool returns.
+fn fold_result(
+    policy: &DiagnosticPolicy,
+    items: Vec<Value>,
+    limit: usize,
+    scanned: usize,
+    exhausted: bool,
+    fresh_through: Option<DateTime<Utc>>,
+) -> Value {
+    let truncated = items.len() > limit;
+    let items: Vec<Value> = items.into_iter().take(limit).collect();
+    let complete = exhausted && !truncated;
+    json!({
+        "context": policy.context(fresh_through.as_ref().map(DateTime::to_rfc3339).as_deref()),
+        "items": items,
+        "page": {
+            "requestedLimit": limit,
+            "returned": items.len(),
+            "totalCount": items.len(),
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": complete,
+            "reason": if complete { Value::Null } else if truncated { json!("limit_reached") } else { json!("max_scan_reached") },
+            "scanned": scanned,
+            "matched": items.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    })
+}
+
+/// Fold a family of events into one row per entity carrying its latest state.
+async fn exec_fold_entity_lifecycle(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    if args.get("event_type").and_then(Value::as_str).is_none() {
+        anyhow::bail!("invalid argument: event_type is required");
+    }
+    let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
+    let fields = string_list(args, "fields")?;
+    // `fields` projects out of the payload, so it must read the policy's view of
+    // it. Projecting the raw payload would hand a hosted tenant the credential
+    // keys `redact` exists to remove.
+    let mode = payload_mode(args, policy)?;
+    let wanted_state = args.get("state").and_then(Value::as_str);
+
+    let (events, scanned, exhausted) =
+        scan_family(core, policy, args, "fold_entity_lifecycle").await?;
+    let fresh_through = events.iter().map(|event| event.timestamp).max();
+
+    // Last writer by timestamp wins, which is how every reader of this store folds.
+    let mut folded: BTreeMap<String, &allsource_core::embedded::EventView> = BTreeMap::new();
+    let mut first_seen: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    for event in &events {
+        first_seen
+            .entry(event.entity_id.clone())
+            .and_modify(|seen| *seen = (*seen).min(event.timestamp))
+            .or_insert(event.timestamp);
+        *counts.entry(event.entity_id.clone()).or_default() += 1;
+        folded
+            .entry(event.entity_id.clone())
+            .and_modify(|latest| {
+                if event.timestamp >= latest.timestamp {
+                    *latest = event;
+                }
+            })
+            .or_insert(event);
+    }
+
+    let items: Vec<Value> = folded
+        .iter()
+        .filter(|(_, latest)| {
+            wanted_state.is_none_or(|state| state_of(&latest.event_type) == state)
+        })
+        .map(|(entity_id, latest)| {
+            json!({
+                "entity_id": entity_id,
+                "state": state_of(&latest.event_type),
+                "state_event_type": latest.event_type,
+                "state_at": latest.timestamp.to_rfc3339(),
+                "first_seen_at": first_seen.get(entity_id).map(DateTime::to_rfc3339),
+                "events": counts.get(entity_id.as_str()).copied().unwrap_or(0),
+                "fields": project_fields(&event_payload(&latest.payload, mode), &fields),
+            })
+        })
+        .collect();
+
+    Ok(fold_result(
+        policy,
+        items,
+        limit,
+        scanned,
+        exhausted,
+        fresh_through,
+    ))
+}
+
+/// The type suffixes that close an item, or the default set when none are given.
+fn terminal_states(args: &Value) -> Result<Vec<String>> {
+    let configured = string_list(args, "terminal_states")?;
+    if configured.is_empty() {
+        return Ok(vec![
+            "completed".to_string(),
+            "failed".to_string(),
+            "cancelled".to_string(),
+        ]);
+    }
+    Ok(configured)
+}
+
+/// Pair start and terminal events that share a payload key.
+async fn exec_fold_steps(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    if args.get("event_type").and_then(Value::as_str).is_none() {
+        anyhow::bail!("invalid argument: event_type is required");
+    }
+    let item_key = args
+        .get("item_key")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("invalid argument: item_key is required"))?;
+    let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
+    let fields = string_list(args, "fields")?;
+    // Same reason as `fold_entity_lifecycle`: a projection reads the payload, so
+    // it reads it through the policy's view.
+    let mode = payload_mode(args, policy)?;
+    let group_key = args.get("group_key").and_then(Value::as_str);
+    let group_value = args.get("group_value").and_then(Value::as_str);
+    if group_key.is_some() != group_value.is_some() {
+        anyhow::bail!("invalid argument: group_key and group_value are given together");
+    }
+    let terminal = terminal_states(args)?;
+
+    let (events, scanned, exhausted) = scan_family(core, policy, args, "fold_steps").await?;
+    let fresh_through = events.iter().map(|event| event.timestamp).max();
+
+    let mut items: BTreeMap<String, Value> = BTreeMap::new();
+    let mut opened: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+    let mut closed: BTreeMap<String, (DateTime<Utc>, String)> = BTreeMap::new();
+    let mut latest: BTreeMap<String, &allsource_core::embedded::EventView> = BTreeMap::new();
+
+    for event in &events {
+        // `item_key` names a payload key whose VALUE is emitted as `item`, so it
+        // reads the policy's view too — otherwise `item_key: "password"` returns
+        // the secret verbatim as a row label.
+        let view = event_payload(&event.payload, mode);
+        if let (Some(key), Some(value)) = (group_key, group_value)
+            && view.get(key).and_then(Value::as_str) != Some(value)
+        {
+            continue;
+        }
+        let Some(item) = view.get(item_key).and_then(Value::as_str) else {
+            continue;
+        };
+        let item = item.to_string();
+        opened
+            .entry(item.clone())
+            .and_modify(|at| *at = (*at).min(event.timestamp))
+            .or_insert(event.timestamp);
+        if terminal
+            .iter()
+            .any(|state| state == state_of(&event.event_type))
+        {
+            closed
+                .entry(item.clone())
+                .and_modify(|(at, state)| {
+                    if event.timestamp >= *at {
+                        *at = event.timestamp;
+                        *state = state_of(&event.event_type).to_string();
+                    }
+                })
+                .or_insert((event.timestamp, state_of(&event.event_type).to_string()));
+        }
+        latest
+            .entry(item.clone())
+            .and_modify(|current| {
+                if event.timestamp >= current.timestamp {
+                    *current = event;
+                }
+            })
+            .or_insert(event);
+        items.entry(item).or_insert(Value::Null);
+    }
+
+    let rows: Vec<Value> = items
+        .keys()
+        .map(|item| {
+            let started_at = opened.get(item).copied();
+            let finished = closed.get(item);
+            let elapsed_ms = started_at
+                .and_then(|start| finished.map(|(end, _)| (*end - start).num_milliseconds()));
+            json!({
+                "item": item,
+                "started_at": started_at.map(|at| at.to_rfc3339()),
+                "finished_at": finished.map(|(at, _)| at.to_rfc3339()),
+                "final_state": finished.map(|(_, state)| state.clone()),
+                "open": finished.is_none(),
+                "elapsed_ms": elapsed_ms,
+                "fields": latest.get(item).map_or(Value::Null, |event| {
+                    project_fields(&event_payload(&event.payload, mode), &fields)
+                }),
+            })
+        })
+        .collect();
+
+    Ok(fold_result(
+        policy,
+        rows,
+        limit,
+        scanned,
+        exhausted,
+        fresh_through,
+    ))
+}
+
+/// Render one event, applying payload exposure mode then field projection.
+fn render_event(
+    event: &allsource_core::embedded::EventView,
+    mode: PayloadMode,
+    fields: &[String],
+) -> Value {
+    let payload = event_payload(&event.payload, mode);
+    let payload = if fields.is_empty() {
+        payload
+    } else {
+        project_fields(&payload, fields)
+    };
+    json!({
+        "id": event.id.to_string(),
+        "entity_id": event.entity_id,
+        "event_type": event.event_type,
+        "tenant_id": event.tenant_id,
+        "timestamp": event.timestamp.to_rfc3339(),
+        "version": event.version,
+        "payload": payload,
+        "metadata": event.metadata.as_ref().map(redact),
+    })
+}
+
+/// Filter by payload text, which the store cannot do, by scanning bounded pages.
+///
+/// The scan starts at the first event every time: an offset cursor would describe
+/// the STORE's ordering, not the filtered result, so the caller would silently skip
+/// matches. `max_scan` bounds the read, and `completeness` reports what was covered.
+async fn scan_query_events(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+    limit: usize,
+    mode: PayloadMode,
+    fields: &[String],
+    needles: &[String],
+) -> Result<Value> {
+    if args.get("cursor").is_some() {
+        anyhow::bail!(
+            "invalid argument: payload_contains cannot be combined with cursor; raise max_scan instead"
+        );
+    }
+    let max_scan = limit_arg(args, "max_scan", DEFAULT_MAX_SCAN, MAX_SCAN)?;
+
+    let mut matched: Vec<Value> = Vec::new();
+    let mut scanned = 0usize;
+    let mut fresh_through: Option<DateTime<Utc>> = None;
+    let mut exhausted = false;
+
+    while scanned < max_scan && matched.len() < limit {
+        let page_size = SCAN_PAGE.min(max_scan - scanned);
+        let (query, _) = scoped_query(policy, "query_events", args, page_size)?;
+        let page = core.query_page(query.offset(scanned)).await?;
+        if page.events.is_empty() {
+            exhausted = true;
+            break;
+        }
+        for event in &page.events {
+            scanned += 1;
+            fresh_through = fresh_through.max(Some(event.timestamp));
+            // Matching the raw payload would be a membership oracle over exactly
+            // what `redact` hides: a caller refused the value can still refine it
+            // a character at a time from the match count. The filter reads the
+            // same view the caller is allowed to read back.
+            if payload_contains_all(&event_payload(&event.payload, mode), needles) {
+                matched.push(render_event(event, mode, fields));
+                if matched.len() == limit {
+                    break;
+                }
+            }
+        }
+        if page.next_offset.is_none() {
+            exhausted = true;
+            break;
+        }
+    }
+
+    let complete = exhausted && matched.len() < limit;
+    Ok(json!({
+        "context": policy.context(fresh_through.as_ref().map(DateTime::to_rfc3339).as_deref()),
+        "items": Value::Array(matched.clone()),
+        "page": {
+            "requestedLimit": limit,
+            "returned": matched.len(),
+            "totalCount": matched.len(),
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": complete,
+            "reason": if complete { Value::Null } else if matched.len() == limit { json!("limit_reached") } else { json!("max_scan_reached") },
+            "scanned": scanned,
+            "matched": matched.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    }))
 }
 
 /// Execute a bounded newest-first event sample.
@@ -753,6 +1490,7 @@ async fn exec_reconstruct_state(
         .get("entity_id")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("invalid argument: entity_id is required"))?;
+    let mode = payload_mode(args, policy)?;
 
     let (query, _) = scoped_query(policy, "reconstruct_state", args, MAX_LIMIT)?;
     let page = core.query_page(query.entity_id(entity_id)).await?;
@@ -785,7 +1523,10 @@ async fn exec_reconstruct_state(
         );
         state.insert("_version".to_string(), json!(e.version));
 
-        if let Some(obj) = e.payload.as_object() {
+        // The folded state IS the payload, so it carries the payload policy with
+        // it. Merging `e.payload` raw returns a hosted tenant everything `redact`
+        // exists to withhold.
+        if let Some(obj) = event_payload(&e.payload, mode).as_object() {
             for (k, v) in obj {
                 state.insert(k.clone(), v.clone());
             }
@@ -882,10 +1623,15 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        EvidencePageOptions, evidence_page, exec_reconstruct_state, payload_mode, query_signature,
-        redact, tool_definitions,
+        EvidencePageOptions, evidence_page, exec_fold_entity_lifecycle, exec_fold_steps,
+        exec_list_stores, exec_query_events, exec_reconstruct_state, exec_watch_events,
+        payload_contains_all, payload_mode, project_fields, query_signature, redact,
+        selected_store, tool_definitions,
     };
-    use crate::diagnostics::{AccessProfile, DiagnosticPolicy};
+    use crate::{
+        diagnostics::{AccessProfile, DiagnosticPolicy},
+        stores::StoreRegistry,
+    };
 
     #[test]
     fn redaction_covers_nested_credential_keys() {
@@ -923,7 +1669,12 @@ mod tests {
         );
         assert_ne!(
             query_signature(&tenant_a, "query_events", 25, &args),
-            query_signature(&tenant_a, "query_events", 50, &json!({ "entity_id": "same-id" }))
+            query_signature(
+                &tenant_a,
+                "query_events",
+                50,
+                &json!({ "entity_id": "same-id" })
+            )
         );
         assert_ne!(
             query_signature(&tenant_a, "query_events", 25, &args),
@@ -954,6 +1705,559 @@ mod tests {
                 assert!(!modes.contains(&json!("full")));
             }
         }
+    }
+
+    async fn two_store_registry() -> StoreRegistry {
+        let mut cores = Vec::new();
+        for _ in 0..2 {
+            cores.push(
+                EmbeddedCore::open(Config::builder().build().expect("valid config"))
+                    .await
+                    .expect("in-memory core"),
+            );
+        }
+        let mut cores = cores.into_iter();
+        StoreRegistry::from_cores(vec![
+            ("default", cores.next().expect("default core")),
+            ("workspace", cores.next().expect("workspace core")),
+        ])
+    }
+
+    #[tokio::test]
+    async fn a_call_selects_a_store_by_name_and_an_unknown_name_is_not_found() {
+        let stores = two_store_registry().await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        assert!(selected_store(&stores, &policy, &json!({})).is_ok());
+        assert!(selected_store(&stores, &policy, &json!({ "store": "workspace" })).is_ok());
+
+        let error = selected_store(&stores, &policy, &json!({ "store": "nope" }))
+            .map(|_| ())
+            .expect_err("an unknown store is not readable");
+        assert!(error.to_string().starts_with("not found:"));
+    }
+
+    #[tokio::test]
+    async fn a_hosted_tenant_cannot_leave_its_bound_store() {
+        let stores = two_store_registry().await;
+        let policy = DiagnosticPolicy::new(
+            AccessProfile::HostedTenant,
+            Some("tenant-a".to_string()),
+            "prod",
+        )
+        .expect("tenant policy");
+
+        let error = selected_store(&stores, &policy, &json!({ "store": "workspace" }))
+            .map(|_| ())
+            .expect_err("a hosted tenant is bound to one store");
+        assert!(error.to_string().starts_with("access denied:"));
+
+        assert!(
+            selected_store(&stores, &policy, &json!({})).is_ok(),
+            "its own store stays readable"
+        );
+        let error = exec_list_stores(&stores, &policy).expect_err("listing names other stores");
+        assert!(error.to_string().starts_with("access denied:"));
+    }
+
+    async fn core_with(events: &[(&str, &str, Value)]) -> EmbeddedCore {
+        let core = EmbeddedCore::open(
+            Config::builder()
+                .single_tenant(true)
+                .build()
+                .expect("valid config"),
+        )
+        .await
+        .expect("in-memory core");
+        for (entity_id, event_type, payload) in events {
+            core.ingest(allsource_core::embedded::IngestEvent {
+                entity_id,
+                event_type,
+                payload: payload.clone(),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await
+            .expect("ingest");
+        }
+        core
+    }
+
+    #[tokio::test]
+    async fn a_first_watch_reports_where_to_start_without_replaying_history() {
+        let core = core_with(&[
+            ("run-1", "workflow_run.started", json!({})),
+            ("run-2", "workflow_run.started", json!({})),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
+            .await
+            .expect("watch");
+
+        assert_eq!(
+            first["items"].as_array().expect("items").len(),
+            0,
+            "a first watch must not replay the store"
+        );
+        assert!(
+            first["checkpoint"]
+                .as_str()
+                .expect("checkpoint")
+                .starts_with("v1|")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_watch_returns_only_events_after_its_checkpoint() {
+        let core = core_with(&[("run-1", "workflow_run.started", json!({}))]).await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
+            .await
+            .expect("watch");
+        let checkpoint = first["checkpoint"]
+            .as_str()
+            .expect("checkpoint")
+            .to_string();
+
+        let idle = exec_watch_events(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "checkpoint": checkpoint.clone() }),
+        )
+        .await
+        .expect("watch");
+        assert_eq!(
+            idle["items"].as_array().expect("items").len(),
+            0,
+            "the event at the checkpoint was already delivered"
+        );
+
+        core.ingest(allsource_core::embedded::IngestEvent {
+            entity_id: "run-1",
+            event_type: "workflow_run.completed",
+            payload: json!({}),
+            metadata: None,
+            tenant_id: None,
+        })
+        .await
+        .expect("ingest");
+
+        let after = exec_watch_events(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "checkpoint": checkpoint }),
+        )
+        .await
+        .expect("watch");
+        let items = after["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1, "only the new event comes back");
+        assert_eq!(items[0]["event_type"], "workflow_run.completed");
+    }
+
+    #[tokio::test]
+    async fn a_watch_refuses_a_checkpoint_it_did_not_issue() {
+        let core = core_with(&[]).await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let error = exec_watch_events(&core, &policy, &json!({ "checkpoint": "yesterday" }))
+            .await
+            .expect_err("a checkpoint must be one this server issued");
+        assert!(error.to_string().starts_with("invalid argument:"));
+    }
+
+    /// `since` is inclusive, so a checkpoint carrying only a timestamp would
+    /// re-deliver every event at that timestamp on each call. The delivered-count
+    /// is what makes it resumable, and it is only sound because the store orders
+    /// by (timestamp, version, scan position) — a total order added so "the
+    /// latest event" is unambiguous (all-source issue #177).
+    ///
+    /// Event timestamps come from the HLC's `physical_ms`, so two events CAN
+    /// share one. `ingest` cannot be made to produce that here — each call
+    /// crosses a millisecond — so this drives the arithmetic directly from a
+    /// hand-built checkpoint instead of waiting on a collision that may not come.
+    #[tokio::test]
+    async fn a_checkpoint_skips_exactly_the_events_already_delivered_at_its_instant() {
+        let core = core_with(&[
+            ("run-0", "workflow_run.started", json!({ "index": 0 })),
+            ("run-0", "workflow_run.progressed", json!({ "index": 1 })),
+            ("run-0", "workflow_run.completed", json!({ "index": 2 })),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let all = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "payload_mode": "full" }),
+        )
+        .await
+        .expect("query");
+        let events = all["items"].as_array().expect("items");
+        assert_eq!(events.len(), 3, "three events to resume across");
+        let second = events[1]["timestamp"].as_str().expect("timestamp");
+
+        let indexes_of = |page: &Value| -> Vec<u64> {
+            page["items"]
+                .as_array()
+                .expect("items")
+                .iter()
+                .map(|item| item["payload"]["index"].as_u64().expect("index"))
+                .collect()
+        };
+
+        let none_delivered = exec_watch_events(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "workflow_run",
+                "checkpoint": format!("v1|{second}|0"),
+                "payload_mode": "full",
+            }),
+        )
+        .await
+        .expect("watch");
+        assert_eq!(
+            indexes_of(&none_delivered),
+            vec![1, 2],
+            "delivered=0 keeps the event at the checkpoint's own instant, because since is inclusive"
+        );
+
+        let one_delivered = exec_watch_events(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "workflow_run",
+                "checkpoint": format!("v1|{second}|1"),
+                "payload_mode": "full",
+            }),
+        )
+        .await
+        .expect("watch");
+        assert_eq!(
+            indexes_of(&one_delivered),
+            vec![2],
+            "delivered=1 drops exactly the one already handed back, and nothing after it"
+        );
+    }
+
+    #[tokio::test]
+    async fn entity_lifecycle_folds_to_the_latest_state_and_filters_on_it() {
+        let core = core_with(&[
+            ("run-1", "workflow_run.started", json!({ "name": "first" })),
+            ("run-2", "workflow_run.started", json!({ "name": "second" })),
+            (
+                "run-1",
+                "workflow_run.completed",
+                json!({ "name": "first" }),
+            ),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let all = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "fields": ["name"] }),
+        )
+        .await
+        .expect("fold");
+        let items = all["items"].as_array().expect("items");
+        assert_eq!(items.len(), 2, "one row per entity, not per event");
+        let run_1 = items
+            .iter()
+            .find(|i| i["entity_id"] == "run-1")
+            .expect("run-1");
+        assert_eq!(run_1["state"], "completed", "the latest event wins");
+        assert_eq!(run_1["events"], 2);
+        assert_eq!(run_1["fields"]["name"], "first");
+        assert_eq!(
+            items
+                .iter()
+                .find(|i| i["entity_id"] == "run-2")
+                .expect("run-2")["state"],
+            "started"
+        );
+
+        let completed = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "state": "completed" }),
+        )
+        .await
+        .expect("fold");
+        let items = completed["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["entity_id"], "run-1");
+    }
+
+    /// `fields` projects out of the payload, so without this it is a bypass
+    /// around the payload policy every other tool applies — a hosted tenant, who
+    /// gets `redacted` by default, could name a credential key and read it raw.
+    #[tokio::test]
+    async fn a_fold_projection_cannot_bypass_the_payload_policy() {
+        let core = core_with(&[
+            (
+                "run-1",
+                "workflow_run.started",
+                json!({ "name": "first", "api_key": "sk-live-1234" }),
+            ),
+            (
+                "step-a",
+                "step_run.started",
+                json!({ "step_run_id": "a", "authorization": "Bearer hunter2" }),
+            ),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let folded = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "workflow_run",
+                "fields": ["name", "api_key"],
+                "payload_mode": "redacted",
+            }),
+        )
+        .await
+        .expect("fold");
+        let fields = &folded["items"][0]["fields"];
+        assert_eq!(fields["name"], "first", "ordinary fields still project");
+        assert_eq!(
+            fields["api_key"], "[REDACTED]",
+            "a projection must not hand back what redact removes"
+        );
+
+        let stepped = exec_fold_steps(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "step_run",
+                "item_key": "step_run_id",
+                "fields": ["authorization"],
+                "payload_mode": "redacted",
+            }),
+        )
+        .await
+        .expect("fold");
+        assert_eq!(stepped["items"][0]["fields"]["authorization"], "[REDACTED]");
+    }
+
+    /// A filter that reads more than the caller may read back is a membership
+    /// oracle: refused the value, they can still confirm it a character at a time
+    /// from the match count.
+    #[tokio::test]
+    async fn payload_contains_cannot_match_what_the_payload_mode_hides() {
+        let core = core_with(&[(
+            "run-1",
+            "queue.state_changed",
+            json!({ "reason": "paused", "api_key": "sk-live-1234" }),
+        )])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let visible = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["paused"], "payload_mode": "redacted" }),
+        )
+        .await
+        .expect("query");
+        assert_eq!(
+            visible["completeness"]["matched"], 1,
+            "text the caller can read back still matches"
+        );
+
+        let hidden = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["sk-live-1234"], "payload_mode": "redacted" }),
+        )
+        .await
+        .expect("query");
+        assert_eq!(
+            hidden["completeness"]["matched"], 0,
+            "a redacted value must not be confirmable through the match count"
+        );
+    }
+
+    #[tokio::test]
+    async fn steps_pair_by_payload_key_and_report_open_items() {
+        let core = core_with(&[
+            (
+                "step-a",
+                "step_run.started",
+                json!({ "step_run_id": "a", "run_id": "run-1" }),
+            ),
+            (
+                "step-a",
+                "step_run.completed",
+                json!({ "step_run_id": "a", "run_id": "run-1" }),
+            ),
+            (
+                "step-b",
+                "step_run.started",
+                json!({ "step_run_id": "b", "run_id": "run-1" }),
+            ),
+            (
+                "step-c",
+                "step_run.started",
+                json!({ "step_run_id": "c", "run_id": "run-2" }),
+            ),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let folded = exec_fold_steps(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "step_run",
+                "item_key": "step_run_id",
+                "group_key": "run_id",
+                "group_value": "run-1",
+            }),
+        )
+        .await
+        .expect("fold");
+
+        let items = folded["items"].as_array().expect("items");
+        assert_eq!(
+            items.len(),
+            2,
+            "run-2's step is filtered out by group_value"
+        );
+        let a = items.iter().find(|i| i["item"] == "a").expect("item a");
+        assert_eq!(a["open"], false);
+        assert_eq!(a["final_state"], "completed");
+        assert!(a["elapsed_ms"].is_number());
+        let b = items.iter().find(|i| i["item"] == "b").expect("item b");
+        assert_eq!(b["open"], true, "a step with no terminal event stays open");
+        assert_eq!(b["final_state"], Value::Null);
+    }
+
+    #[tokio::test]
+    async fn a_fold_requires_the_arguments_that_define_it() {
+        let core = core_with(&[]).await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let error = exec_fold_steps(&core, &policy, &json!({ "event_type": "step_run" }))
+            .await
+            .expect_err("item_key names the thing being folded");
+        assert!(error.to_string().starts_with("invalid argument:"));
+
+        let error = exec_fold_steps(
+            &core,
+            &policy,
+            &json!({ "event_type": "step_run", "item_key": "id", "group_key": "run_id" }),
+        )
+        .await
+        .expect_err("a group key without a value filters nothing");
+        assert!(error.to_string().starts_with("invalid argument:"));
+    }
+
+    #[test]
+    fn field_projection_renders_missing_paths_as_null() {
+        let payload = json!({ "run": { "id": "run-1" }, "step": 3 });
+
+        let projected = project_fields(
+            &payload,
+            &[
+                "run.id".to_string(),
+                "step".to_string(),
+                "absent.x".to_string(),
+            ],
+        );
+
+        assert_eq!(projected["run.id"], "run-1");
+        assert_eq!(projected["step"], 3);
+        assert_eq!(projected["absent.x"], Value::Null);
+    }
+
+    #[test]
+    fn payload_text_filter_requires_every_needle() {
+        let payload = json!({ "reason": "queue paused", "org": "acme" });
+
+        assert!(payload_contains_all(
+            &payload,
+            &["paused".to_string(), "acme".to_string()]
+        ));
+        assert!(!payload_contains_all(
+            &payload,
+            &["paused".to_string(), "missing".to_string()]
+        ));
+    }
+
+    #[tokio::test]
+    async fn payload_contains_excludes_non_matching_events_and_reports_the_scan() {
+        let core = EmbeddedCore::open(
+            Config::builder()
+                .single_tenant(true)
+                .build()
+                .expect("valid config"),
+        )
+        .await
+        .expect("in-memory core");
+        for (entity, reason) in [("run-1", "queue paused"), ("run-2", "queue drained")] {
+            core.ingest(allsource_core::embedded::IngestEvent {
+                entity_id: entity,
+                event_type: "queue.state_changed",
+                payload: json!({ "reason": reason }),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await
+            .expect("ingest");
+        }
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let result = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["paused"], "limit": 10 }),
+        )
+        .await
+        .expect("filtered query");
+
+        let items = result["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1, "only the matching event is returned");
+        assert_eq!(items[0]["entity_id"], "run-1");
+        assert_eq!(result["completeness"]["scanned"], 2);
+        assert_eq!(result["completeness"]["matched"], 1);
+        assert_eq!(result["completeness"]["complete"], true);
+    }
+
+    #[tokio::test]
+    async fn payload_contains_refuses_a_cursor_rather_than_skipping_matches() {
+        let core = EmbeddedCore::open(Config::builder().build().expect("valid config"))
+            .await
+            .expect("in-memory core");
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let error = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["x"], "cursor": "v1:0:abc" }),
+        )
+        .await
+        .expect_err("a cursor describes store order, not filtered order");
+
+        assert!(error.to_string().starts_with("invalid argument:"));
     }
 
     #[tokio::test]
