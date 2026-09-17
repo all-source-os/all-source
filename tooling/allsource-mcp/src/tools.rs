@@ -1,6 +1,6 @@
 //! MCP tool definitions and execution.
 
-use std::fmt::Write;
+use std::{collections::BTreeMap, fmt::Write};
 
 use allsource_core::embedded::{EmbeddedCore, Query};
 use anyhow::Result;
@@ -113,6 +113,46 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
             json!({
                 "type": "object",
                 "properties": {}
+            }),
+        ),
+        read_tool(
+            "fold_entity_lifecycle",
+            "Fold entities by state",
+            "Group a family of events by entity and report each entity's latest state, so a caller never folds a lifecycle by hand.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "event_type": { "type": "string", "description": "Event type prefix that forms the family, e.g. 'workflow_run'" },
+                    "state": { "type": "string", "description": "Keep only entities whose latest state equals this (the segment after the last dot, e.g. 'completed')" },
+                    "entity_id": { "type": "string", "description": "Fold one entity only" },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Dotted payload paths carried from each entity's latest event" },
+                    "since": { "type": "string", "format": "date-time" },
+                    "until": { "type": "string", "format": "date-time" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN }
+                },
+                "required": ["event_type"]
+            }),
+        ),
+        read_tool(
+            "fold_steps",
+            "Fold work items by key",
+            "Pair start and terminal events that share a payload key, reporting elapsed time and which items are still open.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "event_type": { "type": "string", "description": "Event type prefix that forms the family, e.g. 'step_run'" },
+                    "item_key": { "type": "string", "description": "Payload key identifying one item, e.g. 'step_run_id'" },
+                    "group_key": { "type": "string", "description": "Payload key to filter on, e.g. 'run_id'" },
+                    "group_value": { "type": "string", "description": "Value that group_key must equal" },
+                    "terminal_states": { "type": "array", "items": { "type": "string" }, "description": "Type suffixes that close an item; defaults to completed, failed, cancelled. An item with none stays open, and its elapsed_ms is null." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Dotted payload paths carried from each item's latest event" },
+                    "since": { "type": "string", "format": "date-time" },
+                    "until": { "type": "string", "format": "date-time" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN }
+                },
+                "required": ["event_type", "item_key"]
             }),
         ),
         read_tool(
@@ -247,6 +287,8 @@ async fn execute_tool_inner(
     let core = &selected_store(stores, policy, args)?.core;
     match name {
         "query_events" => exec_query_events(core, policy, args).await,
+        "fold_entity_lifecycle" => exec_fold_entity_lifecycle(core, policy, args).await,
+        "fold_steps" => exec_fold_steps(core, policy, args).await,
         "sample_events" => exec_sample_events(core, policy, args).await,
         "quick_stats" => exec_quick_stats(core, policy).await,
         "get_snapshot" => exec_get_snapshot(core, policy, args),
@@ -632,6 +674,251 @@ async fn exec_query_events(
             incomplete_reason: "limit_reached",
             force_incomplete: false,
         },
+    ))
+}
+
+/// Read every event of one family, oldest first, bounded by `max_scan`.
+///
+/// A fold has to see a whole family to be correct, so it scans rather than reading
+/// one page, and reports how far it got instead of implying it saw everything.
+async fn scan_family(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+    tool_name: &str,
+) -> Result<(Vec<allsource_core::embedded::EventView>, usize, bool)> {
+    let max_scan = limit_arg(args, "max_scan", DEFAULT_MAX_SCAN, MAX_SCAN)?;
+    let mut events = Vec::new();
+    let mut exhausted = false;
+
+    while events.len() < max_scan {
+        let page_size = SCAN_PAGE.min(max_scan - events.len());
+        let (query, _) = scoped_query(policy, tool_name, args, page_size)?;
+        let page = core.query_page(query.offset(events.len())).await?;
+        if page.events.is_empty() {
+            exhausted = true;
+            break;
+        }
+        let last_page = page.next_offset.is_none();
+        events.extend(page.events);
+        if last_page {
+            exhausted = true;
+            break;
+        }
+    }
+
+    let scanned = events.len();
+    Ok((events, scanned, exhausted))
+}
+
+/// The segment after the last dot of an event type: `workflow_run.started` -> `started`.
+fn state_of(event_type: &str) -> &str {
+    event_type.rsplit('.').next().unwrap_or(event_type)
+}
+
+/// Wrap folded items in the same evidence envelope every other tool returns.
+fn fold_result(
+    policy: &DiagnosticPolicy,
+    items: Vec<Value>,
+    limit: usize,
+    scanned: usize,
+    exhausted: bool,
+    fresh_through: Option<DateTime<Utc>>,
+) -> Value {
+    let truncated = items.len() > limit;
+    let items: Vec<Value> = items.into_iter().take(limit).collect();
+    let complete = exhausted && !truncated;
+    json!({
+        "context": policy.context(fresh_through.as_ref().map(DateTime::to_rfc3339).as_deref()),
+        "items": items,
+        "page": {
+            "requestedLimit": limit,
+            "returned": items.len(),
+            "totalCount": items.len(),
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": complete,
+            "reason": if complete { Value::Null } else if truncated { json!("limit_reached") } else { json!("max_scan_reached") },
+            "scanned": scanned,
+            "matched": items.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    })
+}
+
+/// Fold a family of events into one row per entity carrying its latest state.
+async fn exec_fold_entity_lifecycle(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    if args.get("event_type").and_then(Value::as_str).is_none() {
+        anyhow::bail!("invalid argument: event_type is required");
+    }
+    let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
+    let fields = string_list(args, "fields")?;
+    let wanted_state = args.get("state").and_then(Value::as_str);
+
+    let (events, scanned, exhausted) =
+        scan_family(core, policy, args, "fold_entity_lifecycle").await?;
+    let fresh_through = events.iter().map(|event| event.timestamp).max();
+
+    // Last writer by timestamp wins, which is how every reader of this store folds.
+    let mut folded: BTreeMap<String, &allsource_core::embedded::EventView> = BTreeMap::new();
+    let mut first_seen: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+    for event in &events {
+        first_seen
+            .entry(event.entity_id.clone())
+            .and_modify(|seen| *seen = (*seen).min(event.timestamp))
+            .or_insert(event.timestamp);
+        folded
+            .entry(event.entity_id.clone())
+            .and_modify(|latest| {
+                if event.timestamp >= latest.timestamp {
+                    *latest = event;
+                }
+            })
+            .or_insert(event);
+    }
+
+    let items: Vec<Value> = folded
+        .iter()
+        .filter(|(_, latest)| {
+            wanted_state.is_none_or(|state| state_of(&latest.event_type) == state)
+        })
+        .map(|(entity_id, latest)| {
+            json!({
+                "entity_id": entity_id,
+                "state": state_of(&latest.event_type),
+                "state_event_type": latest.event_type,
+                "state_at": latest.timestamp.to_rfc3339(),
+                "first_seen_at": first_seen.get(entity_id).map(DateTime::to_rfc3339),
+                "events": events.iter().filter(|e| &e.entity_id == entity_id).count(),
+                "fields": project_fields(&latest.payload, &fields),
+            })
+        })
+        .collect();
+
+    Ok(fold_result(
+        policy,
+        items,
+        limit,
+        scanned,
+        exhausted,
+        fresh_through,
+    ))
+}
+
+/// Pair start and terminal events that share a payload key.
+async fn exec_fold_steps(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    if args.get("event_type").and_then(Value::as_str).is_none() {
+        anyhow::bail!("invalid argument: event_type is required");
+    }
+    let item_key = args
+        .get("item_key")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("invalid argument: item_key is required"))?;
+    let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
+    let fields = string_list(args, "fields")?;
+    let group_key = args.get("group_key").and_then(Value::as_str);
+    let group_value = args.get("group_value").and_then(Value::as_str);
+    if group_key.is_some() != group_value.is_some() {
+        anyhow::bail!("invalid argument: group_key and group_value are given together");
+    }
+    let terminal = {
+        let configured = string_list(args, "terminal_states")?;
+        if configured.is_empty() {
+            vec![
+                "completed".to_string(),
+                "failed".to_string(),
+                "cancelled".to_string(),
+            ]
+        } else {
+            configured
+        }
+    };
+
+    let (events, scanned, exhausted) = scan_family(core, policy, args, "fold_steps").await?;
+    let fresh_through = events.iter().map(|event| event.timestamp).max();
+
+    let mut items: BTreeMap<String, Value> = BTreeMap::new();
+    let mut opened: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+    let mut closed: BTreeMap<String, (DateTime<Utc>, String)> = BTreeMap::new();
+    let mut latest: BTreeMap<String, &allsource_core::embedded::EventView> = BTreeMap::new();
+
+    for event in &events {
+        if let (Some(key), Some(value)) = (group_key, group_value)
+            && event.payload.get(key).and_then(Value::as_str) != Some(value)
+        {
+            continue;
+        }
+        let Some(item) = event.payload.get(item_key).and_then(Value::as_str) else {
+            continue;
+        };
+        let item = item.to_string();
+        opened
+            .entry(item.clone())
+            .and_modify(|at| *at = (*at).min(event.timestamp))
+            .or_insert(event.timestamp);
+        if terminal.iter().any(|state| state == state_of(&event.event_type)) {
+            closed
+                .entry(item.clone())
+                .and_modify(|(at, state)| {
+                    if event.timestamp >= *at {
+                        *at = event.timestamp;
+                        *state = state_of(&event.event_type).to_string();
+                    }
+                })
+                .or_insert((event.timestamp, state_of(&event.event_type).to_string()));
+        }
+        latest
+            .entry(item.clone())
+            .and_modify(|current| {
+                if event.timestamp >= current.timestamp {
+                    *current = event;
+                }
+            })
+            .or_insert(event);
+        items.entry(item).or_insert(Value::Null);
+    }
+
+    let rows: Vec<Value> = items
+        .keys()
+        .map(|item| {
+            let started_at = opened.get(item).copied();
+            let finished = closed.get(item);
+            let elapsed_ms = started_at
+                .and_then(|start| finished.map(|(end, _)| (*end - start).num_milliseconds()));
+            json!({
+                "item": item,
+                "started_at": started_at.map(|at| at.to_rfc3339()),
+                "finished_at": finished.map(|(at, _)| at.to_rfc3339()),
+                "final_state": finished.map(|(_, state)| state.clone()),
+                "open": finished.is_none(),
+                "elapsed_ms": elapsed_ms,
+                "fields": latest
+                    .get(item)
+                    .map_or(Value::Null, |event| project_fields(&event.payload, &fields)),
+            })
+        })
+        .collect();
+
+    Ok(fold_result(
+        policy,
+        rows,
+        limit,
+        scanned,
+        exhausted,
+        fresh_through,
     ))
 }
 
@@ -1095,9 +1382,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        EvidencePageOptions, evidence_page, exec_list_stores, exec_query_events,
-        exec_reconstruct_state, payload_contains_all, payload_mode, project_fields,
-        query_signature, redact, selected_store, tool_definitions,
+        EvidencePageOptions, evidence_page, exec_fold_entity_lifecycle, exec_fold_steps,
+        exec_list_stores, exec_query_events, exec_reconstruct_state, payload_contains_all,
+        payload_mode, project_fields, query_signature, redact, selected_store, tool_definitions,
     };
     use crate::{
         diagnostics::{AccessProfile, DiagnosticPolicy},
@@ -1225,6 +1512,143 @@ mod tests {
         );
         let error = exec_list_stores(&stores, &policy).expect_err("listing names other stores");
         assert!(error.to_string().starts_with("access denied:"));
+    }
+
+    async fn core_with(events: &[(&str, &str, Value)]) -> EmbeddedCore {
+        let core = EmbeddedCore::open(
+            Config::builder()
+                .single_tenant(true)
+                .build()
+                .expect("valid config"),
+        )
+        .await
+        .expect("in-memory core");
+        for (entity_id, event_type, payload) in events {
+            core.ingest(allsource_core::embedded::IngestEvent {
+                entity_id,
+                event_type,
+                payload: payload.clone(),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await
+            .expect("ingest");
+        }
+        core
+    }
+
+    #[tokio::test]
+    async fn entity_lifecycle_folds_to_the_latest_state_and_filters_on_it() {
+        let core = core_with(&[
+            ("run-1", "workflow_run.started", json!({ "name": "first" })),
+            ("run-2", "workflow_run.started", json!({ "name": "second" })),
+            ("run-1", "workflow_run.completed", json!({ "name": "first" })),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let all = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "fields": ["name"] }),
+        )
+        .await
+        .expect("fold");
+        let items = all["items"].as_array().expect("items");
+        assert_eq!(items.len(), 2, "one row per entity, not per event");
+        let run_1 = items.iter().find(|i| i["entity_id"] == "run-1").expect("run-1");
+        assert_eq!(run_1["state"], "completed", "the latest event wins");
+        assert_eq!(run_1["events"], 2);
+        assert_eq!(run_1["fields"]["name"], "first");
+        assert_eq!(
+            items.iter().find(|i| i["entity_id"] == "run-2").expect("run-2")["state"],
+            "started"
+        );
+
+        let completed = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "state": "completed" }),
+        )
+        .await
+        .expect("fold");
+        let items = completed["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["entity_id"], "run-1");
+    }
+
+    #[tokio::test]
+    async fn steps_pair_by_payload_key_and_report_open_items() {
+        let core = core_with(&[
+            (
+                "step-a",
+                "step_run.started",
+                json!({ "step_run_id": "a", "run_id": "run-1" }),
+            ),
+            (
+                "step-a",
+                "step_run.completed",
+                json!({ "step_run_id": "a", "run_id": "run-1" }),
+            ),
+            (
+                "step-b",
+                "step_run.started",
+                json!({ "step_run_id": "b", "run_id": "run-1" }),
+            ),
+            (
+                "step-c",
+                "step_run.started",
+                json!({ "step_run_id": "c", "run_id": "run-2" }),
+            ),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let folded = exec_fold_steps(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "step_run",
+                "item_key": "step_run_id",
+                "group_key": "run_id",
+                "group_value": "run-1",
+            }),
+        )
+        .await
+        .expect("fold");
+
+        let items = folded["items"].as_array().expect("items");
+        assert_eq!(items.len(), 2, "run-2's step is filtered out by group_value");
+        let a = items.iter().find(|i| i["item"] == "a").expect("item a");
+        assert_eq!(a["open"], false);
+        assert_eq!(a["final_state"], "completed");
+        assert!(a["elapsed_ms"].is_number());
+        let b = items.iter().find(|i| i["item"] == "b").expect("item b");
+        assert_eq!(b["open"], true, "a step with no terminal event stays open");
+        assert_eq!(b["final_state"], Value::Null);
+    }
+
+    #[tokio::test]
+    async fn a_fold_requires_the_arguments_that_define_it() {
+        let core = core_with(&[]).await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let error = exec_fold_steps(&core, &policy, &json!({ "event_type": "step_run" }))
+            .await
+            .expect_err("item_key names the thing being folded");
+        assert!(error.to_string().starts_with("invalid argument:"));
+
+        let error = exec_fold_steps(
+            &core,
+            &policy,
+            &json!({ "event_type": "step_run", "item_key": "id", "group_key": "run_id" }),
+        )
+        .await
+        .expect_err("a group key without a value filters nothing");
+        assert!(error.to_string().starts_with("invalid argument:"));
     }
 
     #[test]
