@@ -150,6 +150,7 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                     "state": { "type": "string", "description": "Keep only entities whose latest state equals this (the segment after the last dot, e.g. 'completed')" },
                     "entity_id": { "type": "string", "description": "Fold one entity only" },
                     "fields": { "type": "array", "items": { "type": "string" }, "description": "Dotted payload paths carried from each entity's latest event" },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone(), "description": "Applied to the payload before fields projects out of it" },
                     "since": { "type": "string", "format": "date-time" },
                     "until": { "type": "string", "format": "date-time" },
                     "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
@@ -171,6 +172,7 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                     "group_value": { "type": "string", "description": "Value that group_key must equal" },
                     "terminal_states": { "type": "array", "items": { "type": "string" }, "description": "Type suffixes that close an item; defaults to completed, failed, cancelled. An item with none stays open, and its elapsed_ms is null." },
                     "fields": { "type": "array", "items": { "type": "string" }, "description": "Dotted payload paths carried from each item's latest event" },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone(), "description": "Applied to the payload before fields projects out of it" },
                     "since": { "type": "string", "format": "date-time" },
                     "until": { "type": "string", "format": "date-time" },
                     "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
@@ -446,6 +448,11 @@ fn query_signature(
         policy.source_id(),
         args.get("entity_id").and_then(Value::as_str).unwrap_or(""),
         args.get("event_type").and_then(Value::as_str).unwrap_or(""),
+        // Omitting this would let a cursor issued for one exact type validate
+        // against another and apply its offset to a different result set.
+        args.get("event_type_exact")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
         args.get("since").and_then(Value::as_str).unwrap_or(""),
         args.get("until").and_then(Value::as_str).unwrap_or(""),
         args.get("order").and_then(Value::as_str).unwrap_or("asc"),
@@ -765,16 +772,19 @@ async fn exec_watch_events(
 
     let deadline = Instant::now() + Duration::from_secs(wait);
     loop {
-        let query =
-            watch_query(policy, args, limit + checkpoint.delivered_at_same_ms).since(checkpoint.at);
+        // The already-delivered count must be applied as a query OFFSET, never as
+        // a skip over the returned page: the fetch is capped at MAX_LIMIT, so once
+        // one instant holds that many events a skip consumes the whole window and
+        // the checkpoint can never advance past that instant.
+        let query = watch_query(policy, args, limit)
+            .since(checkpoint.at)
+            .offset(checkpoint.delivered_at_same_ms);
         let page = core.query_page(query).await?;
 
-        // Events at the checkpoint's own millisecond were already delivered.
         let fresh: Vec<&allsource_core::embedded::EventView> = page
             .events
             .iter()
             .filter(|event| event.timestamp >= checkpoint.at)
-            .skip(checkpoint.delivered_at_same_ms)
             .take(limit)
             .collect();
 
@@ -960,6 +970,10 @@ async fn exec_fold_entity_lifecycle(
     }
     let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
     let fields = string_list(args, "fields")?;
+    // `fields` projects out of the payload, so it must read the policy's view of
+    // it. Projecting the raw payload would hand a hosted tenant the credential
+    // keys `redact` exists to remove.
+    let mode = payload_mode(args, policy)?;
     let wanted_state = args.get("state").and_then(Value::as_str);
 
     let (events, scanned, exhausted) =
@@ -999,7 +1013,7 @@ async fn exec_fold_entity_lifecycle(
                 "state_at": latest.timestamp.to_rfc3339(),
                 "first_seen_at": first_seen.get(entity_id).map(DateTime::to_rfc3339),
                 "events": counts.get(entity_id.as_str()).copied().unwrap_or(0),
-                "fields": project_fields(&latest.payload, &fields),
+                "fields": project_fields(&event_payload(&latest.payload, mode), &fields),
             })
         })
         .collect();
@@ -1012,6 +1026,19 @@ async fn exec_fold_entity_lifecycle(
         exhausted,
         fresh_through,
     ))
+}
+
+/// The type suffixes that close an item, or the default set when none are given.
+fn terminal_states(args: &Value) -> Result<Vec<String>> {
+    let configured = string_list(args, "terminal_states")?;
+    if configured.is_empty() {
+        return Ok(vec![
+            "completed".to_string(),
+            "failed".to_string(),
+            "cancelled".to_string(),
+        ]);
+    }
+    Ok(configured)
 }
 
 /// Pair start and terminal events that share a payload key.
@@ -1029,23 +1056,15 @@ async fn exec_fold_steps(
         .ok_or_else(|| anyhow::anyhow!("invalid argument: item_key is required"))?;
     let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
     let fields = string_list(args, "fields")?;
+    // Same reason as `fold_entity_lifecycle`: a projection reads the payload, so
+    // it reads it through the policy's view.
+    let mode = payload_mode(args, policy)?;
     let group_key = args.get("group_key").and_then(Value::as_str);
     let group_value = args.get("group_value").and_then(Value::as_str);
     if group_key.is_some() != group_value.is_some() {
         anyhow::bail!("invalid argument: group_key and group_value are given together");
     }
-    let terminal = {
-        let configured = string_list(args, "terminal_states")?;
-        if configured.is_empty() {
-            vec![
-                "completed".to_string(),
-                "failed".to_string(),
-                "cancelled".to_string(),
-            ]
-        } else {
-            configured
-        }
-    };
+    let terminal = terminal_states(args)?;
 
     let (events, scanned, exhausted) = scan_family(core, policy, args, "fold_steps").await?;
     let fresh_through = events.iter().map(|event| event.timestamp).max();
@@ -1108,9 +1127,9 @@ async fn exec_fold_steps(
                 "final_state": finished.map(|(_, state)| state.clone()),
                 "open": finished.is_none(),
                 "elapsed_ms": elapsed_ms,
-                "fields": latest
-                    .get(item)
-                    .map_or(Value::Null, |event| project_fields(&event.payload, &fields)),
+                "fields": latest.get(item).map_or(Value::Null, |event| {
+                    project_fields(&event_payload(&event.payload, mode), &fields)
+                }),
             })
         })
         .collect();
@@ -1959,6 +1978,60 @@ mod tests {
         let items = completed["items"].as_array().expect("items");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["entity_id"], "run-1");
+    }
+
+    /// `fields` projects out of the payload, so without this it is a bypass
+    /// around the payload policy every other tool applies — a hosted tenant, who
+    /// gets `redacted` by default, could name a credential key and read it raw.
+    #[tokio::test]
+    async fn a_fold_projection_cannot_bypass_the_payload_policy() {
+        let core = core_with(&[
+            (
+                "run-1",
+                "workflow_run.started",
+                json!({ "name": "first", "api_key": "sk-live-1234" }),
+            ),
+            (
+                "step-a",
+                "step_run.started",
+                json!({ "step_run_id": "a", "authorization": "Bearer hunter2" }),
+            ),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let folded = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "workflow_run",
+                "fields": ["name", "api_key"],
+                "payload_mode": "redacted",
+            }),
+        )
+        .await
+        .expect("fold");
+        let fields = &folded["items"][0]["fields"];
+        assert_eq!(fields["name"], "first", "ordinary fields still project");
+        assert_eq!(
+            fields["api_key"], "[REDACTED]",
+            "a projection must not hand back what redact removes"
+        );
+
+        let stepped = exec_fold_steps(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "step_run",
+                "item_key": "step_run_id",
+                "fields": ["authorization"],
+                "payload_mode": "redacted",
+            }),
+        )
+        .await
+        .expect("fold");
+        assert_eq!(stepped["items"][0]["fields"]["authorization"], "[REDACTED]");
     }
 
     #[tokio::test]
