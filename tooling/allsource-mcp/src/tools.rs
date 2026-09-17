@@ -608,6 +608,13 @@ fn redact(value: &Value) -> Value {
 }
 
 /// Render an event payload according to selected exposure mode.
+/// The caller's permitted view of one payload.
+///
+/// **Every** read of an event payload goes through here — emitted, projected by
+/// `fields`, grouped by `item_key`, matched by `payload_contains`, or merged into
+/// a folded state. A read that skips it is a leak even when it emits nothing
+/// itself: a filter that matches what the caller may not see is a membership
+/// oracle over exactly the bytes `redact` removes.
 fn event_payload(payload: &Value, mode: PayloadMode) -> Value {
     match mode {
         PayloadMode::None => Value::Null,
@@ -1075,12 +1082,16 @@ async fn exec_fold_steps(
     let mut latest: BTreeMap<String, &allsource_core::embedded::EventView> = BTreeMap::new();
 
     for event in &events {
+        // `item_key` names a payload key whose VALUE is emitted as `item`, so it
+        // reads the policy's view too — otherwise `item_key: "password"` returns
+        // the secret verbatim as a row label.
+        let view = event_payload(&event.payload, mode);
         if let (Some(key), Some(value)) = (group_key, group_value)
-            && event.payload.get(key).and_then(Value::as_str) != Some(value)
+            && view.get(key).and_then(Value::as_str) != Some(value)
         {
             continue;
         }
-        let Some(item) = event.payload.get(item_key).and_then(Value::as_str) else {
+        let Some(item) = view.get(item_key).and_then(Value::as_str) else {
             continue;
         };
         let item = item.to_string();
@@ -1205,7 +1216,11 @@ async fn scan_query_events(
         for event in &page.events {
             scanned += 1;
             fresh_through = fresh_through.max(Some(event.timestamp));
-            if payload_contains_all(&event.payload, needles) {
+            // Matching the raw payload would be a membership oracle over exactly
+            // what `redact` hides: a caller refused the value can still refine it
+            // a character at a time from the match count. The filter reads the
+            // same view the caller is allowed to read back.
+            if payload_contains_all(&event_payload(&event.payload, mode), needles) {
                 matched.push(render_event(event, mode, fields));
                 if matched.len() == limit {
                     break;
@@ -1475,6 +1490,7 @@ async fn exec_reconstruct_state(
         .get("entity_id")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("invalid argument: entity_id is required"))?;
+    let mode = payload_mode(args, policy)?;
 
     let (query, _) = scoped_query(policy, "reconstruct_state", args, MAX_LIMIT)?;
     let page = core.query_page(query.entity_id(entity_id)).await?;
@@ -1507,7 +1523,10 @@ async fn exec_reconstruct_state(
         );
         state.insert("_version".to_string(), json!(e.version));
 
-        if let Some(obj) = e.payload.as_object() {
+        // The folded state IS the payload, so it carries the payload policy with
+        // it. Merging `e.payload` raw returns a hosted tenant everything `redact`
+        // exists to withhold.
+        if let Some(obj) = event_payload(&e.payload, mode).as_object() {
             for (k, v) in obj {
                 state.insert(k.clone(), v.clone());
             }
@@ -2032,6 +2051,45 @@ mod tests {
         .await
         .expect("fold");
         assert_eq!(stepped["items"][0]["fields"]["authorization"], "[REDACTED]");
+    }
+
+    /// A filter that reads more than the caller may read back is a membership
+    /// oracle: refused the value, they can still confirm it a character at a time
+    /// from the match count.
+    #[tokio::test]
+    async fn payload_contains_cannot_match_what_the_payload_mode_hides() {
+        let core = core_with(&[(
+            "run-1",
+            "queue.state_changed",
+            json!({ "reason": "paused", "api_key": "sk-live-1234" }),
+        )])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let visible = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["paused"], "payload_mode": "redacted" }),
+        )
+        .await
+        .expect("query");
+        assert_eq!(
+            visible["completeness"]["matched"], 1,
+            "text the caller can read back still matches"
+        );
+
+        let hidden = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["sk-live-1234"], "payload_mode": "redacted" }),
+        )
+        .await
+        .expect("query");
+        assert_eq!(
+            hidden["completeness"]["matched"], 0,
+            "a redacted value must not be confirmable through the match count"
+        );
     }
 
     #[tokio::test]
