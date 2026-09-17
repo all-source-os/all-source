@@ -1,6 +1,10 @@
 //! MCP tool definitions and execution.
 
-use std::{collections::BTreeMap, fmt::Write};
+use std::{
+    collections::BTreeMap,
+    fmt::Write,
+    time::{Duration, Instant},
+};
 
 use allsource_core::embedded::{EmbeddedCore, Query};
 use anyhow::Result;
@@ -20,6 +24,9 @@ const MAX_LIMIT: usize = 500;
 const SCAN_PAGE: usize = 500;
 const DEFAULT_MAX_SCAN: usize = 5_000;
 const MAX_SCAN: usize = 50_000;
+/// Longest a watch may hold a request open, so one call can never outlive a caller's timeout.
+const MAX_WAIT_SECONDS: u64 = 55;
+const WATCH_POLL: Duration = Duration::from_millis(500);
 
 /// Build a read-only tool descriptor with shared diagnostic input and annotations.
 fn read_tool(name: &str, title: &str, description: &str, mut input_schema: Value) -> ToolDef {
@@ -113,6 +120,23 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
             json!({
                 "type": "object",
                 "properties": {}
+            }),
+        ),
+        read_tool(
+            "watch_events",
+            "Wait for new events",
+            "Return events newer than a checkpoint, waiting up to wait_seconds for one to arrive. The caller loops on the returned checkpoint.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "event_type": { "type": "string", "description": "Event type prefix to watch" },
+                    "entity_id": { "type": "string" },
+                    "checkpoint": { "type": "string", "description": "Checkpoint returned by the previous call. Omit to start from the newest event, so a first call does not replay history." },
+                    "wait_seconds": { "type": "integer", "minimum": 0, "maximum": MAX_WAIT_SECONDS, "default": 0, "description": "How long to wait for the first new event. 0 returns immediately." },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone() },
+                    "fields": { "type": "array", "items": { "type": "string" } }
+                }
             }),
         ),
         read_tool(
@@ -287,6 +311,7 @@ async fn execute_tool_inner(
     let core = &selected_store(stores, policy, args)?.core;
     match name {
         "query_events" => exec_query_events(core, policy, args).await,
+        "watch_events" => exec_watch_events(core, policy, args).await,
         "fold_entity_lifecycle" => exec_fold_entity_lifecycle(core, policy, args).await,
         "fold_steps" => exec_fold_steps(core, policy, args).await,
         "sample_events" => exec_sample_events(core, policy, args).await,
@@ -675,6 +700,179 @@ async fn exec_query_events(
             force_incomplete: false,
         },
     ))
+}
+
+/// Where a watch resumed from: a timestamp, and how many events at that exact
+/// timestamp were already delivered.
+///
+/// A timestamp alone is not enough. `since` is inclusive, so resuming from it
+/// repeats every event sharing that millisecond; resuming from the millisecond
+/// after it drops the ones that have not been delivered yet.
+struct Checkpoint {
+    at: DateTime<Utc>,
+    delivered_at_same_ms: usize,
+}
+
+impl Checkpoint {
+    /// Parse `v1:<rfc3339>:<count>`.
+    fn parse(raw: &str) -> Result<Self> {
+        let mut parts = raw.splitn(3, '|');
+        let version = parts.next();
+        let at = parts.next().and_then(|value| value.parse().ok());
+        let delivered = parts.next().and_then(|value| value.parse().ok());
+        match (version, at, delivered) {
+            (Some("v1"), Some(at), Some(delivered_at_same_ms)) => Ok(Self {
+                at,
+                delivered_at_same_ms,
+            }),
+            _ => anyhow::bail!("invalid argument: checkpoint is not one this server issued"),
+        }
+    }
+
+    fn encode(at: DateTime<Utc>, delivered_at_same_ms: usize) -> String {
+        format!("v1|{}|{delivered_at_same_ms}", at.to_rfc3339())
+    }
+}
+
+/// Return events after a checkpoint, waiting briefly for the first one.
+///
+/// MCP is request/response, so a watch is a bounded long-poll the caller loops on,
+/// never a stream. With no checkpoint it reports the newest event as the starting
+/// point and returns nothing, so a first call cannot replay the whole store.
+async fn exec_watch_events(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
+    let mode = payload_mode(args, policy)?;
+    let fields = string_list(args, "fields")?;
+    let wait = args
+        .get("wait_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .min(MAX_WAIT_SECONDS);
+
+    let checkpoint = args
+        .get("checkpoint")
+        .and_then(Value::as_str)
+        .map(Checkpoint::parse)
+        .transpose()?;
+
+    let Some(checkpoint) = checkpoint else {
+        return watch_start(core, policy, args).await;
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(wait);
+    loop {
+        let query =
+            watch_query(policy, args, limit + checkpoint.delivered_at_same_ms).since(checkpoint.at);
+        let page = core.query_page(query).await?;
+
+        // Events at the checkpoint's own millisecond were already delivered.
+        let fresh: Vec<&allsource_core::embedded::EventView> = page
+            .events
+            .iter()
+            .filter(|event| event.timestamp >= checkpoint.at)
+            .skip(checkpoint.delivered_at_same_ms)
+            .take(limit)
+            .collect();
+
+        if !fresh.is_empty() || Instant::now() >= deadline {
+            let newest = fresh.last().map_or(checkpoint.at, |event| event.timestamp);
+            let delivered_at_newest = if fresh.is_empty() {
+                checkpoint.delivered_at_same_ms
+            } else {
+                let at_newest = fresh
+                    .iter()
+                    .filter(|event| event.timestamp == newest)
+                    .count();
+                if newest == checkpoint.at {
+                    checkpoint.delivered_at_same_ms + at_newest
+                } else {
+                    at_newest
+                }
+            };
+            let items: Vec<Value> = fresh
+                .iter()
+                .map(|event| render_event(event, mode, &fields))
+                .collect();
+            return Ok(json!({
+                "context": policy.context(Some(newest.to_rfc3339()).as_deref()),
+                "items": items,
+                "checkpoint": Checkpoint::encode(newest, delivered_at_newest),
+                "page": {
+                    "requestedLimit": limit,
+                    "returned": items.len(),
+                    "totalCount": items.len(),
+                    "nextCursor": Value::Null,
+                },
+                "completeness": {
+                    "complete": items.len() < limit,
+                    "reason": if items.len() < limit { Value::Null } else { json!("limit_reached") },
+                    "scanned": page.events.len(),
+                    "matched": items.len(),
+                    "omitted": 0,
+                    "unparsedTimestamps": 0,
+                    "sourcesRequested": 1,
+                    "sourcesRead": 1,
+                    "sourcesSkipped": [],
+                }
+            }));
+        }
+
+        tokio::time::sleep(WATCH_POLL).await;
+    }
+}
+
+/// Answer a watch that carried no checkpoint: report where to start, return nothing.
+async fn watch_start(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let query = watch_query(policy, args, 1).descending(true);
+    let page = core.query_page(query).await?;
+    let newest = page.events.first().map(|event| event.timestamp);
+    let at_newest = usize::from(newest.is_some());
+
+    Ok(json!({
+        "context": policy.context(newest.as_ref().map(DateTime::to_rfc3339).as_deref()),
+        "items": [],
+        "checkpoint": Checkpoint::encode(newest.unwrap_or_else(Utc::now), at_newest),
+        "page": {
+            "requestedLimit": 0,
+            "returned": 0,
+            "totalCount": 0,
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": true,
+            "reason": Value::Null,
+            "scanned": page.events.len(),
+            "matched": 0,
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    }))
+}
+
+/// A tenant-bound query carrying only the filters a watch accepts.
+fn watch_query(policy: &DiagnosticPolicy, args: &Value, limit: usize) -> Query {
+    let mut query = Query::new().limit(limit.min(MAX_LIMIT)).descending(false);
+    if let Some(tenant_id) = policy.tenant_id() {
+        query = query.tenant_id(tenant_id);
+    }
+    if let Some(entity_id) = args.get("entity_id").and_then(Value::as_str) {
+        query = query.entity_id(entity_id);
+    }
+    if let Some(event_type) = args.get("event_type").and_then(Value::as_str) {
+        query = query.event_type_prefix(event_type);
+    }
+    query
 }
 
 /// Read every event of one family, oldest first, bounded by `max_scan`.
@@ -1383,8 +1581,9 @@ mod tests {
 
     use super::{
         EvidencePageOptions, evidence_page, exec_fold_entity_lifecycle, exec_fold_steps,
-        exec_list_stores, exec_query_events, exec_reconstruct_state, payload_contains_all,
-        payload_mode, project_fields, query_signature, redact, selected_store, tool_definitions,
+        exec_list_stores, exec_query_events, exec_reconstruct_state, exec_watch_events,
+        payload_contains_all, payload_mode, project_fields, query_signature, redact,
+        selected_store, tool_definitions,
     };
     use crate::{
         diagnostics::{AccessProfile, DiagnosticPolicy},
@@ -1535,6 +1734,86 @@ mod tests {
             .expect("ingest");
         }
         core
+    }
+
+    #[tokio::test]
+    async fn a_first_watch_reports_where_to_start_without_replaying_history() {
+        let core = core_with(&[
+            ("run-1", "workflow_run.started", json!({})),
+            ("run-2", "workflow_run.started", json!({})),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
+            .await
+            .expect("watch");
+
+        assert_eq!(
+            first["items"].as_array().expect("items").len(),
+            0,
+            "a first watch must not replay the store"
+        );
+        assert!(first["checkpoint"].as_str().expect("checkpoint").starts_with("v1|"));
+    }
+
+    #[tokio::test]
+    async fn a_watch_returns_only_events_after_its_checkpoint() {
+        let core = core_with(&[("run-1", "workflow_run.started", json!({}))]).await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
+            .await
+            .expect("watch");
+        let checkpoint = first["checkpoint"].as_str().expect("checkpoint").to_string();
+
+        let idle = exec_watch_events(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "checkpoint": checkpoint.clone() }),
+        )
+        .await
+        .expect("watch");
+        assert_eq!(
+            idle["items"].as_array().expect("items").len(),
+            0,
+            "the event at the checkpoint was already delivered"
+        );
+
+        core.ingest(allsource_core::embedded::IngestEvent {
+            entity_id: "run-1",
+            event_type: "workflow_run.completed",
+            payload: json!({}),
+            metadata: None,
+            tenant_id: None,
+        })
+        .await
+        .expect("ingest");
+
+        let after = exec_watch_events(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "checkpoint": checkpoint }),
+        )
+        .await
+        .expect("watch");
+        let items = after["items"].as_array().expect("items");
+        assert_eq!(items.len(), 1, "only the new event comes back");
+        assert_eq!(items[0]["event_type"], "workflow_run.completed");
+    }
+
+    #[tokio::test]
+    async fn a_watch_refuses_a_checkpoint_it_did_not_issue() {
+        let core = core_with(&[]).await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let error = exec_watch_events(&core, &policy, &json!({ "checkpoint": "yesterday" }))
+            .await
+            .expect_err("a checkpoint must be one this server issued");
+        assert!(error.to_string().starts_with("invalid argument:"));
     }
 
     #[tokio::test]
