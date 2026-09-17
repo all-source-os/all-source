@@ -759,7 +759,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -799,7 +799,7 @@ mod tests {
         let server = MockServer::start().await;
         mount_empty_core(&server).await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -842,7 +842,7 @@ mod tests {
         let server = MockServer::start().await;
         mount_empty_core(&server).await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -875,7 +875,7 @@ mod tests {
         let server = MockServer::start().await;
         mount_empty_core(&server).await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -908,7 +908,7 @@ mod tests {
         let server = MockServer::start().await;
         mount_empty_core(&server).await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -940,7 +940,7 @@ mod tests {
         let server = MockServer::start().await;
         mount_empty_core(&server).await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -978,7 +978,7 @@ mod tests {
         let server = MockServer::start().await;
         mount_empty_core(&server).await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("tenant-a").await.unwrap();
@@ -1024,7 +1024,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("t").await.unwrap();
@@ -1058,7 +1058,7 @@ mod tests {
     #[tokio::test]
     async fn update_node_merges_properties_in_warm_bundle() {
         let server = empty_core().await;
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("t").await.unwrap();
@@ -1079,7 +1079,7 @@ mod tests {
     #[tokio::test]
     async fn delete_edge_removes_it_from_neighbors() {
         let server = empty_core().await;
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("t").await.unwrap();
@@ -1121,7 +1121,7 @@ mod tests {
     #[tokio::test]
     async fn shortest_path_finds_the_chain() {
         let server = empty_core().await;
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("t").await.unwrap();
@@ -1160,7 +1160,7 @@ mod tests {
     #[tokio::test]
     async fn full_graph_returns_tenant_nodes_and_edges() {
         let server = empty_core().await;
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("t").await.unwrap();
@@ -1191,7 +1191,7 @@ mod tests {
     #[tokio::test]
     async fn delete_vector_removes_it_from_recall() {
         let server = empty_core().await;
-        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_secs(60));
+        let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
         // Pre-warm the tenant so post-write apply() lands on a warm bundle
         // (cold writes no-op apply; reads then hydrate from Core). See bug t-d90426.
         hosted.tenant_graph("t").await.unwrap();

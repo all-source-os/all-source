@@ -196,7 +196,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let cache = TenantProjectionCache::new(server.uri(), None, 8, Duration::from_secs(60));
+        let cache = TenantProjectionCache::new(server.uri(), None, 8, Duration::from_mins(1));
 
         let b1 = cache.get_or_hydrate("tenant-a").await.unwrap();
         assert!(b1.node_state.get_node("node:contact:alice").is_some());
@@ -226,7 +226,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let cache = TenantProjectionCache::new(server.uri(), None, 8, Duration::from_secs(60));
+        let cache = TenantProjectionCache::new(server.uri(), None, 8, Duration::from_mins(1));
         let a = cache.get_or_hydrate("tenant-a").await.unwrap();
         let b = cache.get_or_hydrate("tenant-b").await.unwrap();
 
@@ -246,7 +246,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let cache = TenantProjectionCache::new(server.uri(), None, 2, Duration::from_secs(60));
+        let cache = TenantProjectionCache::new(server.uri(), None, 2, Duration::from_mins(1));
         cache.get_or_hydrate("t1").await.unwrap();
         cache.get_or_hydrate("t2").await.unwrap();
         cache.get_or_hydrate("t3").await.unwrap();

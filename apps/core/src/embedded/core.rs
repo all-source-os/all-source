@@ -763,9 +763,9 @@ impl EmbeddedCore {
         // `since` is inclusive, so ask from the next millisecond. Passing the
         // timestamp itself re-sends every event sharing that millisecond on
         // every pull — which, at ingest speed, is most of a burst.
-        let since = since_vv.get(&self_region).and_then(|ts| {
-            chrono::DateTime::from_timestamp_millis(ts.physical_ms as i64 + 1)
-        });
+        let since = since_vv
+            .get(&self_region)
+            .and_then(|ts| chrono::DateTime::from_timestamp_millis(ts.physical_ms as i64 + 1));
 
         let store = Arc::clone(&self.store);
         let all_events = tokio::task::spawn_blocking(move || {

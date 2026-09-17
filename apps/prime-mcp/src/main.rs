@@ -301,9 +301,7 @@ async fn main() -> Result<()> {
     // paths, and local/dev http (no CORE_URL), still open the embedded store
     // below, unchanged.
     if matches!(cli.mode, Mode::Http) {
-        let api_key_set = std::env::var("PRIME_API_KEY")
-            .ok()
-            .is_some_and(|s| !s.is_empty());
+        let api_key_set = std::env::var("PRIME_API_KEY").is_ok_and(|s| !s.is_empty());
         let core_url_set = std::env::var("CORE_URL").ok().filter(|s| !s.is_empty());
         if core_url_set.is_some() && !api_key_set {
             tracing::error!(

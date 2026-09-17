@@ -141,7 +141,7 @@ impl WalShipper {
                 store: None,
                 metrics: None,
                 replication_mode: ReplicationMode::Async,
-                ack_timeout: Duration::from_millis(5000),
+                ack_timeout: Duration::from_secs(5),
                 ack_notify: Arc::new(Notify::new()),
             },
             tx_clone,

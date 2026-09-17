@@ -48,8 +48,8 @@ anyhow = "1.0"
 argon2 = "0.5"
 
 # Data / Arrow / Parquet
-arrow = { version = "57.3", features = ["ipc", "json"] }
-arrow-flight = "57.3"
+arrow = { version = "59.2", features = ["ipc", "json"] }
+arrow-flight = "59.2"
 async-trait = "0.1"
 
 # Web framework
@@ -71,7 +71,7 @@ ctrlc = "3.5"
 
 # Storage & Concurrency
 dashmap = "6.2"
-datafusion = "52.1"
+datafusion = "55.1"
 
 # Optional features
 fastembed = { version = "5" }
@@ -87,7 +87,7 @@ http = "1.4"
 instant-distance = { version = "0.6" }
 jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
 parking_lot = "0.12"
-parquet = { version = "57.3", features = ["arrow", "async"] }
+parquet = { version = "59.2", features = ["arrow", "async"] }
 prometheus = "0.14"
 rand = "0.10"
 ratatui = "0.29"

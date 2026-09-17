@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn test_trips_after_threshold() {
-        let cb = CircuitBreaker::new(3, Duration::from_secs(60));
+        let cb = CircuitBreaker::new(3, Duration::from_mins(1));
         cb.record_failure();
         cb.record_failure();
         assert_eq!(cb.state(), State::Closed);
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn test_resets_on_success() {
-        let cb = CircuitBreaker::new(3, Duration::from_secs(60));
+        let cb = CircuitBreaker::new(3, Duration::from_mins(1));
         cb.record_failure();
         cb.record_failure();
         cb.record_success();

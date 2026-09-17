@@ -314,11 +314,7 @@ mod tests {
             .await
             .expect("requests")
             .iter()
-            .filter(|r| {
-                std::str::from_utf8(&r.body)
-                    .map(|s| s.contains("EXTRACTED"))
-                    .unwrap_or(false)
-            })
+            .filter(|r| std::str::from_utf8(&r.body).is_ok_and(|s| s.contains("EXTRACTED")))
             .count();
         assert_eq!(confidence_hits, 1);
     }

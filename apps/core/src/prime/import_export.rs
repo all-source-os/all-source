@@ -61,6 +61,9 @@ pub async fn export_json(
         let entity_id = &event.entity_id;
 
         match event.event_type.as_str() {
+            // Not collapsed into a pattern guard for the same reason as the
+            // EDGE_CREATED arm below: `insert` mutates the dedup set.
+            #[allow(clippy::collapsible_match)]
             event_types::NODE_CREATED => {
                 if exported_nodes.insert(entity_id.clone()) {
                     let line = ExportLine {

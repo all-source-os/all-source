@@ -1524,7 +1524,7 @@ impl Prime {
                 if query.node_type.is_some() {
                     retrieval = Retrieval::TypeScan;
                     hits = candidates.into_iter().map(|n| (0.0, n)).collect();
-                    hits.sort_by(|a, b| b.1.updated_at.cmp(&a.1.updated_at));
+                    hits.sort_by_key(|hit| std::cmp::Reverse(hit.1.updated_at));
                 }
             } else {
                 retrieval = Retrieval::Lexical;
