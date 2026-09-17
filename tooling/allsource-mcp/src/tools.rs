@@ -11,13 +11,24 @@ use sha2::{Digest, Sha256};
 use crate::{
     diagnostics::DiagnosticPolicy,
     protocol::{ToolAnnotations, ToolDef, tool_error, tool_result},
+    stores::{DEFAULT_STORE, Store, StoreRegistry},
 };
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 500;
+/// Events read per page while filtering by payload text, which the store cannot do itself.
+const SCAN_PAGE: usize = 500;
+const DEFAULT_MAX_SCAN: usize = 5_000;
+const MAX_SCAN: usize = 50_000;
 
 /// Build a read-only tool descriptor with shared diagnostic input and annotations.
 fn read_tool(name: &str, title: &str, description: &str, mut input_schema: Value) -> ToolDef {
+    if name != "list_stores" {
+        input_schema["properties"]["store"] = json!({
+            "type": "string",
+            "description": "Which configured store to read; list_stores names them. Defaults to 'default'.",
+        });
+    }
     input_schema["properties"]["diagnostic"] = json!({
         "type": "object",
         "description": "Optional correlation identifiers carried into diagnostic context; never used as tenant authorization.",
@@ -69,6 +80,10 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                 "properties": {
                     "entity_id": { "type": "string", "description": "Filter by entity ID (exact match)" },
                     "event_type": { "type": "string", "description": "Filter by event type prefix (e.g. 'workflow_run' matches 'workflow_run.started')" },
+                    "event_type_exact": { "type": "string", "description": "Filter by one exact event type; unlike event_type it never matches longer types" },
+                    "payload_contains": { "type": "array", "items": { "type": "string" }, "description": "Keep only events whose payload text contains every one of these strings. Scans up to max_scan events, so the page is not cursor-paginated." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project payloads to these dotted paths (e.g. 'run.id'); a path the payload lacks renders null." },
+                    "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN, "description": "Upper bound on events read while filtering by payload_contains." },
                     "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
                     "cursor": { "type": "string", "description": "Opaque cursor returned by a previous identical query" },
                     "order": { "type": "string", "enum": ["asc", "desc"], "default": "asc" },
@@ -89,6 +104,15 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                     "cursor": { "type": "string", "description": "Opaque cursor returned by a previous identical sample" },
                     "payload_mode": { "type": "string", "enum": payload_modes.clone() }
                 }
+            }),
+        ),
+        read_tool(
+            "list_stores",
+            "List readable stores",
+            "Name every store this server may read, with its path and event count.",
+            json!({
+                "type": "object",
+                "properties": {}
             }),
         ),
         read_tool(
@@ -175,12 +199,12 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
 
 /// Execute a tool call and return the MCP result.
 pub async fn execute_tool(
-    core: &EmbeddedCore,
+    stores: &StoreRegistry,
     policy: &DiagnosticPolicy,
     name: &str,
     args: &Value,
 ) -> Value {
-    match execute_tool_inner(core, policy, name, args).await {
+    match execute_tool_inner(stores, policy, name, args).await {
         Ok(mut result) => {
             DiagnosticPolicy::attach_correlation(&mut result, args);
             tool_result(&result)
@@ -211,11 +235,16 @@ pub async fn execute_tool(
 
 /// Dispatch a validated tool call to its implementation.
 async fn execute_tool_inner(
-    core: &EmbeddedCore,
+    stores: &StoreRegistry,
     policy: &DiagnosticPolicy,
     name: &str,
     args: &Value,
 ) -> Result<Value> {
+    if name == "list_stores" {
+        return exec_list_stores(stores, policy);
+    }
+
+    let core = &selected_store(stores, policy, args)?.core;
     match name {
         "query_events" => exec_query_events(core, policy, args).await,
         "sample_events" => exec_sample_events(core, policy, args).await,
@@ -227,6 +256,54 @@ async fn execute_tool_inner(
         "analyze_changes" => exec_analyze_changes(core, policy, args).await,
         _ => anyhow::bail!("invalid argument: unknown tool '{name}'"),
     }
+}
+
+/// Resolve the store a call selected, refusing selection for a hosted tenant.
+///
+/// A hosted tenant is bound to one store for the life of the process, so letting a
+/// request name another would let it read outside that binding.
+fn selected_store<'a>(
+    stores: &'a StoreRegistry,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<&'a Store> {
+    let requested = args.get("store").and_then(Value::as_str);
+    if requested.is_some_and(|name| name != DEFAULT_STORE) && policy.is_hosted_tenant() {
+        anyhow::bail!("access denied: hosted tenant profiles read only their bound store");
+    }
+    stores.get(requested)
+}
+
+/// List the stores this server may read.
+fn exec_list_stores(stores: &StoreRegistry, policy: &DiagnosticPolicy) -> Result<Value> {
+    if policy.is_hosted_tenant() {
+        anyhow::bail!("access denied: hosted tenant profiles read only their bound store");
+    }
+    let items: Vec<Value> = stores
+        .iter()
+        .map(|(name, store)| {
+            json!({
+                "store": name,
+                "path": store.path.display().to_string(),
+                "events": store.core.event_count(),
+            })
+        })
+        .collect();
+    Ok(json!({
+        "context": policy.context(None),
+        "items": items,
+        "completeness": {
+            "complete": true,
+            "reason": Value::Null,
+            "scanned": items.len(),
+            "matched": items.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": items.len(),
+            "sourcesRead": items.len(),
+            "sourcesSkipped": [],
+        }
+    }))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -370,6 +447,9 @@ fn scoped_query(
     if let Some(event_type) = args.get("event_type").and_then(|v| v.as_str()) {
         query = query.event_type_prefix(event_type);
     }
+    if let Some(event_type) = args.get("event_type_exact").and_then(|v| v.as_str()) {
+        query = query.event_type(event_type);
+    }
     if let Some(since) = since {
         query = query.since(since);
     }
@@ -378,6 +458,45 @@ fn scoped_query(
     }
 
     Ok((query, signature))
+}
+
+/// Read an optional array-of-strings argument.
+fn string_list(args: &Value, key: &str) -> Result<Vec<String>> {
+    let Some(value) = args.get(key) else {
+        return Ok(Vec::new());
+    };
+    let items = value
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("invalid argument: {key} must be an array of strings"))?;
+    items
+        .iter()
+        .map(|item| {
+            item.as_str().map(str::to_string).ok_or_else(|| {
+                anyhow::anyhow!("invalid argument: {key} must be an array of strings")
+            })
+        })
+        .collect()
+}
+
+/// Whether a payload's JSON text contains every needle.
+fn payload_contains_all(payload: &Value, needles: &[String]) -> bool {
+    let text = payload.to_string();
+    needles.iter().all(|needle| text.contains(needle.as_str()))
+}
+
+/// Project a payload onto dotted paths; a path the payload lacks renders null.
+fn project_fields(payload: &Value, paths: &[String]) -> Value {
+    let projected: serde_json::Map<String, Value> = paths
+        .iter()
+        .map(|path| {
+            let mut cursor = payload;
+            for segment in path.split('.') {
+                cursor = cursor.get(segment).unwrap_or(&Value::Null);
+            }
+            (path.clone(), cursor.clone())
+        })
+        .collect();
+    Value::Object(projected)
 }
 
 /// Recursively redact values under credential-like object keys.
@@ -486,24 +605,20 @@ async fn exec_query_events(
 ) -> Result<Value> {
     let limit = limit_arg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT)?;
     let mode = payload_mode(args, policy)?;
+    let fields = string_list(args, "fields")?;
+    let needles = string_list(args, "payload_contains")?;
+
+    if !needles.is_empty() {
+        return scan_query_events(core, policy, args, limit, mode, &fields, &needles).await;
+    }
+
     let (query, signature) = scoped_query(policy, "query_events", args, limit)?;
 
     let page = core.query_page(query).await?;
     let result: Vec<Value> = page
         .events
         .iter()
-        .map(|e| {
-            json!({
-                "id": e.id.to_string(),
-                "entity_id": e.entity_id,
-                "event_type": e.event_type,
-                "tenant_id": e.tenant_id,
-                "timestamp": e.timestamp.to_rfc3339(),
-                "version": e.version,
-                "payload": event_payload(&e.payload, mode),
-                "metadata": e.metadata.as_ref().map(redact),
-            })
-        })
+        .map(|e| render_event(e, mode, &fields))
         .collect();
 
     let items = Value::Array(result);
@@ -518,6 +633,104 @@ async fn exec_query_events(
             force_incomplete: false,
         },
     ))
+}
+
+/// Render one event, applying payload exposure mode then field projection.
+fn render_event(
+    event: &allsource_core::embedded::EventView,
+    mode: PayloadMode,
+    fields: &[String],
+) -> Value {
+    let payload = event_payload(&event.payload, mode);
+    let payload = if fields.is_empty() {
+        payload
+    } else {
+        project_fields(&payload, fields)
+    };
+    json!({
+        "id": event.id.to_string(),
+        "entity_id": event.entity_id,
+        "event_type": event.event_type,
+        "tenant_id": event.tenant_id,
+        "timestamp": event.timestamp.to_rfc3339(),
+        "version": event.version,
+        "payload": payload,
+        "metadata": event.metadata.as_ref().map(redact),
+    })
+}
+
+/// Filter by payload text, which the store cannot do, by scanning bounded pages.
+///
+/// The scan starts at the first event every time: an offset cursor would describe
+/// the STORE's ordering, not the filtered result, so the caller would silently skip
+/// matches. `max_scan` bounds the read, and `completeness` reports what was covered.
+async fn scan_query_events(
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+    limit: usize,
+    mode: PayloadMode,
+    fields: &[String],
+    needles: &[String],
+) -> Result<Value> {
+    if args.get("cursor").is_some() {
+        anyhow::bail!(
+            "invalid argument: payload_contains cannot be combined with cursor; raise max_scan instead"
+        );
+    }
+    let max_scan = limit_arg(args, "max_scan", DEFAULT_MAX_SCAN, MAX_SCAN)?;
+
+    let mut matched: Vec<Value> = Vec::new();
+    let mut scanned = 0usize;
+    let mut fresh_through: Option<DateTime<Utc>> = None;
+    let mut exhausted = false;
+
+    while scanned < max_scan && matched.len() < limit {
+        let page_size = SCAN_PAGE.min(max_scan - scanned);
+        let (query, _) = scoped_query(policy, "query_events", args, page_size)?;
+        let page = core.query_page(query.offset(scanned)).await?;
+        if page.events.is_empty() {
+            exhausted = true;
+            break;
+        }
+        for event in &page.events {
+            scanned += 1;
+            fresh_through = fresh_through.max(Some(event.timestamp));
+            if payload_contains_all(&event.payload, needles) {
+                matched.push(render_event(event, mode, fields));
+                if matched.len() == limit {
+                    break;
+                }
+            }
+        }
+        if page.next_offset.is_none() {
+            exhausted = true;
+            break;
+        }
+    }
+
+    let complete = exhausted && matched.len() < limit;
+    Ok(json!({
+        "context": policy.context(fresh_through.as_ref().map(DateTime::to_rfc3339).as_deref()),
+        "items": Value::Array(matched.clone()),
+        "page": {
+            "requestedLimit": limit,
+            "returned": matched.len(),
+            "totalCount": matched.len(),
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": complete,
+            "reason": if complete { Value::Null } else if matched.len() == limit { json!("limit_reached") } else { json!("max_scan_reached") },
+            "scanned": scanned,
+            "matched": matched.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    }))
 }
 
 /// Execute a bounded newest-first event sample.
@@ -882,10 +1095,14 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        EvidencePageOptions, evidence_page, exec_reconstruct_state, payload_mode, query_signature,
-        redact, tool_definitions,
+        EvidencePageOptions, evidence_page, exec_list_stores, exec_query_events,
+        exec_reconstruct_state, payload_contains_all, payload_mode, project_fields,
+        query_signature, redact, selected_store, tool_definitions,
     };
-    use crate::diagnostics::{AccessProfile, DiagnosticPolicy};
+    use crate::{
+        diagnostics::{AccessProfile, DiagnosticPolicy},
+        stores::StoreRegistry,
+    };
 
     #[test]
     fn redaction_covers_nested_credential_keys() {
@@ -954,6 +1171,151 @@ mod tests {
                 assert!(!modes.contains(&json!("full")));
             }
         }
+    }
+
+    async fn two_store_registry() -> StoreRegistry {
+        let mut cores = Vec::new();
+        for _ in 0..2 {
+            cores.push(
+                EmbeddedCore::open(Config::builder().build().expect("valid config"))
+                    .await
+                    .expect("in-memory core"),
+            );
+        }
+        let mut cores = cores.into_iter();
+        StoreRegistry::from_cores(vec![
+            ("default", cores.next().expect("default core")),
+            ("workspace", cores.next().expect("workspace core")),
+        ])
+    }
+
+    #[tokio::test]
+    async fn a_call_selects_a_store_by_name_and_an_unknown_name_is_not_found() {
+        let stores = two_store_registry().await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        assert!(selected_store(&stores, &policy, &json!({})).is_ok());
+        assert!(selected_store(&stores, &policy, &json!({ "store": "workspace" })).is_ok());
+
+        let error = selected_store(&stores, &policy, &json!({ "store": "nope" }))
+            .map(|_| ())
+            .expect_err("an unknown store is not readable");
+        assert!(error.to_string().starts_with("not found:"));
+    }
+
+    #[tokio::test]
+    async fn a_hosted_tenant_cannot_leave_its_bound_store() {
+        let stores = two_store_registry().await;
+        let policy = DiagnosticPolicy::new(
+            AccessProfile::HostedTenant,
+            Some("tenant-a".to_string()),
+            "prod",
+        )
+        .expect("tenant policy");
+
+        let error = selected_store(&stores, &policy, &json!({ "store": "workspace" }))
+            .map(|_| ())
+            .expect_err("a hosted tenant is bound to one store");
+        assert!(error.to_string().starts_with("access denied:"));
+
+        assert!(
+            selected_store(&stores, &policy, &json!({})).is_ok(),
+            "its own store stays readable"
+        );
+        let error = exec_list_stores(&stores, &policy).expect_err("listing names other stores");
+        assert!(error.to_string().starts_with("access denied:"));
+    }
+
+    #[test]
+    fn field_projection_renders_missing_paths_as_null() {
+        let payload = json!({ "run": { "id": "run-1" }, "step": 3 });
+
+        let projected = project_fields(
+            &payload,
+            &[
+                "run.id".to_string(),
+                "step".to_string(),
+                "absent.x".to_string(),
+            ],
+        );
+
+        assert_eq!(projected["run.id"], "run-1");
+        assert_eq!(projected["step"], 3);
+        assert_eq!(projected["absent.x"], Value::Null);
+    }
+
+    #[test]
+    fn payload_text_filter_requires_every_needle() {
+        let payload = json!({ "reason": "queue paused", "org": "acme" });
+
+        assert!(payload_contains_all(
+            &payload,
+            &["paused".to_string(), "acme".to_string()]
+        ));
+        assert!(!payload_contains_all(
+            &payload,
+            &["paused".to_string(), "missing".to_string()]
+        ));
+    }
+
+    #[tokio::test]
+    async fn payload_contains_excludes_non_matching_events_and_reports_the_scan() {
+        let core = EmbeddedCore::open(
+            Config::builder()
+                .single_tenant(true)
+                .build()
+                .expect("valid config"),
+        )
+        .await
+        .expect("in-memory core");
+        for (entity, reason) in [("run-1", "queue paused"), ("run-2", "queue drained")] {
+            core.ingest(allsource_core::embedded::IngestEvent {
+                entity_id: entity,
+                event_type: "queue.state_changed",
+                payload: json!({ "reason": reason }),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await
+            .expect("ingest");
+        }
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let result = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["paused"], "limit": 10 }),
+        )
+        .await
+        .expect("filtered query");
+
+        let items = result["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1, "only the matching event is returned");
+        assert_eq!(items[0]["entity_id"], "run-1");
+        assert_eq!(result["completeness"]["scanned"], 2);
+        assert_eq!(result["completeness"]["matched"], 1);
+        assert_eq!(result["completeness"]["complete"], true);
+    }
+
+    #[tokio::test]
+    async fn payload_contains_refuses_a_cursor_rather_than_skipping_matches() {
+        let core = EmbeddedCore::open(Config::builder().build().expect("valid config"))
+            .await
+            .expect("in-memory core");
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let error = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "payload_contains": ["x"], "cursor": "v1:0:abc" }),
+        )
+        .await
+        .expect_err("a cursor describes store order, not filtered order");
+
+        assert!(error.to_string().starts_with("invalid argument:"));
     }
 
     #[tokio::test]

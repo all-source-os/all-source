@@ -5,10 +5,12 @@ use tracing_subscriber::EnvFilter;
 
 mod diagnostics;
 mod protocol;
+mod stores;
 mod tools;
 mod transport;
 
 use diagnostics::{AccessProfile, DiagnosticPolicy};
+use stores::StoreRegistry;
 use transport::StdioTransport;
 
 #[derive(Parser)]
@@ -20,6 +22,13 @@ struct Cli {
     /// Path to `AllSource` data directory containing storage/ and wal/
     #[arg(long, env = "ALLSOURCE_DATA_DIR")]
     data_dir: PathBuf,
+
+    /// Additional named store, `name=/path/to/allsource`, repeatable.
+    ///
+    /// A tool call selects one with `store`; the directory from `--data-dir` is
+    /// `default`. Names are fixed at startup so a request can never name a path.
+    #[arg(long = "store", value_parser = parse_store, value_name = "NAME=PATH")]
+    stores: Vec<(String, PathBuf)>,
 
     /// Access profile. Hosted tenant mode fails closed without --tenant-id.
     #[arg(
@@ -43,6 +52,17 @@ struct Cli {
     source_id: String,
 }
 
+/// Parse a `name=path` store argument.
+fn parse_store(raw: &str) -> Result<(String, PathBuf), String> {
+    let (name, path) = raw
+        .split_once('=')
+        .ok_or_else(|| format!("expected NAME=PATH, got '{raw}'"))?;
+    if name.is_empty() || path.is_empty() {
+        return Err(format!("expected NAME=PATH, got '{raw}'"));
+    }
+    Ok((name.to_string(), PathBuf::from(path)))
+}
+
 #[tokio::main]
 /// Start the read-only MCP server over standard input and output.
 async fn main() -> Result<()> {
@@ -57,18 +77,17 @@ async fn main() -> Result<()> {
 
     tracing::info!("Opening AllSource data at {:?}", cli.data_dir);
 
-    let core = allsource_core::embedded::EmbeddedCore::open(
-        allsource_core::embedded::Config::builder()
-            .data_dir(&cli.data_dir)
-            .single_tenant(false)
-            .read_only(true)
-            .build()?,
-    )
-    .await?;
+    let registry = StoreRegistry::open(&cli.data_dir, &cli.stores).await?;
+    for (name, store) in registry.iter() {
+        tracing::info!(
+            store = name.as_str(),
+            path = %store.path.display(),
+            events = store.core.event_count(),
+            "AllSource store opened"
+        );
+    }
 
-    tracing::info!("AllSource Core opened: {} events", core.event_count());
-
-    let mut transport = StdioTransport::new(core, policy);
+    let mut transport = StdioTransport::new(registry, policy);
     transport.run().await?;
 
     Ok(())

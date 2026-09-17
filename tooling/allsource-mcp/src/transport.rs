@@ -16,25 +16,25 @@
 //! Input stays tolerant: `read_message` accepts either framing, so a client that
 //! still sends Content-Length keeps working.
 
-use allsource_core::embedded::EmbeddedCore;
 use anyhow::Result;
 use std::io::{BufRead, Write};
 
 use crate::{
     diagnostics::DiagnosticPolicy,
     protocol::{self, Request, Response},
+    stores::StoreRegistry,
     tools,
 };
 
 pub struct StdioTransport {
-    core: EmbeddedCore,
+    stores: StoreRegistry,
     policy: DiagnosticPolicy,
 }
 
 impl StdioTransport {
-    /// Create a transport bound to one core and diagnostic policy.
-    pub fn new(core: EmbeddedCore, policy: DiagnosticPolicy) -> Self {
-        Self { core, policy }
+    /// Create a transport bound to one store registry and diagnostic policy.
+    pub fn new(stores: StoreRegistry, policy: DiagnosticPolicy) -> Self {
+        Self { stores, policy }
     }
 
     /// Serve MCP requests until standard input closes.
@@ -125,7 +125,8 @@ impl StdioTransport {
                     .cloned()
                     .unwrap_or(serde_json::json!({}));
 
-                let result = tools::execute_tool(&self.core, &self.policy, tool_name, &args).await;
+                let result =
+                    tools::execute_tool(&self.stores, &self.policy, tool_name, &args).await;
                 Some(Response::success(req.id.clone(), result))
             }
 
@@ -196,7 +197,10 @@ mod tests {
     use allsource_core::embedded::{Config, EmbeddedCore};
 
     use super::StdioTransport;
-    use crate::diagnostics::{AccessProfile, DiagnosticPolicy};
+    use crate::{
+        diagnostics::{AccessProfile, DiagnosticPolicy},
+        stores::StoreRegistry,
+    };
 
     async fn transport() -> StdioTransport {
         let core = EmbeddedCore::open(Config::builder().build().expect("valid config"))
@@ -204,7 +208,7 @@ mod tests {
             .expect("in-memory core");
         let policy =
             DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
-        StdioTransport::new(core, policy)
+        StdioTransport::new(StoreRegistry::from_cores(vec![("default", core)]), policy)
     }
 
     async fn serve(input: &str) -> String {
