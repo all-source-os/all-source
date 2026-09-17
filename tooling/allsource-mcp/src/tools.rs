@@ -969,11 +969,13 @@ async fn exec_fold_entity_lifecycle(
     // Last writer by timestamp wins, which is how every reader of this store folds.
     let mut folded: BTreeMap<String, &allsource_core::embedded::EventView> = BTreeMap::new();
     let mut first_seen: BTreeMap<String, DateTime<Utc>> = BTreeMap::new();
+    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     for event in &events {
         first_seen
             .entry(event.entity_id.clone())
             .and_modify(|seen| *seen = (*seen).min(event.timestamp))
             .or_insert(event.timestamp);
+        *counts.entry(event.entity_id.clone()).or_default() += 1;
         folded
             .entry(event.entity_id.clone())
             .and_modify(|latest| {
@@ -996,7 +998,7 @@ async fn exec_fold_entity_lifecycle(
                 "state_event_type": latest.event_type,
                 "state_at": latest.timestamp.to_rfc3339(),
                 "first_seen_at": first_seen.get(entity_id).map(DateTime::to_rfc3339),
-                "events": events.iter().filter(|e| &e.entity_id == entity_id).count(),
+                "events": counts.get(entity_id.as_str()).copied().unwrap_or(0),
                 "fields": project_fields(&latest.payload, &fields),
             })
         })
@@ -1067,7 +1069,10 @@ async fn exec_fold_steps(
             .entry(item.clone())
             .and_modify(|at| *at = (*at).min(event.timestamp))
             .or_insert(event.timestamp);
-        if terminal.iter().any(|state| state == state_of(&event.event_type)) {
+        if terminal
+            .iter()
+            .any(|state| state == state_of(&event.event_type))
+        {
             closed
                 .entry(item.clone())
                 .and_modify(|(at, state)| {
@@ -1626,7 +1631,12 @@ mod tests {
         );
         assert_ne!(
             query_signature(&tenant_a, "query_events", 25, &args),
-            query_signature(&tenant_a, "query_events", 50, &json!({ "entity_id": "same-id" }))
+            query_signature(
+                &tenant_a,
+                "query_events",
+                50,
+                &json!({ "entity_id": "same-id" })
+            )
         );
         assert_ne!(
             query_signature(&tenant_a, "query_events", 25, &args),
@@ -1755,7 +1765,12 @@ mod tests {
             0,
             "a first watch must not replay the store"
         );
-        assert!(first["checkpoint"].as_str().expect("checkpoint").starts_with("v1|"));
+        assert!(
+            first["checkpoint"]
+                .as_str()
+                .expect("checkpoint")
+                .starts_with("v1|")
+        );
     }
 
     #[tokio::test]
@@ -1767,7 +1782,10 @@ mod tests {
         let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
             .await
             .expect("watch");
-        let checkpoint = first["checkpoint"].as_str().expect("checkpoint").to_string();
+        let checkpoint = first["checkpoint"]
+            .as_str()
+            .expect("checkpoint")
+            .to_string();
 
         let idle = exec_watch_events(
             &core,
@@ -1816,12 +1834,92 @@ mod tests {
         assert!(error.to_string().starts_with("invalid argument:"));
     }
 
+    /// `since` is inclusive, so a checkpoint carrying only a timestamp would
+    /// re-deliver every event at that timestamp on each call. The delivered-count
+    /// is what makes it resumable, and it is only sound because the store orders
+    /// by (timestamp, version, scan position) — a total order added so "the
+    /// latest event" is unambiguous (all-source issue #177).
+    ///
+    /// Event timestamps come from the HLC's `physical_ms`, so two events CAN
+    /// share one. `ingest` cannot be made to produce that here — each call
+    /// crosses a millisecond — so this drives the arithmetic directly from a
+    /// hand-built checkpoint instead of waiting on a collision that may not come.
+    #[tokio::test]
+    async fn a_checkpoint_skips_exactly_the_events_already_delivered_at_its_instant() {
+        let core = core_with(&[
+            ("run-0", "workflow_run.started", json!({ "index": 0 })),
+            ("run-0", "workflow_run.progressed", json!({ "index": 1 })),
+            ("run-0", "workflow_run.completed", json!({ "index": 2 })),
+        ])
+        .await;
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let all = exec_query_events(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "payload_mode": "full" }),
+        )
+        .await
+        .expect("query");
+        let events = all["items"].as_array().expect("items");
+        assert_eq!(events.len(), 3, "three events to resume across");
+        let second = events[1]["timestamp"].as_str().expect("timestamp");
+
+        let indexes_of = |page: &Value| -> Vec<u64> {
+            page["items"]
+                .as_array()
+                .expect("items")
+                .iter()
+                .map(|item| item["payload"]["index"].as_u64().expect("index"))
+                .collect()
+        };
+
+        let none_delivered = exec_watch_events(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "workflow_run",
+                "checkpoint": format!("v1|{second}|0"),
+                "payload_mode": "full",
+            }),
+        )
+        .await
+        .expect("watch");
+        assert_eq!(
+            indexes_of(&none_delivered),
+            vec![1, 2],
+            "delivered=0 keeps the event at the checkpoint's own instant, because since is inclusive"
+        );
+
+        let one_delivered = exec_watch_events(
+            &core,
+            &policy,
+            &json!({
+                "event_type": "workflow_run",
+                "checkpoint": format!("v1|{second}|1"),
+                "payload_mode": "full",
+            }),
+        )
+        .await
+        .expect("watch");
+        assert_eq!(
+            indexes_of(&one_delivered),
+            vec![2],
+            "delivered=1 drops exactly the one already handed back, and nothing after it"
+        );
+    }
+
     #[tokio::test]
     async fn entity_lifecycle_folds_to_the_latest_state_and_filters_on_it() {
         let core = core_with(&[
             ("run-1", "workflow_run.started", json!({ "name": "first" })),
             ("run-2", "workflow_run.started", json!({ "name": "second" })),
-            ("run-1", "workflow_run.completed", json!({ "name": "first" })),
+            (
+                "run-1",
+                "workflow_run.completed",
+                json!({ "name": "first" }),
+            ),
         ])
         .await;
         let policy =
@@ -1836,12 +1934,18 @@ mod tests {
         .expect("fold");
         let items = all["items"].as_array().expect("items");
         assert_eq!(items.len(), 2, "one row per entity, not per event");
-        let run_1 = items.iter().find(|i| i["entity_id"] == "run-1").expect("run-1");
+        let run_1 = items
+            .iter()
+            .find(|i| i["entity_id"] == "run-1")
+            .expect("run-1");
         assert_eq!(run_1["state"], "completed", "the latest event wins");
         assert_eq!(run_1["events"], 2);
         assert_eq!(run_1["fields"]["name"], "first");
         assert_eq!(
-            items.iter().find(|i| i["entity_id"] == "run-2").expect("run-2")["state"],
+            items
+                .iter()
+                .find(|i| i["entity_id"] == "run-2")
+                .expect("run-2")["state"],
             "started"
         );
 
@@ -1899,7 +2003,11 @@ mod tests {
         .expect("fold");
 
         let items = folded["items"].as_array().expect("items");
-        assert_eq!(items.len(), 2, "run-2's step is filtered out by group_value");
+        assert_eq!(
+            items.len(),
+            2,
+            "run-2's step is filtered out by group_value"
+        );
         let a = items.iter().find(|i| i["item"] == "a").expect("item a");
         assert_eq!(a["open"], false);
         assert_eq!(a["final_state"], "completed");
