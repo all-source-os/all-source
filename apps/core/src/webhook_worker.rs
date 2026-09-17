@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn test_backoff_delay_capped() {
         // Very high attempt should be capped at 300s
-        assert_eq!(backoff_delay(20), std::time::Duration::from_secs(300));
+        assert_eq!(backoff_delay(20), std::time::Duration::from_mins(5));
     }
 
     #[test]

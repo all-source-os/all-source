@@ -1169,6 +1169,9 @@ mod tests {
     /// The worker's WebSocket handshake must carry the same credential the
     /// client's HTTP calls use — a real listener captures the header the
     /// reconnect loop actually sends.
+    // tungstenite's handshake callback fixes the Err type of the closure below, so
+    // its size is not ours to shrink.
+    #[allow(clippy::result_large_err)]
     #[tokio::test]
     async fn stream_handshake_carries_the_client_api_key() {
         use tokio::net::TcpListener;

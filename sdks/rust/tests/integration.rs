@@ -412,7 +412,7 @@ async fn test_circuit_breaker_trips() {
     let mut config = ClientConfig::new("http://127.0.0.1:19999", "key");
     config.retry.max_retries = 0;
     config.circuit_breaker_threshold = 2;
-    config.circuit_breaker_recovery = Duration::from_secs(60);
+    config.circuit_breaker_recovery = Duration::from_mins(1);
     let client = CoreClient::with_config(config).unwrap();
 
     // Two failures to trip the breaker

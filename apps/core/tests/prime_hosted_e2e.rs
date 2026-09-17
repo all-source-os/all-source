@@ -114,7 +114,7 @@ async fn hosted_prime_round_trips_and_isolates_tenants_through_real_core() {
     let base = spawn_real_core().await;
 
     // Writer: add nodes for two tenants against the real Core.
-    let writer = HostedPrime::connect(base.clone(), None, 8, Duration::from_secs(60));
+    let writer = HostedPrime::connect(base.clone(), None, 8, Duration::from_mins(1));
     let alice = writer
         .add_node("tenant-a", "contact", json!({"name": "Alice"}))
         .await
@@ -129,7 +129,7 @@ async fn hosted_prime_round_trips_and_isolates_tenants_through_real_core() {
     // Reader: a SECOND HostedPrime with a cold cache. Its reads must round-trip
     // through Core, so this proves real persistence — not just the writer's
     // warm cache.
-    let reader = HostedPrime::connect(base, None, 8, Duration::from_secs(60));
+    let reader = HostedPrime::connect(base, None, 8, Duration::from_mins(1));
 
     // Tenant A sees its own node …
     let a = reader.get_node("tenant-a", &alice_eid).await.unwrap();

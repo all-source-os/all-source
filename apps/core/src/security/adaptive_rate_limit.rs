@@ -186,7 +186,7 @@ impl AdaptiveRateLimiter {
             retry_after: if allowed {
                 None
             } else {
-                Some(std::time::Duration::from_secs(60))
+                Some(std::time::Duration::from_mins(1))
             },
             limit: profile.current_limit,
         };

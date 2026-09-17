@@ -205,7 +205,7 @@ fn test_rate_limit_recovery() {
         }
         // On slow systems, give more time
         if attempt >= 5 && recovered_count == 0 {
-            thread::sleep(Duration::from_millis(1000));
+            thread::sleep(Duration::from_secs(1));
         }
     }
     // Should have recovered at least 1 token (being more lenient for CI)
