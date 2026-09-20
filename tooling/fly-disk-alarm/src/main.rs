@@ -144,13 +144,14 @@ fn main() -> ExitCode {
 /// an issue. Every one of these reasons used to go to stderr only, so the issue
 /// said "the scheduled disk alarm did not pass" above an empty code block and
 /// no reader could tell a full volume from an unset token (#294).
+/// Stdout only: the workflow merges stderr into the same report, so writing the
+/// reason to both prints it twice in the issue.
 fn unreadable(json_out: bool, reason: &str) -> ExitCode {
     if json_out {
         println!("{}", serde_json::json!({ "error": reason }));
     } else {
         println!("{reason}");
     }
-    eprintln!("{reason}");
     ExitCode::from(2)
 }
 
