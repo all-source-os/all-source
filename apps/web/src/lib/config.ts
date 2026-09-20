@@ -387,6 +387,7 @@ export const siteConfig = {
     {
       title: "Platform",
       links: [
+        { href: "/what-is-an-event-store", text: "What is an event store?", icon: null },
         { href: "/what-is-allsource", text: "What is AllSource?", icon: null },
         { href: "/platform/event-sourcing", text: "Event Store", icon: null },
         { href: "/event-sourcing/patterns", text: "Event-Sourcing Patterns", icon: null },

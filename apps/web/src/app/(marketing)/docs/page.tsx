@@ -10,6 +10,13 @@ export const metadata = constructMetadata({
 
 const cards = [
   {
+    title: "Event Store Fundamentals",
+    description:
+      "Understand immutable streams, replay, projections, provenance, temporal state, and the trade-offs of event sourcing.",
+    href: "/what-is-an-event-store",
+    external: false,
+  },
+  {
     title: "Getting Started",
     description: "Set up AllSource Core, ingest your first events, and query them in minutes.",
     href: "https://github.com/all-source-os/all-source#quick-start",

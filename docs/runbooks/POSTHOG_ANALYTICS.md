@@ -30,6 +30,7 @@ history, and AI-referral provenance. PostHog is not a second product database.
 - `$web_vitals`
 - `signup_started` with fixed `method`
 - `signup_accepted` with fixed `method` and boolean `new_user`
+- `marketing_cta_clicked` with fixed `destination` and `placement`
 - `dashboard_event_created` without event content
 - `onboarding_sdk_selected`
 - `onboarding_event_created`

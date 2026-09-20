@@ -6,7 +6,7 @@ import { siteConfig } from "@/lib/config";
 function HeroPill() {
   return (
     <Link
-      href="/what-is-allsource"
+      href="/what-is-an-event-store"
       className="flex min-h-12 w-fit items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/50 hover:text-primary sm:text-sm"
     >
       <span className="h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
