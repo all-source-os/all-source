@@ -54,8 +54,10 @@ fn main() -> ExitCode {
         Some(raw) => match raw.parse::<f64>() {
             Ok(t) if (0.0..=1.0).contains(&t) => t,
             _ => {
-                eprintln!("--threshold must be a number between 0.0 and 1.0, got {raw:?}");
-                return ExitCode::from(2);
+                return unreadable(
+                    json_out,
+                    &format!("--threshold must be a number between 0.0 and 1.0, got {raw:?}"),
+                );
             }
         },
     };
@@ -63,18 +65,19 @@ fn main() -> ExitCode {
     let volumes = match fetch(&org) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("could not read Fly volume usage: {e}");
-            return ExitCode::from(2);
+            return unreadable(json_out, &format!("could not read Fly volume usage: {e}"));
         }
     };
 
     if volumes.is_empty() {
-        eprintln!(
-            "the query returned no volumes for org {org:?}. That is not the same as \
-             'no volume is full' — check the token's org scope and that {QUERY:?} \
-             still names the current Fly metrics."
+        return unreadable(
+            json_out,
+            &format!(
+                "the query returned no volumes for org {org:?}. That is not the same as \
+                 'no volume is full' — check the token's org scope and that {QUERY:?} \
+                 still names the current Fly metrics."
+            ),
         );
-        return ExitCode::from(2);
     }
 
     let mut over: Vec<&Volume> = volumes.iter().filter(|v| v.ratio >= threshold).collect();
@@ -105,7 +108,11 @@ fn main() -> ExitCode {
         let mut sorted: Vec<&Volume> = volumes.iter().collect();
         sorted.sort_by(|a, b| b.ratio.total_cmp(&a.ratio));
         for v in sorted {
-            let mark = if v.ratio >= threshold { "  <-- OVER" } else { "" };
+            let mark = if v.ratio >= threshold {
+                "  <-- OVER"
+            } else {
+                ""
+            };
             println!(
                 "{:<26} {:<20} {:<7} {:>6.1}%{}",
                 v.app,
@@ -120,13 +127,31 @@ fn main() -> ExitCode {
     if over.is_empty() {
         ExitCode::SUCCESS
     } else {
-        eprintln!(
+        // stdout, not stderr: the workflow pipes stdout into the report that
+        // becomes the issue body, so a verdict written to stderr reaches nobody.
+        println!(
             "\n{} volume(s) at or above {:.0}% — extend the volume or free space before it fills.",
             over.len(),
             threshold * 100.0
         );
         ExitCode::from(1)
     }
+}
+
+/// Exit 2 — usage could not be read — with the reason on STDOUT.
+///
+/// The alarm's consumer is a workflow that captures stdout and pastes it into
+/// an issue. Every one of these reasons used to go to stderr only, so the issue
+/// said "the scheduled disk alarm did not pass" above an empty code block and
+/// no reader could tell a full volume from an unset token (#294).
+fn unreadable(json_out: bool, reason: &str) -> ExitCode {
+    if json_out {
+        println!("{}", serde_json::json!({ "error": reason }));
+    } else {
+        println!("{reason}");
+    }
+    eprintln!("{reason}");
+    ExitCode::from(2)
 }
 
 fn flag(args: &[String], name: &str) -> Option<String> {
@@ -146,7 +171,15 @@ fn token() -> Result<String, String> {
     };
     let trimmed = raw.trim().to_string();
     if trimmed.is_empty() {
-        return Err("the Fly token is empty".into());
+        // A GitHub secret that does not exist arrives as an EMPTY env var, not
+        // an unset one, so this — not the "neither is set" arm above — is what
+        // an unconfigured workflow hits.
+        return Err(
+            "the Fly token is empty. In CI that means the FLY_API_TOKEN \
+                    repository secret does not exist: create it with a Fly token \
+                    scoped to the org, per docs/operations/ALERTS.md"
+                .into(),
+        );
     }
     Ok(trimmed)
 }

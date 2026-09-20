@@ -39,9 +39,12 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -o pipefail
+          # stderr is merged in deliberately: the report becomes the issue body,
+          # and a cargo/network/panic message printed to stderr would otherwise
+          # leave that body empty — which is exactly what #294 reported.
           cargo run --quiet --manifest-path tooling/fly-disk-alarm/Cargo.toml -- \
             --threshold "${{ github.event.inputs.threshold || '0.70' }}" \
-            | tee report.txt
+            2>&1 | tee report.txt
         continue-on-error: true
 
       # Exit 1 means a volume is over the line; exit 2 means usage could not be
@@ -53,8 +56,13 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            let report = 'No report captured.';
+            // An EMPTY report is the same failure as a missing one: it renders
+            // as a blank code block that tells the reader nothing (#294).
+            let report = '';
             try { report = fs.readFileSync('report.txt', 'utf8'); } catch {}
+            if (report.trim() === '') {
+              report = 'The check produced no output at all — read the run log.';
+            }
 
             const title = 'Fly volume disk alarm';
             const body = [
