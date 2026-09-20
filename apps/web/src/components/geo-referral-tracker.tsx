@@ -8,13 +8,12 @@
  * it posts them to `/api/geo/referral`. The server re-classifies and is the
  * only side holding a credential — see that route for the trust boundary.
  *
- * ## Why a beacon at all, when Vercel Web Analytics is installed
+ * ## Why a beacon at all, when PostHog is installed
  *
- * Vercel Web Analytics gives us aggregate traffic in Vercel's dashboard. It
- * does **not** give us the raw referrer and user agent inside our own event
- * stream, and it cannot join an arrival to a conversion in AllSource. Layer 1
- * needs both, so the tracker below is ~60 lines of first-party beacon on top
- * of it rather than a second analytics vendor.
+ * PostHog measures acquisition and product UX. It is not the durable source of
+ * truth for AllSource product outcomes and does not receive raw event payloads.
+ * This beacon keeps AI-referral arrival and conversion evidence in AllSource,
+ * where temporal joins and provenance can be demonstrated directly.
  *
  * ## Privacy
  *

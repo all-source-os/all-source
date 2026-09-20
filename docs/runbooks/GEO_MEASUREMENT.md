@@ -237,29 +237,23 @@ It is already wired into both signup paths in `apps/web/src/app/(auth)/signup/pa
 
 ## Analytics choice (ADR summary)
 
-**Vercel Web Analytics** (`@vercel/analytics`) for site-wide traffic, plus the
-first-party beacon above for the GEO event stream. Full reasoning — and what
-was rejected (PostHog, Plausible/Fathom, GA4) and why — is in the ADR comment
-at the top of `apps/web/src/app/layout.tsx`. The short version: Vercel Web
-Analytics is cookieless (no consent-banner rewrite) and same-origin (no CSP
-widening), but it does **not** expose the raw referrer and user agent in our own
-pipeline and cannot join an arrival to a conversion in AllSource — which is
-exactly what layer 1 needs.
+**PostHog Cloud EU** measures site-wide acquisition and product UX in
+cookieless mode. Autocapture, person profiles, and session replay are disabled.
+The first-party beacon above remains authority for AI-referral provenance and
+durable product outcomes. See `docs/runbooks/POSTHOG_ANALYTICS.md` and the ADR
+comment in `apps/web/src/app/layout.tsx`.
 
 ## Environment variables you must set BY HAND
 
-These are set in the **Vercel dashboard** (Project Settings → Environment
-Variables) for the `allsource-web` Vercel project. There is no `fly.toml` for
-`apps/web` and there must never be one — the frontend ships via
-`git push origin main` (Vercel auto-build) or `vercel --prod`.
+Server-only values are Fly secrets on `allsource-web`. Public PostHog values
+are build arguments in `apps/web/fly.toml`.
 
 | variable | scope | required | notes |
 |---|---|---|---|
 | `ALLSOURCE_API_KEY` | **server only** | yes | Gateway API key with ingest rights. Never prefix with `NEXT_PUBLIC_` — that would publish it in the browser bundle. |
 | `ALLSOURCE_API_URL` | server only | no | Defaults to `https://api.all-source.xyz`. |
-
-Vercel Web Analytics needs **no** environment variable — enable it in Project
-Settings → Analytics.
+| `NEXT_PUBLIC_POSTHOG_KEY` | public build arg | yes | Public write-only project token. Never substitute a personal API key. |
+| `NEXT_PUBLIC_POSTHOG_HOST` | public build arg | yes | `https://eu.i.posthog.com`. |
 
 Same names as `tooling/geo` on purpose: one env-var scheme for the whole GEO
 programme, not two.

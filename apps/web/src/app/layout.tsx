@@ -1,7 +1,7 @@
-import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { GeoReferralTracker } from "@/components/geo-referral-tracker";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { PostHogAnalytics } from "@/components/posthog-analytics";
 import { TailwindIndicator } from "@/components/tailwind-indicator";
 import { ThemeProvider } from "@/components/theme-provider";
 import {
@@ -14,47 +14,20 @@ import { cn, constructMetadata } from "@/lib/utils";
 import "./globals.css";
 
 /*
- * ADR — analytics choice for GEO layer 1 (prompt 024)
+ * ADR — production analytics after Fly.io migration
  *
- * The site had NO analytics of any kind before this. The constraint set was:
- * Vercel-hosted Next.js App Router; must expose the raw referrer and user
- * agent; must not force a cookie-banner rewrite.
+ * PostHog Cloud EU measures acquisition and product UX. It runs cookieless,
+ * with autocapture, session replay, and person profiles disabled. URLs are
+ * reduced to origin + pathname before capture.
  *
- * Chosen: **Vercel Web Analytics** (`@vercel/analytics`) for cookieless
- * site-wide traffic, a first-party `<GeoReferralTracker />` beacon for the GEO
- * event stream, and GA4 with denied-by-default storage for Search Console and
- * cross-product acquisition reporting.
+ * First-party AllSource events remain authoritative for durable product
+ * outcomes and AI-referral attribution. GA4 remains denied-by-default for
+ * Search Console and cross-product acquisition reporting. PostHog never
+ * receives event payloads, entity IDs, API keys, emails, or free text.
  *
- * Why three measurement paths rather than one product:
- * - Vercel Web Analytics is cookieless and privacy-preserving, so it adds no
- *   consent-banner obligation the site did not already have. It is served from
- *   `/_vercel/insights/*` on our own origin, so it needs no third-party CSP
- *   entries, env var, or account setup beyond enabling it in the Vercel
- *   dashboard. GA4 uses narrowly scoped script and collection origins in
- *   `next.config.mjs`.
- * - It does NOT satisfy the second constraint. Vercel shows referrers in *its*
- *   dashboard; it gives us no programmatic access to the raw referrer and user
- *   agent, and it cannot join an arrival to a conversion inside AllSource.
- *   That is precisely what layer 1 is for, hence the beacon.
- * - GA4 supplies channel, landing-page, and Google Search Console reporting
- *   shared with the other Wolven Tech products. It runs with analytics and ad
- *   storage denied, strips query strings, and disables Google Signals.
- *   First-party GEO events remain authoritative for AI referrals because GA4
- *   may group them as Direct or Referral.
- *
- * Rejected:
- * - **PostHog** — the richest option, but it sets cookies by default and would
- *   pull the site into consent-banner work that is not this slice's job.
- * - **Plausible / Fathom** — cookieless and good, but a paid third-party
- *   script host (CSP widening) for aggregate numbers Vercel already gives us
- *   free, and still no raw referrer in our own pipeline.
- *
- * Env vars to set by hand: Vercel Web Analytics needs NONE (enable it in
- * Project Settings -> Analytics). GA4 uses `NEXT_PUBLIC_GA_MEASUREMENT_ID`,
- * with a canonical-host fallback for production. The referral route needs
- * `ALLSOURCE_API_KEY` (and optionally `ALLSOURCE_API_URL`) set in the Vercel
- * dashboard — server scope only, never `NEXT_PUBLIC_`. See
- * docs/runbooks/GEO_MEASUREMENT.md.
+ * Fly builds require `NEXT_PUBLIC_POSTHOG_KEY` and
+ * `NEXT_PUBLIC_POSTHOG_HOST`. Referral routes require server-only
+ * `ALLSOURCE_API_KEY` and optional `ALLSOURCE_API_URL`.
  */
 
 export const metadata: Metadata = constructMetadata({
@@ -103,11 +76,11 @@ export default function RootLayout({
       </head>
       <body className={cn("min-h-screen bg-background antialiased w-full mx-auto scroll-smooth")}>
         <GoogleAnalytics />
+        <PostHogAnalytics />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           {children}
           <TailwindIndicator />
           <GeoReferralTracker />
-          {process.env.VERCEL ? <Analytics /> : null}
         </ThemeProvider>
       </body>
     </html>

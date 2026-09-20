@@ -12,11 +12,11 @@ import {
   Label,
   Textarea,
 } from "@allsource/ui";
-import { track } from "@vercel/analytics";
 import { AlertCircle, Check, Loader2, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import type { CreateEventRequest, Event } from "@/lib/api/client";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 interface CreateEventDialogProps {
   open: boolean;
@@ -83,7 +83,7 @@ export function CreateEventDialog({ open, onOpenChange, onCreate }: CreateEventD
         event_type: nextEventType,
         payload: nextPayload,
       });
-      track("dashboard_event_created", { source: "event_dialog" });
+      trackProductEvent("dashboard_event_created", { source: "event_dialog" });
       setCreatedEvent({ id: created?.id, entityId: nextEntityId });
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Event could not be created.");

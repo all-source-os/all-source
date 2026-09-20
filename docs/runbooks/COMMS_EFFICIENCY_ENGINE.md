@@ -11,9 +11,9 @@ to operators.
 
 **It dogfoods Core.** Efficiency is a **temporal join over the tenant's own Core
 event stream** — email engagement events ⋈ goal events — computed by a control-plane
-reconciler. There is **no parallel analytics stack** (no Mixpanel/PostHog). The
-product's event store + temporal queries ARE the analytics engine; proving that on
-our own marketing is the strongest dogfood.
+reconciler. This subsystem uses no parallel analytics store: the product's event
+store + temporal queries are its authority. PostHog separately measures public
+acquisition and product UX; it never replaces comms outcomes in Core.
 
 It is **generalized**: it measures any proactive-comms send, with the lifecycle
 email trail as the first consumer.

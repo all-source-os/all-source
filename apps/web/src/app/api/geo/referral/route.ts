@@ -134,10 +134,10 @@ export async function POST(request: NextRequest) {
   if (!apiKey) {
     // Loud, not silent. A GEO window with an unnoticed hole in it is worse
     // than a visible failure — and this is the single most likely
-    // misconfiguration (the env var is set by hand in the Vercel dashboard).
+    // misconfiguration (the env var is a Fly secret).
     console.error(
       "[geo] ALLSOURCE_API_KEY is not set — geo.referral.observed dropped. " +
-        "Set it in the Vercel dashboard (Project Settings -> Environment Variables)."
+        "Set it with fly secrets set --app allsource-web ALLSOURCE_API_KEY=..."
     );
     return NextResponse.json({ error: "GEO telemetry is not configured" }, { status: 503 });
   }

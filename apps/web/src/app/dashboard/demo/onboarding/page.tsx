@@ -2,11 +2,11 @@
 
 import { Button, Card, CardContent } from "@allsource/ui";
 import { cn } from "@allsource/ui/utils";
-import { track } from "@vercel/analytics";
 import { ArrowLeft, ArrowRight, Check, Code2, Download, Play, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 const STEPS = [
   { id: "choose-sdk", label: "Choose SDK", icon: Code2 },
@@ -211,7 +211,7 @@ export function OnboardingWizard({
     (sdk: SDK) => {
       setCreatedEventId(null);
       setQueryVerified(false);
-      track("onboarding_sdk_selected", { sdk, path: basePath });
+      trackProductEvent("onboarding_sdk_selected", { sdk, path: basePath });
       setParams({ sdk, step: "2" });
     },
     [basePath, setParams]
@@ -385,7 +385,7 @@ export function OnboardingWizard({
             disabled={!queryVerified}
             data-testid="go-to-dashboard-button"
             onClick={() => {
-              track("onboarding_completed", {
+              trackProductEvent("onboarding_completed", {
                 sdk: selectedSdk ?? "unknown",
                 path: basePath,
               });
@@ -531,7 +531,7 @@ function StepSendEvent({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const id = data.id ?? data.event_id ?? "evt-demo";
-      track("onboarding_event_created", { sdk });
+      trackProductEvent("onboarding_event_created", { sdk });
       onEventCreated(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send event");
@@ -617,7 +617,7 @@ function StepQueryBack({
         return;
       }
       onVerificationChange(true);
-      track("onboarding_query_completed", { sdk, result_count: events.length });
+      trackProductEvent("onboarding_query_completed", { sdk, result_count: events.length });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to query events");
     } finally {

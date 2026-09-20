@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { reportGeoConversion } from "@/components/geo-referral-tracker";
+import { trackProductEvent } from "@/lib/product-analytics";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
@@ -80,6 +81,7 @@ function SignUpContent() {
     // GEO layer 1: if this session arrived from an AI surface, mark it
     // converted. A no-op for every other session, and it never blocks signup.
     reportGeoConversion("signup_started");
+    trackProductEvent("signup_started", { method: provider });
     setLoadingProvider(provider);
     setError(null);
     // Use same-origin path — Next.js rewrites proxy this to the control plane
@@ -89,6 +91,7 @@ function SignUpContent() {
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     reportGeoConversion("signup_started");
+    trackProductEvent("signup_started", { method: "email" });
     setError(null);
     setIsSubmitting(true);
 
@@ -114,6 +117,7 @@ function SignUpContent() {
       // Forward ?next= so deep-links like /connect resume after signup.
       if (data.token) {
         const isNewUser = data.new_user === true;
+        trackProductEvent("signup_accepted", { method: "email", new_user: isNewUser });
         const next = searchParams.get("next");
         const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
         window.location.href = `/api/auth/callback?token=${encodeURIComponent(data.token)}&new_user=${isNewUser}${nextParam}`;

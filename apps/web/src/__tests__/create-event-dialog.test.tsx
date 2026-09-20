@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CreateEventDialog, parseEventPayload } from "@/components/events/create-event-dialog";
 
-const { track } = vi.hoisted(() => ({ track: vi.fn() }));
+const { trackProductEvent } = vi.hoisted(() => ({ trackProductEvent: vi.fn() }));
 
-vi.mock("@vercel/analytics", () => ({ track }));
+vi.mock("@/lib/product-analytics", () => ({ trackProductEvent }));
 
 describe("parseEventPayload", () => {
   it("accepts JSON objects", () => {
@@ -46,7 +46,7 @@ describe("CreateEventDialog", () => {
       });
     });
     expect(screen.getByText("Event stored")).toBeInTheDocument();
-    expect(track).toHaveBeenCalledWith("dashboard_event_created", {
+    expect(trackProductEvent).toHaveBeenCalledWith("dashboard_event_created", {
       source: "event_dialog",
     });
     expect(onOpenChange).not.toHaveBeenCalled();
