@@ -26,6 +26,9 @@ pub enum ChronError {
     #[error("task {0} is not claimed; nothing to release")]
     NotClaimed(String),
 
+    #[error("task {id} is already claimed by {holder}; run `cn release {id}` first")]
+    AlreadyClaimed { id: String, holder: String },
+
     #[error("refusing to re-parent: {0}")]
     ReparentRefused(#[from] crate::domain::hierarchy::ReparentRefusal),
 

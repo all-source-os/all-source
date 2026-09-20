@@ -121,7 +121,7 @@ impl<R: TaskRepository> App<R> {
                 if best > 0 { Some((best, t)) } else { None }
             })
             .collect();
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        scored.sort_by_key(|a| std::cmp::Reverse(a.0));
         scored.into_iter().map(|(_, t)| t).collect()
     }
 

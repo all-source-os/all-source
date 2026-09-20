@@ -371,16 +371,31 @@ pub async fn dispatch(
         Command::Claim(args) => {
             let agent = crate::infrastructure::agent_id();
             let ids = collect_cascade_ids(repo, &args.id, args.cascade)?;
-            for id in &ids {
-                let task = repo.get_task(id)?;
-                if task.status != crate::domain::task::TaskStatus::Open {
-                    continue;
-                }
+            let tasks = ids
+                .iter()
+                .map(|id| repo.get_task(id))
+                .collect::<Result<Vec<_>, _>>()?;
+            let plan = claim_task::plan_claim(&args.id, &tasks)?;
+
+            for id in &plan.to_claim {
                 claim_task::claim_task(repo, id, &agent).await?;
                 if toon_mode {
                     print!("{}", toon::action("claimed", id));
                 } else {
                     println!("Claimed task {id} (agent: {agent})");
+                }
+            }
+
+            for skipped in &plan.skipped {
+                if toon_mode {
+                    print!("{}", toon::action("skipped", &skipped.id));
+                } else {
+                    let held = skipped
+                        .held_by
+                        .as_deref()
+                        .map(|h| format!(", held by {h}"))
+                        .unwrap_or_default();
+                    println!("Skipped {} ({}{held})", skipped.id, skipped.status);
                 }
             }
         }
