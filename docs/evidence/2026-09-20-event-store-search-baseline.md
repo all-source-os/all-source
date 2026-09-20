@@ -75,6 +75,21 @@ Production verification after Fly deployment `6185001b`:
 - identity/configuration endpoint returned HTTP 200.
 - feature-flag endpoint returned HTTP 200.
 
+Production verification after event-store discovery deployment `abbdeb54`:
+
+- `https://www.all-source.xyz/what-is-an-event-store` returned HTTP 200 from Fly.
+- Canonical resolved to the clean production URL without the verification query.
+- Title, description, one H1, breadcrumbs, `TechArticle`, and organization/site
+  structured data rendered in the live document.
+- `robots.txt` allowed the page and declared the production sitemap.
+- `sitemap.xml` contained the definition page, API docs, hub, and ten pattern pages.
+- Homepage hero, docs hub, and footer rendered links to the definition page.
+- 390 px viewport rendered at 390 px document width with no horizontal overflow.
+- Activating the `Read API docs` CTA loaded `/docs/api` with HTTP 200 and produced
+  a PostHog EU ingestion response with HTTP 200.
+- Targeted tests passed (9 tests), and the production Next.js build generated 111
+  pages after type checking.
+
 Dashboard aggregates remain unknown because the authenticated Chrome account can
 see project `33987`, while production uses shared project `244095`. Successful
 browser ingestion proves delivery, not a dashboard count or conversion rate.
