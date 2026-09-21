@@ -12,6 +12,8 @@ name = "allsource-auth"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = "0.1"
+validator = { version = "0.19", features = ["derive"] }
 # Authentication framework (manual axum bridge — better-auth 0.8 uses axum 0.8 internally)
 better-auth = "0.8"
 better-auth-core = "0.8"
@@ -43,4 +45,5 @@ uuid = { version = "1.22", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
+base64 = "0.22"
 tower = { version = "0.5", features = ["util"] }

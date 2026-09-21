@@ -57,7 +57,9 @@ name = "allsource-auth"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
+ "base64",
  "better-auth",
  "better-auth-allsource",
  "better-auth-core",
@@ -73,6 +75,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+ "validator",
 ]
 
 [[package]]

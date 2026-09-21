@@ -72,10 +72,13 @@ pub struct AllsourceClient {
     core_url: String,
     query_url: String,
     api_key: String,
+    tenant_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct IngestEvent<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tenant_id: Option<&'a str>,
     entity_id: &'a str,
     event_type: &'a str,
     payload: serde_json::Value,
@@ -144,7 +147,19 @@ impl AllsourceClient {
             core_url: core_url.trim_end_matches('/').to_string(),
             query_url: query_url.trim_end_matches('/').to_string(),
             api_key: api_key.to_string(),
+            tenant_id: None,
         }
+    }
+
+    /// Scope writes and reads identically when connecting directly to Core.
+    /// Core ingestion does not infer the tenant from the service credential.
+    pub fn with_tenant_id(mut self, tenant_id: impl Into<String>) -> Self {
+        self.tenant_id = Some(tenant_id.into());
+        self
+    }
+
+    fn tenant_query(&self) -> Vec<(&str, &str)> {
+        self.tenant_id.as_deref().map(|id| vec![("tenant_id", id)]).unwrap_or_default()
     }
 
     /// Append an event to Allsource Core.
@@ -156,6 +171,7 @@ impl AllsourceClient {
     ) -> Result<(), AllsourceAuthError> {
         let url = format!("{}/api/v1/events", self.core_url);
         let event = IngestEvent {
+            tenant_id: self.tenant_id.as_deref(),
             entity_id,
             event_type,
             payload,
@@ -198,6 +214,7 @@ impl AllsourceClient {
         let resp = self
             .http
             .get(&url)
+            .query(&self.tenant_query())
             .header("Authorization", format!("Bearer {}", self.api_key))
             .query(&[
                 ("entity_id", entity_id),
@@ -242,6 +259,7 @@ impl AllsourceClient {
         let resp = self
             .http
             .get(&url)
+            .query(&self.tenant_query())
             .header("Authorization", format!("Bearer {}", self.api_key))
             .query(&[
                 ("event_type_prefix", event_type_prefix),
@@ -335,6 +353,7 @@ impl AllsourceClient {
         let resp = self
             .http
             .get(&url)
+            .query(&self.tenant_query())
             .header("Authorization", format!("Bearer {}", self.api_key))
             .query(&[
                 ("event_type_prefix", event_type_prefix),
@@ -391,6 +410,7 @@ impl AllsourceClient {
         let resp = self
             .http
             .get(&url)
+            .query(&self.tenant_query())
             .header("Authorization", format!("Bearer {}", self.api_key))
             .query(&[
                 ("event_type_prefix", event_type_prefix),
@@ -451,6 +471,7 @@ impl AllsourceClient {
         let resp = self
             .http
             .get(&url)
+            .query(&self.tenant_query())
             .header("Authorization", format!("Bearer {}", self.api_key))
             .query(&[
                 ("event_type_prefix", event_type_prefix),
@@ -532,6 +553,21 @@ async fn extract_error_message(resp: reqwest::Response) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn scoped_client_uses_same_tenant_for_ingest_and_query() {
+        let client = super::AllsourceClient::new("http://core", "http://core", "test")
+            .with_tenant_id("allsource-auth");
+        assert_eq!(client.tenant_query(), vec![("tenant_id", "allsource-auth")]);
+        let event = super::IngestEvent {
+            tenant_id: client.tenant_id.as_deref(),
+            entity_id: "auth-user:test",
+            event_type: "auth.user.created",
+            payload: serde_json::json!({"id":"test"}),
+        };
+        assert_eq!(serde_json::to_value(event).unwrap()["tenant_id"], "allsource-auth");
+        let legacy = super::AllsourceClient::new("http://core", "http://gateway", "test");
+        assert!(legacy.tenant_query().is_empty());
+    }
     use super::*;
     use better_auth_core::types::User;
     use std::sync::Arc;

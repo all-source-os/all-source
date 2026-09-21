@@ -1,7 +1,7 @@
 // Canonical tier ids — the ONE naming scheme used everywhere in the app.
 // `self-host` is the free, run-it-yourself tier; indie/studio/scale are the
 // paid hosted tiers; enterprise is sales-led.
-export type CanonicalTier = "self-host" | "indie" | "studio" | "scale" | "enterprise";
+export type CanonicalTier = "trial" | "self-host" | "indie" | "studio" | "scale" | "enterprise";
 
 // retiredToCanonical is the SINGLE retired→canonical map on the web side — the
 // mirror of the backend's MapRetiredTier, applied once at the ingest edge where
@@ -26,6 +26,7 @@ const retiredToCanonical: Record<string, CanonicalTier> = {
 export function canonicalTier(raw: string | null | undefined): CanonicalTier {
   if (!raw) return "self-host";
   const t = raw.trim().toLowerCase();
+  if (t === "trial") return "trial";
   if (t === "self-host" || t === "indie" || t === "studio" || t === "scale" || t === "enterprise") {
     return t;
   }
@@ -34,6 +35,7 @@ export function canonicalTier(raw: string | null | undefined): CanonicalTier {
 
 // TIER_RANK orders the canonical tiers for upgrade/downgrade comparisons.
 export const TIER_RANK: Record<CanonicalTier, number> = {
+  trial: 0,
   "self-host": 0,
   indie: 1,
   studio: 2,

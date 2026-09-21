@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { reportGeoConversion } from "@/components/geo-referral-tracker";
+import { authRedirect } from "@/lib/auth-redirect";
 import { trackProductEvent } from "@/lib/product-analytics";
 
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
@@ -113,14 +114,11 @@ function SignUpContent() {
         throw new Error(data.error?.message || data.message || "Registration failed");
       }
 
-      // Route through the callback handler to set the httpOnly auth cookie.
-      // Forward ?next= so deep-links like /connect resume after signup.
-      if (data.token) {
+      // The same-origin endpoint has already set the HttpOnly session cookie.
+      if (data.session_established) {
         const isNewUser = data.new_user === true;
         trackProductEvent("signup_accepted", { method: "email", new_user: isNewUser });
-        const next = searchParams.get("next");
-        const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
-        window.location.href = `/api/auth/callback?token=${encodeURIComponent(data.token)}&new_user=${isNewUser}${nextParam}`;
+        window.location.href = authRedirect(searchParams.get("next"), isNewUser);
       } else {
         // Fallback: show email verification message
         setEmailSent(true);

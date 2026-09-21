@@ -15,6 +15,7 @@ primary_region = "iad"
 
 [env]
   AUTH_BACKEND = "allsource"
+  AUTH_ALLSOURCE_TENANT_ID = "allsource-auth"
   AUTH_PORT = "3903"
   RUST_LOG = "allsource_auth=info"
 

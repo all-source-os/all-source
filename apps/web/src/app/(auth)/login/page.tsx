@@ -15,8 +15,9 @@ import {
 } from "@allsource/ui";
 import { AlertCircle, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useState } from "react";
+import { authRedirect } from "@/lib/auth-redirect";
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_token: "Authentication failed. Please try again.",
@@ -29,7 +30,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 function LoginContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,15 +76,12 @@ function LoginContent() {
         throw new Error(data.error?.message || data.message || "Login failed");
       }
 
-      // Route through the callback handler to set the httpOnly auth cookie.
-      // Forward ?next= so deep-links like /connect resume after sign-in.
-      if (data.token) {
+      // The same-origin endpoint has already set the HttpOnly session cookie.
+      if (data.session_established) {
         const isNewUser = data.new_user === true;
-        const next = searchParams.get("next");
-        const nextParam = next ? `&next=${encodeURIComponent(next)}` : "";
-        window.location.href = `/api/auth/callback?token=${encodeURIComponent(data.token)}&new_user=${isNewUser}${nextParam}`;
+        window.location.href = authRedirect(searchParams.get("next"), isNewUser);
       } else {
-        router.push(searchParams.get("next") ?? "/dashboard");
+        throw new Error("Unable to establish your session. Please try again.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.");

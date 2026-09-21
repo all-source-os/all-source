@@ -95,6 +95,12 @@ pub struct AllsourceAuthAdapter {
 }
 
 impl AllsourceAuthAdapter {
+    /// Use an explicit storage tenant for direct-to-Core deployments.
+    pub fn with_tenant_id(mut self, tenant_id: impl Into<String>) -> Self {
+        self.client = self.client.with_tenant_id(tenant_id);
+        self
+    }
+
     /// Create a new adapter.
     ///
     /// - `core_url`: Allsource Core URL (e.g., `http://localhost:3900`)

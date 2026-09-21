@@ -8,24 +8,25 @@
 //!   (requires `AUTH_ALLSOURCE_URL` + `AUTH_ALLSOURCE_QUERY_URL`)
 //! - `memory` — in-memory, sessions lost on restart (default)
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Instant;
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use anyhow::Result;
-use axum::extract::{Request, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
-use axum::Router;
-use better_auth::adapters::MemoryDatabaseAdapter;
-use better_auth::plugins::oauth::OAuthProvider;
-use better_auth::plugins::{EmailPasswordPlugin, OAuthPlugin, SessionManagementPlugin};
+use axum::{
+    Router,
+    extract::{Request, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use better_auth::{
     AuthConfig as BetterAuthConfig, BetterAuth, SessionOps, TypedAuthBuilder, UserOps,
+    adapters::MemoryDatabaseAdapter,
+    plugins::{OAuthPlugin, SessionManagementPlugin, oauth::OAuthProvider},
 };
 use better_auth_allsource::AllsourceAuthAdapter;
-use better_auth_core::entity::{AuthSession as AuthSessionTrait, AuthUser as AuthUserTrait};
-use better_auth_core::{AuthRequest, DatabaseAdapter, HttpMethod};
+use better_auth_core::{
+    AuthRequest, DatabaseAdapter, HttpMethod,
+    entity::{AuthSession as AuthSessionTrait, AuthUser as AuthUserTrait},
+};
 use dashmap::DashMap;
 use tracing::{error, info, warn};
 
@@ -125,11 +126,7 @@ fn configure_plugins<DB: DatabaseAdapter>(
 ) -> TypedAuthBuilder<DB> {
     builder = builder
         .plugin(SessionManagementPlugin::new())
-        .plugin(
-            EmailPasswordPlugin::new()
-                .enable_signup(true)
-                .require_email_verification(false),
-        );
+        .plugin(crate::email_credentials::EmailCredentialsPlugin);
 
     // Build OAuth plugin with available providers
     let mut oauth_providers: Vec<(&str, OAuthProvider)> = Vec::new();
@@ -170,8 +167,8 @@ impl AuthModule {
     /// mount prefix (`/api/auth`) before requests reach better-auth's handler.
     /// `base_url` includes `/api/auth` so OAuth callback URLs are correct.
     fn auth_config(config: &AuthConfig) -> BetterAuthConfig {
-        let is_localhost = config.base_url.contains("localhost")
-            || config.base_url.contains("127.0.0.1");
+        let is_localhost =
+            config.base_url.contains("localhost") || config.base_url.contains("127.0.0.1");
 
         let mut cfg = BetterAuthConfig::new(&config.secret)
             .base_url(&config.base_url)
@@ -264,10 +261,34 @@ impl AuthModule {
                 anyhow::anyhow!("AllSource Core health check failed at {health_url}: {e}")
             })?;
 
-        let db = AllsourceAuthAdapter::new(core_url, query_url, api_key.unwrap_or(""));
+        let storage_tenant = std::env::var("AUTH_ALLSOURCE_TENANT_ID").map_err(|_| {
+            anyhow::anyhow!("AUTH_ALLSOURCE_TENANT_ID is required for durable auth storage")
+        })?;
+        if storage_tenant.is_empty() {
+            return Err(anyhow::anyhow!(
+                "AUTH_ALLSOURCE_TENANT_ID must not be empty"
+            ));
+        }
+        // An unauthenticated /health 200 does not prove the storage credential
+        // works. Fail startup if it is revoked or belongs to another tenant.
+        let identity: serde_json::Value = client
+            .get(format!("{}/api/v1/auth/me", core_url.trim_end_matches('/')))
+            .bearer_auth(api_key.unwrap_or(""))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        if identity.get("tenant_id").and_then(|v| v.as_str()) != Some(storage_tenant.as_str()) {
+            return Err(anyhow::anyhow!(
+                "Auth storage credential tenant does not match AUTH_ALLSOURCE_TENANT_ID"
+            ));
+        }
+        let db = AllsourceAuthAdapter::new(core_url, query_url, api_key.unwrap_or(""))
+            .with_tenant_id(storage_tenant);
 
-        let builder = BetterAuth::<AllsourceAuthAdapter>::new(Self::auth_config(config))
-            .database(db);
+        let builder =
+            BetterAuth::<AllsourceAuthAdapter>::new(Self::auth_config(config)).database(db);
 
         let auth = configure_plugins(builder, config)
             .build()
@@ -289,20 +310,18 @@ impl AuthModule {
 
         // Exchange endpoint: POST /exchange — exchanges a single-use auth code for a session token
         let exchange_router = Router::new()
-            .route(
-                "/exchange",
-                axum::routing::post(exchange_code_handler),
-            )
+            .route("/exchange", axum::routing::post(exchange_code_handler))
             .with_state(auth_codes.clone());
 
-        let auth_router = match &self.backend {
-            AuthBackend::Memory(auth) => Router::new()
-                .fallback(auth_handler_memory)
-                .with_state((auth.clone(), config, auth_codes)),
-            AuthBackend::Allsource(auth) => Router::new()
-                .fallback(auth_handler_allsource)
-                .with_state((auth.clone(), config, auth_codes)),
-        };
+        let auth_router =
+            match &self.backend {
+                AuthBackend::Memory(auth) => Router::new()
+                    .fallback(auth_handler_memory)
+                    .with_state((auth.clone(), config, auth_codes)),
+                AuthBackend::Allsource(auth) => Router::new()
+                    .fallback(auth_handler_allsource)
+                    .with_state((auth.clone(), config, auth_codes)),
+            };
 
         // Merge exchange route first so it takes priority over the fallback
         exchange_router.merge(auth_router)
@@ -324,12 +343,7 @@ impl AuthModule {
     ///
     /// Uses the framework-agnostic `handle_request` API to simulate
     /// a POST /sign-up/email request.
-    pub async fn create_demo_account(
-        &self,
-        email: &str,
-        password: &str,
-        name: &str,
-    ) -> Result<()> {
+    pub async fn create_demo_account(&self, email: &str, password: &str, name: &str) -> Result<()> {
         let body = serde_json::json!({
             "email": email,
             "password": password,
@@ -392,11 +406,7 @@ async fn auth_handler_memory(
 
 /// Catch-all handler for allsource backend.
 async fn auth_handler_allsource(
-    State((auth, config, auth_codes)): State<(
-        Arc<AllsourceAuth>,
-        Arc<AuthConfig>,
-        AuthCodeCache,
-    )>,
+    State((auth, config, auth_codes)): State<(Arc<AllsourceAuth>, Arc<AuthConfig>, AuthCodeCache)>,
     request: Request,
 ) -> Response {
     auth_handler_impl(&auth, &config, &auth_codes, request).await
@@ -491,27 +501,22 @@ fn convert_callback_to_redirect(
     auth_codes: &AuthCodeCache,
 ) -> Response {
     // Determine redirect target: first trusted origin, or fall back to base_url origin
-    let redirect_to = config
-        .trusted_origins
-        .first()
-        .cloned()
-        .unwrap_or_else(|| {
-            config
-                .base_url
-                .find("://")
-                .and_then(|scheme_end| {
-                    let after_scheme = &config.base_url[scheme_end + 3..];
-                    after_scheme.find('/').map(|path_start| {
-                        config.base_url[..scheme_end + 3 + path_start].to_string()
-                    })
-                })
-                .unwrap_or_else(|| config.base_url.clone())
-        });
+    let redirect_to = config.trusted_origins.first().cloned().unwrap_or_else(|| {
+        config
+            .base_url
+            .find("://")
+            .and_then(|scheme_end| {
+                let after_scheme = &config.base_url[scheme_end + 3..];
+                after_scheme
+                    .find('/')
+                    .map(|path_start| config.base_url[..scheme_end + 3 + path_start].to_string())
+            })
+            .unwrap_or_else(|| config.base_url.clone())
+    });
 
     // Extract session token from Set-Cookie header for cross-domain handoff
     let session_token = auth_response.headers.iter().find_map(|(name, value)| {
-        if name.eq_ignore_ascii_case("set-cookie") && value.contains("better-auth.session_token=")
-        {
+        if name.eq_ignore_ascii_case("set-cookie") && value.contains("better-auth.session_token=") {
             value
                 .split("better-auth.session_token=")
                 .nth(1)
@@ -650,9 +655,7 @@ fn convert_response(auth_response: better_auth_core::AuthResponse) -> Response {
 
     builder
         .body(axum::body::Body::from(auth_response.body))
-        .unwrap_or_else(|_| {
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response()
-        })
+        .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Internal error").into_response())
 }
 
 #[cfg(test)]
@@ -698,7 +701,10 @@ mod tests {
         let mut config = memory_config();
         config.backend = "sqlite".to_string();
         let result = AuthModule::build(config).await;
-        let err = result.err().expect("should fail for unknown backend").to_string();
+        let err = result
+            .err()
+            .expect("should fail for unknown backend")
+            .to_string();
         assert!(
             err.contains("Unknown AUTH_BACKEND"),
             "Error should mention unknown backend: {err}"
@@ -758,6 +764,45 @@ mod tests {
             "Sign-up should succeed, got {}",
             signup_resp.status()
         );
+
+        // Regression: upstream 0.8 writes password_hash into user metadata;
+        // the durable adapter rejects it. The replacement must use Account.
+        if let AuthBackend::Memory(auth) = &module.backend {
+            use better_auth_core::{AccountOps, entity::AuthAccount};
+            let db = auth.database();
+            let user = db
+                .get_user_by_email("test@example.com")
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(user.metadata().get("password_hash").is_none());
+            let credential = db
+                .get_account("credential", user.id())
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(credential.password().unwrap().starts_with("$argon2"));
+        }
+
+        for (path, body, expected) in [
+            ("/sign-up/email", signup_body.clone(), StatusCode::CONFLICT),
+            (
+                "/sign-in/email",
+                serde_json::json!({"email":"test@example.com","password":"WrongPassword123!"}),
+                StatusCode::UNAUTHORIZED,
+            ),
+        ] {
+            let request = Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap();
+            assert_eq!(
+                router.clone().oneshot(request).await.unwrap().status(),
+                expected
+            );
+        }
 
         // Sign in
         let signin_body = serde_json::json!({

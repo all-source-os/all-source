@@ -6,13 +6,13 @@
 //!
 //! All auth routes are mounted at `/api/auth`.
 
-use std::sync::Arc;
+use std::{
+    net::{Ipv6Addr, SocketAddr},
+    sync::Arc,
+};
 
 use anyhow::Result;
-use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::Router;
+use axum::{Router, extract::State, http::StatusCode, response::IntoResponse};
 use clap::Parser;
 use tokio::net::TcpListener;
 use tracing::{error, info};
@@ -86,8 +86,10 @@ async fn main() -> Result<()> {
         .nest("/api/auth", auth_module.router());
 
     // Bind and serve
-    let addr = format!("0.0.0.0:{}", cli.port);
-    let listener = TcpListener::bind(&addr).await?;
+    // Fly .internal DNS resolves to private IPv6 addresses. A v4-only bind
+    // passes the proxy health check while refusing service-to-service traffic.
+    let addr = listen_address(cli.port);
+    let listener = TcpListener::bind(addr).await?;
     info!(
         "AllSource Auth Service listening on {} (backend: {})",
         addr, backend_name
@@ -99,6 +101,18 @@ async fn main() -> Result<()> {
 
     info!("AllSource Auth Service stopped");
     Ok(())
+}
+
+fn listen_address(port: u16) -> SocketAddr {
+    SocketAddr::from((Ipv6Addr::UNSPECIFIED, port))
+}
+
+#[cfg(test)]
+mod listener_tests {
+    #[test]
+    fn listens_on_private_ipv6_interface() {
+        assert_eq!(super::listen_address(3903).to_string(), "[::]:3903");
+    }
 }
 
 /// GET /health — health check endpoint.

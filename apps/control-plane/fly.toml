@@ -11,6 +11,7 @@ primary_region = "iad"
   GIN_MODE = "release"
   PORT = "3901"
   CORE_SERVICE_URL = "http://allsource-core.internal:3900"
+  AUTH_SERVICE_URL = "http://allsource-auth.internal:3903"
   # OAuth callback URL must match the domain registered with GitHub/Google.
   # Since OAuth providers redirect to the frontend, and Next.js proxies
   # /api/v1/auth/oauth/* to this service, this must be the frontend URL.
@@ -41,9 +42,10 @@ primary_region = "iad"
 [http_service]
   internal_port = 3901
   force_https = true
-  auto_stop_machines = true
+  # Web/auth call .internal directly, bypassing Fly Proxy's auto-start.
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ["app"]
 
   [http_service.concurrency]

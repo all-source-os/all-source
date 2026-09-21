@@ -707,6 +707,11 @@ func (cp *ControlPlane) LoginHandler(c *gin.Context) {
 		return
 	}
 
+	if os.Getenv("AUTH_SERVICE_URL") != "" {
+		cp.emailAuthService(c, false, "", username, req.Password)
+		return
+	}
+
 	// Verify credentials against Core
 	resp, err := cp.client.R().
 		SetBody(map[string]string{
@@ -826,7 +831,12 @@ func (cp *ControlPlane) RegisterHandler(c *gin.Context) {
 		}
 	}
 
-	// Register credentials in Core (Core handles password hashing)
+	if os.Getenv("AUTH_SERVICE_URL") != "" {
+		cp.emailAuthService(c, true, req.Name, req.Email, req.Password)
+		return
+	}
+
+	// Legacy deployments without AUTH_SERVICE_URL retain the Core contract.
 	resp, err := cp.client.R().
 		SetBody(map[string]string{
 			"username": req.Email,
