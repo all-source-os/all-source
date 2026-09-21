@@ -9,6 +9,7 @@ interface AnalyticsState {
   client: PostHogClient | null;
   initialization: Promise<PostHogClient | null> | null;
   initialized: boolean;
+  testTraffic?: boolean;
 }
 
 declare global {
@@ -20,6 +21,17 @@ declare global {
 const BET = "allsource";
 const TRACKING_SCHEMA = 1;
 const PRODUCTION_HOSTS = new Set(["all-source.xyz", "www.all-source.xyz"]);
+const TEST_TRAFFIC_KEY = "allsource-analytics-test";
+
+export function isAnalyticsTest(hostname: string, search: string, previousTest = false): boolean {
+  return (
+    previousTest ||
+    !PRODUCTION_HOSTS.has(hostname) ||
+    new URLSearchParams(search)
+      .getAll("analytics_test")
+      .some((value) => value === "1" || value === "true")
+  );
+}
 
 function analyticsState(): AnalyticsState | null {
   if (typeof window === "undefined") return null;
@@ -42,14 +54,34 @@ export function cleanAnalyticsUrl(value: unknown, fallbackOrigin?: string): stri
 }
 
 function commonProperties(): AnalyticsProperties {
-  const production = PRODUCTION_HOSTS.has(window.location.hostname);
+  const state = analyticsState();
+  let previousTest = state?.testTraffic ?? false;
+  try {
+    previousTest ||= window.sessionStorage.getItem(TEST_TRAFFIC_KEY) === "1";
+  } catch {
+    // Blocked storage must not break page rendering or lose same-document QA state.
+  }
+  const testTraffic = isAnalyticsTest(
+    window.location.hostname,
+    window.location.search,
+    previousTest
+  );
+  if (state) state.testTraffic = testTraffic;
+  if (testTraffic) {
+    try {
+      // Store only a QA flag, never an identifier. Keep it across query-free CTA navigation.
+      window.sessionStorage.setItem(TEST_TRAFFIC_KEY, "1");
+    } catch {
+      // The in-memory flag still protects client-side navigation.
+    }
+  }
   return {
-    analytics_test: !production,
+    analytics_test: testTraffic,
     bet: BET,
     page_path: window.location.pathname,
     surface: window.location.pathname.startsWith("/dashboard") ? "dashboard" : "marketing",
     tracking_schema: TRACKING_SCHEMA,
-    traffic_role: production ? "production" : "test",
+    traffic_role: testTraffic ? "test" : "production",
   };
 }
 

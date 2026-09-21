@@ -90,9 +90,35 @@ Production verification after event-store discovery deployment `abbdeb54`:
 - Targeted tests passed (9 tests), and the production Next.js build generated 111
   pages after type checking.
 
-Dashboard aggregates remain unknown because the authenticated Chrome account can
-see project `33987`, while production uses shared project `244095`. Successful
-browser ingestion proves delivery, not a dashboard count or conversion rate.
+At the initial capture, dashboard aggregates were unknown because the authenticated
+Chrome account could see project `33987`, not the production shared project `244095`.
+This access blocker was resolved on 21 September; see the follow-up below.
+
+## Dashboard follow-up — 21 September 2026
+
+The authenticated account now exposes https://eu.posthog.com/project/244095/activity/explore.
+Last-30-day Activity with `bet=allsource`, `traffic_role=production`,
+`analytics_test=false`, and internal/test-user filtering enabled returned all
+36 matching records: 13 pageviews, 14 web-vitals events, eight pageleaves and one
+`marketing_cta_clicked`. The CTA originates from `/what-is-an-event-store`, with
+a subsequent `/docs/api` pageview. No signup events appeared in this bounded result.
+
+These are **production-labelled records, not verified customer conversions**.
+Code inspection identified that the initial integration set `analytics_test`
+solely from hostname, ignoring explicit QA query markers. The documented 20
+September docs CTA check is therefore included in the production-labelled data.
+Do not claim the one CTA as organic acquisition, infer a conversion rate, or
+treat absent PostHog signups as zero authoritative signups.
+
+Correction tracked in `t-539203`: explicit `analytics_test=1` or
+`analytics_test=true` classifies the tab as test traffic, persisting only a
+boolean QA flag in sessionStorage across query-free navigation. A same-document
+in-memory fallback handles unavailable storage; a hard reload with storage
+blocked requires the explicit marker again. No user identifier or arbitrary
+query value is stored or transmitted. Query strings remain stripped from URLs.
+
+Signup/activation reconciliation against authoritative AllSource data is still
+outstanding. `t-7ba26f` must remain open until that acceptance criterion is met.
 
 ## Measurement path
 
