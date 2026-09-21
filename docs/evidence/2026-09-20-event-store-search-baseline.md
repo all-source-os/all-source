@@ -120,6 +120,21 @@ query value is stored or transmitted. Query strings remain stripped from URLs.
 Signup/activation reconciliation against authoritative AllSource data is still
 outstanding. `t-7ba26f` must remain open until that acceptance criterion is met.
 
+### QA classification fix verified in production
+
+- Source commit: `d5199cdf`, pushed to `origin/main`.
+- Fly release: `deployment-01M3235BM2VJ6J46RR2RW83E10`; rolling health checks passed.
+- All 154 web tests passed; typecheck and focused Biome checks passed.
+- Local Turbopack was blocked by OS port restrictions; webpack production build
+  passed and generated 111 pages. The remote Fly Turbopack build also passed.
+- Opened `/what-is-an-event-store?analytics_test=1`, then clicked **Read API docs**.
+  Browser navigated to `/docs/api` without query parameters.
+- PostHog project 244095 test-only filter visibly received six records including
+  both pageviews and `marketing_cta_clicked` with `destination=api_docs`.
+  All displayed `traffic_role=test` and `analytics_test=true`; URLs were query-free.
+- Historical mislabelled events were not altered. Exclude the documented prior QA
+  activity when reporting acquisition; this release fixes future classification.
+
 ## Measurement path
 
 `/what-is-an-event-store` emits `$pageview`. Its fixed CTA allowlist emits
