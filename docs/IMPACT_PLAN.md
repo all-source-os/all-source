@@ -2,7 +2,8 @@
 
 Status: active
 Owner: founder
-Last updated: 2026-09-08
+Last updated: 2026-09-21
+Plan version: 2
 Bet: [`docs/BET.md`](BET.md)
 Marketing system: [`docs/MARKETING_STRATEGY_PACK.md`](MARKETING_STRATEGY_PACK.md)
 
@@ -16,6 +17,16 @@ Traffic, post engagement, GitHub stars, local installs, and trial starts are
 diagnostics. None substitutes for gate.
 
 ## Current bottleneck
+
+As of 2026-09-21, signup repair and QA-separated PostHog reconciliation are
+verified. The next constraint is missing paid delivery/value evidence and
+unverified legal seller identity, not missing pages. Follow
+[VALUE_DELIVERY_PLAN.md](VALUE_DELIVERY_PLAN.md); paid growth remains HOLD.
+Existing BET gate is unchanged. Event-store-first public positioning is a later
+founder direction; the older agent-first BET text needs an explicit reconciled
+contract revision, not an implicit rewrite during this audit.
+
+### Previous bottleneck — 2026-09-08
 
 High-intent pages explain durable memory but skip from explanation to pricing,
 documentation, or generic installation. Buyer cannot run one bounded proof of
@@ -134,3 +145,9 @@ Record:
 
 Update this file only with observed evidence. Keep [`docs/BET.md`](BET.md)
 unchanged unless founder changes customer, trigger, promise, gate, or kill rule.
+
+## Decision log
+
+| Date | Decision | Evidence and next action |
+| --- | --- | --- |
+| 2026-09-21 | Keep repaired signup and QA classification; hold paid growth | Signup evidence saved under docs/evidence; value-delivery plan created. Reconcile paid inventory and real-workload fulfilment via t-c594ba, confirm seller details via t-7cea76, and price copy via t-5968ae. Unknown outcomes stay unknown. |
