@@ -137,6 +137,42 @@ outstanding. `t-7ba26f` must remain open until that acceptance criterion is met.
 
 ## Measurement path
 
+## Authoritative reconciliation investigation — 21 September 2026
+
+Read-only operational checks found 11 retained Core tenants, none demo-flagged,
+and none created since 2026-09-20T00:00:00Z at capture time (approximately
+2026-09-21 14:12 UTC). This is a retained-tenant snapshot, not a historical
+registration count: deleted tenants and users joining existing tenants are not
+represented by this metric.
+
+Core's legacy auth user endpoint returned an empty list. It is not authoritative
+for the deployed better-auth service and has no creation timestamp. An empty
+`auth.user.created` event query also cannot establish zero registrations until
+its tenant scope and the auth persistence configuration are verified. Activation
+must exclude `onboarding_sample`, `demo_seed`, QA and system events. No signup or
+activation total is claimed from these incomplete checks.
+
+### Production conversion blocker: t-35f359
+
+- An empty-JSON POST to `/api/v1/auth/register` returned HTTP 502 with
+  `Failed to reach Control Plane`. No account was created by this probe.
+- Web runtime actually targets `http://allsource-auth.internal:3903`; the error
+  message does not identify the configured backend correctly.
+- Requests from the web machine to auth health and both registration paths failed
+  with connection timeout/refusal.
+- Auth reports healthy through Fly's checks, but the inspected machine's socket
+  tables show only an IPv4 listener on port 3903, not IPv6. Source confirms
+  `0.0.0.0` binding. This prevents direct private IPv6 connections.
+- A separate source-level contract mismatch remains: the web proxy forwards
+  `/register` unchanged; better-auth implements `/sign-up/email`. Connectivity
+  repair alone does not prove signup, session handoff or tenant provisioning.
+
+Keep t-7ba26f open. Repair and verify the complete auth path before interpreting
+conversion absence as weak demand. Do not change auth backends or migrate user
+records merely to bypass the failure.
+
+### Event instrumentation
+
 `/what-is-an-event-store` emits `$pageview`. Its fixed CTA allowlist emits
 `marketing_cta_clicked` for `api_docs`, `live_demo`, or `signup`. Signup emits
 `signup_started` and `signup_accepted`. AllSource product events remain authority
