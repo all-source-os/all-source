@@ -7,6 +7,9 @@ Source of truth: [`BET.md`](BET.md). This record tracks operational readiness;
 it does not change or satisfy the commercial promotion gate. An unchecked item
 means no direct verification was captured in this pass, not a known failure.
 
+Mobile delivery amendment: 2026-09-21. Historical checked items below describe
+prior builds; they do not satisfy the new complete Android/iOS release gate.
+
 ## Sunday Club listing, 2026-09-14
 
 - Target: <https://sundayclub.so/submit>
@@ -36,7 +39,7 @@ means no direct verification was captured in this pass, not a known failure.
 
 - Public discovery: applicable; Sunday Club listing points to the product site.
 - Primary product: hosted AllSource via <https://www.all-source.xyz/> and its API.
-- Mobile app: not applicable; bet has no native job or store distribution.
+- Mobile app: required complete Android and iOS delivery; current implementation gaps are tracked in `docs/MOBILE_DELIVERY.md`.
 - API or back office: applicable; hosted ingest, recall, replay, and provenance
   are the first-value circuit.
 - First geography and language: global, English.
@@ -104,6 +107,23 @@ Evidence: [`BET.md`](BET.md) defines qualifying customer and event evidence;
 production reconciliation not checked here.
 
 ## Mobile publication
+
+Applicability: required on Android and iOS by the 2026-09-21 delivery amendment.
+Current complete-mobile release state: blocked; required parity and commerce
+evidence is incomplete. Existing web readiness and commercial status are separate.
+
+- [ ] Complete first-value-to-output journey works in Android.
+- [ ] Complete first-value-to-output journey works in iOS.
+- [ ] In-app purchase, verified entitlement, full fulfilment, export/share and support work on both platforms.
+- [ ] Receipt replay, interruption, restore, refund/revocation and offline rules are verified where commerce applies.
+- [ ] Signed Android internal build and iOS TestFlight build are installed and tested on physical devices.
+- [ ] Safe areas, back navigation, keyboard, large text, screen reader and deep links pass per platform.
+- [ ] Dedicated /apps, /apps/ios and /apps/android pages have crawlable links, canonical metadata, sitemap entries and truthful availability.
+- [ ] Store metadata and declarations match each exact build; reviewed versions and public URLs are verified.
+
+Evidence and task IDs: [MOBILE_DELIVERY.md](MOBILE_DELIVERY.md).
+
+## Historical mobile publication — superseded scope
 
 Applicability: not applicable; no mobile app in the bet's essential circuit.
 

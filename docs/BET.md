@@ -1,6 +1,33 @@
 # AllSource bet
 
 Status: active
+Contract version: 2
+Shape schema: 1
+
+## Complete mobile delivery
+
+Mobile delivery schema: 1
+Decision: 2026-09-21 founder-requested delivery reshape. This is the required
+target, not a claim that the apps or purchases have shipped. It supersedes
+earlier Android-only, companion-only, browser-only fulfilment, and mobile
+not-applicable scope. Existing customer, amount, fee trigger, refund promise,
+no-gos, and promotion/kill criteria remain fixed. For mobile payments, trusted
+store or service-provider receipts extend the web receipt source; identical
+qualification, fulfilment and refund requirements apply.
+
+- Android experience: complete product journey on Android. Onboard and authenticate a tenant, provision hosted access, connect an existing real agent via safe key handoff, inspect ingest/recall/provenance and restart proof, buy or manage Indie, and obtain support. The mobile app controls hosted infrastructure; it does not run the agent or replace API/SDK/MCP clients.
+- iOS experience: complete product journey on iOS with the same outcome and domain rules.
+- Mobile commerce class: digital
+- Android purchase: Google Play Billing; same contracted price and entitlement unit, trusted server verification before unlock.
+- iOS purchase: StoreKit; same contracted price and entitlement unit, trusted server verification before unlock.
+- Entitlement lifecycle: trusted verification, durable receipt deduplication and recoverable delivery; restore, refund and revocation checks; explicit offline/revalidation policy. Web and mobile entitlement mapping must prevent double charging while keeping local customer data private.
+- Mobile fulfilment: Onboard and authenticate a tenant, provision hosted access, connect an existing real agent via safe key handoff, inspect ingest/recall/provenance and restart proof, buy or manage Indie, and obtain support. The mobile app controls hosted infrastructure; it does not run the agent or replace API/SDK/MCP clients.
+- App discovery pages: https://www.all-source.xyz/apps, https://www.all-source.xyz/apps/ios, https://www.all-source.xyz/apps/android; required target routes, not claims of current availability.
+- Mobile release evidence: `docs/MOBILE_DELIVERY.md` and `docs/LAUNCH_READINESS.md` track Android and iOS independently through signed build, internal installation, physical-device proof, review and verified public store URLs.
+- Lesson coverage: 2026-09-21 ten-bet audit; Real onboarding must survive restart and create durable tenants. Paid renewal, not trial signup, is the commercial signal.
+- Missing-work queue: repository Chronis epic and dependent Android, iOS, commerce/offer, website, device and release beads listed in `docs/MOBILE_DELIVERY.md`.
+
+Decision and audit: [delivery amendment](decisions/2026-09-21-complete-mobile-delivery.md).
 
 ## Customer, trigger, and struggle
 
