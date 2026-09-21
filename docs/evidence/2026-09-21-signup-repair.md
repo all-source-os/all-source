@@ -33,7 +33,43 @@ Window: **2026-09-20 00:00 UTC inclusive to 2026-09-21 15:03 UTC exclusive**.
 
 Source: aggregate Core event reconciliation. Activation means at least one non-seeded, non-system event from a workspace belonging to the new email signup cohort. This is not an all-time user count and excludes OAuth, deleted tenants, other products, and historical cohorts. It does not establish that no customers exist.
 
-PostHog reconciliation remains unverified: browser access was denied because the approval workspace was out of credits. Do not equate missing analytics events with missing backend signups. Project 244095 is shared; any later reconciliation must filter AllSource and exclude QA/test traffic. No alternate access path was attempted after that denial.
+Initial browser reconciliation was blocked by approval workspace credits. On the subsequent user-requested continuation, the newly connected read-only PostHog connector provided authorized project access. The local PostHog skill was read; the server's requested `learn` command returned unavailable for this client, so tool-provided schema guidance was used. No browser permission bypass was used.
+
+## PostHog reconciliation — 21 September 2026
+
+Confirmed project **244095**, shared name **ChargeWindow Production**, timezone **UTC**. Verified event names, property types, and values before querying. No approved catalog metric exists for this calculation; these are noncanonical diagnostic event counts, not unique people or a conversion-rate funnel.
+
+Same window as the backend snapshot above, with `bet = allsource`:
+
+| Event | traffic_role | analytics_test | Count |
+| --- | --- | --- | ---: |
+| signup_started | test | true | 3 |
+| signup_accepted | test | true | 1 |
+| marketing_cta_clicked | test | true | 1 |
+| marketing_cta_clicked | production | false | 1 |
+
+No production-labelled signup events were returned. The production-labelled CTA is the previously documented misclassified QA click, not evidence of a customer lead. Historical data was not relabelled.
+
+The one browser QA signup is present in PostHog; the two API smoke accounts in the backend snapshot do not execute the browser SDK. Thus one browser acceptance versus three durable QA users is expected, not dropped signup telemetry. Three signup starts are attempts, not three distinct people. There is no activation event in the observed PostHog taxonomy; activation remains an explicitly scoped backend product measure. Zero customer email signups and zero activated workspaces from that cohort agree with the backend evidence, without making claims about OAuth or historical users.
+
+Query executed through the connected read-only PostHog tool:
+
+```sql
+SELECT event,
+       properties.traffic_role AS traffic_role,
+       properties.analytics_test AS analytics_test,
+       count() AS events
+FROM events
+WHERE timestamp >= toDateTime('2026-09-20 00:00:00')
+  AND timestamp < toDateTime('2026-09-21 15:03:00')
+  AND event IN ('signup_started', 'signup_accepted', 'marketing_cta_clicked')
+  AND properties.bet = 'allsource'
+GROUP BY event, traffic_role, analytics_test
+ORDER BY event, traffic_role
+LIMIT 50
+```
+
+This reconciliation verifies collection and separates tests; it does not show market demand or permit attributing failed pre-repair signup attempts to low intent.
 
 ## Repeatable checks
 

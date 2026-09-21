@@ -173,6 +173,14 @@ records merely to bypass the failure.
 
 ### Event instrumentation
 
+**21 September resolution:** signup blocker repaired, deployed and closed at
+`7d4cad6f`. The subsequent authorized PostHog connector reconciliation confirmed
+one QA browser acceptance, three QA attempts, and no production-labelled signup
+events in the matched backend snapshot window. Backend email cohort: zero
+non-QA signups and zero activations, with QA isolated. API smoke accounts do not
+emit browser analytics. See `2026-09-21-signup-repair.md` for exact scope, SQL,
+counts, tests, and caveats. Earlier open/blocker statements above are historical.
+
 `/what-is-an-event-store` emits `$pageview`. Its fixed CTA allowlist emits
 `marketing_cta_clicked` for `api_docs`, `live_demo`, or `signup`. Signup emits
 `signup_started` and `signup_accepted`. AllSource product events remain authority
