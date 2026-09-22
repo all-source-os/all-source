@@ -151,3 +151,10 @@ unchanged unless founder changes customer, trigger, promise, gate, or kill rule.
 | Date | Decision | Evidence and next action |
 | --- | --- | --- |
 | 2026-09-21 | Keep repaired signup and QA classification; hold paid growth | Signup evidence saved under docs/evidence; value-delivery plan created. Reconcile paid inventory and real-workload fulfilment via t-c594ba, confirm seller details via t-7cea76, and price copy via t-5968ae. Unknown outcomes stay unknown. |
+
+
+## Chat delivery assessment — 22 September 2026
+
+Founder-approved additional delivery assessment, activation **queued**. Strong later fit using existing MCP work, but no second active pilot. Preserve paid-use and renewal evidence requirements.
+
+Hypothesis: Authoritative event provenance, tenant-scoped retrieval and executable restart/replay evidence. Test the interaction described in [CHAT_DELIVERY.md](CHAT_DELIVERY.md) only when the existing portfolio activation gate permits it. Use synthetic samples until customer data, entitlement and host review gates pass. Record host interaction separately from qualified customer and payment evidence. Keep the current bottleneck, commercial gate, mobile work and permissioned source authoritative. Root Beads epic `t-ddf1c3`; amendment `t-f5a1f0`; Sponsor pilot `t-0d6ca5`.

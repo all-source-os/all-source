@@ -1,8 +1,33 @@
 # AllSource bet
 
 Status: active
-Contract version: 2
+Contract version: 3
 Shape schema: 1
+
+## Chat delivery
+
+Chat delivery schema: 1
+Decision: 2026-09-22 founder-approved customer-first chat assessment.
+
+- Chat activation: queued
+- Conversation trigger: An operator investigates an event timeline, restart or replay result inside a conversation.
+- Advantage over ordinary chat: Authoritative event provenance, tenant-scoped retrieval and executable restart/replay evidence.
+- Interactive result: Read-only event timeline with source evidence and restart status.
+- Useful interaction: Filter a permitted time window and inspect an event or replay result without executing a write.
+- Tool boundary: separate authoritative data/computation and optional render tools; versioned MCP Apps UI; server validates every input. Model and widget never authorize writes or invent totals.
+- Chat data boundary: Tenant authorization on every retrieval. No raw secrets, cross-tenant history, arbitrary query execution or model-authorized writes. Evaluate existing MCP interfaces before adding another server.
+- Chat commerce mode: sample-only
+- Access verification: no custom paid access in this stage. Authentication, trusted entitlement, refund/revocation and recovery remain unverified release blockers; never expose checkout credentials.
+- Policy evidence: OpenAI plugin commerce guidance checked 2026-09-22 forbids digital checkout and freemium upsells; existing paid-account access requires product-specific eligibility. Claude review is independent. No purchase links or in-chat upsell.
+- ChatGPT status: not-tested
+- Claude status: not-tested
+- Host evidence: no actual host proof yet; local builds, protocol tests and harness evidence must be labelled separately in docs/CHAT_DELIVERY.md.
+- Text fallback: useful structured results and plain text preserve units, sources, missing evidence and next action when UI is unavailable.
+- Chat outcome evidence: existing qualification, price, fulfilment and promotion/kill gate remain authoritative; samples, renders, tool calls and founder tests are internal diagnostics only.
+- Chat rollout reason: Strong later fit using existing MCP work, but no second active pilot. Preserve paid-use and renewal evidence requirements.
+- Chat readiness record: docs/CHAT_DELIVERY.md
+
+Decision: [chat delivery amendment](decisions/2026-09-22-chat-delivery.md).
 
 ## Complete mobile delivery
 
