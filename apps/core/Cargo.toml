@@ -254,6 +254,11 @@ path = "examples/embedded_quickstart.rs"
 required-features = ["embedded"]
 
 [[example]]
+name = "decision_history_proof"
+path = "examples/decision_history_proof.rs"
+required-features = ["embedded"]
+
+[[example]]
 name = "event_store_restart_proof"
 path = "examples/event_store_restart_proof.rs"
 required-features = ["embedded"]
