@@ -1,0 +1,10 @@
+[
+  {"id":"s1","text":"Cannot log in after password reset.","label":"access"},
+  {"id":"s2","text":"Invoice charged twice; please refund the duplicate.","label":"billing"},
+  {"id":"s3","text":"Payment completed but account remains locked.","label":"access"},
+  {"id":"s4","text":"Invoice has the wrong amount.","label":"billing"},
+  {"id":"s5","text":"My access code expired.","label":"access"},
+  {"id":"s6","text":"Please refund my subscription.","label":"billing"},
+  {"id":"s7","text":"Invoice is correct; I cannot sign in.","label":"access"},
+  {"id":"s8","text":"Payment failed and the card was still charged.","label":"billing"}
+]

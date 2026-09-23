@@ -1,6 +1,7 @@
 # Optional decision intelligence for AllSource
 
-Status: first offline proof implemented; provider integration and benchmarks remain open.
+Status: offline proof, optional Choice adapter and stored-label filtering prototype
+implemented. Prime reranking comparison and approved live evaluation remain open.
 Tracker: epic `t-34d0d1`.
 
 ## Boundary
@@ -70,4 +71,6 @@ rustfmt --edition 2021 --check apps/core/examples/decision_history_proof.rs
 - [Confidence](https://docs.typesafe.ai/confidence)
 - [JevQL](https://github.com/kylemclaren/jevql)
 
-References informed the proposal; this fixture does not implement their API.
+The Core fixture does not implement the API. `tooling/jev-eval` now implements
+the documented Choice request/response contract behind an optional HTTP feature;
+its default run makes no external calls. See its README for limitations.
