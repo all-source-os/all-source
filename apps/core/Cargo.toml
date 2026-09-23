@@ -254,6 +254,11 @@ path = "examples/embedded_quickstart.rs"
 required-features = ["embedded"]
 
 [[example]]
+name = "event_store_restart_proof"
+path = "examples/event_store_restart_proof.rs"
+required-features = ["embedded"]
+
+[[example]]
 name = "prime_graph"
 path = "examples/prime_graph.rs"
 required-features = ["prime"]
