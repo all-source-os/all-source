@@ -158,3 +158,16 @@ unchanged unless founder changes customer, trigger, promise, gate, or kill rule.
 Founder-approved additional delivery assessment, activation **queued**. Strong later fit using existing MCP work, but no second active pilot. Preserve paid-use and renewal evidence requirements.
 
 Hypothesis: Authoritative event provenance, tenant-scoped retrieval and executable restart/replay evidence. Test the interaction described in [CHAT_DELIVERY.md](CHAT_DELIVERY.md) only when the existing portfolio activation gate permits it. Use synthetic samples until customer data, entitlement and host review gates pass. Record host interaction separately from qualified customer and payment evidence. Keep the current bottleneck, commercial gate, mobile work and permissioned source authoritative. Root Beads epic `t-ddf1c3`; amendment `t-f5a1f0`; Sponsor pilot `t-0d6ca5`.
+
+
+## Evidence investigation — 24 September 2026
+
+<!-- evidence-work-2026-09-24 -->
+
+Decision: **Hold commercial expansion; continue recovery comparison**. The LangGraph issue is a local dev-runtime persistence bug. Native persistent checkpointers are credible substitutes. The existing AllSource demo passed in separate processes, but deliberately calls graceful shutdown; it does not reproduce sudden process loss.
+
+[Investigation](evidence/2026-09-23-evidence-led-investigation.md) and [one-case worksheet](evidence/2026-09-24-experiment-worksheet.md) contain refreshed originals, counterevidence, permission limits and a prospective bounded test. Fixed BET economics/gates and existing cohort state are unchanged. Current historical qualified exposure, payment and delivered-value totals are unknown in this evidence pass; no promotion or kill is claimed from traffic.
+
+Direct track: retain existing acquisition/outcome tasks and pauses. SEO track: no current measured query-volume or ranking evidence obtained; SEO maturity cannot postpone a fired stop. Both full native platforms, purchase/recovery and dedicated discovery remain separate delivery gates. No outreach, commercial activation or public posting occurred.
+
+Research `t-470c42`; epic `t-ee4d33` retains public receipt and independent review work.
