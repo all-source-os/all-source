@@ -235,16 +235,9 @@ impl Prime {
     fn from_core(core: EmbeddedCore, data_dir_lock: Option<DataDirLock>, read_only: bool) -> Self {
         let store = core.inner();
 
-        // Prime's graph projections are its entire queryable surface; unlike
-        // the multi-tenant server, Prime never goes through the lazy
-        // per-tenant query path that hydrates Parquet on demand. Reconstruct
-        // the event pile from the full archive *before* registering
-        // projections — otherwise a post-compaction boot backfills from an
-        // empty (truncated) WAL and silently loses all memory (issue #180).
-        if let Err(e) = store.hydrate_all_from_storage() {
-            tracing::error!("Prime boot: failed to hydrate events from Parquet: {e}");
-        }
-
+        // `core` must come from `EmbeddedCore::open`, which has already
+        // hydrated the full Parquet archive; the backfill below depends on it
+        // (issue #180).
         let (
             node_state,
             node_type_index,
