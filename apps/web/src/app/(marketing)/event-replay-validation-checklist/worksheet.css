@@ -1,4 +1,261 @@
-.product-worksheet{--ink:#23332f;--paper:#faf8f2;background:var(--paper);color:var(--ink);font-family:ui-sans-serif,system-ui,sans-serif;padding:clamp(24px,5vw,72px);line-height:1.75;isolation:isolate;overflow-wrap:anywhere}
-.product-worksheet *{box-sizing:border-box}.product-worksheet a{color:var(--accent);text-decoration:underline;text-underline-offset:4px}.product-worksheet a:focus-visible{outline:3px solid var(--accent);outline-offset:5px}.product-worksheet .pw-wrap{max-width:1120px;margin:auto}.product-worksheet .pw-nav{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;padding-bottom:24px;border-bottom:1px solid #d9ded4;font-size:14px}.product-worksheet .pw-hero{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(240px,1fr);gap:clamp(24px,5vw,70px);align-items:center;padding:48px 0}.product-worksheet .pw-kicker{font:600 12px/1.5 ui-monospace,monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}.product-worksheet h1{font-family:Georgia,serif;font-size:clamp(36px,4.7vw,62px);font-weight:400;line-height:1.07;letter-spacing:-.035em;margin:16px 0 22px;color:var(--ink);text-wrap:balance}.product-worksheet .pw-lead{font-size:19px;line-height:1.6;max-width:44em}.product-worksheet .pw-meta{font-size:13px;color:#52635c}.product-worksheet .pw-art{aspect-ratio:1;position:relative;overflow:hidden;border-radius:24px;background:#f5f1e8}.product-worksheet .pw-art img{position:absolute;width:400%;height:300%;max-width:none;max-height:none;object-fit:fill;left:var(--art-x);top:var(--art-y)}.product-worksheet figure{margin:0}.product-worksheet figcaption{font-size:12px;text-align:center;color:#52635c;margin-top:10px}.product-worksheet .pw-actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:25px}.product-worksheet .pw-button{display:inline-flex;align-items:center;min-height:46px;padding:10px 19px;background:var(--accent);color:#fff;border-radius:7px;text-decoration:none;font-weight:600;font-size:14px}.product-worksheet .pw-secondary{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}.product-worksheet .pw-grid{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:clamp(24px,5vw,70px);border-top:1px solid #d9ded4;padding-top:38px}.product-worksheet h2{font:400 29px/1.2 Georgia,serif;letter-spacing:-.02em;margin:0 0 18px;color:var(--ink)}.product-worksheet h3{font-size:16px;margin:0 0 12px;color:var(--ink)}.product-worksheet .pw-section{margin-bottom:38px}.product-worksheet p{margin:0 0 17px}.product-worksheet .pw-side{font-size:14px}.product-worksheet .pw-panel{padding:24px;border:1px solid #d9ded4;border-radius:12px;margin-bottom:22px;background:#fffdf8}.product-worksheet .pw-side ul{list-style:none;margin:0;padding:0}.product-worksheet .pw-side li{margin:0 0 13px}.product-worksheet .pw-number{font:12px ui-monospace,monospace;color:var(--accent);display:block;margin-bottom:9px}.product-worksheet .pw-table-wrap{overflow-x:auto;margin:22px 0 35px}.product-worksheet table{width:100%;border-collapse:collapse;font-size:15px;line-height:1.55}.product-worksheet caption{text-align:left;margin-bottom:12px;font-weight:600}.product-worksheet th,.product-worksheet td{text-align:left;vertical-align:top;padding:14px 12px;border-bottom:1px solid #d9ded4;min-width:140px}.product-worksheet th{font-weight:600;width:35%;background:#edf0e8}.product-worksheet .pw-bottom{padding-top:25px;border-top:1px solid #d9ded4;font-size:13px;color:#52635c}.product-worksheet .pw-checklist{padding-left:20px}.product-worksheet .pw-checklist li{padding:5px 0}
-@media(max-width:720px){.product-worksheet .pw-hero,.product-worksheet .pw-grid{grid-template-columns:1fr}.product-worksheet .pw-hero{padding-top:32px}.product-worksheet figure{max-width:360px;margin:auto;width:100%}.product-worksheet .pw-grid{gap:20px}.product-worksheet h1{font-size:39px}}
-@media print{.product-worksheet{padding:0;background:white;color:black;font-size:11pt}.product-worksheet .pw-hero,.product-worksheet .pw-grid{display:block}.product-worksheet figure,.product-worksheet .pw-nav,.product-worksheet .pw-actions,.product-worksheet .pw-side{display:none}.product-worksheet h1{font-size:26pt}.product-worksheet h2{font-size:16pt}.product-worksheet .pw-section{break-inside:avoid}.product-worksheet a{color:inherit}}
+.product-worksheet {
+  --ink: #23332f;
+  --paper: #faf8f2;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  padding: clamp(24px, 5vw, 72px);
+  line-height: 1.75;
+  isolation: isolate;
+  overflow-wrap: anywhere;
+}
+.product-worksheet * {
+  box-sizing: border-box;
+}
+.product-worksheet a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.product-worksheet a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 5px;
+}
+.product-worksheet .pw-wrap {
+  max-width: 1120px;
+  margin: auto;
+}
+.product-worksheet .pw-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #d9ded4;
+  font-size: 14px;
+}
+.product-worksheet .pw-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr);
+  gap: clamp(24px, 5vw, 70px);
+  align-items: center;
+  padding: 48px 0;
+}
+.product-worksheet .pw-kicker {
+  font:
+    600 12px / 1.5 ui-monospace,
+    monospace;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.product-worksheet h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(36px, 4.7vw, 62px);
+  font-weight: 400;
+  line-height: 1.07;
+  letter-spacing: -0.035em;
+  margin: 16px 0 22px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.product-worksheet .pw-lead {
+  font-size: 19px;
+  line-height: 1.6;
+  max-width: 44em;
+}
+.product-worksheet .pw-meta {
+  font-size: 13px;
+  color: #52635c;
+}
+.product-worksheet .pw-art {
+  aspect-ratio: 1;
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #f5f1e8;
+}
+.product-worksheet .pw-art img {
+  position: absolute;
+  width: 400%;
+  height: 300%;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  left: var(--art-x);
+  top: var(--art-y);
+}
+.product-worksheet figure {
+  margin: 0;
+}
+.product-worksheet figcaption {
+  font-size: 12px;
+  text-align: center;
+  color: #52635c;
+  margin-top: 10px;
+}
+.product-worksheet .pw-actions {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 25px;
+}
+.product-worksheet .pw-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 10px 19px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 7px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+.product-worksheet .pw-secondary {
+  background: transparent;
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.product-worksheet .pw-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: clamp(24px, 5vw, 70px);
+  border-top: 1px solid #d9ded4;
+  padding-top: 38px;
+}
+.product-worksheet h2 {
+  font:
+    400 29px / 1.2 Georgia,
+    serif;
+  letter-spacing: -0.02em;
+  margin: 0 0 18px;
+  color: var(--ink);
+}
+.product-worksheet h3 {
+  font-size: 16px;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+.product-worksheet .pw-section {
+  margin-bottom: 38px;
+}
+.product-worksheet p {
+  margin: 0 0 17px;
+}
+.product-worksheet .pw-side {
+  font-size: 14px;
+}
+.product-worksheet .pw-panel {
+  padding: 24px;
+  border: 1px solid #d9ded4;
+  border-radius: 12px;
+  margin-bottom: 22px;
+  background: #fffdf8;
+}
+.product-worksheet .pw-side ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.product-worksheet .pw-side li {
+  margin: 0 0 13px;
+}
+.product-worksheet .pw-number {
+  font:
+    12px ui-monospace,
+    monospace;
+  color: var(--accent);
+  display: block;
+  margin-bottom: 9px;
+}
+.product-worksheet .pw-table-wrap {
+  overflow-x: auto;
+  margin: 22px 0 35px;
+}
+.product-worksheet table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.product-worksheet caption {
+  text-align: left;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.product-worksheet th,
+.product-worksheet td {
+  text-align: left;
+  vertical-align: top;
+  padding: 14px 12px;
+  border-bottom: 1px solid #d9ded4;
+  min-width: 140px;
+}
+.product-worksheet th {
+  font-weight: 600;
+  width: 35%;
+  background: #edf0e8;
+}
+.product-worksheet .pw-bottom {
+  padding-top: 25px;
+  border-top: 1px solid #d9ded4;
+  font-size: 13px;
+  color: #52635c;
+}
+.product-worksheet .pw-checklist {
+  padding-left: 20px;
+}
+.product-worksheet .pw-checklist li {
+  padding: 5px 0;
+}
+@media (max-width: 720px) {
+  .product-worksheet .pw-hero,
+  .product-worksheet .pw-grid {
+    grid-template-columns: 1fr;
+  }
+  .product-worksheet .pw-hero {
+    padding-top: 32px;
+  }
+  .product-worksheet figure {
+    max-width: 360px;
+    margin: auto;
+    width: 100%;
+  }
+  .product-worksheet .pw-grid {
+    gap: 20px;
+  }
+  .product-worksheet h1 {
+    font-size: 39px;
+  }
+}
+@media print {
+  .product-worksheet {
+    padding: 0;
+    background: white;
+    color: black;
+    font-size: 11pt;
+  }
+  .product-worksheet .pw-hero,
+  .product-worksheet .pw-grid {
+    display: block;
+  }
+  .product-worksheet figure,
+  .product-worksheet .pw-nav,
+  .product-worksheet .pw-actions,
+  .product-worksheet .pw-side {
+    display: none;
+  }
+  .product-worksheet h1 {
+    font-size: 26pt;
+  }
+  .product-worksheet h2 {
+    font-size: 16pt;
+  }
+  .product-worksheet .pw-section {
+    break-inside: avoid;
+  }
+  .product-worksheet a {
+    color: inherit;
+  }
+}
