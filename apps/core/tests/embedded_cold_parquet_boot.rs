@@ -73,4 +73,44 @@ mod tests {
             "all 5 events must be readable after reopen"
         );
     }
+
+    /// Boot hydration reads the whole archive, so the tenants in it are warm.
+    /// An embedding app that then calls `ensure_tenant_loaded` (Longhand does,
+    /// for every store it opens) must not read the same Parquet a second time.
+    #[tokio::test]
+    async fn boot_hydration_leaves_the_tenant_marked_loaded() {
+        let tmp = TempDir::new().unwrap();
+        let data_dir = tmp.path();
+
+        {
+            let core = EmbeddedCore::open(Config::builder().data_dir(data_dir).build().unwrap())
+                .await
+                .expect("open");
+            for i in 0..5 {
+                core.ingest(IngestEvent {
+                    entity_id: "e-1",
+                    event_type: "thing.happened",
+                    payload: json!({ "n": i }),
+                    metadata: None,
+                    tenant_id: None,
+                })
+                .await
+                .expect("ingest");
+            }
+            core.inner().checkpoint().expect("checkpoint to Parquet");
+        }
+
+        let core = EmbeddedCore::open(Config::builder().data_dir(data_dir).build().unwrap())
+            .await
+            .expect("reopen");
+
+        assert!(
+            core.inner().is_tenant_loaded("default"),
+            "a tenant boot already hydrated must not be cold"
+        );
+        core.inner()
+            .ensure_tenant_loaded("default")
+            .expect("ensure_tenant_loaded");
+        assert_eq!(core.stats().total_events, 5);
+    }
 }

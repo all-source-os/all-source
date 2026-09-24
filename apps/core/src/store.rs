@@ -1164,6 +1164,9 @@ impl EventStore {
     /// No-op (and `Ok(0)`) when no Parquet storage is configured, e.g.
     /// in-memory test mode.
     ///
+    /// Marks every tenant present in the archive as loaded, so a later
+    /// `ensure_tenant_loaded` for it takes the warm path.
+    ///
     /// Returns the number of events newly loaded from Parquet.
     pub fn hydrate_all_from_storage(&self) -> Result<usize> {
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
@@ -1172,6 +1175,13 @@ impl EventStore {
 
         let events = storage.read().load_all_events()?;
         let read_count = events.len();
+        let tenants: Vec<String> = events
+            .iter()
+            .map(Event::tenant_id_str)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
         let before = self.events.read().len();
         for event in events {
             self.append_loaded_event(event);
@@ -1180,6 +1190,12 @@ impl EventStore {
 
         // The pile is now the authoritative full history.
         *self.total_ingested.write() = self.events.read().len() as u64;
+        // Every tenant in the archive is now fully in memory. Unmarked, the
+        // first `ensure_tenant_loaded` for each re-reads its whole subtree and
+        // applies nothing.
+        for tenant in &tenants {
+            self.tenant_loader.mark_loaded(tenant);
+        }
 
         tracing::info!(
             read = read_count,
@@ -1603,8 +1619,9 @@ impl EventStore {
         }
     }
 
-    /// True iff `ensure_tenant_loaded` has previously succeeded for
-    /// this tenant. Diagnostic / testing API.
+    /// True iff this tenant is resident: `ensure_tenant_loaded` succeeded
+    /// for it, or `hydrate_all_from_storage` found it in the archive, and
+    /// it has not been evicted since. Diagnostic / testing API.
     pub fn is_tenant_loaded(&self, tenant_id: &str) -> bool {
         self.tenant_loader.is_loaded(tenant_id)
     }
