@@ -1,0 +1,48 @@
+{
+  "canonical": "https://www.all-source.xyz/event-replay-validation-checklist",
+  "description": "Validate event replay with a reproducible fixture, expected state and restart boundaries. Use the free checklist before trusting a rebuilt projection.",
+  "html": "<article id=\"worksheet-main\" class=\"product-worksheet\" style=\"--accent:#2d6579;--art-x:0%;--art-y:0%\"><div class=\"pw-wrap\"><nav class=\"pw-nav\" aria-label=\"Worksheet navigation\"><a href=\"/\">AllSource</a><a href=\"#blank-worksheet\">Free worksheet ↓</a></nav><header class=\"pw-hero\"><div><p class=\"pw-kicker\">A practical field guide · Free to use</p><h1>Event Replay Validation Checklist</h1><p class=\"pw-lead\">A replay is useful only when you can explain what should be reconstructed and compare that expectation with the result. Use this worksheet to test a small event stream before relying on a larger projection.</p><p class=\"pw-meta\">Published by <a href=\"https://wolventech.com/\">Wolven Tech</a> · <time datetime=\"2026-09-24\">24 September 2026</time></p><div class=\"pw-actions\"><a class=\"pw-button\" href=\"/worksheets/event-replay-validation-checklist.txt\" download>Download blank worksheet</a><a class=\"pw-button pw-secondary\" href=\"/event-replay-debugging\">Open the replay walkthrough</a></div></div><figure><div class=\"pw-art\" role=\"img\" aria-label=\"Three linked event blocks leading to a rebuilt stack of state\"><img src=\"/worksheets/product-scenes-20260924.webp\" alt=\"\" width=\"1448\" height=\"1086\" decoding=\"async\" fetchpriority=\"high\"></div><figcaption>Concept illustration · Not a customer result</figcaption></figure></header><div class=\"pw-grid\"><div><section class=\"pw-section\" id=\"step-1\"><span class=\"pw-number\">01</span><h2>Start with a fixture you can check by hand</h2><p>Choose one stream and one projection. Record the event schema, projection version, ordering rule and tenant before running anything. A fixture small enough to inspect is easier to diagnose than a large production export. Keep customer payloads out of a public reproduction; synthetic events should exercise the behaviour without exposing their original records.</p><p>Write the expected final state before running the implementation. For an illustrative inventory stream, add ten units, remove three, then add one. The expected state is eight. At the second event it is seven. This example tests arithmetic and an ordered history; it does not establish throughput, transactional isolation or durability under a power failure.</p></section><section class=\"pw-section\" id=\"step-2\"><span class=\"pw-number\">02</span><h2>Name the failure boundary</h2><p>A replay in the same process, a restart after a clean shutdown, and recovery after abrupt termination are separate tests. Label each result with the boundary actually exercised. If the process flushed its buffers before exit, do not describe that as an abrupt-crash test. Record the storage directory and the exact command used to reopen it.</p><p>Keep recovery tests in an isolated disposable environment. Stop a process only after checking that it is your fixture and that no shared database or customer workload depends on it. A failed recovery is useful evidence when the last acknowledged write and the point of interruption are recorded. It is not useful when the input history is unknown.</p></section><section class=\"pw-section\" id=\"step-3\"><span class=\"pw-number\">03</span><h2>Compare the state and the route used to produce it</h2><p>Run the projection against the original fixture and save the result. Rebuild from the same ordered events into an empty destination, then compare fields and event counts. Test a historical position separately from the latest state. Record how duplicate delivery, rejected events and missing sequence positions are handled by your actual implementation.</p><p>Repeat the comparison after the chosen restart boundary. If the endpoint is tenant-scoped, include the tenant in the request and record it in the test notes. An empty response may be a query-boundary mistake rather than data loss. Preserve both responses and the request shape so another engineer can distinguish those causes.</p></section><section class=\"pw-section\" id=\"step-4\"><span class=\"pw-number\">04</span><h2>Use the result to decide the next test</h2><p>Mark each expectation passed, failed or not run. A passing small fixture supports that fixture and its tested environment. It does not prove the recovery of every projection, version or workload. Add a new fixture when a real failure exposes a new boundary; keep the old fixture so a fix does not erase the regression check.</p><p>The linked AllSource walkthrough gives a concrete starting point. This checklist adds a reusable record for your own comparison. A framework&#39;s existing persistent checkpointer may already meet your needs; use the same fixture and failure boundary to compare it fairly. Prefer the simplest mechanism that satisfies the observed requirement.</p></section><div class=\"pw-table-wrap\"><table><caption>Worked record · illustrative, not customer evidence</caption><tbody><tr><th scope=\"row\">Fixture</th><td>add 10 → remove 3 → add 1</td></tr><tr><th scope=\"row\">Expected latest / historical</th><td>8 / 7 after event 2</td></tr><tr><th scope=\"row\">Restart boundary</th><td>Clean shutdown / abrupt termination / not run</td></tr><tr><th scope=\"row\">Observed state</th><td>Record actual values and differences</td></tr><tr><th scope=\"row\">Reproduction</th><td>Commit, command, tenant, schema and storage path</td></tr></tbody></table></div><section id=\"blank-worksheet\" class=\"pw-section\"><h2>Your blank worksheet</h2><p>Download the text file and complete it in your own notes, or print this page. No account or purchase is required for this worksheet. Your completed notes are not submitted by this page.</p><ol class=\"pw-checklist\"><li>Fixture and synthetic event IDs:</li><li>Expected ordering rule:</li><li>Tenant / stream:</li><li>Schema and projection version:</li><li>Expected state before run:</li><li>Observed initial state:</li><li>Restart boundary actually tested:</li><li>Observed recovered state:</li><li>Pass / fail / not run:</li><li>Reproduction command and next test:</li></ol><a class=\"pw-button\" href=\"/worksheets/event-replay-validation-checklist.txt\" download>Download the free text template</a></section></div><aside class=\"pw-side\" aria-label=\"Related product resources\"><div class=\"pw-panel\"><h2>In this guide</h2><ol><li><a href=\"#step-1\">Start with a fixture you can check by hand</a></li><li><a href=\"#step-2\">Name the failure boundary</a></li><li><a href=\"#step-3\">Compare the state and the route used to produce it</a></li><li><a href=\"#step-4\">Use the result to decide the next test</a></li></ol></div><div class=\"pw-panel\"><h2>Keep going</h2><ul><li><a href=\"/event-replay-debugging\">Event replay walkthrough →</a></li><li><a href=\"/agent-memory-restart-proof\">Restart proof and its limits →</a></li></ul></div></aside></div><footer class=\"pw-bottom\"><p>AllSource · A Wolven Tech product. Examples and artwork are illustrative. Product pages describe current access, terms and limitations.</p><a href=\"/\">Back to AllSource</a></footer></div></article>",
+  "schema": {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Article",
+        "author": {
+          "@type": "Organization",
+          "name": "Wolven Tech",
+          "url": "https://wolventech.com/"
+        },
+        "dateModified": "2026-09-24",
+        "datePublished": "2026-09-24",
+        "description": "Validate event replay with a reproducible fixture, expected state and restart boundaries. Use the free checklist before trusting a rebuilt projection.",
+        "headline": "Event Replay Validation Checklist",
+        "inLanguage": "en-GB",
+        "mainEntityOfPage": "https://www.all-source.xyz/event-replay-validation-checklist",
+        "publisher": {
+          "@type": "Organization",
+          "name": "Wolven Tech",
+          "url": "https://wolventech.com/"
+        },
+        "url": "https://www.all-source.xyz/event-replay-validation-checklist"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "item": "https://www.all-source.xyz/",
+            "name": "AllSource",
+            "position": 1
+          },
+          {
+            "@type": "ListItem",
+            "item": "https://www.all-source.xyz/event-replay-validation-checklist",
+            "name": "Event Replay Validation Checklist",
+            "position": 2
+          }
+        ]
+      }
+    ]
+  },
+  "title": "Event Replay Validation Checklist | AllSource"
+}

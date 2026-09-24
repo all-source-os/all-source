@@ -1,0 +1,27 @@
+Event Replay Validation Checklist | AllSource
+2026-09-24
+Source: https://www.all-source.xyz/event-replay-validation-checklist
+
+Fixture and synthetic event IDs:
+
+Expected ordering rule:
+
+Tenant / stream:
+
+Schema and projection version:
+
+Expected state before run:
+
+Observed initial state:
+
+Restart boundary actually tested:
+
+Observed recovered state:
+
+Pass / fail / not run:
+
+Reproduction command and next test:
+
+
+
+Keep completed notes in your own files. Examples are illustrative.

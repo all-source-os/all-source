@@ -180,6 +180,7 @@ export default function EventReplayDebuggingPage() {
             <h1 className="mt-6 max-w-4xl text-balance text-4xl font-semibold leading-[1.02] tracking-tight sm:text-6xl">
               Find first event where state went wrong.
             </h1>
+          <p style={{ marginTop: '1rem', marginBottom: '1rem' }}><a href="/event-replay-validation-checklist" style={{ textDecoration: 'underline', textUnderlineOffset: '4px' }}>Free worksheet: Event Replay Validation Checklist →</a></p>
             <p className="mt-6 max-w-2xl text-pretty text-lg leading-8 text-muted-foreground">
               AllSource keeps accepted state changes as ordered events. Inspect timeline, compare
               state across timestamps, preview replay impact, then rebuild one tenant projection

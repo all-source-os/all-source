@@ -5,6 +5,7 @@ import { eventSourcingPatterns } from "@/lib/event-sourcing-patterns";
 import { integrations } from "@/lib/integrations";
 
 const STATIC_PATHS = [
+  "/event-replay-validation-checklist",
   "",
   "/about",
   "/architecture",
