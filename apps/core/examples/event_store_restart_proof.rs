@@ -26,10 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let core = EmbeddedCore::open(Config::builder().data_dir(&args[2]).build()?).await?;
     if args[1] == "append" {
-        assert!(core
-            .query(Query::new().entity_id("sample-stock"))
-            .await?
-            .is_empty());
+        assert!(
+            core.query(Query::new().entity_id("sample-stock"))
+                .await?
+                .is_empty()
+        );
         for (sequence, event_type, delta) in [
             (1, "stock.received", 10),
             (2, "stock.reserved", -3),

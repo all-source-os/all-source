@@ -158,10 +158,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let core = EmbeddedCore::open(Config::builder().data_dir(&args[2]).build()?).await?;
     if args[1] == "append" {
-        assert!(core
-            .query(Query::new().entity_id("synthetic-ticket"))
-            .await?
-            .is_empty());
+        assert!(
+            core.query(Query::new().entity_id("synthetic-ticket"))
+                .await?
+                .is_empty()
+        );
         for entry in fixture() {
             core.ingest(IngestEvent {
                 entity_id: "synthetic-ticket",
