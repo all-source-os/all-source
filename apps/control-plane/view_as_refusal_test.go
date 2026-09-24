@@ -113,6 +113,7 @@ func TestViewAsWriteRefusal_RejectsAndAlarmsWrites(t *testing.T) {
 			}
 			if alarm == nil {
 				t.Fatalf("%s: expected an admin.viewas.write_refused alarm event, got %+v", tc.method, core.ingested)
+				return
 			}
 			if alarm.TenantID != usecases.ViewAsAuditTenant {
 				t.Fatalf("alarm tenant: expected %q, got %q", usecases.ViewAsAuditTenant, alarm.TenantID)

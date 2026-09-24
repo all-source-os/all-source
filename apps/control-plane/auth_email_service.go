@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/allsource/control-plane/internal/application/usecases"
-	"github.com/allsource/control-plane/internal/domain/entities"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+
+	"github.com/allsource/control-plane/internal/application/usecases"
+	"github.com/allsource/control-plane/internal/domain/entities"
 )
 
 var authUserIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
@@ -26,20 +27,24 @@ func (cp *ControlPlane) emailAuthService(c *gin.Context, signup bool, name, emai
 	if signup {
 		path = "/api/auth/sign-up/email"
 	}
-	body, _ := json.Marshal(map[string]string{"name": name, "email": strings.ToLower(strings.TrimSpace(email)), "password": password})
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, strings.TrimRight(os.Getenv("AUTH_SERVICE_URL"), "/")+path, bytes.NewReader(body))
+	body, err := json.Marshal(map[string]string{"name": name, "email": strings.ToLower(strings.TrimSpace(email)), "password": password})
+	if err != nil {
+		c.JSON(500, gin.H{"message": "Unable to create session"})
+		return
+	}
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, strings.TrimRight(os.Getenv("AUTH_SERVICE_URL"), "/")+path, bytes.NewReader(body)) //nolint:gosec // G704 false positive: URL is operator-set env plus a constant path, not user input
 	if err != nil {
 		c.JSON(503, gin.H{"message": "Authentication service is unavailable"})
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:gosec // G704 false positive: see above
 	if err != nil {
 		c.JSON(503, gin.H{"message": "Authentication service is unavailable"})
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // close-on-defer, non-actionable
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		status := resp.StatusCode
 		message := "Unable to authenticate. Check your details or sign in if already registered."
