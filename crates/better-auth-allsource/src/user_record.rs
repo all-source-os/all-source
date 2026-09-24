@@ -33,8 +33,7 @@ impl Serialize for UserRecord {
         // Lean on `User`'s derived `Serialize` to render every field except
         // `metadata`, then splice `metadata` back in. Stays robust if the
         // upstream struct gains new fields.
-        let mut value =
-            serde_json::to_value(&self.0).map_err(serde::ser::Error::custom)?;
+        let mut value = serde_json::to_value(&self.0).map_err(serde::ser::Error::custom)?;
         if !self.0.metadata.is_null() {
             if let Some(obj) = value.as_object_mut() {
                 obj.insert("metadata".to_string(), self.0.metadata.clone());

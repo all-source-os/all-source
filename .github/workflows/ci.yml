@@ -138,6 +138,7 @@ jobs:
       elixir: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.elixir == 'true' }}
       mcp: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.mcp == 'true' }}
       prime: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.prime == 'true' }}
+      better-auth: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.better-auth == 'true' }}
       workflows: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.workflows == 'true' }}
       # Container-related changes for downstream workflows
       core: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.rust == 'true' }}
@@ -194,6 +195,8 @@ jobs:
               - 'apps/prime-mcp/**'
               - 'apps/core/src/prime/**'
               - 'tooling/recall-bench/**'
+            better-auth:
+              - 'crates/better-auth-allsource/**'
             workflows:
               - '.github/workflows/**'
 
@@ -408,6 +411,42 @@ jobs:
       - name: Build recall-bench
         working-directory: tooling/recall-bench
         run: cargo build
+
+  # ============================================================================
+  # better-auth-allsource Quality Gates (published crate, own workspace)
+  # ============================================================================
+  better-auth-quality:
+    name: better-auth-allsource Quality Gates
+    needs: [workflow-lint, workflow-validate, changes]
+    if: needs.changes.outputs.better-auth == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "crates/better-auth-allsource -> target"
+          cache-on-failure: true
+
+      - name: Check formatting
+        working-directory: crates/better-auth-allsource
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: crates/better-auth-allsource
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        working-directory: crates/better-auth-allsource
+        run: cargo test --locked
 
   # ============================================================================
   # Go Quality Gates (Control Plane)
@@ -642,6 +681,7 @@ jobs:
       - web-brand
       - rust-quality
       - prime-quality
+      - better-auth-quality
       - go-quality
       - elixir-query-quality
       - elixir-mcp-quality
@@ -689,6 +729,7 @@ jobs:
             check_job "Web Brand Color" "${{ needs.web-brand.result }}" "${{ needs.changes.outputs.web == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Rust Quality" "${{ needs.rust-quality.result }}" "${{ needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Prime MCP Quality" "${{ needs.prime-quality.result }}" "${{ needs.changes.outputs.prime == 'true' || needs.changes.outputs.workflows == 'true' }}"
+            check_job "better-auth-allsource Quality" "${{ needs.better-auth-quality.result }}" "${{ needs.changes.outputs.better-auth == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Go Quality" "${{ needs.go-quality.result }}" "${{ needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Elixir Query" "${{ needs.elixir-query-quality.result }}" "${{ needs.changes.outputs.elixir == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Elixir MCP" "${{ needs.elixir-mcp-quality.result }}" "${{ needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' }}"

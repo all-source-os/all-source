@@ -31,17 +31,14 @@ fn to_camel_case(field: &str) -> String {
 /// Look up `field` on `payload`, trying the literal key first and then
 /// its camelCase form. Returns `None` if neither resolves to a string.
 fn payload_field_str<'a>(payload: &'a serde_json::Value, field: &str) -> Option<&'a str> {
-    payload
-        .get(field)
-        .and_then(|v| v.as_str())
-        .or_else(|| {
-            let camel = to_camel_case(field);
-            if camel == field {
-                None
-            } else {
-                payload.get(&camel).and_then(|v| v.as_str())
-            }
-        })
+    payload.get(field).and_then(|v| v.as_str()).or_else(|| {
+        let camel = to_camel_case(field);
+        if camel == field {
+            None
+        } else {
+            payload.get(&camel).and_then(|v| v.as_str())
+        }
+    })
 }
 
 /// Build the `payload_filter` query value Core expects: a flat
@@ -58,9 +55,12 @@ fn payload_field_str<'a>(payload: &'a serde_json::Value, field: &str) -> Option<
 /// `None` — duplicating users on every signin (issue #187).
 fn build_payload_filter(field: &str, value: &str) -> String {
     serde_json::Value::Object(
-        [(field.to_string(), serde_json::Value::String(value.to_string()))]
-            .into_iter()
-            .collect(),
+        [(
+            field.to_string(),
+            serde_json::Value::String(value.to_string()),
+        )]
+        .into_iter()
+        .collect(),
     )
     .to_string()
 }
@@ -159,7 +159,10 @@ impl AllsourceClient {
     }
 
     fn tenant_query(&self) -> Vec<(&str, &str)> {
-        self.tenant_id.as_deref().map(|id| vec![("tenant_id", id)]).unwrap_or_default()
+        self.tenant_id
+            .as_deref()
+            .map(|id| vec![("tenant_id", id)])
+            .unwrap_or_default()
     }
 
     /// Append an event to Allsource Core.
@@ -564,16 +567,21 @@ mod tests {
             event_type: "auth.user.created",
             payload: serde_json::json!({"id":"test"}),
         };
-        assert_eq!(serde_json::to_value(event).unwrap()["tenant_id"], "allsource-auth");
+        assert_eq!(
+            serde_json::to_value(event).unwrap()["tenant_id"],
+            "allsource-auth"
+        );
         let legacy = super::AllsourceClient::new("http://core", "http://gateway", "test");
         assert!(legacy.tenant_query().is_empty());
     }
     use super::*;
     use better_auth_core::types::User;
     use std::sync::Arc;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::TcpListener;
-    use tokio::sync::Mutex;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::TcpListener,
+        sync::Mutex,
+    };
 
     #[test]
     fn to_camel_case_basic() {
@@ -651,9 +659,15 @@ mod tests {
 
     #[test]
     fn is_deleted_detects_tombstone() {
-        assert!(is_deleted(&serde_json::json!({ "_deleted": true, "id": "u1" })));
-        assert!(!is_deleted(&serde_json::json!({ "_deleted": false, "id": "u1" })));
-        assert!(!is_deleted(&serde_json::json!({ "id": "u1", "email": "a@b" })));
+        assert!(is_deleted(
+            &serde_json::json!({ "_deleted": true, "id": "u1" })
+        ));
+        assert!(!is_deleted(
+            &serde_json::json!({ "_deleted": false, "id": "u1" })
+        ));
+        assert!(!is_deleted(
+            &serde_json::json!({ "id": "u1", "email": "a@b" })
+        ));
     }
 
     /// Regression for issue #188. `get_user_by_id` reads via `get_latest`,
@@ -682,7 +696,10 @@ mod tests {
             event_at("2026-06-01T00:00:00Z", 1, deleted.payload.clone()),
         ];
         let newest = newest_event(&ascending).expect("non-empty");
-        assert!(is_deleted(&newest.payload), "tombstone must win → user hidden");
+        assert!(
+            is_deleted(&newest.payload),
+            "tombstone must win → user hidden"
+        );
 
         // Newest-first (order=desc honored) yields the same winner.
         let descending = vec![
