@@ -1,7 +1,7 @@
 # AllSource bet
 
 Status: active
-Contract version: 3
+Contract version: 4
 Shape schema: 1
 
 ## Chat delivery
@@ -215,3 +215,20 @@ Kill or reshape the hosted-agent-memory offer if either condition occurs:
 - [x] Promotion and kill conditions use external behaviour.
 - [x] Self-hosting and vanity metrics cannot satisfy the gate.
 - [x] No critical placeholder or unresolved product decision remains.
+
+## Customer agent delivery
+
+Customer agent delivery schema: 1
+Founder decision: 25 September 2026. Required delivery amendment, contract revision 4. This supersedes any optional customer MCP/skill language; existing rollout status and commercial gates remain unchanged. Specifications do not claim runtime readiness.
+
+- Customer agent requirement: required
+- MCP contract: docs/CUSTOMER_AGENT_DELIVERY.md
+- Customer skill: skills/allsource-customer/SKILL.md
+- Agent preparation: Retrieve tenant-authorised event/restart/replay evidence and prepare a read-only investigation view using existing MCP infrastructure.
+- Product display: Source-linked event timeline, query scope, restart proof and replay-plan differences.
+- Human decision: The tenant operator reviews the evidence in the product and explicitly authorises any consequential replay or infrastructure action through its separate human gate.
+- Approval authority: product-human-only
+- Agent boundary: No arbitrary queries, cross-tenant payloads, secrets, replay execution, infrastructure change or subscription action from this customer review skill. Existing ingestion SDK functionality is not redefined by this review-surface amendment. MCP credentials cannot approve or release the gated outcome.
+- Handoff and recovery: authenticated opaque review reference for the exact version; authorised product display shows sources, differences and unknowns. Reject stale versions, preserve pending drafts on failure and provide accessible text fallback without claiming approval.
+- Customer agent readiness: docs/CUSTOMER_AGENT_DELIVERY.md
+- Customer agent state: specified

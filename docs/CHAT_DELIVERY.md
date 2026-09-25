@@ -29,3 +29,7 @@ Product: all-source. Contract v3; chat schema 1. Activation: **queued**.
 ## Work queue
 
 Strong later fit using existing MCP work, but no second active pilot. Preserve paid-use and renewal evidence requirements. Root Beads epic `t-ddf1c3`: placement `t-ebe5d7`, adapters `t-7be3df`, amendments `t-f5a1f0`, Sponsor pilot `t-0d6ca5`, private portfolio `t-9744bc`. This record does not activate a second bet.
+
+## Required customer-agent amendment — 25 September 2026
+
+Customer MCP and a portable Claude skill are now required, with the product as the human approval gate and authoritative display. See [CUSTOMER_AGENT_DELIVERY.md](CUSTOMER_AGENT_DELIVERY.md). Earlier deferred/pilot status remains a release state, not a waiver. Skill, MCP runtime and product HITL evidence are tracked separately; no runtime readiness is implied by this amendment.

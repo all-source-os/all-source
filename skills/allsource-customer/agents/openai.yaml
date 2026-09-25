@@ -1,0 +1,4 @@
+interface:
+  display_name: "AllSource Customer"
+  short_description: "Prepare work for human review in the product"
+  default_prompt: "Use $allsource-customer to prepare this work and hand it to the product for human review."
