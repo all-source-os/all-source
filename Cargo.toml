@@ -20,18 +20,18 @@ exclude = [
     # build graph.
     "crates/hound-extract",
     "tooling/allsource-inspect",
-    # Measurement harness for the web bundle-size loop. Standalone (own
-    # Cargo.lock, zero deps) so a plain `cargo build` at the root never picks up
-    # a tool that only ever runs against apps/web/.next.
-    "tooling/route-weight",
     "tooling/allsource-mcp",
     # GEO measurement tooling. Its own workspace + Cargo.lock: it talks to the
     # Control Plane gateway through the published `allsource` SDK only, so it
     # must never pull apps/core into the build graph — see
     # docs/contracts/geo-events/README.md.
     "tooling/geo",
-    "tooling/recall-bench",
     "tooling/jev-eval",
+    "tooling/recall-bench",
+    # Measurement harness for the web bundle-size loop. Standalone (own
+    # Cargo.lock, zero deps) so a plain `cargo build` at the root never picks up
+    # a tool that only ever runs against apps/web/.next.
+    "tooling/route-weight",
 ]
 
 [workspace.dependencies]

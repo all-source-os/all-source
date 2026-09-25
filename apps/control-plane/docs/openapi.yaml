@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Control Plane API
-  version: 0.25.0
+  version: 0.25.1
   description: |
     The Control Plane provides management, billing, and governance APIs
     for AllSource Chronos.

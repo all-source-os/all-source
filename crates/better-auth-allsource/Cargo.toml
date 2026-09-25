@@ -1,6 +1,6 @@
 [package]
 name = "better-auth-allsource"
-version = "0.14.12"
+version = "0.14.13"
 edition = "2021"
 description = "Allsource DatabaseAdapter for better-auth-rs — event-sourced auth persistence"
 license = "MIT"

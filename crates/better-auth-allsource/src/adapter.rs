@@ -16,8 +16,7 @@ use better_auth_core::{
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::client::AllsourceClient;
-use crate::user_record::UserRecord;
+use crate::{client::AllsourceClient, user_record::UserRecord};
 
 /// Keys that better-auth-allsource refuses to accept inside `User.metadata`.
 /// These look like password hash storage, which belongs on
@@ -1517,8 +1516,10 @@ mod email_lookup_tests {
     //! stale `auth.user.created` payloads, and converge on the OLDEST duplicate.
     use super::*;
     use better_auth_core::adapters::traits::UserOps;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::TcpListener;
+    use tokio::{
+        io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+        net::TcpListener,
+    };
 
     /// Minimal mock of the Query Service `/api/v1/events/query` endpoint that
     /// returns the same canned body for `conns` sequential requests.
@@ -1624,11 +1625,19 @@ mod email_lookup_tests {
         let adapter = AllsourceAuthAdapter::new(&url, &url, "k");
 
         assert!(
-            adapter.get_user_by_email("b@x.com").await.unwrap().is_some(),
+            adapter
+                .get_user_by_email("b@x.com")
+                .await
+                .unwrap()
+                .is_some(),
             "new (current) email must resolve"
         );
         assert!(
-            adapter.get_user_by_email("a@x.com").await.unwrap().is_none(),
+            adapter
+                .get_user_by_email("a@x.com")
+                .await
+                .unwrap()
+                .is_none(),
             "old (replaced) email must NOT resolve"
         );
     }
@@ -1640,7 +1649,11 @@ mod email_lookup_tests {
         let adapter = AllsourceAuthAdapter::new(&url, &url, "k");
 
         assert!(
-            adapter.get_user_by_email("alice@b.com").await.unwrap().is_some(),
+            adapter
+                .get_user_by_email("alice@b.com")
+                .await
+                .unwrap()
+                .is_some(),
             "email match must be case-insensitive"
         );
     }
@@ -1651,13 +1664,16 @@ mod email_lookup_tests {
         u.email = Some("gone@x.com".to_string());
         // Simulate a delete tombstone as the newest event for the entity.
         let payload = serde_json::json!({ "_deleted": true, "id": "u1" });
-        let body =
-            serde_json::json!({ "events": [ { "payload": payload } ] }).to_string();
+        let body = serde_json::json!({ "events": [ { "payload": payload } ] }).to_string();
         let url = mock_query_server(body, 1).await;
         let adapter = AllsourceAuthAdapter::new(&url, &url, "k");
 
         assert!(
-            adapter.get_user_by_email("gone@x.com").await.unwrap().is_none(),
+            adapter
+                .get_user_by_email("gone@x.com")
+                .await
+                .unwrap()
+                .is_none(),
             "tombstoned user must not resolve"
         );
         let _ = u; // keep the builder exercised

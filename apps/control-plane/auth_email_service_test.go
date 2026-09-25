@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -41,10 +42,10 @@ func TestEmailAuthService(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(tc.authStatus)
 				if tc.invalid {
-					_, _ = w.Write([]byte(`{"token":"opaque"}`))
+					_, _ = w.Write([]byte(`{"token":"opaque"}`)) //nolint:errcheck // test response
 					return
 				}
-				_, _ = w.Write([]byte(`{"token":"opaque","user":{"id":"user-123","email":"owner@example.test","name":"Example"}}`))
+				_, _ = w.Write([]byte(`{"token":"opaque","user":{"id":"user-123","email":"owner@example.test","name":"Example"}}`)) //nolint:errcheck // test response
 			}))
 			defer auth.Close()
 			t.Setenv("AUTH_SERVICE_URL", auth.URL)
@@ -67,19 +68,21 @@ func TestEmailAuthService(t *testing.T) {
 						}
 					}
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = w.Write([]byte(`{"metadata":{"subscription":{"status":"active"}}}`))
+					_, _ = w.Write([]byte(`{"metadata":{"subscription":{"status":"active"}}}`)) //nolint:errcheck // test response
 					return
 				}
 				if r.URL.Path != "/api/v1/tenants" {
 					t.Errorf("unexpected Core path %s", r.URL.Path)
 				}
 				var body map[string]interface{}
-				_ = json.NewDecoder(r.Body).Decode(&body)
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Errorf("decode tenant create body: %v", err)
+				}
 				if body["id"] != "email-user-123" {
 					t.Errorf("must scope tenant to authenticated identity")
 				}
 				w.WriteHeader(tc.tenantStatus)
-				_, _ = w.Write([]byte(`{}`))
+				_, _ = w.Write([]byte(`{}`)) //nolint:errcheck // test response
 			}))
 			defer core.Close()
 			cp := &ControlPlane{client: resty.New().SetBaseURL(core.URL), authClient: NewAuthClient("test-secret", core.URL)}
@@ -90,7 +93,7 @@ func TestEmailAuthService(t *testing.T) {
 			if tc.signup {
 				path = "/register"
 			}
-			req := httptest.NewRequest("POST", path, strings.NewReader(`{"name":"Example","email":"owner@example.test","password":"TestPassword123!"}`))
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, strings.NewReader(`{"name":"Example","email":"owner@example.test","password":"TestPassword123!"}`))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -108,7 +111,9 @@ func TestEmailAuthService(t *testing.T) {
 					Token   string `json:"token"`
 					NewUser bool   `json:"new_user"`
 				}
-				_ = json.Unmarshal(w.Body.Bytes(), &data)
+				if err := json.Unmarshal(w.Body.Bytes(), &data); err != nil {
+					t.Fatal(err)
+				}
 				claims, err := cp.authClient.ValidateToken(data.Token)
 				if err != nil {
 					t.Fatal(err)

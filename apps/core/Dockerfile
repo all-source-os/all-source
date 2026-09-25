@@ -12,7 +12,8 @@
 #   docker build --target runtime-alpine .            # Alpine + HEALTHCHECK
 # =============================================================================
 
-ARG RUST_VERSION=1.92
+# Above the crate's MSRV (1.92): the image builds `analytics`, and datafusion 55 needs 1.94.
+ARG RUST_VERSION=1.94
 ARG ALPINE_VERSION=3.23
 ARG EDITION=enterprise
 

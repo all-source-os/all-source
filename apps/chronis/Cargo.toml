@@ -31,7 +31,7 @@ hotpath-alloc = ["hotpath/hotpath-alloc"]
 dhat-heap = ["dep:dhat"]
 
 [dependencies]
-allsource-core = { version = "0.25.0", path = "../core", default-features = false, features = [
+allsource-core = { version = "0.25.1", path = "../core", default-features = false, features = [
     "embedded",
     "embedded-replicant",
     "embedded-projections",
