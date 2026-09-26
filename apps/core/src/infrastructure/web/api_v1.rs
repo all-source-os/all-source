@@ -235,6 +235,10 @@ pub async fn serve_v1(
         // Config endpoints (admin only)
         .route("/api/v1/config", get(list_configs))
         .route("/api/v1/config", post(set_config))
+        .route(
+            "/api/v1/config/conditional/set",
+            post(set_config_conditionally),
+        )
         .route("/api/v1/config/{key}", get(get_config))
         .route("/api/v1/config/{key}", put(update_config))
         .route("/api/v1/config/{key}", delete(delete_config))
@@ -555,6 +559,7 @@ const WRITE_PATHS: &[&str] = &[
     "/api/v1/compaction/trigger",
     "/api/v1/audit/events",
     "/api/v1/config",
+    "/api/v1/tenants",
     "/api/v1/webhooks",
     "/api/v1/demo/seed",
 ];

@@ -219,20 +219,28 @@ impl EventSourcedTenantRepository {
 #[async_trait]
 impl TenantRepository for EventSourcedTenantRepository {
     async fn create(&self, id: TenantId, name: String, quotas: TenantQuotas) -> Result<Tenant> {
-        let id_str = id.as_str().to_string();
+        self.create_initialized(Tenant::new(id, name, quotas)?)
+            .await
+    }
+
+    async fn create_initialized(&self, tenant: Tenant) -> Result<Tenant> {
+        let id_str = tenant.id().as_str().to_string();
+        let lock = self.usage_lock_for(&id_str);
+        let _guard = lock.lock().await;
 
         // Check for duplicates
         if self.cache.contains_key(&id_str) {
             return Err(AllSourceError::TenantAlreadyExists(id_str));
         }
 
-        // Validate name early
-        let tenant = Tenant::new(id.clone(), name.clone(), quotas.clone())?;
-
-        // Emit creation event
+        // The first WAL event includes the full initialization. A failed or
+        // concurrent signup cannot expose an unstamped trial or reset billing.
         let payload = json!({
-            "name": name,
-            "quotas": serde_json::to_value(&quotas).unwrap_or_default(),
+            "name": tenant.name(),
+            "description": tenant.description(),
+            "is_demo": tenant.is_demo(),
+            "quotas": tenant.quotas(),
+            "metadata": tenant.metadata(),
         });
         self.emit_event(tenant_events::CREATED, &id_str, payload)?;
 

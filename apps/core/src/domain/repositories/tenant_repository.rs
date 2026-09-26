@@ -74,6 +74,16 @@ pub trait TenantRepository: Send + Sync {
     /// - `StorageError` - If the operation fails
     async fn create(&self, id: TenantId, name: String, quotas: TenantQuotas) -> Result<Tenant>;
 
+    /// Create an already validated tenant with its initial operational metadata
+    /// in the same durable creation. Never update a tenant that already exists.
+    /// Backends without this guarantee must refuse instead of exposing a
+    /// partially initialized tenant or overwriting a concurrent subscription.
+    async fn create_initialized(&self, _tenant: Tenant) -> Result<Tenant> {
+        Err(crate::error::AllSourceError::InternalError(
+            "Atomic tenant initialization is unavailable".into(),
+        ))
+    }
+
     /// Save or update a tenant
     ///
     /// If the tenant doesn't exist, it will be created.

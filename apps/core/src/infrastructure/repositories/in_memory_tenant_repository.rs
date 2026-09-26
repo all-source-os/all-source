@@ -85,6 +85,18 @@ impl Default for InMemoryTenantRepository {
 
 #[async_trait]
 impl TenantRepository for InMemoryTenantRepository {
+    async fn create_initialized(&self, tenant: Tenant) -> Result<Tenant> {
+        match self.tenants.entry(tenant.id().as_str().to_string()) {
+            dashmap::mapref::entry::Entry::Vacant(entry) => {
+                entry.insert(tenant.clone());
+                Ok(tenant)
+            }
+            dashmap::mapref::entry::Entry::Occupied(_) => Err(AllSourceError::TenantAlreadyExists(
+                tenant.id().as_str().to_string(),
+            )),
+        }
+    }
+
     async fn create(&self, id: TenantId, name: String, quotas: TenantQuotas) -> Result<Tenant> {
         let key = id.as_str().to_string();
 

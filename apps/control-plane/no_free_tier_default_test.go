@@ -28,6 +28,7 @@ var mintingSites = []struct {
 }{
 	{file: "onboard.go", fn: "OnboardHandler"},                               // POST /api/v1/onboard/start
 	{file: "auth.go", fn: "findOrCreateOAuthUser"},                           // OAuth login + email register funnel
+	{file: "oauth_workspace.go", fn: "createRegisteredWorkspace"},            // durable OAuth owner bootstrap
 	{file: "internal/application/usecases/register_agent.go", fn: "Execute"}, // POST /api/v1/agents/register
 }
 

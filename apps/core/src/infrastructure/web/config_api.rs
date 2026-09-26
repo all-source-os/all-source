@@ -1,6 +1,9 @@
 use crate::{
     error::{AllSourceError, Result},
-    infrastructure::{security::middleware::Admin, web::api_v1::AppState},
+    infrastructure::{
+        repositories::event_sourced_config_repository::ConfigCondition,
+        security::middleware::Admin, web::api_v1::AppState,
+    },
 };
 use axum::{Json, extract::State, http::StatusCode};
 use chrono::{DateTime, Utc};
@@ -15,6 +18,7 @@ pub struct SetConfigRequest {
     pub key: String,
     pub value: serde_json::Value,
     pub changed_by: Option<String>,
+    pub condition: Option<ConfigCondition>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -29,6 +33,7 @@ pub struct ConfigEntryResponse {
     pub value: serde_json::Value,
     pub updated_at: DateTime<Utc>,
     pub updated_by: Option<String>,
+    pub revision: uuid::Uuid,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,6 +67,7 @@ pub async fn list_configs(
             value: e.value,
             updated_at: e.updated_at,
             updated_by: e.updated_by,
+            revision: e.revision,
         })
         .collect();
 
@@ -89,6 +95,7 @@ pub async fn get_config(
         value: entry.value,
         updated_at: entry.updated_at,
         updated_by: entry.updated_by,
+        revision: entry.revision,
     }))
 }
 
@@ -110,7 +117,12 @@ pub async fn set_config(
         ));
     }
 
-    config_repo.set(&req.key, req.value, req.changed_by.as_deref())?;
+    let entry = config_repo.set_conditionally(
+        &req.key,
+        req.value,
+        req.changed_by.as_deref(),
+        req.condition.as_ref(),
+    )?;
 
     tracing::debug!("Config set: {}", req.key);
 
@@ -119,8 +131,26 @@ pub async fn set_config(
         Json(serde_json::json!({
             "key": req.key,
             "saved": true,
+            "revision": entry.revision,
         })),
     ))
+}
+
+/// Set a config entry with a required atomic precondition.
+/// POST /api/v1/config/conditional/set
+/// Conditional clients use this distinct route so older servers cannot silently
+/// ignore an unknown condition field and perform an unconditional upsert.
+pub async fn set_config_conditionally(
+    state: State<AppState>,
+    admin: Admin,
+    Json(req): Json<SetConfigRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>)> {
+    if req.condition.is_none() {
+        return Err(AllSourceError::InvalidInput(
+            "A configuration condition is required".into(),
+        ));
+    }
+    set_config(state, admin, Json(req)).await
 }
 
 /// Update a config entry
@@ -156,6 +186,7 @@ pub async fn update_config(
         value: entry.value,
         updated_at: entry.updated_at,
         updated_by: entry.updated_by,
+        revision: entry.revision,
     }))
 }
 

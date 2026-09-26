@@ -29,7 +29,7 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
-| Identity, entitlement, privacy, recovery | partially verified locally | Current stored team membership/billing, grant isolation/WAL recovery, bounded HTTP input and log redaction; issuance, consent, owner provisioning, retention and deployed consistency remain open |
+| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, grant isolation/WAL recovery, bounded HTTP input, log redaction and initial OAuth/email workspace ownership; issuance, consent, legacy/invite membership, retention and deployed consistency remain open |
 | Production discovery/distribution | not-tested | Verified endpoint, binding/config guide and release package |
 | Qualified customer outcome | unknown | Existing BET gate evidence remains authoritative |
 
@@ -39,6 +39,12 @@ The schema alone creates no human authority. Subsequent
 [restricted runtime and access evidence](evidence/2026-09-26-customer-agent-live-access/README.md)
 covers local eligibility/validation only. Both runtime flags default off. No
 customer connection, deployment, complete human journey or outcome is claimed.
+
+[Workspace ownership evidence](evidence/2026-09-27-customer-workspace-ownership/README.md)
+covers Control Plane signup through actual Core, conditional configuration,
+atomic initial trial metadata and recovery. Core must be upgraded before this
+Control Plane change. It does not complete customer connection issuance or
+authorize any MCP scope absent from current billing metadata.
 
 ## Required acceptance
 

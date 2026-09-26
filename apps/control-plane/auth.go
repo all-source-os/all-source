@@ -557,62 +557,11 @@ func (cp *ControlPlane) findOrCreateOAuthUser(provider, providerID, email, name,
 		}
 	}
 
-	// Derive tenant ID from email (same as demo flow). The tenant ID must satisfy
-	// Core's validation (alphanumeric, hyphens, underscores) — the raw userID
-	// "oauth:email:UUID" contains colons and would be rejected.
-	tenantSlug := entities.TenantSlug(email)
-	tenantID := tenantSlug
-
-	// New self-service signups (OAuth + email register, which funnels here) start a
-	// 14-day trial, NOT a permanent free tier (prompt 048). Shared tier + expiry
-	// stamp so this can't drift from onboard / agent-register; the scheduler's
-	// trial-expiry sweep suspends the tenant once trial_expires_at passes.
-	// NOTE: Core force-maps "already exists" to 4xx below, so a RETURNING user's
-	// login does not overwrite their stored subscription — this trial stamp only
-	// lands on the genuinely-new tenant Core actually creates (201).
-	trialSubscription, _ := usecases.TrialSubscriptionMetadata(time.Now())
-
-	tenantBody := map[string]interface{}{
-		"id":   tenantID,
-		"name": name,
-		"slug": tenantSlug,
-		"metadata": map[string]interface{}{
-			"subscription": trialSubscription,
-			"quota":        usecases.TrialQuotaMetadata(),
-		},
-	}
-
-	// Create or get tenant from Core
-	resp, err := cp.client.R().
-		SetBody(tenantBody).
-		Post("/api/v1/tenants")
-
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tenantID, isNewUser, err := cp.oauthWorkspace(ctx, userID, email, name)
 	if err != nil {
-		return nil, fmt.Errorf("core service unavailable: %w", err)
-	}
-
-	isNewUser := false
-
-	switch {
-	case resp.StatusCode() == 201 || resp.StatusCode() == 200:
-		var result map[string]interface{}
-		if parseErr := json.Unmarshal(resp.Body(), &result); parseErr == nil {
-			if id, ok := result["id"].(string); ok && id != "" {
-				tenantID = id
-			}
-			isNewUser = resp.StatusCode() == 201
-		}
-	case resp.StatusCode() == 409:
-		// Tenant already exists — returning user, keep the email-derived tenantID
-		isNewUser = false
-	case resp.StatusCode() == 400 && strings.Contains(string(resp.Body()), "already exists"):
-		// Core currently force-maps repository errors to HTTP 400, so a duplicate
-		// tenant on a returning-user login comes back as 400 instead of 409.
-		// Treat "already exists" as success so returning users can log in.
-		isNewUser = false
-	default:
-		log.Printf("Core tenant creation failed: HTTP %d, body: %s", resp.StatusCode(), string(resp.Body()))
-		return nil, fmt.Errorf("failed to create tenant (HTTP %d): %s", resp.StatusCode(), string(resp.Body()))
+		return nil, err
 	}
 
 	// Sign JWT

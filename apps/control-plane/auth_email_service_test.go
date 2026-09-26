@@ -27,7 +27,7 @@ func TestEmailAuthService(t *testing.T) {
 		{"duplicate", true, 422, 0, false, 422},
 		{"upstream-failure", true, 500, 0, false, 502},
 		{"missing-identity", true, 200, 0, true, 502},
-		{"tenant-failure", true, 200, 500, false, 502},
+		{"tenant-failure", true, 200, 500, false, 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ADMIN_EMAILS", "owner@example.test")
@@ -52,23 +52,20 @@ func TestEmailAuthService(t *testing.T) {
 			calls := 0
 			core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/api/v1/config/conditional/set" {
+					_, _ = w.Write([]byte(`{"key":"team:email-user-123:members","saved":true,"revision":"synthetic-revision"}`)) //nolint:errcheck // test response
+					return
+				}
+				if r.URL.Path == "/api/v1/config/team:email-user-123:members" {
+					_, _ = w.Write([]byte(`{"key":"team:email-user-123:members","value":[{"user_id":"user-123","role":"admin"}]}`)) //nolint:errcheck // test response
+					return
+				}
 				if r.URL.Path == "/api/v1/tenants/email-user-123" {
-					if r.Method == http.MethodPut {
-						var update struct {
-							Metadata map[string]interface{} `json:"metadata"`
-						}
-						if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
-							t.Fatal(err)
-						}
-						for _, key := range []string{"quota", "quotas"} {
-							q, ok := update.Metadata[key].(map[string]interface{})
-							if !ok || q["events_quota"] != float64(1000) || q["queries_quota"] != float64(100) {
-								t.Errorf("missing trial limits in %s", key)
-							}
-						}
+					if r.Method != http.MethodGet {
+						t.Errorf("returning login must not rewrite tenant")
 					}
-					w.Header().Set("Content-Type", "application/json")
-					_, _ = w.Write([]byte(`{"metadata":{"subscription":{"status":"active"}}}`)) //nolint:errcheck // test response
+					_, _ = w.Write([]byte(`{"id":"email-user-123","metadata":{"subscription":{"status":"active"},"quotas":{"queries_quota":100}}}`)) //nolint:errcheck // test response
 					return
 				}
 				if r.URL.Path != "/api/v1/tenants" {
@@ -81,7 +78,18 @@ func TestEmailAuthService(t *testing.T) {
 				if body["id"] != "email-user-123" {
 					t.Errorf("must scope tenant to authenticated identity")
 				}
+				metadata := workspaceMap(t, body["metadata"])
+				for _, key := range []string{"quota", "quotas"} {
+					quota := workspaceMap(t, metadata[key])
+					if quota["events_quota"] != float64(1000) || quota["queries_quota"] != float64(100) {
+						t.Errorf("missing trial limits in %s", key)
+					}
+				}
 				w.WriteHeader(tc.tenantStatus)
+				if tc.tenantStatus == http.StatusConflict {
+					_, _ = w.Write([]byte("Tenant already exists: email-user-123")) //nolint:errcheck // test response
+					return
+				}
 				_, _ = w.Write([]byte(`{}`)) //nolint:errcheck // test response
 			}))
 			defer core.Close()

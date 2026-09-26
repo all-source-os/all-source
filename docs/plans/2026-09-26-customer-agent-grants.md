@@ -87,8 +87,14 @@ Membership requires one exact stored subject with `admin` or `member` role in
 `team:<tenant>:members`. Missing/duplicate membership and unknown roles deny
 access. Actual `oauth:<provider>:<id>` subjects are accepted as opaque identities;
 tenant/client path components retain the stricter character set. No owner is
-inferred from a slug or a JWT role. Normal Control Plane OAuth registration does
-not currently persist an owner in this list; owner bootstrap remains unresolved.
+inferred from a slug or a JWT role. New Control Plane OAuth workspaces now bind
+the authenticated provider subject to a random workspace through a durable
+conditional registry, then persist its initial owner. Email sign-in retains its
+existing immutable auth-user-ID workspace binding and initializes the same
+owner list. Neither path overwrites an existing member list or resets billing.
+Legacy email-slug OAuth tenants receive no inferred owner. Incomplete legacy
+email metadata, invitation lifecycle and concurrent team edits remain unresolved.
+See [workspace provisioning evidence](../evidence/2026-09-27-customer-workspace-ownership/README.md).
 
 Eligibility requires an active, non-demo tenant and explicit persisted MCP scope.
 It preserves current `active`, `on_trial`, `trialing` and `past_due` statuses,
@@ -127,7 +133,9 @@ configuration stays outside tool arguments. See the
    per-client restrictions and discovery. Remote OAuth, if chosen, needs PKCE and
    exact redirect validation. Local stdio needs real process/owner binding.
 2. **Complete live authority.** Current stored membership and entitlement are
-   checked, but normal-account owner provisioning, explicit host/field consent
+   checked, with durable owner provisioning for new OAuth workspaces and the
+   existing auth-service email identity binding. Legacy OAuth ownership,
+   invitation lifecycle, concurrent member edits, explicit host/field consent
    and source ownership remain unresolved. The internal grant adapter's success
    alone is only credential verification. Neither that primitive nor the new
    access service grants human authority. Preserve the actual Indie catalog,

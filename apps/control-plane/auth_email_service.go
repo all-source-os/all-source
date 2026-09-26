@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 
-	"github.com/allsource/control-plane/internal/application/usecases"
 	"github.com/allsource/control-plane/internal/domain/entities"
 )
 
@@ -71,57 +71,12 @@ func (cp *ControlPlane) emailAuthService(c *gin.Context, signup bool, name, emai
 
 	// Never associate an unverified email with an existing OAuth workspace or
 	// ADMIN_EMAILS. Workspace identity comes from the authenticated user ID.
-	tenantID := "email-" + result.User.ID
-	subscription, _ := usecases.TrialSubscriptionMetadata(time.Now())
-	tenantResp, err := cp.client.R().SetContext(c.Request.Context()).SetBody(map[string]interface{}{
-		"id": tenantID, "slug": tenantID, "name": result.User.Name,
-		"quota_preset": "trial",
-	}).Post("/api/v1/tenants")
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	tenantID, isNewUser, err := cp.emailWorkspace(ctx, result.User.ID, result.User.Email, result.User.Name)
 	if err != nil {
 		c.JSON(503, gin.H{"message": "Workspace setup unavailable. Your account is saved; try signing in again."})
 		return
-	}
-	status := tenantResp.StatusCode()
-	exists := status == 409 || (status == 400 && strings.Contains(string(tenantResp.Body()), "already exists"))
-	if status != 200 && status != 201 && !exists {
-		c.JSON(502, gin.H{"message": "Workspace setup failed. Your account is saved; try signing in again."})
-		return
-	}
-	// Core's create DTO does not accept metadata. Persist the trial separately.
-	// On a retry, inspect the existing workspace before changing anything so a
-	// paid subscription is never overwritten and a partial setup can recover.
-	if exists {
-		tenantResp, err = cp.client.R().SetContext(c.Request.Context()).Get("/api/v1/tenants/" + tenantID)
-		if err != nil || tenantResp.StatusCode() != 200 {
-			c.JSON(503, gin.H{"message": "Unable to load workspace. Try signing in again."})
-			return
-		}
-	}
-	var tenant struct {
-		CreatedAt time.Time              `json:"created_at"`
-		Metadata  map[string]interface{} `json:"metadata"`
-	}
-	if err := json.Unmarshal(tenantResp.Body(), &tenant); err != nil {
-		c.JSON(502, gin.H{"message": "Invalid workspace response"})
-		return
-	}
-	if tenant.Metadata == nil {
-		tenant.Metadata = map[string]interface{}{}
-	}
-	if _, configured := tenant.Metadata["subscription"]; !configured {
-		if !tenant.CreatedAt.IsZero() {
-			subscription, _ = usecases.TrialSubscriptionMetadata(tenant.CreatedAt)
-		}
-		tenant.Metadata["subscription"] = subscription
-		tenant.Metadata["quota"] = usecases.TrialQuotaMetadata()
-		// Query Service's tenant/usage response reads the plural legacy key.
-		// Keep both consumers consistent until that wire format is unified.
-		tenant.Metadata["quotas"] = usecases.TrialQuotaMetadata()
-		updated, updateErr := cp.client.R().SetContext(c.Request.Context()).SetBody(map[string]interface{}{"metadata": tenant.Metadata}).Put("/api/v1/tenants/" + tenantID)
-		if updateErr != nil || updated.StatusCode() != 200 {
-			c.JSON(503, gin.H{"message": "Trial setup unavailable. Your account is saved; try signing in again."})
-			return
-		}
 	}
 	now := time.Now()
 	claims := &Claims{
@@ -139,7 +94,7 @@ func (cp *ControlPlane) emailAuthService(c *gin.Context, signup bool, name, emai
 		responseStatus = http.StatusCreated
 	}
 	c.Header("Cache-Control", "no-store")
-	c.JSON(responseStatus, gin.H{"token": token, "new_user": status == 201, "user": gin.H{
+	c.JSON(responseStatus, gin.H{"token": token, "new_user": isNewUser, "user": gin.H{
 		"id": result.User.ID, "email": result.User.Email, "name": result.User.Name, "tenant_id": tenantID,
 	}})
 }

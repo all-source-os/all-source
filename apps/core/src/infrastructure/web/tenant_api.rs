@@ -22,6 +22,8 @@ pub struct CreateTenantRequest {
     pub description: Option<String>,
     pub quota_preset: Option<String>, // "trial", "free", "professional", "unlimited"
     pub quotas: Option<TenantQuotas>,
+    /// Opaque initial metadata, committed atomically with tenant creation.
+    pub metadata: Option<serde_json::Value>,
     #[serde(default)]
     pub is_demo: bool,
 }
@@ -152,6 +154,37 @@ pub async fn create_tenant_handler(
     let quotas = resolve_create_quotas(req.quotas, req.quota_preset.as_deref());
 
     let tenant_id = TenantId::new(req.id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    if let Some(metadata) = req.metadata {
+        if !metadata.is_object() || metadata.to_string().len() > 32_768 {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "Initial metadata must be an object within 32 KiB".into(),
+            ));
+        }
+        let mut initial = crate::domain::entities::Tenant::new(tenant_id, req.name, quotas)
+            .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        initial.update_metadata(metadata);
+        initial.update_description(req.description);
+        initial.set_is_demo(req.is_demo);
+        let tenant = state
+            .tenant_repo
+            .create_initialized(initial)
+            .await
+            .map_err(|error| {
+                let status =
+                    if matches!(error, crate::error::AllSourceError::TenantAlreadyExists(_)) {
+                        StatusCode::CONFLICT
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    };
+                (status, error.to_string())
+            })?;
+        return Ok((
+            StatusCode::CREATED,
+            Json(TenantResponse::from_domain(&tenant)),
+        ));
+    }
 
     let mut tenant = state
         .tenant_repo

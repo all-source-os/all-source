@@ -1,12 +1,13 @@
 use crate::{
     domain::value_objects::system_stream::{SystemDomain, config_events, system_entity_id_value},
-    error::Result,
+    error::{AllSourceError, Result},
     infrastructure::persistence::SystemMetadataStore,
 };
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 /// A configuration entry with metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,6 +16,16 @@ pub struct ConfigEntry {
     pub value: serde_json::Value,
     pub updated_at: DateTime<Utc>,
     pub updated_by: Option<String>,
+    /// The durable event identifier, stable across restart and unique per write.
+    pub revision: Uuid,
+}
+
+/// A condition evaluated against the same locked state that is durably changed.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ConfigCondition {
+    Absent {},
+    Revision { revision: Uuid },
 }
 
 /// Event-sourced ConfigRepository backed by SystemMetadataStore.
@@ -37,6 +48,10 @@ pub struct ConfigEntry {
 pub struct EventSourcedConfigRepository {
     system_store: Arc<SystemMetadataStore>,
     cache: Arc<DashMap<String, ConfigEntry>>,
+    // Operational configuration is not the ingest hot path. A bounded single
+    // lock also serializes legacy writes/deletes with conditional writes, so
+    // they cannot invalidate a successful check before its WAL/cache update.
+    write_lock: Mutex<()>,
 }
 
 impl EventSourcedConfigRepository {
@@ -48,6 +63,7 @@ impl EventSourcedConfigRepository {
         let repo = Self {
             system_store,
             cache,
+            write_lock: Mutex::new(()),
         };
         repo.rebuild_cache();
         repo
@@ -81,6 +97,7 @@ impl EventSourcedConfigRepository {
                             value,
                             updated_at: event.timestamp(),
                             updated_by,
+                            revision: event.id(),
                         },
                     );
                 }
@@ -113,6 +130,39 @@ impl EventSourcedConfigRepository {
 
     /// Set a configuration value.
     pub fn set(&self, key: &str, value: serde_json::Value, changed_by: Option<&str>) -> Result<()> {
+        self.set_conditionally(key, value, changed_by, None)?;
+        Ok(())
+    }
+
+    /// Compare and durably replace a value. A mismatch writes no event.
+    ///
+    /// Conditions share the writer lock with unconditional writes and deletes.
+    /// Event IDs, rather than value equality, reject stale ABA observations.
+    pub fn set_conditionally(
+        &self,
+        key: &str,
+        value: serde_json::Value,
+        changed_by: Option<&str>,
+        condition: Option<&ConfigCondition>,
+    ) -> Result<ConfigEntry> {
+        let _guard = self.write_lock.lock().map_err(|_| {
+            AllSourceError::InternalError("Configuration writer unavailable".into())
+        })?;
+
+        let matches = match condition {
+            None => true,
+            Some(ConfigCondition::Absent {}) => !self.cache.contains_key(key),
+            Some(ConfigCondition::Revision { revision }) => self
+                .cache
+                .get(key)
+                .is_some_and(|entry| entry.revision == *revision),
+        };
+        if !matches {
+            return Err(AllSourceError::ConcurrencyError(
+                "Configuration precondition failed".into(),
+            ));
+        }
+
         let payload = serde_json::json!({
             "value": value,
             "changed_by": changed_by,
@@ -120,17 +170,15 @@ impl EventSourcedConfigRepository {
 
         let event = self.emit_event(config_events::SET, key, payload)?;
 
-        self.cache.insert(
-            key.to_string(),
-            ConfigEntry {
-                key: key.to_string(),
-                value,
-                updated_at: event.timestamp(),
-                updated_by: changed_by.map(std::string::ToString::to_string),
-            },
-        );
-
-        Ok(())
+        let entry = ConfigEntry {
+            key: key.to_string(),
+            value,
+            updated_at: event.timestamp(),
+            updated_by: changed_by.map(std::string::ToString::to_string),
+            revision: event.id(),
+        };
+        self.cache.insert(key.to_string(), entry.clone());
+        Ok(entry)
     }
 
     /// Get the current value for a key.
@@ -150,6 +198,9 @@ impl EventSourcedConfigRepository {
 
     /// Delete a configuration key.
     pub fn delete(&self, key: &str, deleted_by: Option<&str>) -> Result<bool> {
+        let _guard = self.write_lock.lock().map_err(|_| {
+            AllSourceError::InternalError("Configuration writer unavailable".into())
+        })?;
         if !self.cache.contains_key(key) {
             return Ok(false);
         }
