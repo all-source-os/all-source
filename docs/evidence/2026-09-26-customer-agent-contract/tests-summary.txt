@@ -1,0 +1,4 @@
+Running ExUnit with seed: 773846, max_cases: 24
+Excluding tags: [:integration]
+Finished in 24.9 seconds (4.1s async, 20.7s sync)
+6 doctests, 1025 tests, 0 failures, 2 skipped (91 excluded)

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "kind": "run_comparison",
+  "projection_name": null,
+  "sources": [
+    {"kind": "run_evidence", "ref": "sample_run_before_0001", "revision": 1, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    {"kind": "run_evidence", "ref": "sample_run_after_00002", "revision": 1, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+  ]
+}

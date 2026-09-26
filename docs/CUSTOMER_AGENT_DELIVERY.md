@@ -33,6 +33,11 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 | Production discovery/distribution | not-tested | Verified endpoint, binding/config guide and release package |
 | Qualified customer outcome | unknown | Existing BET gate evidence remains authoritative |
 
+Schema implementation: [v1 types and exact boundaries](plans/2026-09-26-customer-agent-contract.md),
+with [fixture and existing replay-domain evidence](evidence/2026-09-26-customer-agent-contract/README.md).
+This pure contract creates no runtime endpoint or human authority; readiness
+above remains unchanged until those separate paths are exercised.
+
 ## Required acceptance
 
 1. Normal customer request produces only a pending proposal and the correct product review/display.

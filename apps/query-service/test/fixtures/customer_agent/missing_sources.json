@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "kind": "replay_plan",
+  "projection_name": "event-count",
+  "sources": []
+}

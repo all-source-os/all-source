@@ -4,7 +4,9 @@ defmodule QueryServiceExWeb.ReplayControllerTest do
   import Plug.Conn
   import Plug.Test
 
+  alias QueryServiceEx.Application.Services.CustomerAgentReview
   alias QueryServiceEx.Projections.Enablement
+  alias QueryServiceEx.Projections.ReplayAnalysis
   alias QueryServiceEx.Projections.TenantProjections
   alias QueryServiceExWeb.ReplayController
 
@@ -150,6 +152,17 @@ defmodule QueryServiceExWeb.ReplayControllerTest do
 
     assert analysis["first_event_at"] == "2026-08-01T10:00:00Z"
     assert analysis["last_event_at"] == "2026-08-02T09:00:00Z"
+
+    # Exercise the customer contract against the real domain analysis, not a
+    # second implementation of its response shape. Preview still cannot rebuild.
+    assert {:ok, domain_analysis} = ReplayAnalysis.analyze(tenant, "event-count")
+    assert {:ok, snapshot} = CustomerAgentReview.replay_snapshot(domain_analysis)
+    assert snapshot["reported_total_events"] == analysis["total_events"]
+    assert snapshot["sampled_entity_count"] == analysis["sampled_entity_count"]
+    assert snapshot["projection_status"] == "ready"
+    assert "restart_proof" in snapshot["unknowns"]
+    refute Map.has_key?(snapshot, "ready_to_replay")
+    refute Jason.encode!(snapshot) =~ "order-1"
     assert TenantProjections.list_replays(tenant) == []
   end
 

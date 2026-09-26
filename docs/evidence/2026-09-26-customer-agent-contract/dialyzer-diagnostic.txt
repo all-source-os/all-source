@@ -1,0 +1,23 @@
+Finding suitable PLTs
+Checking PLT...
+[:amqp, :amqp_client, :asn1, :bandit, :broadway, :broadway_kafka, :broadway_rabbitmq, :brod, :castore, :certifi, :compiler, :cors_plug, :crc32cer, :credentials_obfuscation, :crypto, :delta_crdt, :eex, :elixir, :ex_unit, :excoveralls, :finch, :gen_stage, :h2, :hackney, :horde, :hpax, :idna, :inets, :jason, :jose, :kafka_protocol, :kernel, :libcluster, :libring, :logger, :logger_json, :merkle_map, :mime, :mimerl, :mint, :mint_web_socket, :mix, :mox, :nimble_options, :nimble_ownership, :nimble_pool, :open_api_spex, :phoenix, :phoenix_pubsub, :phoenix_template, :plug, :plug_crypto, :public_key, :query_service_ex, :quic, :rabbit_common, :ranch, :recon, :redix, :req, :runtime_tools, :sasl, :ssl, :ssl_verify_fun, :stdlib, :syntax_tools, :telemetry, :telemetry_metrics, :telemetry_metrics_prometheus_core, :telemetry_poller, :tesla, :thoas, :thousand_island, :tools, :websock, :websock_adapter, :webtransport, :xmerl]
+PLT is up to date!
+ignore_warnings: .dialyzer_ignore.exs
+
+Starting Dialyzer
+[
+  check_plt: false,
+  init_plt: ~c"/Users/decebaldobrica/Projects/founder-mode/all-source/apps/query-service/priv/plts/dialyzer.plt",
+  files: [~c"/Users/decebaldobrica/Projects/founder-mode/all-source/apps/query-service/_build/test/lib/query_service_ex/ebin/Elixir.QueryServiceEx.Projections.Behaviour.beam",
+   ~c"/Users/decebaldobrica/Projects/founder-mode/all-source/apps/query-service/_build/test/lib/query_service_ex/ebin/Elixir.Jason.Encoder.QueryServiceExWeb.Schemas.Metrics.MetricsResponse.beam",
+   ~c"/Users/decebaldobrica/Projects/founder-mode/all-source/apps/query-service/_build/test/lib/query_service_ex/ebin/Elixir.Jason.Encoder.QueryServiceExWeb.Schemas.Analytics.EventTypeCount.beam",
+   ~c"/Users/decebaldobrica/Projects/founder-mode/all-source/apps/query-service/_build/test/lib/query_service_ex/ebin/Elixir.QueryServiceEx.Projections.ProjectionServer.beam",
+   ~c"/Users/decebaldobrica/Projects/founder-mode/all-source/apps/query-service/_build/test/lib/query_service_ex/ebin/Elixir.Jason.Encoder.QueryServiceExWeb.Schemas.Events.EventResponse.beam",
+   ...],
+  ...
+]
+Total errors: 7, Skipped: 7, Unnecessary Skips: 1
+Unused filters:
+~r/core_websocket_worker\.ex.*call_with_opaque/
+unused filters present
+Halting VM with exit status 1
