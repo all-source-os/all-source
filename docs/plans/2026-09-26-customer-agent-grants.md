@@ -66,44 +66,94 @@ reads may use followers. The new customer review path must not interpret any of
 those existing checks as immediate revocation, host-specific consent or human
 authority. This change leaves existing generic API-key behaviour unchanged.
 
-The opaque credential fails the existing API-key JWT verifier. That does not
-prove every other legacy endpoint rejects malformed credentials gracefully;
-transport integration must test that independently. No endpoint currently
-accepts these new grants.
+The opaque credential fails the existing API-key JWT verifier. The restricted
+HTTP routes now accept these grants and reject a synthetic administrator JWT.
+That does not prove every other legacy endpoint rejects malformed credentials
+gracefully; those generic routes are not changed here.
+
+## Restricted runtime and live eligibility
+
+The existing Query Service now serves opt-in `POST /api/customer-agent/context`
+and `POST /api/customer-agent/validate`. They bypass the generic JWT/dev/cached
+tenant pipelines and require a separate opaque grant and exact configured
+resource. The application uses an access port; its infrastructure adapter reads
+current grant/revocation records, tenant metadata and the Control Plane member
+list from Core's leader. It verifies the grant again after eligibility reads,
+accounts for elapsed time before returning, and repeats access verification
+before sending the HTTP result. These are sequential reads, not a transactional
+snapshot or atomic authorization-plus-disclosure guarantee.
+
+Membership requires one exact stored subject with `admin` or `member` role in
+`team:<tenant>:members`. Missing/duplicate membership and unknown roles deny
+access. Actual `oauth:<provider>:<id>` subjects are accepted as opaque identities;
+tenant/client path components retain the stricter character set. No owner is
+inferred from a slug or a JWT role. Normal Control Plane OAuth registration does
+not currently persist an owner in this list; owner bootstrap remains unresolved.
+
+Eligibility requires an active, non-demo tenant and explicit persisted MCP scope.
+It preserves current `active`, `on_trial`, `trialing` and `past_due` statuses,
+including existing dunning grace. Trial access requires a future stored trial
+expiry; converted paid subscriptions ignore historical trial dates. A stored
+subscription end remains a hard deadline. Unknown or exhausted query budgets
+deny access; the existing `-1` unlimited convention is preserved. No catalog
+price, new scope, overage charge or entitlement is inferred from the tier name.
+Current agent-trial metadata lacks an MCP scope and therefore cannot satisfy
+this policy without an explicit product entitlement decision.
+
+The existing Elixir MCP stdio server has an exclusive customer review profile.
+It exposes only `allsource_review_context` and
+`allsource_validate_review_proposal`, using the HTTP routes above. Generic Core,
+admin, resource and prompt operations are unavailable in this profile, even if
+the existing system-admin environment flag is set. No Core backend or websocket
+is started for it. Tool schemas, structured results and matching JSON text
+describe the actual limited behavior:
+
+- Context: `eligibility_verified`, `source_access: unresolved`, preparation
+  unavailable and human approval required in the product.
+- Validation: `valid_unresolved`, request fingerprint and explicit unknowns,
+  `persisted: false`, `approved: false`.
+
+Neither result creates a pending review or reads source data. Connection
+configuration stays outside tool arguments. See the
+[runtime evidence and configuration boundary](../evidence/2026-09-26-customer-agent-live-access/README.md).
 
 ## Work still required before use
 
 1. **Issue/revoke authority and discovery.** Wire primitives through the existing
-   MCP/product runtime. Authenticate issuance/revocation outside this adapter;
+   product runtime. The restricted MCP bindings exist, but issuance/revocation
+   still needs authentication outside this adapter;
    its arguments are trusted server context, not permission to expose these
    methods directly. Add product connection UI, explicit host/field consent,
    per-client restrictions and discovery. Remote OAuth, if chosen, needs PKCE and
    exact redirect validation. Local stdio needs real process/owner binding.
-2. **Live eligibility.** After credential verification, independently check
-   current membership/role, entitlement and source ownership, before retrieval
-   and before disclosure. This adapter's success is only credential verification.
-   It grants no paid bypass or human action. QS team roles (`admin`, `member`,
-   `viewer`) and Control Plane roles (`admin`, `developer`, `readonly`,
-   `serviceaccount`) differ; resolve authoritative live membership, not a JWT
-   string or a fabricated mapping. Billing status fallback to free/active is not
-   paid evidence; preserve actual Indie catalog/trial/renewal rules.
+2. **Complete live authority.** Current stored membership and entitlement are
+   checked, but normal-account owner provisioning, explicit host/field consent
+   and source ownership remain unresolved. The internal grant adapter's success
+   alone is only credential verification. Neither that primitive nor the new
+   access service grants human authority. Preserve the actual Indie catalog,
+   trial and renewal rules while reconciling account onboarding.
 3. **Storage and cost controls.** Add authoritative per-tenant grant count,
-   request/rate/concurrency limits, body and response bounds, credential redaction
-   and retention/tombstone policy before exposing issuance. System record growth
-   is currently not capped by this internal adapter. Revocation disables access;
+   concurrency limits and retention/tombstone policy before exposing issuance.
+   HTTP input is bounded at 64 KiB before the generic parser, with no raw-body
+   duplicate. The existing per-process rate limiter and fixed error responses
+   are wired; protocol input and client results have size checks. These are not
+   complete streaming-memory or distributed concurrency/cost controls. System
+   record growth is currently not capped by the internal adapter. Revocation disables access;
    it does not erase immutable Core audit history. Local real-Core SIGKILL/restart
    tests now prove grant/revocation WAL recovery and denial after stale tenant
    and grant writes. They do not prove replication, failover, production topology
    or atomicity with a later data disclosure. Recheck before disclosure and prove
-   the deployment's consistency guarantees before exposing the flow.
+   the deployment's consistency guarantees before exposing source data.
 4. **Tool/resource enforcement.** Recheck each invocation and result disclosure,
    deny agent credentials at the separate product human gate, bind object
-   versions and ownership, and prove reconnect/host failure paths through the
-   actual MCP process. No new tool, resource, route, user session, proposal store,
-   human receipt or deployment is included here.
+   versions and ownership. Revocation and reconnect denial are now proven through
+   the compiled MCP process and real HTTP/Core stack. Native Claude host proof is
+   separate and still pending; the optional test requires approval for external
+   processing. No user session, proposal store, human receipt, product display
+   or deployment is included here.
 
 No customer credential was minted against production, no private source was
 retrieved, and no second pilot was activated. The task's acceptance criteria stay
 unchecked until the full access path is verified.
 
-[Current isolation and real-Core recovery evidence](../evidence/2026-09-26-customer-agent-grant-isolation/README.md).
+[Grant isolation and real-Core recovery evidence](../evidence/2026-09-26-customer-agent-grant-isolation/README.md).

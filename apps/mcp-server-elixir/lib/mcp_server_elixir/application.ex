@@ -22,7 +22,7 @@ defmodule McpServerElixir.Application do
         # PubSub for local event broadcasting
         {Phoenix.PubSub, name: McpServerElixir.PubSub}
       ] ++
-        mode_children(core_mode) ++
+        backend_children(core_mode) ++
         [
           # Conversation context manager for multi-turn queries
           {McpServerElixir.Context.ConversationContext, []}
@@ -30,6 +30,12 @@ defmodule McpServerElixir.Application do
 
     opts = [strategy: :one_for_one, name: McpServerElixir.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp backend_children(core_mode) do
+    if Application.get_env(:mcp_server_elixir, :customer_review, false),
+      do: [],
+      else: mode_children(core_mode)
   end
 
   defp stdio_children do

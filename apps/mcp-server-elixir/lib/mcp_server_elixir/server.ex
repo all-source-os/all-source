@@ -33,6 +33,7 @@ defmodule McpServerElixir.Server do
     :ok = :io.setopts(:standard_io, encoding: :utf8)
 
     Logger.info("🌟 AllSource MCP Server (Elixir) starting...")
+    customer_review = Application.get_env(:mcp_server_elixir, :customer_review, false)
 
     Logger.info(
       "📡 Core API: #{Application.get_env(:mcp_server_elixir, :core_url, "http://localhost:3900")}"
@@ -45,26 +46,30 @@ defmodule McpServerElixir.Server do
     # Start reading from stdin using a Task
     {:ok, _pid} = Task.start_link(fn -> stdin_reader_loop() end)
 
-    read_only = Application.get_env(:mcp_server_elixir, :read_only, false)
+    read_only = customer_review or Application.get_env(:mcp_server_elixir, :read_only, false)
 
     # Accept both spellings, matching the CONTROL_URL || ALLSOURCE_CONTROL_URL
     # pair in config/runtime.exs. Reading only the ALLSOURCE_ form here meant
     # setting CONTROL_URL configured the client but left the tenant tools hidden.
     control_plane_enabled =
-      System.get_env("ALLSOURCE_CONTROL_URL") != nil or System.get_env("CONTROL_URL") != nil
+      not customer_review and
+        (System.get_env("ALLSOURCE_CONTROL_URL") != nil or System.get_env("CONTROL_URL") != nil)
 
     # System-admin mode gates the mutating fleet recovery tools. OFF by default:
     # a connected MCP client can READ fleet health but cannot run a Destructive
     # recovery unless the operator explicitly enables it on this server instance.
-    system_admin = System.get_env("ALLSOURCE_SYSTEM_ADMIN") == "true"
+    system_admin = not customer_review and System.get_env("ALLSOURCE_SYSTEM_ADMIN") == "true"
 
     if read_only, do: Logger.info("🔒 Read-only mode enabled")
 
-    unless control_plane_enabled,
+    unless control_plane_enabled or customer_review,
       do:
         Logger.info(
           "ℹ️  Control plane not configured (set ALLSOURCE_CONTROL_URL to enable tenant tools)"
         )
+
+    if customer_review,
+      do: Logger.info("Customer review profile: eligibility and syntax validation only")
 
     if system_admin,
       do:
@@ -73,19 +78,24 @@ defmodule McpServerElixir.Server do
         )
 
     backend =
-      Application.get_env(
-        :mcp_server_elixir,
-        :core_backend,
-        McpServerElixir.Infrastructure.CoreClient
-      )
+      if customer_review do
+        nil
+      else
+        Application.get_env(
+          :mcp_server_elixir,
+          :core_backend,
+          McpServerElixir.Infrastructure.CoreClient
+        )
+      end
 
     {:ok,
      %{
        backend: backend,
-       control_client: ControlPlaneClient.new(),
+       control_client: if(customer_review, do: nil, else: ControlPlaneClient.new()),
        read_only: read_only,
        control_plane_enabled: control_plane_enabled,
-       system_admin: system_admin
+       system_admin: system_admin,
+       customer_review: customer_review
      }}
   end
 
@@ -128,6 +138,13 @@ defmodule McpServerElixir.Server do
       line when is_binary(line) ->
         send(__MODULE__, {:stdin_line, line})
         stdin_reader_loop()
+    end
+  end
+
+  defp handle_input(line, %{customer_review: true}) do
+    case McpServerElixir.Protocol.CustomerReview.handle_line(line) do
+      nil -> :ok
+      response -> send_response(response)
     end
   end
 

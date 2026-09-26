@@ -31,7 +31,8 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionGrant do
   @spec valid_binding?(term()) :: boolean()
   def valid_binding?(binding) when is_map(binding) do
     Enum.sort(Map.keys(binding)) == Enum.sort(@binding_keys) and
-      Enum.all?(~w(tenant_id subject_id client_id), &valid_id?(binding[&1])) and
+      Enum.all?(~w(tenant_id client_id), &valid_id?(binding[&1])) and
+      valid_subject?(binding["subject_id"]) and
       valid_resource?(binding["resource"])
   end
 
@@ -42,6 +43,13 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionGrant do
     do: Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, value)
 
   def valid_id?(_), do: false
+
+  @doc "An opaque identity, including Control Plane OAuth subjects; never a path component."
+  @spec valid_subject?(term()) :: boolean()
+  def valid_subject?(value) when is_binary(value) and byte_size(value) in 1..256,
+    do: Regex.match?(~r/\A[A-Za-z0-9_:@.+-]+\z/, value)
+
+  def valid_subject?(_), do: false
 
   @spec matches_owner?(term(), term()) :: boolean()
   def matches_owner?(record, binding) when is_map(record) do

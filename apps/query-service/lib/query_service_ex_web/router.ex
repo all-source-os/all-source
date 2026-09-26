@@ -147,6 +147,15 @@ defmodule QueryServiceExWeb.Router do
   # Authenticated Routes (user context, no tenant required)
   # -------------------------------------------------------------------
 
+  # Agent grants have their own live boundary. Generic JWT/dev/tenant fallback
+  # pipelines must not authenticate this surface. Never log proposal parameters.
+  scope "/api/customer-agent", QueryServiceExWeb do
+    pipe_through(:api)
+
+    post("/context", CustomerAgentController, :context, log: false)
+    post("/validate", CustomerAgentController, :validate, log: false)
+  end
+
   scope "/api/auth", QueryServiceExWeb do
     pipe_through(:authenticated)
 

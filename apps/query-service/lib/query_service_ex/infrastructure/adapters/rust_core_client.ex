@@ -997,13 +997,28 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   @spec get_config_for_authorization(String.t()) :: {:ok, term()} | {:error, atom()}
   def get_config_for_authorization(key) do
     if valid_authorization_config_key?(key) do
-      case Tesla.get(authorization_client(), "/api/v1/config/#{key}") do
-        {:ok, %Tesla.Env{status: 200, body: %{"key" => ^key, "value" => value}}} -> {:ok, value}
-        {:ok, %Tesla.Env{status: 404}} -> {:error, :not_found}
-        _ -> {:error, :storage_unavailable}
-      end
+      fetch_config_for_authorization(key)
     else
       {:error, :invalid_key}
+    end
+  end
+
+  @doc "Read Control Plane's current member list from the leader; no write counterpart."
+  @spec get_team_members_for_authorization(term()) :: {:ok, term()} | {:error, atom()}
+  def get_team_members_for_authorization(tenant_id)
+      when is_binary(tenant_id) and byte_size(tenant_id) in 1..128 do
+    if Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, tenant_id),
+      do: fetch_config_for_authorization("team:#{tenant_id}:members"),
+      else: {:error, :invalid_tenant}
+  end
+
+  def get_team_members_for_authorization(_), do: {:error, :invalid_tenant}
+
+  defp fetch_config_for_authorization(key) do
+    case Tesla.get(authorization_client(), "/api/v1/config/#{key}") do
+      {:ok, %Tesla.Env{status: 200, body: %{"key" => ^key, "value" => value}}} -> {:ok, value}
+      {:ok, %Tesla.Env{status: 404}} -> {:error, :not_found}
+      _ -> {:error, :storage_unavailable}
     end
   end
 

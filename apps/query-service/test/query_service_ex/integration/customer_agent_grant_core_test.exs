@@ -9,39 +9,19 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
   """
   use ExUnit.Case, async: false
 
+  alias QueryServiceEx.Application.Services.CustomerAgentAccess
   alias QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
+  alias QueryServiceEx.TestSupport.CustomerAgentCore
 
   @moduletag :integration
   @moduletag timeout: 60_000
   @binary System.get_env("ALLSOURCE_CORE_BINARY")
   @moduletag skip: is_nil(@binary)
-  @secret "synthetic-only-core-grant-recovery-secret-2026"
+  import QueryServiceEx.TestSupport.CustomerAgentCore, only: [with_core: 2, token: 1]
 
   setup do
-    suffix = :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
-    directory = Path.join(System.tmp_dir!(), "allsource-grant-core-#{suffix}")
-    File.mkdir!(directory)
-    File.chmod!(directory, 0o700)
-    keys = [:core_url, :core_write_url, :core_read_urls, :core_api_key]
-    previous = Enum.map(keys, &{&1, Application.get_env(:query_service_ex, &1)})
-    port = free_port()
-    url = "http://127.0.0.1:#{port}"
-    Application.put_env(:query_service_ex, :core_url, url)
-    Application.put_env(:query_service_ex, :core_write_url, url)
-    Application.put_env(:query_service_ex, :core_read_urls, [url])
-    Application.put_env(:query_service_ex, :core_api_key, "Bearer " <> token("admin"))
-
-    on_exit(fn ->
-      Enum.each(previous, fn
-        {key, nil} -> Application.delete_env(:query_service_ex, key)
-        {key, value} -> Application.put_env(:query_service_ex, key, value)
-      end)
-
-      File.rm_rf!(directory)
-    end)
-
-    %{directory: directory, port: port, url: url}
+    CustomerAgentCore.setup_context()
   end
 
   test "grants and independent revocations survive Core crashes; tenant writes cannot restore access",
@@ -137,6 +117,139 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
     end)
   end
 
+  test "live eligibility follows actual tenant billing and Control Plane membership after reconnect",
+       context do
+    binding = %{
+      "tenant_id" => "live-access-tenant",
+      "subject_id" => "oauth:google:123456789",
+      "client_id" => "claude-code",
+      "resource" => "https://api.example.test/customer-review"
+    }
+
+    now = System.system_time(:second)
+
+    metadata = %{
+      "subscription" => %{"tier" => "indie", "status" => "active"},
+      "quotas" => %{"mcp_scope" => "read", "queries_quota" => 50_000, "queries_used" => 20}
+    }
+
+    members = [
+      %{"user_id" => binding["subject_id"], "role" => "member", "email" => "private@example.test"}
+    ]
+
+    issued =
+      with_core(context, fn ->
+        client = RustCoreClient.write_client()
+
+        assert response_status(
+                 Tesla.post(client, "/api/v1/tenants", %{
+                   id: binding["tenant_id"],
+                   name: "Synthetic live access"
+                 })
+               ) == 201
+
+        set_metadata(client, binding, metadata)
+        set_members(client, binding, members)
+        assert {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], now, 120)
+
+        assert {:ok, context} =
+                 CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+
+        assert context["membership_role"] == "member"
+        assert context["queries_remaining"] == 49_980
+        refute Jason.encode!(context) =~ "private@example.test"
+        refute Jason.encode!(context) =~ issued.token
+        issued
+      end)
+
+    with_core(context, fn ->
+      client = RustCoreClient.write_client()
+      assert {:ok, _} = CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+
+      # Membership revocation must matter even while the credential is valid.
+      set_members(client, binding, [])
+
+      assert {:ok, _} =
+               CustomerAgentGrantStore.verify_credential(
+                 issued.token,
+                 binding,
+                 "read_context",
+                 now
+               )
+
+      assert {:error, :access_denied} =
+               CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+
+      set_members(client, binding, [
+        %{"user_id" => binding["subject_id"], "role" => "serviceaccount"}
+      ])
+
+      assert {:error, :access_denied} =
+               CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+
+      set_members(client, binding, members)
+
+      # An independent caller sees current storage, not an inherited session.
+      result =
+        Task.async(fn ->
+          CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+        end)
+
+      assert {:ok, _} = Task.await(result, 10_000)
+
+      for change <- [
+            put_in(metadata, ["subscription", "status"], "canceled"),
+            put_in(metadata, ["quotas", "mcp_scope"], ""),
+            put_in(metadata, ["quotas", "queries_used"], 50_000),
+            put_in(metadata, ["subscription"], %{
+              "status" => "active",
+              "tier" => "trial",
+              "trial_expires_at" => DateTime.from_unix!(now) |> DateTime.to_iso8601()
+            })
+          ] do
+        set_metadata(client, binding, change)
+
+        assert {:error, :access_denied} =
+                 CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+      end
+
+      set_metadata(client, binding, put_in(metadata, ["subscription", "status"], "past_due"))
+      assert {:ok, _} = CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+
+      assert {:error, :access_denied} =
+               CustomerAgentAccess.verify(
+                 issued.token,
+                 Map.put(binding, "subject_id", "oauth:google:other"),
+                 "read_context",
+                 now
+               )
+
+      assert {:error, :access_denied} =
+               CustomerAgentAccess.verify(issued.token, binding, "approve", now)
+
+      assert :ok = CustomerAgentGrantStore.revoke(binding, issued.id, now)
+
+      assert {:error, :access_denied} =
+               CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+    end)
+  end
+
+  defp set_metadata(client, binding, metadata) do
+    response = Tesla.put(client, "/api/v1/tenants/#{binding["tenant_id"]}", %{metadata: metadata})
+    assert response_status(response) == 200
+  end
+
+  defp set_members(client, binding, members) do
+    response =
+      Tesla.post(client, "/api/v1/config", %{
+        key: "team:#{binding["tenant_id"]}:members",
+        value: members,
+        changed_by: "synthetic-test"
+      })
+
+    assert response_status(response) == 200
+  end
+
   defp assert_admin_boundary(id) do
     admin = Application.fetch_env!(:query_service_ex, :core_api_key)
     Application.put_env(:query_service_ex, :core_api_key, "Bearer " <> token("developer"))
@@ -152,131 +265,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
     Application.put_env(:query_service_ex, :core_api_key, admin)
   end
 
-  defp with_core(context, fun) do
-    executable = String.to_charlist(Path.expand(@binary))
-
-    env =
-      Enum.map(core_env(context), fn {key, value} ->
-        {String.to_charlist(key), String.to_charlist(value)}
-      end)
-
-    # test-hang-allow: owned loopback child, bounded readiness; always SIGKILL and await exit.
-    port =
-      Port.open({:spawn_executable, executable}, [
-        :binary,
-        :exit_status,
-        :stderr_to_stdout,
-        {:cd, String.to_charlist(context.directory)},
-        {:env, env}
-      ])
-
-    try do
-      wait_ready(port, context.url, 30)
-      fun.()
-    after
-      stop_core(port)
-    end
-  end
-
-  defp core_env(context) do
-    %{
-      "ALLSOURCE_HOST" => "127.0.0.1",
-      "ALLSOURCE_PORT" => to_string(context.port),
-      "ALLSOURCE_DATA_DIR" => context.directory,
-      "ALLSOURCE_SYSTEM_DATA_DIR" => Path.join(context.directory, "system"),
-      "ALLSOURCE_JWT_SECRET" => @secret,
-      "ALLSOURCE_DEV_MODE" => "false",
-      "ALLSOURCE_AUTH_DISABLED" => "false",
-      "ALLSOURCE_ROLE" => "leader",
-      "ALLSOURCE_REPLICATION_ENABLED" => "false",
-      "ALLSOURCE_CLUSTER_ENABLED" => "false",
-      "ALLSOURCE_BOOTSTRAP_API_KEY" => "",
-      "ALLSOURCE_BOOTSTRAP_TENANT" => "",
-      "ALLSOURCE_RESP_PORT" => "",
-      "RUST_LOG" => "error"
-    }
-  end
-
-  defp wait_ready(_port, _url, 0),
-    do: flunk("Owned Core process did not become ready within deadline")
-
-  defp wait_ready(port, url, attempts) do
-    drain_output(port, 100)
-    client = Tesla.client([{Tesla.Middleware.Timeout, timeout: 300}], Tesla.Adapter.Hackney)
-
-    case Tesla.get(client, url <> "/health") do
-      {:ok, %{status: 200}} ->
-        :ok
-
-      _ ->
-        # test-hang-allow: bounded readiness retry; at most 30 attempts.
-        Process.sleep(100)
-        wait_ready(port, url, attempts - 1)
-    end
-  end
-
-  defp drain_output(_port, 0), do: :ok
-
-  defp drain_output(port, remaining) do
-    receive do
-      {^port, {:data, _data}} -> drain_output(port, remaining - 1)
-      {^port, {:exit_status, status}} -> flunk("Owned Core process exited with status #{status}")
-    after
-      0 -> :ok
-    end
-  end
-
-  defp stop_core(port) do
-    case Port.info(port, :os_pid) do
-      {:os_pid, pid} ->
-        System.cmd("/bin/kill", ["-KILL", to_string(pid)], stderr_to_stdout: true)
-        await_exit(port, System.monotonic_time(:millisecond) + 3_000)
-
-      nil ->
-        :ok
-    end
-  end
-
-  defp await_exit(port, deadline) do
-    remaining = deadline - System.monotonic_time(:millisecond)
-
-    if remaining <= 0, do: flunk("Owned Core process did not exit after SIGKILL")
-
-    receive do
-      {^port, {:exit_status, _status}} -> :ok
-      {^port, {:data, _data}} -> await_exit(port, deadline)
-    after
-      remaining -> flunk("Owned Core process did not exit after SIGKILL")
-    end
-  end
-
   # Avoid printing Tesla.Env, which contains the synthetic Authorization header.
   defp response_status({:ok, %{status: status}}), do: status
   defp response_status(_), do: :request_failed
-
-  defp token(role) do
-    now = System.system_time(:second)
-
-    claims = %{
-      "sub" => "grant-test-user",
-      "tenant_id" => "grant-test-tenant",
-      "role" => role,
-      "iss" => "allsource",
-      "iat" => now,
-      "exp" => now + 300
-    }
-
-    {_, jwt} =
-      JOSE.JWT.sign(JOSE.JWK.from_oct(@secret), %{"alg" => "HS256"}, claims) |> JOSE.JWS.compact()
-
-    jwt
-  end
-
-  defp free_port do
-    # test-hang-allow: ephemeral reservation only; immediately closed, no accept loop.
-    {:ok, socket} = :gen_tcp.listen(0, [:binary, active: false, ip: {127, 0, 0, 1}])
-    {:ok, port} = :inet.port(socket)
-    :ok = :gen_tcp.close(socket)
-    port
-  end
 end

@@ -8,6 +8,8 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewState do
   status/3 is not an authenticator and must never authorise a rebuild by itself.
   """
 
+  alias QueryServiceEx.Domain.CustomerAgent.ConnectionGrant
+
   @enforce_keys [:owner_tenant, :owner_subject, :digest, :created_at, :expires_at]
   defstruct [
     :owner_tenant,
@@ -34,7 +36,8 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewState do
   @doc "Create pending state using server-authenticated owner IDs and Unix seconds."
   @spec pending(term(), term(), term(), term(), term()) :: {:ok, t()} | {:error, :invalid_review}
   def pending(tenant, subject, digest, now, ttl) do
-    if valid_owner?(tenant) and valid_owner?(subject) and valid_digest?(digest) and
+    if ConnectionGrant.valid_id?(tenant) and ConnectionGrant.valid_subject?(subject) and
+         valid_digest?(digest) and
          is_integer(now) and now >= 0 and is_integer(ttl) and ttl in 1..86_400 do
       {:ok,
        %__MODULE__{
@@ -66,7 +69,8 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewState do
 
   defp valid_record?(state, now) do
     state.decision in [:pending, :rejected, :approved] and is_integer(now) and
-      valid_owner?(state.owner_tenant) and valid_owner?(state.owner_subject) and
+      ConnectionGrant.valid_id?(state.owner_tenant) and
+      ConnectionGrant.valid_subject?(state.owner_subject) and
       valid_digest?(state.digest) and valid_interval?(state, now)
   end
 
@@ -74,11 +78,6 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewState do
     is_integer(state.created_at) and state.created_at >= 0 and is_integer(state.expires_at) and
       (state.expires_at - state.created_at) in 1..86_400 and now >= state.created_at
   end
-
-  defp valid_owner?(value) when is_binary(value) and byte_size(value) in 1..128,
-    do: Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, value)
-
-  defp valid_owner?(_), do: false
 
   defp valid_digest?(value) when is_binary(value) and byte_size(value) == 64,
     do: Regex.match?(~r/\A[0-9a-f]{64}\z/, value)

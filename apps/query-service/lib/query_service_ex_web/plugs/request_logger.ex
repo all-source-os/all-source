@@ -39,8 +39,8 @@ defmodule QueryServiceExWeb.Plugs.RequestLogger do
       status: conn.status,
       duration_ms: duration_ms,
       client_ip: client_ip(conn),
-      user_agent: get_user_agent(conn),
-      query_string: conn.query_string
+      user_agent: if(customer_review?(conn), do: nil, else: get_user_agent(conn)),
+      query_string: if(customer_review?(conn), do: "", else: conn.query_string)
     ]
 
     Logger.metadata(metadata)
@@ -60,6 +60,9 @@ defmodule QueryServiceExWeb.Plugs.RequestLogger do
       metadata
     )
   end
+
+  defp customer_review?(%{request_path: "/api/customer-agent/" <> _}), do: true
+  defp customer_review?(_), do: false
 
   defp duration_ms(start_time) do
     stop_time = System.monotonic_time()

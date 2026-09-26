@@ -94,6 +94,9 @@ config :query_service_ex,
   core_api_key: System.get_env("CORE_API_KEY")
 
 # Configure Tesla HTTP client
+config :query_service_ex,
+  customer_agent_access_store: QueryServiceEx.Infrastructure.Adapters.CustomerAgentAccessStore
+
 config :tesla,
   disable_deprecated_builder_warning: true
 

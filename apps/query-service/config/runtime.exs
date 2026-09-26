@@ -1,5 +1,10 @@
 import Config
 
+# Customer review remains opt-in until connection consent and release gates pass.
+config :query_service_ex,
+  customer_review_enabled: System.get_env("CUSTOMER_REVIEW_ENABLED") == "true",
+  customer_review_resource: System.get_env("CUSTOMER_REVIEW_RESOURCE")
+
 # Runtime configuration for production
 # All environment variables are optional at startup - the app will fail gracefully
 # when trying to use unconfigured services.

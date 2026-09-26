@@ -1,0 +1,3 @@
+272e27eb05fc76372587aeec7fd94360dbe8536ef7ddc01fba7e7c93908ce918  target/debug/allsource-core
+2ecd5939c26f294c17fe604b5ccd110f3fc782008efa5fc7cc6dc9bc3274d348  apps/mcp-server-elixir/_build/prod/mcp_server_elixir-0.25.1.tar.gz
+a35a4afa3f9746db8cae116e09ec8dda3f692e30de06e32b8eb8081c7206c518  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Protocol.CustomerReview.beam

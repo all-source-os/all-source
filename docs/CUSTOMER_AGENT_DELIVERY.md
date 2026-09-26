@@ -9,7 +9,7 @@ Founder decision: 25 September 2026. Required target; contract specified and cus
 - Human decision: The tenant operator reviews the evidence in the product and explicitly authorises any consequential replay or infrastructure action through its separate human gate.
 - Domain boundary: No arbitrary queries, cross-tenant payloads, secrets, replay execution, infrastructure change or subscription action from this customer review skill. Existing ingestion SDK functionality is not redefined by this review-surface amendment.
 - Skill package: [customer skill](../skills/allsource-customer/SKILL.md); distribute the complete directory and local references when release gates pass. No public install/discovery endpoint is claimed here.
-- MCP contract: [logical operations and bindings](../skills/allsource-customer/references/workflow.md). Use existing product MCP infrastructure where present; this record does not assert those new bindings exist.
+- MCP contract: [logical operations and bindings](../skills/allsource-customer/references/workflow.md). The existing Elixir server now has an opt-in profile with two locally verified eligibility/validation bindings. Full preparation and handoff remain unavailable.
 - Approval enforcement: [human-only gate contract](../skills/allsource-customer/references/human-gate.md). Agent credentials cannot approve; product binds human actor/role, exact version/hash, action, scope, expiry and replay-resistant receipt. OAuth connection consent is separate.
 
 ## Product surface and data
@@ -24,19 +24,21 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 |---|---|---|
 | Product MCP/HITL contract | specified | This record and bundled references |
 | Customer Claude skill | draft | Local portable package; validation is separate from actual use |
-| MCP runtime and shared rules | not-tested | Bind/discover real tools and prove typed validation, text fallback and retry |
+| MCP runtime and shared rules | partially verified locally | Compiled stdio profile → real HTTP → Core, two discovered tools, typed validation, matching text/structured results and revoked reconnect denial; no preparation/status/result binding |
 | Human gate and display | not-tested | Actual product interaction and agent-credential denial needed |
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
-| Identity, entitlement, privacy, recovery | not-tested | Product-specific access, retention and policy evidence |
+| Identity, entitlement, privacy, recovery | partially verified locally | Current stored team membership/billing, grant isolation/WAL recovery, bounded HTTP input and log redaction; issuance, consent, owner provisioning, retention and deployed consistency remain open |
 | Production discovery/distribution | not-tested | Verified endpoint, binding/config guide and release package |
 | Qualified customer outcome | unknown | Existing BET gate evidence remains authoritative |
 
 Schema implementation: [v1 types and exact boundaries](plans/2026-09-26-customer-agent-contract.md),
 with [fixture and existing replay-domain evidence](evidence/2026-09-26-customer-agent-contract/README.md).
-This pure contract creates no runtime endpoint or human authority; readiness
-above remains unchanged until those separate paths are exercised.
+The schema alone creates no human authority. Subsequent
+[restricted runtime and access evidence](evidence/2026-09-26-customer-agent-live-access/README.md)
+covers local eligibility/validation only. Both runtime flags default off. No
+customer connection, deployment, complete human journey or outcome is claimed.
 
 ## Required acceptance
 

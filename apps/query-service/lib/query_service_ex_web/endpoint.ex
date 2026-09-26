@@ -37,6 +37,7 @@ defmodule QueryServiceExWeb.Endpoint do
   plug(QueryServiceExWeb.Plugs.CorrelationId)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
   plug(QueryServiceExWeb.Plugs.RequestLogger)
+  plug(QueryServiceExWeb.Plugs.CustomerAgentBody)
 
   plug(Plug.Parsers,
     parsers: [:json],

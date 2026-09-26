@@ -1,5 +1,18 @@
 import Config
 
+config :mcp_server_elixir,
+  customer_review: System.get_env("ALLSOURCE_CUSTOMER_REVIEW") == "true",
+  customer_review_connection: %{
+    url: System.get_env("CUSTOMER_REVIEW_URL"),
+    token: System.get_env("CUSTOMER_REVIEW_GRANT"),
+    binding: %{
+      "tenant_id" => System.get_env("CUSTOMER_REVIEW_TENANT"),
+      "subject_id" => System.get_env("CUSTOMER_REVIEW_SUBJECT"),
+      "client_id" => System.get_env("CUSTOMER_REVIEW_CLIENT"),
+      "resource" => System.get_env("CUSTOMER_REVIEW_RESOURCE")
+    }
+  }
+
 # Runtime config — these env vars are read when the release STARTS, not at compile time.
 # This is critical for Docker deployments where env vars are set at container run time.
 

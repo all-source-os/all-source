@@ -2,6 +2,23 @@
 
 Status: draft integration contract, not a live connector claim.
 
+## Restricted implementation currently under verification
+
+The existing Elixir MCP server has an opt-in customer review profile. Its
+current discovery exposes exactly these bindings:
+
+| Discovered tool | Current result |
+|---|---|
+| `allsource_review_context` | Checks the opaque grant, current stored team membership and persisted MCP entitlement. Reports `eligibility_verified`, unresolved source access and unavailable preparation. It does not retrieve event data. |
+| `allsource_validate_review_proposal` | Runs the product's typed proposal and curated projection validation. Returns `valid_unresolved`, a request fingerprint, explicit unknowns, `persisted: false` and `approved: false`. |
+
+Check actual discovery before using either name. These bindings do not yet
+implement preparation, source resolution, saved review/status, product display
+or delivery. A successful eligibility or syntax check is not a pending draft,
+source authorization or a human decision. Stop with that explicit incomplete
+state when the requested job requires an unavailable binding. No public endpoint,
+customer installation or processing consent follows from this local profile.
+
 ## Intended request
 
 Prepare a tenant event timeline and show what a replay would affect before I approve anything
