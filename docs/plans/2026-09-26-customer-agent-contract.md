@@ -85,6 +85,9 @@ tenant `admin` only; `developer`, `readonly`, `serviceaccount`, unrecognised rol
 and unmapped roles cannot approve. This is a contract for the new surface, not a
 change to existing role behaviour. Runtime must reconcile live membership and
 permission source before release; token role claims alone are insufficient.
+Query Service team management separately uses `admin`, `member`, `viewer`; that
+vocabulary is not automatically equivalent to Control Plane roles. Resolve the
+actual tenant membership source before connecting the gate.
 
 `Domain.CustomerAgent.ReviewState` constructs only pending records from
 server-supplied ownership and a digest. Lifetime is at most 24 hours. It reports

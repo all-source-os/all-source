@@ -95,14 +95,14 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
     build_client(base_url)
   end
 
-  defp build_client(base_url) do
+  defp build_client(base_url, opts \\ []) do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
       Tesla.Middleware.JSON,
-      {Tesla.Middleware.Timeout, timeout: @default_timeout},
+      {Tesla.Middleware.Timeout, timeout: Keyword.get(opts, :timeout, @default_timeout)},
       {Tesla.Middleware.Retry,
        delay: 100,
-       max_retries: 3,
+       max_retries: Keyword.get(opts, :max_retries, 3),
        max_delay: 2_000,
        should_retry: fn
          {:ok, %{status: status}} when status in [408, 429, 500, 502, 503, 504] -> true
@@ -974,7 +974,31 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
     * `{:error, reason}` - Error details
   """
   def get_tenant(tenant_id) when is_binary(tenant_id) do
-    case Tesla.get(read_client(), "/api/v1/tenants/#{tenant_id}") do
+    fetch_tenant(read_client(), tenant_id)
+  end
+
+  @doc """
+  Read current tenant metadata from the leader for credential verification.
+
+  No follower, read cache or retry can supply stale revocation state. A five-second
+  request timeout bounds failure; callers must deny access if this read fails.
+  """
+  @spec get_tenant_for_authorization(String.t()) :: {:ok, map()} | {:error, term()}
+  def get_tenant_for_authorization(tenant_id)
+      when is_binary(tenant_id) and byte_size(tenant_id) in 1..128 do
+    url =
+      Application.get_env(:query_service_ex, :core_write_url) ||
+        Application.get_env(:query_service_ex, :core_url, @default_base_url)
+
+    if Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, tenant_id),
+      do: fetch_tenant(build_client(url, timeout: 5_000, max_retries: 0), tenant_id),
+      else: {:error, :invalid_tenant}
+  end
+
+  def get_tenant_for_authorization(_), do: {:error, :invalid_tenant}
+
+  defp fetch_tenant(client, tenant_id) do
+    case Tesla.get(client, "/api/v1/tenants/#{tenant_id}") do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
         {:ok, body}
 
