@@ -986,16 +986,57 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   @spec get_tenant_for_authorization(String.t()) :: {:ok, map()} | {:error, term()}
   def get_tenant_for_authorization(tenant_id)
       when is_binary(tenant_id) and byte_size(tenant_id) in 1..128 do
-    url =
-      Application.get_env(:query_service_ex, :core_write_url) ||
-        Application.get_env(:query_service_ex, :core_url, @default_base_url)
-
     if Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, tenant_id),
-      do: fetch_tenant(build_client(url, timeout: 5_000, max_retries: 0), tenant_id),
+      do: fetch_tenant(authorization_client(), tenant_id),
       else: {:error, :invalid_tenant}
   end
 
   def get_tenant_for_authorization(_), do: {:error, :invalid_tenant}
+
+  @doc "Read an admin-only system config value from the leader, without caching or retry."
+  @spec get_config_for_authorization(String.t()) :: {:ok, term()} | {:error, atom()}
+  def get_config_for_authorization(key) do
+    if valid_authorization_config_key?(key) do
+      case Tesla.get(authorization_client(), "/api/v1/config/#{key}") do
+        {:ok, %Tesla.Env{status: 200, body: %{"key" => ^key, "value" => value}}} -> {:ok, value}
+        {:ok, %Tesla.Env{status: 404}} -> {:error, :not_found}
+        _ -> {:error, :storage_unavailable}
+      end
+    else
+      {:error, :invalid_key}
+    end
+  end
+
+  @doc "Persist an opaque security config value through Core's existing admin-only API."
+  @spec put_config_for_authorization(String.t(), map()) :: {:ok, map()} | {:error, atom()}
+  def put_config_for_authorization(key, value) do
+    if valid_authorization_config_key?(key) and is_map(value) do
+      body = %{key: key, value: value, changed_by: "customer-agent-service"}
+
+      case Tesla.post(authorization_client(), "/api/v1/config", body) do
+        {:ok, %Tesla.Env{status: 200, body: %{"key" => ^key, "saved" => true} = response}} ->
+          {:ok, response}
+
+        _ ->
+          {:error, :storage_unavailable}
+      end
+    else
+      {:error, :invalid_key}
+    end
+  end
+
+  defp valid_authorization_config_key?(key) when is_binary(key) and byte_size(key) in 1..128,
+    do: Regex.match?(~r/\Acustomer_agent_v1\.(?:grant|revoked)\.[0-9a-f]{32}\z/, key)
+
+  defp valid_authorization_config_key?(_), do: false
+
+  defp authorization_client do
+    url =
+      Application.get_env(:query_service_ex, :core_write_url) ||
+        Application.get_env(:query_service_ex, :core_url, @default_base_url)
+
+    build_client(url, timeout: 5_000, max_retries: 0)
+  end
 
   defp fetch_tenant(client, tenant_id) do
     case Tesla.get(client, "/api/v1/tenants/#{tenant_id}") do

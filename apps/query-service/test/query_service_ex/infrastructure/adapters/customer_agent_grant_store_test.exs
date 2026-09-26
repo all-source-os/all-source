@@ -14,6 +14,20 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
       Agent.update(CoreState, &Map.update!(&1, :requests, fn n -> n + 1 end))
 
       case {conn.method, conn.path_info} do
+        {"GET", ["api", "v1", "config", key]} ->
+          read_config(conn, key)
+
+        {"POST", ["api", "v1", "config"]} ->
+          {:ok, body, conn} = read_body(conn, length: 65_536, read_timeout: 1_000)
+          %{"key" => key, "value" => value} = Jason.decode!(body)
+
+          if Agent.get(CoreState, & &1.fail_write) do
+            respond(conn, 403, %{"error" => "synthetic-private-error"})
+          else
+            Agent.update(CoreState, &put_in(&1, [:configs, key], value))
+            respond(conn, 200, %{"key" => key, "saved" => true})
+          end
+
         {"GET", ["api", "v1", "tenants", tenant]} ->
           state = Agent.get(CoreState, & &1)
 
@@ -34,6 +48,21 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
 
             respond(conn, 200, %{})
           end
+      end
+    end
+
+    defp read_config(conn, key) do
+      state = Agent.get(CoreState, & &1)
+
+      cond do
+        state.fail_read or key in state.failed_keys ->
+          respond(conn, 503, %{"error" => "synthetic-private-error"})
+
+        Map.has_key?(state.configs, key) ->
+          respond(conn, 200, %{"key" => key, "value" => state.configs[key]})
+
+        true ->
+          respond(conn, 404, %{"error" => "not found"})
       end
     end
 
@@ -63,7 +92,9 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
                },
                requests: 0,
                fail_write: false,
-               fail_read: false
+               fail_read: false,
+               failed_keys: [],
+               configs: %{}
              }
            end,
            [name: CoreState]
@@ -95,9 +126,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
   test "writes only a hash to Core and verifies with a fresh leader read", %{binding: binding} do
     assert {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], 1_000, 60)
     assert issued.token =~ "asreview_v1_"
-    tenant = Agent.get(CoreState, & &1.tenant)
-    refute Jason.encode!(tenant) =~ issued.token
-    assert tenant["metadata"]["quotas"] == %{"events" => 100}
+    state = Agent.get(CoreState, & &1)
+    refute Jason.encode!(state) =~ issued.token
+    assert state.tenant["metadata"] == %{"quotas" => %{"events" => 100}}
+    assert map_size(state.configs) == 1
 
     assert {:ok, grant} =
              CustomerAgentGrantStore.verify_credential(
@@ -120,7 +152,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
                1_002
              )
 
-    assert Agent.get(CoreState, & &1.requests) == before + 1
+    assert Agent.get(CoreState, & &1.requests) == before + 2
   end
 
   test "revocation survives a new caller and prevents reconnect", %{binding: binding} do
@@ -134,6 +166,45 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
       end)
 
     assert Task.await(result, 6_000) == {:error, :unauthorized}
+  end
+
+  test "an older full tenant metadata write cannot restore a revoked credential", %{
+    binding: binding
+  } do
+    {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], 1_000, 60)
+    previous_metadata = Agent.get(CoreState, & &1.tenant["metadata"])
+    assert :ok = CustomerAgentGrantStore.revoke(binding, issued.id, 1_001)
+
+    # Billing persists a complete metadata map read before its own merge. This
+    # interleaving must not overwrite a customer credential's later revocation.
+    assert {:ok, _} =
+             RustCoreClient.merge_tenant_metadata(binding["tenant_id"], previous_metadata)
+
+    assert {:error, :unauthorized} =
+             CustomerAgentGrantStore.verify_credential(
+               issued.token,
+               binding,
+               "read_context",
+               1_002
+             )
+  end
+
+  test "a late grant-record write cannot overwrite a separate revocation marker", %{
+    binding: binding
+  } do
+    {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], 1_000, 60)
+    key = "customer_agent_v1.grant." <> issued.id
+    {:ok, previous} = RustCoreClient.get_config_for_authorization(key)
+    assert :ok = CustomerAgentGrantStore.revoke(binding, issued.id, 1_001)
+    assert {:ok, _} = RustCoreClient.put_config_for_authorization(key, previous)
+
+    assert {:error, :unauthorized} =
+             CustomerAgentGrantStore.verify_credential(
+               issued.token,
+               binding,
+               "read_context",
+               1_002
+             )
   end
 
   test "binds tenant, owner, client, resource and operations", %{binding: binding} do
@@ -161,6 +232,42 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
     for operation <- ["approve", "execute", "prepare_proposal"] do
       assert {:error, :unauthorized} =
                CustomerAgentGrantStore.verify_credential(issued.token, binding, operation, 1_001)
+    end
+  end
+
+  test "unavailable revocation lookup never permits an otherwise valid credential", %{
+    binding: binding
+  } do
+    {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], 1_000, 60)
+    key = "customer_agent_v1.revoked." <> issued.id
+    Agent.update(CoreState, &%{&1 | failed_keys: [key]})
+    before = Agent.get(CoreState, & &1.requests)
+
+    assert {:error, :storage_unavailable} =
+             CustomerAgentGrantStore.verify_credential(
+               issued.token,
+               binding,
+               "read_context",
+               1_001
+             )
+
+    assert Agent.get(CoreState, & &1.requests) == before + 2
+  end
+
+  test "any existing revocation marker denies access regardless of its value", %{binding: binding} do
+    {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], 1_000, 60)
+    key = "customer_agent_v1.revoked." <> issued.id
+
+    for value <- [nil, false, %{}, %{"revoked" => false}] do
+      Agent.update(CoreState, &put_in(&1, [:configs, key], value))
+
+      assert {:error, :unauthorized} =
+               CustomerAgentGrantStore.verify_credential(
+                 issued.token,
+                 binding,
+                 "read_context",
+                 1_001
+               )
     end
   end
 
@@ -203,7 +310,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStoreTest do
                60
              )
 
-    Agent.update(CoreState, &put_in(&1, [:tenant, "metadata"], %{}))
+    Agent.update(CoreState, &%{&1 | configs: %{}})
 
     assert {:error, :unauthorized} =
              CustomerAgentGrantStore.verify_credential(

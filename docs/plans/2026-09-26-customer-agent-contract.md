@@ -114,6 +114,11 @@ digest, state, expiry and minimal receipt/result references. Do not write raw
 event payloads, prompt/tool content or private documents into immutable review
 events. Refer to existing authorised source objects; do not duplicate them.
 
+Connection grants use separate admin-only Core system config records and
+independent revocation markers, outside mutable tenant metadata. See
+[the grant persistence boundary](2026-09-26-customer-agent-grants.md) for the
+verified storage primitive and remaining runtime authorization requirements.
+
 Pending review access expires within 24 hours or earlier source/grant expiry.
 Deletion revokes handles and prevents all further retrieval; metadata audit
 history is not falsely advertised as erased from WAL/Parquet. Source data follows

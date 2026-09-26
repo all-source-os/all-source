@@ -3,8 +3,9 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
   Core-backed opaque connection credentials with uncached leader verification.
 
   Existing ApiKeyStore uses a local read cache and cannot supply immediate
-  cross-process revocation. This adapter stores minimal grant metadata under the
-  existing tenant metadata boundary. It does not issue a user JWT or authorise
+  cross-process revocation. This adapter stores minimal grants and separate
+  revocation markers in existing admin-only Core system config records. Tenant
+  metadata updates cannot overwrite them. It does not issue a user JWT or authorise
   customer data access: callers must separately check current membership,
   entitlement, consent and object ownership before and after returning evidence.
   Issuance/revocation are internal primitives, not customer-facing routes.
@@ -14,6 +15,8 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
 
   @prefix "asreview_v1_"
+  @grant_prefix "customer_agent_v1.grant."
+  @revoked_prefix "customer_agent_v1.revoked."
   @context_fields ~w(id tenant_id subject_id client_id resource version operations created_at expires_at active)
 
   @doc "Persist a new server-authorised binding before returning its one-time secret."
@@ -24,7 +27,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
       token = @prefix <> id <> "." <> random_hex(32)
       stored = Map.merge(record, %{"id" => id, "token_hash" => digest(token)})
 
-      case persist(binding["tenant_id"], id, stored) do
+      case persist(@grant_prefix <> id, stored) do
         :ok -> {:ok, %{id: id, token: token, expires_at: stored["expires_at"]}}
         error -> error
       end
@@ -36,9 +39,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
   def verify_credential(token, binding, operation, now) do
     with true <- ConnectionGrant.valid_binding?(binding),
          {:ok, id} <- token_id(token),
-         {:ok, record} <- fetch(binding["tenant_id"], id),
+         {:ok, record} <- fetch(id),
          true <- matches_secret?(record, token),
-         true <- ConnectionGrant.valid_for?(record, binding, operation, now) do
+         true <- ConnectionGrant.valid_for?(record, binding, operation, now),
+         :ok <- not_revoked(id) do
       {:ok, Map.take(record, @context_fields)}
     else
       {:error, :storage_unavailable} = error -> error
@@ -51,28 +55,24 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
   def revoke(binding, id, now) do
     with true <- ConnectionGrant.valid_binding?(binding) and valid_grant_id?(id),
          true <- is_integer(now) and now >= 0,
-         {:ok, record} <- fetch(binding["tenant_id"], id),
+         {:ok, record} <- fetch(id),
          true <- ConnectionGrant.matches_owner?(record, binding) do
-      if record["active"] == false do
-        :ok
-      else
-        persist(binding["tenant_id"], id, %{"active" => false, "revoked_at" => now})
-      end
+      persist(@revoked_prefix <> id, %{"revoked" => true})
     else
       {:error, :storage_unavailable} = error -> error
       _ -> {:error, :unauthorized}
     end
   end
 
-  defp fetch(tenant_id, id) do
-    case RustCoreClient.get_tenant_for_authorization(tenant_id) do
-      {:ok, tenant} when is_map(tenant) ->
-        authoritative_id = tenant["tenant_id"] || tenant["id"]
-        record = get_in(tenant, ["metadata", "customer_agent_v1", "grants", id])
-
-        if authoritative_id == tenant_id and is_map(record) and record["id"] == id,
+  defp fetch(id) do
+    case RustCoreClient.get_config_for_authorization(@grant_prefix <> id) do
+      {:ok, record} when is_map(record) ->
+        if record["id"] == id,
           do: {:ok, record},
           else: {:error, :unauthorized}
+
+      {:error, :not_found} ->
+        {:error, :unauthorized}
 
       _ ->
         {:error, :storage_unavailable}
@@ -81,11 +81,19 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
     _ -> {:error, :storage_unavailable}
   end
 
-  defp persist(tenant_id, id, record) do
-    partial = %{"customer_agent_v1" => %{"grants" => %{id => record}}}
-
-    case RustCoreClient.merge_tenant_metadata(tenant_id, partial) do
+  defp persist(key, record) do
+    case RustCoreClient.put_config_for_authorization(key, record) do
       {:ok, _} -> :ok
+      _ -> {:error, :storage_unavailable}
+    end
+  rescue
+    _ -> {:error, :storage_unavailable}
+  end
+
+  defp not_revoked(id) do
+    case RustCoreClient.get_config_for_authorization(@revoked_prefix <> id) do
+      {:error, :not_found} -> :ok
+      {:ok, _} -> {:error, :unauthorized}
       _ -> {:error, :storage_unavailable}
     end
   rescue

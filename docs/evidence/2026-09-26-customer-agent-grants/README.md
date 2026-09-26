@@ -1,5 +1,10 @@
 # Scoped grant primitive evidence — 26 September 2026
 
+Historical evidence for the initial tenant-metadata implementation. That storage
+design was superseded after reproducing stale billing writes restoring revoked
+access. See [the isolation fix and real-Core recovery evidence](../2026-09-26-customer-agent-grant-isolation/README.md).
+The results below describe the original source bytes, not the replacement store.
+
 Progress only: `t-7ce02d` remains open. Base: signed `ad4ab816`.
 [Implemented boundary and missing runtime work](../../plans/2026-09-26-customer-agent-grants.md).
 [Tested source bytes](source-sha256.txt).

@@ -1,0 +1,15 @@
+Focused fixture and real-Core recovery run:
+MIX_ENV=test ALLSOURCE_CORE_BINARY=<repo>/target/debug/allsource-core
+mix test --include integration test/query_service_ex/infrastructure/adapters/customer_agent_grant_store_test.exs test/query_service_ex/integration/customer_agent_grant_core_test.exs
+Exit 0
+Finished in 0.6 seconds (0.00s async, 0.6s sync)
+13 tests, 0 failures
+
+Full Query Service regression suite:
+MIX_ENV=test TESTCONTAINERS_RYUK_DISABLED=true mix test
+Exit 0
+Finished in 25.4 seconds (4.5s async, 20.9s sync)
+6 doctests, 1037 tests, 0 failures, 2 skipped (92 excluded)
+
+Both commands bounded by gtimeout -k 15 300.
+Local Elixir 1.19.1 / OTP 28.1.1; no production/customer data.

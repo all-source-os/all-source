@@ -1,0 +1,8 @@
+Source base: 00f70228b60de03d93787e37f3f6359bf7b7b2f3
+Core source/Cargo files unchanged in this work.
+Build: cargo build --offline -p allsource-core --bin allsource-core --features enterprise
+Result: exit 0, dev profile, 26.03s
+SHA-256: 272e27eb05fc76372587aeec7fd94360dbe8536ef7ddc01fba7e7c93908ce918
+Path from repository root: target/debug/allsource-core
+Runtime: isolated loopback leader, synthetic JWT, auth enabled, replication disabled.
+This local binary was not deployed or distributed.
