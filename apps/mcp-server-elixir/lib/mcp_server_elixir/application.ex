@@ -26,10 +26,31 @@ defmodule McpServerElixir.Application do
         [
           # Conversation context manager for multi-turn queries
           {McpServerElixir.Context.ConversationContext, []}
-        ] ++ stdio_children()
+        ] ++ transport_children()
 
     opts = [strategy: :one_for_one, name: McpServerElixir.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp transport_children do
+    if Application.get_env(:mcp_server_elixir, :customer_review_http, false) do
+      unless Application.get_env(:mcp_server_elixir, :customer_review, false),
+        do: raise("HTTP customer transport requires the exclusive customer profile")
+
+      {:ok, ip} =
+        :inet.parse_address(
+          String.to_charlist(Application.fetch_env!(:mcp_server_elixir, :customer_review_http_ip))
+        )
+
+      [
+        {Bandit,
+         plug: McpServerElixir.CustomerHTTP,
+         ip: ip,
+         port: Application.fetch_env!(:mcp_server_elixir, :customer_review_http_port)}
+      ]
+    else
+      stdio_children()
+    end
   end
 
   defp backend_children(core_mode) do

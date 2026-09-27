@@ -10,11 +10,34 @@ defmodule QueryServiceExWeb.CustomerAgentController do
 
   alias QueryServiceEx.Application.Services.CustomerAgentAccess
   alias QueryServiceEx.Application.Services.CustomerAgentReview
+  alias QueryServiceEx.Application.Services.CustomerRemoteAuthorization
   alias QueryServiceEx.Domain.CustomerAgent.Proposal
   alias QueryServiceEx.RateLimiter
 
   def context(conn, params), do: dispatch(conn, params, "read_context")
   def validate(conn, params), do: dispatch(conn, params, "validate_proposal")
+  def remote_context(conn, params), do: remote(conn, params, "read_context")
+  def remote_validate(conn, params), do: remote(conn, params, "validate_proposal")
+
+  defp remote(conn, params, operation) do
+    with true <- Application.get_env(:query_service_ex, :customer_remote_enabled, false),
+         {:allow, _} <- RateLimiter.check_rate("customer-remote:admission", :free),
+         true <- is_map(params) and not Map.has_key?(params, "binding"),
+         ["Bearer " <> envelope] <- get_req_header(conn, "authorization"),
+         {:ok, payload} <-
+           CustomerRemoteAuthorization.open_access(
+             envelope,
+             Application.get_env(:query_service_ex, :customer_review_resource),
+             System.system_time(:second)
+           ) do
+      conn
+      |> put_req_header("authorization", "Bearer " <> payload["token"])
+      |> dispatch(Map.put(params, "binding", payload["binding"]), operation)
+    else
+      {:deny, _} -> conn |> put_resp_header("retry-after", "1") |> error(429, "rate_limited")
+      _ -> error(conn, 401, "access_denied")
+    end
+  end
 
   defp dispatch(conn, params, operation) do
     with true <- Application.get_env(:query_service_ex, :customer_review_enabled, false),

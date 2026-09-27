@@ -74,6 +74,7 @@ defmodule McpServerElixir.MixProject do
       {:tesla, "~> 1.11"},
       {:hackney, "~> 4.6"},
       {:jason, "~> 1.4"},
+      {:bandit, "~> 1.12"},
 
       # WebSocket Client
       {:websockex, "~> 0.4"},

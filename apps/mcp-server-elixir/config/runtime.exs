@@ -2,7 +2,14 @@ import Config
 
 config :mcp_server_elixir,
   customer_review: System.get_env("ALLSOURCE_CUSTOMER_REVIEW") == "true",
-  customer_review_connection_file: System.get_env("CUSTOMER_REVIEW_CONNECTION_FILE")
+  customer_review_connection_file: System.get_env("CUSTOMER_REVIEW_CONNECTION_FILE"),
+  customer_review_http: System.get_env("ALLSOURCE_CUSTOMER_REVIEW_HTTP") == "true",
+  customer_review_query_url: System.get_env("CUSTOMER_REVIEW_QUERY_URL"),
+  customer_review_metadata_url: System.get_env("CUSTOMER_REVIEW_METADATA_URL"),
+  customer_review_http_port: String.to_integer(System.get_env("CUSTOMER_REVIEW_HTTP_PORT", "3904")),
+  customer_review_http_ip: System.get_env("CUSTOMER_REVIEW_HTTP_IP", "127.0.0.1"),
+  customer_review_origins:
+    String.split(System.get_env("CUSTOMER_REVIEW_ORIGINS", ""), ",", trim: true)
 
 # Runtime config — these env vars are read when the release STARTS, not at compile time.
 # This is critical for Docker deployments where env vars are set at container run time.

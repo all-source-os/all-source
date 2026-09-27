@@ -3,8 +3,8 @@ defmodule QueryServiceEx.Application.Services.CustomerRemoteAuthorization do
   Remote PKCE connection service, called only after browser actor/consent checks.
 
   The caller must establish a verified human session and CSRF protection before
-  authorization. This internal service does not add a public route. Redemption
-  returns an internal credential/binding for the HTTP transport's token envelope;
+  authorization. HTTP controllers own that boundary. Redemption returns an
+  internal credential/binding for the HTTP transport's token envelope;
   it is neither a product session nor authority to approve a consequential action.
   """
   alias QueryServiceEx.Application.Services.CustomerAgentAccess
@@ -12,6 +12,11 @@ defmodule QueryServiceEx.Application.Services.CustomerRemoteAuthorization do
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionConsent
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionGrant
   alias QueryServiceEx.Domain.CustomerAgent.RemoteAuthorization
+
+  def seal_request(request, resource, now), do: tokens().seal_request(request, resource, now)
+  def open_request(token, resource, now), do: tokens().open_request(token, resource, now)
+  def seal_access(issued, now), do: tokens().seal_access(issued, now)
+  def open_access(token, resource, now), do: tokens().open_access(token, resource, now)
 
   @spec authorize(map(), map(), map(), integer()) :: {:ok, map()} | {:error, atom()}
   def authorize(actor, params, acceptance, now) do
@@ -100,4 +105,5 @@ defmodule QueryServiceEx.Application.Services.CustomerRemoteAuthorization do
 
   defp connections, do: Application.fetch_env!(:query_service_ex, :customer_connection_store)
   defp codes, do: Application.fetch_env!(:query_service_ex, :customer_authorization_code)
+  defp tokens, do: Application.fetch_env!(:query_service_ex, :customer_remote_tokens)
 end

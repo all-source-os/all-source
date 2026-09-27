@@ -157,6 +157,14 @@ defmodule QueryServiceExWeb.Router do
     post("/connections/list", CustomerConnectionsController, :index, log: false)
     post("/connections/create", CustomerConnectionsController, :create, log: false)
     post("/connections/revoke", CustomerConnectionsController, :revoke, log: false)
+    post("/connections/authorize", CustomerOAuthController, :authorize, log: false)
+    get("/oauth/metadata", CustomerOAuthController, :metadata, log: false)
+    get("/oauth/resource", CustomerOAuthController, :resource, log: false)
+    post("/oauth/prepare", CustomerOAuthController, :prepare, log: false)
+    post("/oauth/inspect", CustomerOAuthController, :inspect_request, log: false)
+    post("/oauth/token", CustomerOAuthController, :token, log: false)
+    post("/remote/context", CustomerAgentController, :remote_context, log: false)
+    post("/remote/validate", CustomerAgentController, :remote_validate, log: false)
   end
 
   scope "/api/auth", QueryServiceExWeb do

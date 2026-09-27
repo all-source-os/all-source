@@ -97,7 +97,8 @@ config :query_service_ex,
 config :query_service_ex,
   customer_agent_access_store: QueryServiceEx.Infrastructure.Adapters.CustomerAgentAccessStore,
   customer_connection_store: QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore,
-  customer_authorization_code: QueryServiceEx.Infrastructure.Adapters.CustomerAuthorizationCode
+  customer_authorization_code: QueryServiceEx.Infrastructure.Adapters.CustomerAuthorizationCode,
+  customer_remote_tokens: QueryServiceEx.Infrastructure.Adapters.CustomerRemoteTokens
 
 config :tesla,
   disable_deprecated_builder_warning: true

@@ -17,10 +17,12 @@ defmodule McpServerElixir.Protocol.CustomerReview do
     openWorldHint: false
   }
 
-  def handle_line(line) when is_binary(line) and byte_size(line) <= 65_536 do
+  def handle_line(line, caller \\ &CustomerReviewClient.call/2)
+
+  def handle_line(line, caller) when is_binary(line) and byte_size(line) <= 65_536 do
     case Jason.decode(line) do
       {:ok, %{"jsonrpc" => "2.0", "method" => method} = request} when is_binary(method) ->
-        dispatch(request)
+        dispatch(request, caller)
 
       {:ok, _} ->
         error(nil, -32_600, "Invalid JSON-RPC request")
@@ -32,7 +34,7 @@ defmodule McpServerElixir.Protocol.CustomerReview do
     _ -> error(nil, -32_603, "Customer review unavailable")
   end
 
-  def handle_line(_), do: error(nil, -32_600, "Request exceeds 64 KiB limit")
+  def handle_line(_, _), do: error(nil, -32_600, "Request exceeds 64 KiB limit")
 
   def tools do
     [
@@ -56,14 +58,19 @@ defmodule McpServerElixir.Protocol.CustomerReview do
   end
 
   # Notifications never produce a response, including unknown notifications.
-  defp dispatch(request) when not is_map_key(request, "id"), do: nil
+  defp dispatch(request, _caller) when not is_map_key(request, "id"), do: nil
 
-  defp dispatch(%{"id" => id}) when not (is_binary(id) or is_integer(id)),
+  defp dispatch(%{"id" => id}, _caller) when not (is_binary(id) or is_integer(id)),
     do: error(nil, -32_600, "Invalid request identifier")
 
-  defp dispatch(%{"method" => "initialize", "id" => id, "params" => params}) when is_map(params) do
+  defp dispatch(%{"method" => "initialize", "id" => id, "params" => params}, _caller)
+       when is_map(params) do
     result(id, %{
-      protocolVersion: @protocol,
+      protocolVersion:
+        if(params["protocolVersion"] in [@protocol, "2025-11-25"],
+          do: params["protocolVersion"],
+          else: @protocol
+        ),
       capabilities: %{tools: %{}},
       serverInfo: %{name: "allsource-customer-review", version: @version},
       instructions:
@@ -71,28 +78,29 @@ defmodule McpServerElixir.Protocol.CustomerReview do
     })
   end
 
-  defp dispatch(%{"method" => "ping", "id" => id}), do: result(id, %{})
-  defp dispatch(%{"method" => "tools/list", "id" => id}), do: result(id, %{tools: tools()})
+  defp dispatch(%{"method" => "ping", "id" => id}, _caller), do: result(id, %{})
+  defp dispatch(%{"method" => "tools/list", "id" => id}, _caller), do: result(id, %{tools: tools()})
 
-  defp dispatch(%{"method" => "tools/call", "id" => id, "params" => params}) when is_map(params) do
+  defp dispatch(%{"method" => "tools/call", "id" => id, "params" => params}, caller)
+       when is_map(params) do
     case {params["name"], Map.get(params, "arguments", %{})} do
       {"allsource_review_context", arguments} when is_map(arguments) and map_size(arguments) == 0 ->
-        call(id, "context", %{})
+        call(id, "context", %{}, caller)
 
       {"allsource_validate_review_proposal", %{"proposal" => proposal} = arguments}
       when is_map(proposal) and map_size(arguments) == 1 ->
-        call(id, "validate", arguments)
+        call(id, "validate", arguments, caller)
 
       _ ->
         error(id, -32_602, "Unknown tool or invalid arguments")
     end
   end
 
-  defp dispatch(%{"id" => id}),
+  defp dispatch(%{"id" => id}, _caller),
     do: error(id, -32_601, "Method not available in customer review profile")
 
-  defp call(id, operation, arguments) do
-    case CustomerReviewClient.call(operation, arguments) do
+  defp call(id, operation, arguments, caller) do
+    case caller.(operation, arguments) do
       {:ok, data} ->
         result(id, %{
           content: [%{type: "text", text: Jason.encode!(data)}],

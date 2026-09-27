@@ -13,7 +13,7 @@ const nextConfig = {
 
   // Security headers (fixes #123)
   async headers() {
-    return [
+    const headers = [
       {
         source: "/(.*)",
         headers: [
@@ -53,6 +53,31 @@ const nextConfig = {
             key: "Permissions-Policy",
             value: "camera=(), microphone=(), geolocation=()",
           },
+        ],
+      },
+    ];
+    const policy = headers[0].headers.find((header) => header.key === "Content-Security-Policy");
+    return [
+      ...headers,
+      ...["/api/customer-agent/:path*", "/mcp/customer-review", "/.well-known/:path*"].map(
+        (source) => ({
+          source,
+          headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+        })
+      ),
+      {
+        source: "/connect/claude",
+        headers: [
+          // Browsers apply form-action to the consent POST's final OAuth redirect.
+          {
+            key: "Content-Security-Policy",
+            value: policy.value.replace(
+              "form-action 'self'",
+              "form-action 'self' https://claude.ai/api/mcp/auth_callback"
+            ),
+          },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],
       },
     ];

@@ -1,0 +1,8 @@
+530adda2b4d65744e8a2f31e0060a22908f0410394c4361e39b25327993b9065  target/debug/allsource-core
+bb0afc4d3502d94d54d10260decbd708c89448481303667257b5b84a63b3b03b  apps/mcp-server-elixir/_build/prod/mcp_server_elixir-0.25.1.tar.gz
+d682a3e0bf0614e396429a37ed5312ad37d09b3e766bede0bb30cfbf6af8c383  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.CustomerHTTP.beam
+2715eea08974e0ecb3f5593c1f768a49dabbd34688c15cac5aada60bee03f4be  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Infrastructure.CustomerRemoteClient.beam
+b68d2263d62089f8d7213573cb7229d5f3e46f4bf31c42bafb7c380329a3f12c  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Protocol.CustomerReview.beam
+e90081bbc64257bfa6caed9fe3279694ef4ab94e235e1fecd67c4e589f3b57ba  apps/web/.next/BUILD_ID
+9fe172c62665d6f5cc5ada6e4478ee411b6dc8372f666135558005827fa9e122  apps/web/.next/server/app/connect/claude/page.js
+32379cf29251f679e34b34750cde70b6b917b4e46536f9d5fcb827433e268283  apps/web/src/lib/product-analytics.ts

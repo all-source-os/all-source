@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { publicUrl } from "@/lib/public-url";
+import { remoteEnabled, remoteRequestCookie } from "@/lib/server/customer-agent-http";
 
 // Session tokens are minted by the Control Plane and validated by the Query
 // Service's /api/v1/auth/me. NEXT_PUBLIC_API_URL points at the branded gateway
@@ -21,6 +22,8 @@ function getQueryServiceUrl(): string {
 function safeNextPath(raw: string | null): string | null {
   if (!raw) return null;
   if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  if (raw.includes("\\") || Array.from(raw).some((character) => character.charCodeAt(0) <= 32))
+    return null;
   if (raw.startsWith("/api/") || raw.startsWith("/api?")) return null;
   return raw;
 }
@@ -63,7 +66,10 @@ export async function GET(request: NextRequest) {
     // Token is valid, set cookie and redirect.
     // If the caller specified a safe ?next= target (e.g. /connect), honor it.
     // Otherwise fall back to onboarding (new user) or dashboard.
-    const redirectUrl = nextPath ?? (isNewUser ? "/onboarding" : "/dashboard");
+    const pendingConnection = remoteEnabled() && request.cookies.has(remoteRequestCookie);
+    const redirectUrl =
+      nextPath ??
+      (pendingConnection ? "/connect/claude" : isNewUser ? "/onboarding" : "/dashboard");
     const response = NextResponse.redirect(publicUrl(request, redirectUrl));
 
     // Set httpOnly cookie with the token
