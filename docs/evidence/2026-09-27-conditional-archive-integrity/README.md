@@ -41,6 +41,25 @@ processes with private temporary directories, not a mocked storage response.
 The source and local binary SHA-256 manifests identify this proof. This is not
 a production availability proof or a large-archive load test.
 
+## CI harness follow-up
+
+CI run 36317947441 exposed an existing tenant-wire fixture race. The fixture
+stored the last request's query string regardless of path, so a background health
+request could overwrite the actual event-query observation with an empty string.
+A deterministic test inserting an HTTP health request reproduced the exact
+failure. This was a test observation defect, not evidence of a tenant-routing
+regression in the production client.
+
+The fixture now records only event-query GET requests and asserts exactly one
+observation. It still checks the raw encoded query for a single authenticated
+tenant; duplicate or missing tenant fields remain failures. Client calls must
+also return successful responses, and unrelated unknown paths return 404.
+Five focused tests pass, including the forced health-request race. The full
+Query Service suite with CI seed `238999` passed: six doctests, 1,108 tests,
+zero failures, two skipped and 127 excluded (local Elixir 1.19 reporting).
+Configured formatting, warnings-as-errors compilation and strict Credo passed.
+No production adapter behavior or authorization rule changed in this correction.
+
 ## Limits
 
 "Complete" here means every discovered Parquet file loaded successfully. It does

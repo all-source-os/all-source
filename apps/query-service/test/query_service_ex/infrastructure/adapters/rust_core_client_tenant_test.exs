@@ -23,19 +23,27 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTenantTest do
 
     def init(opts), do: opts
 
-    def call(conn, _opts) do
-      :ok = Agent.update(FakeCoreState, &%{&1 | query_string: conn.query_string})
+    def call(%{method: "GET", request_path: "/api/v1/events/query"} = conn, _opts) do
+      :ok = Agent.update(FakeCoreState, &[conn.query_string | &1])
 
       conn
       |> put_resp_content_type("application/json")
       |> send_resp(200, Jason.encode!(%{"events" => [], "count" => 0}))
     end
+
+    def call(%{method: "GET", request_path: "/health"} = conn, _opts) do
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(200, Jason.encode!(%{"status" => "healthy"}))
+    end
+
+    def call(conn, _opts), do: send_resp(conn, 404, "not found")
   end
 
   setup do
     start_supervised!(%{
       id: FakeCoreState,
-      start: {Agent, :start_link, [fn -> %{query_string: nil} end, [name: FakeCoreState]]}
+      start: {Agent, :start_link, [fn -> [] end, [name: FakeCoreState]]}
     })
 
     port = free_port()
@@ -55,19 +63,21 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTenantTest do
 
   describe "query_events/3" do
     test "a client-supplied tenant_id never reaches Core" do
-      RustCoreClient.query_events("authenticated-tenant", %{
-        "tenant_id" => "victim-tenant",
-        "limit" => 5
-      })
+      assert {:ok, []} =
+               RustCoreClient.query_events("authenticated-tenant", %{
+                 "tenant_id" => "victim-tenant",
+                 "limit" => 5
+               })
 
       assert_single_tenant("authenticated-tenant")
     end
 
     test "keeps the caller's other params while replacing the tenant" do
-      RustCoreClient.query_events("authenticated-tenant", %{
-        "tenant_id" => "victim-tenant",
-        "entity_id" => "order-1"
-      })
+      assert {:ok, []} =
+               RustCoreClient.query_events("authenticated-tenant", %{
+                 "tenant_id" => "victim-tenant",
+                 "entity_id" => "order-1"
+               })
 
       params = decoded_params()
       assert params["entity_id"] == "order-1"
@@ -75,7 +85,11 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTenantTest do
     end
 
     test "an atom tenant_id in the caller's map is still overridden" do
-      RustCoreClient.query_events("authenticated-tenant", %{tenant_id: "victim-tenant", limit: 1})
+      assert {:ok, []} =
+               RustCoreClient.query_events("authenticated-tenant", %{
+                 tenant_id: "victim-tenant",
+                 limit: 1
+               })
 
       assert_single_tenant("authenticated-tenant")
     end
@@ -83,17 +97,29 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTenantTest do
 
   describe "query_events_page/3" do
     test "a client-supplied tenant_id never reaches Core" do
-      RustCoreClient.query_events_page("authenticated-tenant", %{
-        "tenant_id" => "victim-tenant",
-        "limit" => 5
-      })
+      assert {:ok, %{"events" => []}} =
+               RustCoreClient.query_events_page("authenticated-tenant", %{
+                 "tenant_id" => "victim-tenant",
+                 "limit" => 5
+               })
 
+      assert_single_tenant("authenticated-tenant")
+    end
+
+    test "an unrelated health request cannot overwrite the tenant query observation" do
+      assert {:ok, _} =
+               RustCoreClient.query_events_page("authenticated-tenant", %{
+                 "tenant_id" => "victim-tenant",
+                 "limit" => 5
+               })
+
+      assert {:ok, %{status: 200}} = Tesla.get(RustCoreClient.write_client(), "/health")
       assert_single_tenant("authenticated-tenant")
     end
   end
 
   defp assert_single_tenant(expected) do
-    query_string = Agent.get(FakeCoreState, & &1.query_string)
+    query_string = observed_query()
 
     tenants =
       query_string
@@ -108,7 +134,13 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTenantTest do
   end
 
   defp decoded_params do
-    Agent.get(FakeCoreState, & &1.query_string) |> URI.decode_query()
+    observed_query() |> URI.decode_query()
+  end
+
+  defp observed_query do
+    queries = Agent.get(FakeCoreState, & &1)
+    assert [query] = queries, "expected exactly one event query, got #{inspect(queries)}"
+    query
   end
 
   defp get_env(key), do: Application.get_env(:query_service_ex, key)
