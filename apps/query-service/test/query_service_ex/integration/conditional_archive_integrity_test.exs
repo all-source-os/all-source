@@ -37,6 +37,29 @@ defmodule QueryServiceEx.Integration.ConditionalArchiveIntegrityTest do
     assert File.read!(context.corrupt) == "unknown synthetic archive"
   end
 
+  test "an unreadable partition is not an empty version history", context do
+    partition = Path.dirname(context.corrupt)
+    File.chmod!(partition, 0o000)
+
+    try do
+      assert {:error, :eacces} = File.ls(partition)
+
+      for _restart <- 1..2 do
+        with_core(context, fn ->
+          assert {:ok, %{status: 500, body: body}} = append("conditional", 0)
+          assert body["error"] =~ "Failed to read storage directory"
+          assert {:ok, %{"events" => []}} = query("conditional")
+          assert {:ok, %{status: 500}} = append("conditional", 0)
+          assert {:ok, %{status: 200}} = Tesla.get(RustCoreClient.write_client(), "/health")
+        end)
+      end
+    after
+      File.chmod!(partition, 0o700)
+    end
+
+    assert File.read!(context.corrupt) == "unknown synthetic archive"
+  end
+
   defp assert_refused do
     assert {:ok, %{status: 500, body: body}} = append("conditional", 0)
     assert body["error"] =~ "Cannot verify conditional version from incomplete archive"

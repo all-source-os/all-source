@@ -60,6 +60,83 @@ zero failures, two skipped and 127 excluded (local Elixir 1.19 reporting).
 Configured formatting, warnings-as-errors compilation and strict Credo passed.
 No production adapter behavior or authorization rule changed in this correction.
 
+## Decoder failure after a valid batch
+
+A second reproduction found that a valid footer did not guarantee a complete
+file read. The single-file decoder used `while let Some(Ok(batch))`, which
+treated a later Arrow decoding error like end-of-file and returned the already
+decoded prefix as success. Strict tenant hydration therefore marked that file
+complete and could authorize an append at the prefix's version.
+
+The synthetic fixture writes 2,048 events in two row groups, preserves the
+footer and first group, and corrupts one column in the second group. A direct
+Arrow read proves the first 1,024 rows decode and the next batch fails. Before
+the repair, both regression tests failed: the file loader returned success and
+the conditional append did not reject the incomplete archive.
+
+The decoder now propagates each batch error. Tolerant loaders continue their
+existing whole-file skip policy and return healthy neighboring files; they no
+longer mistake a decodable prefix of a damaged file for a successful file read.
+Conditional appends reject the archive both cold and after a tolerant query.
+The tests also verify no event notification and unchanged fixture bytes.
+
+The six focused integrity tests pass. The separately named archive-read
+manifest records the follow-up source without replacing the earlier proof.
+Production release 45 and the image built from `e5db174d` do not contain this
+subsequent decoder repair. No customer feature is enabled by this proof.
+
+## Directory enumeration integrity
+
+Two further synthetic regressions reproduced conditional appends accepting
+version zero when a partition could not be read or the tenant path was a file.
+The generic directory walk deliberately skips failed child reads, directory
+entries and file-type lookups, while `is_dir` maps metadata errors to false.
+Those tolerant decisions cannot establish empty retained history for a write.
+
+Conditional loads now require successful tenant-root inspection and propagate
+directory enumeration errors. A missing tenant root still permits a new stream;
+an unreadable or non-directory root does not. Generic queries keep their
+tolerant enumeration policy. Because that policy can omit inaccessible history,
+a cache populated by a tolerant query remains unverified until a strict load
+completes. This can add one archive reread before the first conditional append.
+
+The permission fixture requires an unprivileged Unix test process, confirms
+`PermissionDenied` before testing Core, and restores the temporary partition's
+permissions even when the test fails. Cold and query-warmed cases reject the
+append, emit no event, and leave a cold tenant unmarked as loaded. Together with
+the decoder and existing archive cases, eight focused integrity tests pass.
+
+An initial HTTP run of the decoder-only binary passed 11 cases but timed out
+waiting for the first child process to become ready. The same failing case,
+unchanged binary and seed `342434`, passed on retry. The helper discarded child
+output, so the startup-timeout cause is unconfirmed; this is not evidence of a
+resolved startup defect.
+
+After both repairs, strict all-target/all-feature Clippy and Rust formatting
+passed. The Core library suite passed 1,990 tests with five ignored, and 48
+focused archive, acknowledged-version, concurrency, cold-start and read-scope
+tests passed. The enterprise/analytics binary was rebuilt and passed all 13
+actual HTTP/restart cases with seed `342434`, including the new unreadable
+partition case. That case checks refusal before and after tolerant queries,
+health availability, two independently started Core processes, and unchanged
+synthetic archive bytes. Elixir formatting passed. Separate source and local
+binary hashes identify this follow-up proof.
+
+## Deployment candidate
+
+The clean `e5db174d` Alpine build completed and pushed
+`registry.fly.io/allsource-core:core-e5db174d-20260927`, digest
+`sha256:294fe0c37493b0eb60ab87c2467da4741ec1992a0e1ca96ee0dda3cb1240649f`.
+The build exited successfully; a builder-release timeout occurred after the
+registry manifest was pushed. This candidate was not deployed because it lacks
+the subsequent batch-decoder and enumeration repairs recorded above.
+
+At 12:58 UTC, production remained on release 45's digest
+`sha256:898fdad1e6dd7a6273612820b481fd6e0b4ce04053dd22c458e910c9c475bbbb`,
+and a fresh Query Service readiness response reported healthy Core backend and
+WebSocket connectivity. No machine, volume, application flag or production data
+was changed during this follow-up.
+
 ## Limits
 
 "Complete" here means every discovered Parquet file loaded successfully. It does

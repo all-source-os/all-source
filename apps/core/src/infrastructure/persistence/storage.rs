@@ -853,12 +853,12 @@ impl ParquetStorage {
         })?;
 
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-        let mut reader = builder.build()?;
+        let reader = builder.build()?;
 
         let mut events = Vec::new();
 
-        while let Some(Ok(batch)) = reader.next() {
-            let batch_events = self.record_batch_to_events(&batch, tenant_id)?;
+        for batch in reader {
+            let batch_events = self.record_batch_to_events(&batch?, tenant_id)?;
             events.extend(batch_events);
         }
 
@@ -987,6 +987,21 @@ impl ParquetStorage {
         find_parquet_files_recursive(&tenant_root)
     }
 
+    fn list_complete_tenant_archive(&self, tenant_id: &str) -> Result<Vec<PathBuf>> {
+        let safe = sanitize_tenant_id_for_path(tenant_id)?;
+        let root = self.storage_dir.join(safe);
+        match fs::symlink_metadata(&root) {
+            Ok(metadata) if metadata.is_dir() => {
+                find_parquet_files_recursive_with_integrity(&root, true)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            _ => Err(AllSourceError::StorageError(
+                "Cannot verify conditional version: tenant archive is not an accessible directory"
+                    .into(),
+            )),
+        }
+    }
+
     /// Load only the events belonging to `tenant_id`, walking just that
     /// tenant's subtree on disk. The full-storage loader
     /// (`load_all_events`) opens every Parquet file regardless of tenant;
@@ -1016,7 +1031,11 @@ impl ParquetStorage {
         tenant_id: &str,
         require_complete: bool,
     ) -> Result<(Vec<Event>, bool)> {
-        let parquet_files = self.list_parquet_files_for_tenant(tenant_id)?;
+        let parquet_files = if require_complete {
+            self.list_complete_tenant_archive(tenant_id)?
+        } else {
+            self.list_parquet_files_for_tenant(tenant_id)?
+        };
         tracing::info!(
             tenant_id = tenant_id,
             file_count = parquet_files.len(),
@@ -1061,7 +1080,9 @@ impl ParquetStorage {
             skipped_files = skipped,
             "load_events_for_tenant: complete"
         );
-        Ok((events, skipped == 0))
+        // Tolerant enumeration may omit unreadable directories or entries.
+        // Only strict enumeration can certify the retained archive for OCC.
+        Ok((events, require_complete && skipped == 0))
     }
 
     /// Get the storage directory path.
@@ -1327,6 +1348,13 @@ fn list_flat_layout_files(root: &Path) -> Result<Vec<PathBuf>> {
 /// not followed — the storage tree is mounted from a single volume and
 /// chasing symlinks invites cycles.
 fn find_parquet_files_recursive(root: &Path) -> Result<Vec<PathBuf>> {
+    find_parquet_files_recursive_with_integrity(root, false)
+}
+
+fn find_parquet_files_recursive_with_integrity(
+    root: &Path,
+    require_complete: bool,
+) -> Result<Vec<PathBuf>> {
     let mut out = Vec::new();
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
 
@@ -1334,9 +1362,9 @@ fn find_parquet_files_recursive(root: &Path) -> Result<Vec<PathBuf>> {
         let entries = match fs::read_dir(&dir) {
             Ok(e) => e,
             // Root must exist (we created it in `new`); subdirectories may
-            // race a delete from compaction. Skip vanished subdirs rather
-            // than failing the whole load.
-            Err(e) if dir == root => {
+            // race a delete from compaction. Tolerant reads skip those;
+            // strict reads cannot certify history after enumeration failed.
+            Err(e) if dir == root || require_complete => {
                 return Err(AllSourceError::StorageError(format!(
                     "Failed to read storage directory: {e}"
                 )));
@@ -1344,13 +1372,28 @@ fn find_parquet_files_recursive(root: &Path) -> Result<Vec<PathBuf>> {
             Err(_) => continue,
         };
 
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) if require_complete => {
+                    return Err(AllSourceError::StorageError(format!(
+                        "Failed to enumerate complete archive: {error}"
+                    )));
+                }
+                Err(_) => continue,
+            };
             let path = entry.path();
             // Use file_type() rather than metadata() so symlinks don't get
             // followed by accident (metadata() resolves symlinks, file_type()
             // doesn't).
-            let Ok(ft) = entry.file_type() else {
-                continue;
+            let ft = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(error) if require_complete => {
+                    return Err(AllSourceError::StorageError(format!(
+                        "Failed to inspect complete archive entry: {error}"
+                    )));
+                }
+                Err(_) => continue,
             };
             if ft.is_dir() {
                 stack.push(path);
