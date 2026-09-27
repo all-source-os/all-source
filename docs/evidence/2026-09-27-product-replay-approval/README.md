@@ -93,6 +93,18 @@ Verified through Codex browser controls:
 
 Synthetic approval verifies the implementation, not a customer's human decision.
 
+## CI formatting follow-up
+
+The initial commit `4048948da897b39dcb96368db2756699348a495a` failed the
+Query Service formatting gate in CI run `36353591012`: Elixir 1.18 wrapped two
+header expressions differently from the local Elixir 1.19 formatter. Reusing
+the existing session headers keeps the test cases unchanged and the expressions
+short enough for both formatters. Local `mix format --check-formatted` passes;
+the nine real-Core replay review tests pass again with zero failures. The source
+manifest now pins this test-only follow-up; the original full-suite logs above
+remain evidence for the initial implementation. CI confirmation of the follow-up
+is tracked separately from those local results.
+
 ## Release limits
 
 No production flag, credential, Fly source upload, registry image or deployment

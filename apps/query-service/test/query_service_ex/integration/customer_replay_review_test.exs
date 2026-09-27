@@ -85,15 +85,16 @@ defmodule QueryServiceEx.Integration.CustomerReplayReviewTest do
 
       body = %{"connection_id" => grant.id, "input" => decision(pending, now)}
       token = R.session()
+      session = HTTP.bearer(token)
 
       for headers <- [
-            HTTP.bearer(token),
+            session,
             HTTP.bearer(grant.token),
-            HTTP.bearer(token) ++ [{"x-allsource-product-action", R.proof(token, "reject", body)}],
-            HTTP.bearer(token) ++ [{"x-allsource-product-action", R.proof(token, "approve", %{})}],
-            HTTP.bearer(token) ++
+            session ++ [{"x-allsource-product-action", R.proof(token, "reject", body)}],
+            session ++ [{"x-allsource-product-action", R.proof(token, "approve", %{})}],
+            session ++
               [{"x-allsource-product-action", R.proof("other-session", "approve", body)}],
-            HTTP.bearer(token) ++
+            session ++
               [{"x-allsource-product-action", R.proof(token, "approve", body, %{"exp" => now})}]
           ] do
         assert {403, _, _} = HTTP.http(context, :post, "replay/approve", body, headers)
