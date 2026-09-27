@@ -1,5 +1,6 @@
 defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
   use ExUnit.Case, async: false
+  alias QueryServiceEx.Domain.AgentRun.AppendCommand
   alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Infrastructure.Adapters.AgentRunStore
   alias QueryServiceEx.TestSupport.AgentRunFixture, as: F
@@ -10,6 +11,15 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
 
     def call(conn, opts) do
       conn = fetch_query_params(conn)
+
+      conn =
+        if conn.method == "POST" do
+          {:ok, body, conn} = read_body(conn)
+          send(opts[:owner], {:source_append, conn.request_path, Jason.decode!(body)})
+          conn
+        else
+          conn
+        end
 
       send(
         opts[:owner],
@@ -76,6 +86,75 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
     end
 
     refute_receive {:source_read, _, _, _}
+  end
+
+  test "conditional append uses one bounded fixed endpoint and exact metadata allowlist" do
+    ack = %{"event_id" => F.uuid(1001), "version" => 1, "timestamp" => "2026-09-27T09:00:00Z"}
+    fixture(200, Jason.encode!(ack))
+    request = append_request()
+    assert {:ok, ^ack} = AgentRunStore.append(request)
+    assert_receive {:source_append, "/api/v1/events", ^request}
+    assert_receive {:source_read, "POST", %{}, ["Bearer synthetic-only"]}
+    refute_receive {:source_append, _, _}
+  end
+
+  test "failed append has no automatic retry and does not echo response contents" do
+    fixture(503, "SYNTHETIC PRIVATE")
+    assert {:error, :append_uncertain} = AgentRunStore.append(append_request())
+    assert_receive {:source_append, _, _}
+    refute_receive {:source_append, _, _}
+  end
+
+  test "append acknowledgement is bounded before decoding" do
+    fixture(200, String.duplicate("x", 4_097))
+    assert {:error, :append_uncertain} = AgentRunStore.append(append_request())
+    assert_receive {:source_append, _, _}
+    refute_receive {:source_append, _, _}
+  end
+
+  test "conflict is distinct from uncertain append without exposing upstream error text" do
+    fixture(409, "SYNTHETIC PRIVATE")
+    assert {:error, :version_conflict} = AgentRunStore.append(append_request())
+    assert_receive {:source_append, _, _}
+    refute_receive {:source_append, _, _}
+  end
+
+  test "wrong acknowledged version cannot become success" do
+    fixture(
+      200,
+      Jason.encode!(%{event_id: F.uuid(1001), version: 2, timestamp: "2026-09-27T09:00:00Z"})
+    )
+
+    assert {:error, :append_uncertain} = AgentRunStore.append(append_request())
+  end
+
+  test "append refuses forged targets and extra metadata before network access" do
+    fixture(200, "{}")
+    request = append_request()
+
+    for invalid <- [
+          Map.put(request, "entity_id", "different-run"),
+          Map.put(request, "tenant_id", "?tenant=other"),
+          Map.put(request, "expected_version", nil),
+          put_in(request["metadata"]["raw_prompt"], "SYNTHETIC PRIVATE"),
+          put_in(request["payload"]["raw_prompt"], "SYNTHETIC PRIVATE")
+        ] do
+      assert {:error, :append_uncertain} = AgentRunStore.append(invalid)
+    end
+
+    refute_receive {:source_append, _, _}
+  end
+
+  defp append_request do
+    {:ok, command} =
+      AppendCommand.new(F.tenant(), F.uuid(1), %{
+        "operation_id" => F.uuid(900),
+        "expected_version" => 0,
+        "event" => F.payload("run.started", F.uuid(1), nil)
+      })
+
+    {:append, request} = AppendCommand.prepare(command, [])
+    request
   end
 
   defp fixture(status, body) do

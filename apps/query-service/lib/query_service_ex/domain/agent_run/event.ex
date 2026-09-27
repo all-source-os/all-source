@@ -15,6 +15,11 @@ defmodule QueryServiceEx.Domain.AgentRun.Event do
   def keys, do: @keys
   def kinds, do: @run_kinds ++ @change_kinds ++ @attempt_kinds
 
+  def tenant?(value) when is_binary(value) and byte_size(value) in 1..128,
+    do: Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, value)
+
+  def tenant?(_), do: false
+
   def entity(tenant, run_id) do
     hash = :sha256 |> :crypto.hash(tenant) |> Base.encode16(case: :lower)
     "agent-run-v1-" <> hash <> "-" <> run_id

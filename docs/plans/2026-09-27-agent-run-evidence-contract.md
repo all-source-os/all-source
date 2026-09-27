@@ -1,4 +1,4 @@
-# Agent-run evidence: initial read implementation
+# Agent-run evidence: internal capture and read implementation
 
 Owner: existing Chronis epic `t-e3d99f`. This is the shared run substrate required
 by the customer-review contract, not another comparison feature. It is internal
@@ -101,9 +101,53 @@ No second datastore, mutable proposal store or model call is added. Core remains
 durable source of truth. No customer MCP consent is expanded: current
 `review-metadata-v1` still permits eligibility and validation only.
 
+## Typed capture and retry recovery
+
+`AgentRunRecorder.record/3` takes an authoritative tenant, run ID and exactly
+`operation_id`, `expected_version`, `event`. The operation is a lower-case UUID;
+expected version is an integer from 0 to 999; event is the closed payload above,
+bound to the requested run. Unknown fields, forged binding and invalid lifecycle
+transitions fail before the write. The caller must separately establish current
+write authority, quotas and disclosure consent. This internal service adds no
+permission to the customer-review connection or public generic ingestion API.
+
+The recorder reads and validates the complete retained history, then performs
+at most one conditional Core append. Core supplies the actual event ID, timestamp
+and version. The recorder confirms all three against the stored event before
+returning `recorded`. A hashed tenant/run/operation tuple is stored in envelope
+metadata; raw operation IDs and arbitrary metadata are excluded. The same
+operation with the exact payload and predecessor version returns the original
+acknowledgement as `already_recorded`. Changed content or version under that
+operation returns `operation_conflict`. Concurrent distinct operations cannot
+both claim the same version. There is no process-local idempotency registry or
+dependency on Core's separate expiring generic deduplication registry.
+
+Transport failures, timeouts, missing post-write evidence and acknowledgement
+mismatches return `append_uncertain`. There is no automatic write retry. A 409
+triggers one bounded read to distinguish an already-recorded operation from a
+stale predecessor; ambiguous evidence remains unknown. Each HTTP operation has
+the existing six-second deadline: at most two reads and one write per call,
+with 2 MiB per read and 4 KiB for the acknowledgement. The typed write accepts only
+the fixed event endpoint and allowlisted request fields.
+
+Neither `recorded` nor `already_recorded` is an execution or human approval
+receipt. Both report `execution: none` and `action_authority: not_established`.
+A recovered `attempt.started` may describe an action that never began or one
+that completed without a recorded result; it remains unresolved. Future SDK
+wrappers must never execute an external action based on a recovered start.
+They need their own acknowledged-before-action flow and source reconciliation.
+
+Idempotency is limited to a complete retained run. Partial history is rejected;
+once all history is removed, this reader cannot distinguish an unused run ID
+from an expired one. Do not reuse run IDs, claim indefinite deduplication, or
+enable an SDK execution wrapper until its retention/reuse guard is verified.
+Recorded metadata and hashes are claims, not attestation against a generic
+writer authorized to write that same tenant. Synthetic capture and restart
+verification is [recorded separately](../evidence/2026-09-27-agent-run-capture/README.md).
+
 ## Remaining work in the existing epic
 
-Authenticated REST/SDK read/write boundaries, typed append/idempotency and
+Authenticated REST/SDK read/write boundaries, retention/reuse guards and
 write-before-execute wrappers; language parity; current per-tenant entitlement
 and query metering; normal product UI; actual source handles and their consent;
 review persistence and product human gate; complete native/web host journeys;

@@ -8,6 +8,37 @@ defmodule QueryServiceEx.Domain.AgentRun.Timeline do
 
   def limit, do: @limit
 
+  @doc "Check a next payload against an already validated timeline, without recording it."
+  def validate_next(nil, %{"kind" => "run.started", "causation_id" => nil} = payload) do
+    case Event.validate(payload) do
+      {:ok, _} -> :ok
+      _ -> {:error, :invalid_run_event}
+    end
+  end
+
+  def validate_next(nil, _), do: {:error, :invalid_transition}
+
+  def validate_next(run, payload) do
+    with {:ok, _} <- Event.validate(payload),
+         true <- payload["run_id"] == run.run_id,
+         true <- payload["causation_id"] == List.last(run.events)["id"] do
+      state = %{
+        changes: Map.new(run.changes, &{&1.id, &1}),
+        attempts: Map.new(run.attempts, &{&1.id, &1}),
+        completed: run.completed,
+        capture_gap: "capture_gap" in run.unknowns
+      }
+
+      case step(Map.put(payload, "version", run.revision + 1), {:ok, state}) do
+        {:cont, {:ok, _}} -> :ok
+        {:halt, error} -> error
+      end
+    else
+      false -> {:error, :stale_revision}
+      error -> error
+    end
+  end
+
   def build(tenant, run_id, events) when is_list(events) and length(events) <= @limit do
     with true <- is_binary(tenant) and Event.uuid?(run_id),
          {:ok, records} <- decode(events, tenant, run_id) do
