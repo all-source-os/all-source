@@ -25,8 +25,6 @@ defmodule QueryServiceExWeb.ProjectionControllerTest do
   defmodule StubCore do
     def start, do: Agent.start_link(fn -> %{} end, name: __MODULE__)
 
-    def reset, do: Agent.update(__MODULE__, fn _ -> %{} end)
-
     def get_tenant(tenant_id) do
       meta = Agent.get(__MODULE__, &Map.get(&1, tenant_id, %{}))
       {:ok, %{"id" => tenant_id, "metadata" => meta}}
@@ -60,10 +58,7 @@ defmodule QueryServiceExWeb.ProjectionControllerTest do
       {:ok, _} = TenantProjections.start_link([])
     end
 
-    case StubCore.start() do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> StubCore.reset()
-    end
+    start_supervised!(%{id: StubCore, start: {StubCore, :start, []}})
 
     Application.put_env(:query_service_ex, :projections_core_client, StubCore)
 

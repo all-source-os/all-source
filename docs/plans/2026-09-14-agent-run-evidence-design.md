@@ -1,7 +1,7 @@
 # Agent-run evidence and replay design
 
 - Date: 2026-09-14
-- Status: scoped design for PRD; implementation not started
+- Status: initial internal read implementation verified on 27 September; public API, SDK/MCP, UI and release remain open. See [current contract](2026-09-27-agent-run-evidence-contract.md).
 - Input: [feedback report](../research/2026-09-14-agent-workflow-feedback-report.md)
 
 ## Decision

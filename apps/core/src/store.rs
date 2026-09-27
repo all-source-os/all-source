@@ -579,9 +579,12 @@ impl EventStore {
 
         // Validate event first (before any locking)
         self.validate_event(event)?;
+        // OCC must include durable history even when this tenant's cache is cold.
+        self.ensure_tenant_loaded(event.tenant_id_str())?;
 
         let entity_id = event.entity_id_str().to_string();
         let _durable = self.durability_gate.read();
+        let mut stored_event = event.clone();
 
         // Atomic version check + append: hold the DashMap entry lock
         // to prevent TOCTOU races between check and write.
@@ -595,18 +598,25 @@ impl EventStore {
                 return Err(crate::error::AllSourceError::VersionConflict { expected, current });
             }
 
-            // Write to WAL FIRST for durability (under version lock to keep atomicity)
+            let next = current.checked_add(1).ok_or_else(|| {
+                crate::error::AllSourceError::InvalidInput("Entity version exhausted".into())
+            })?;
+            stored_event.version = i64::try_from(next).map_err(|_| {
+                crate::error::AllSourceError::InvalidInput("Entity version exhausted".into())
+            })?;
+
+            // Persist the same version that the acknowledgement returns.
             if let Some(ref wal) = self.wal {
-                wal.append(event.clone())?;
+                wal.append(stored_event.clone())?;
             }
 
-            *version_entry += 1;
-            *version_entry
+            *version_entry = next;
+            next
         };
 
         // From here on, the event is durable (WAL) and version is bumped.
         // Continue with indexing, projections, storage, and broadcast.
-        self.ingest_post_wal(event)?;
+        self.ingest_post_wal(&stored_event)?;
 
         Ok(new_version)
     }
