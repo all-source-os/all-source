@@ -33,7 +33,9 @@
 # this every `fly deploy` uploads all of it.
 .claude/
 .chronis/
-proofshot-artifacts/
+.agents/
+**/.local/
+**/proofshot-artifacts/
 
 # Documentation (but keep content for blogs and changelog)
 *.md

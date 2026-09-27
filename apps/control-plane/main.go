@@ -752,6 +752,11 @@ func (cp *ControlPlane) setupRoutes() {
 	admin.GET("/design-partners/applications", cp.DesignPartnerApplicationsHandler)
 	admin.PUT("/design-partners/applications/:id/status", cp.DesignPartnerStatusHandler)
 
+	// Operator-only commercial exploration; never a public/customer event stream.
+	admin.GET("/partnerships", cp.PartnershipsListHandler)
+	admin.PUT("/partnerships", cp.PartnershipsSaveHandler)
+	admin.GET("/partnerships/:id/history", cp.PartnershipsHistoryHandler)
+
 	// Recovery — diagnose (Safe, read-only) + guarded/destructive actions.
 	// reactivate/suspend/edit_quotas are NOT re-implemented — they keep using the
 	// existing /tenants/:id/{suspend,unsuspend,quotas} routes above. Only the new

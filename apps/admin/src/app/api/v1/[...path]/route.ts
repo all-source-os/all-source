@@ -4,7 +4,7 @@ import { getControlPlaneUrl } from "@/lib/auth";
 /**
  * Backend-For-Frontend data proxy for Control Plane admin requests.
  *
- * The admin app is served from admin.all-source.xyz (Vercel) while the Control
+ * The admin app is served from admin.all-source.xyz while the Control
  * Plane lives at a different origin (api.all-source.xyz). The CP authenticates
  * with `Authorization: Bearer <jwt>` ONLY — it ignores cookies. The admin JWT
  * is stored in an httpOnly `admin_token` cookie that browser JS cannot read and
@@ -24,10 +24,7 @@ import { getControlPlaneUrl } from "@/lib/auth";
  * NOT forwarded to the CP (auth is via Bearer, not cookie).
  */
 
-async function proxyToControlPlane(
-  request: NextRequest,
-  path: string
-): Promise<NextResponse> {
+async function proxyToControlPlane(request: NextRequest, path: string): Promise<NextResponse> {
   const url = new URL(`/api/v1/${path}`, getControlPlaneUrl());
 
   request.nextUrl.searchParams.forEach((value, key) => {
@@ -46,6 +43,7 @@ async function proxyToControlPlane(
   const fetchOptions: RequestInit = {
     method: request.method,
     headers,
+    cache: "no-store",
   };
 
   if (["POST", "PUT", "PATCH"].includes(request.method)) {
@@ -59,15 +57,12 @@ async function proxyToControlPlane(
     return new NextResponse(body, {
       status: response.status,
       headers: {
-        "content-type":
-          response.headers.get("content-type") || "application/json",
+        "cache-control": "private, no-store",
+        "content-type": response.headers.get("content-type") || "application/json",
       },
     });
   } catch {
-    return NextResponse.json(
-      { error: "Failed to reach Control Plane" },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "Failed to reach Control Plane" }, { status: 502 });
   }
 }
 

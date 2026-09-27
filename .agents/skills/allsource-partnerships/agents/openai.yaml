@@ -1,0 +1,4 @@
+interface:
+  display_name: "AllSource Partnerships"
+  short_description: "Research partner routes and send approved outreach"
+  default_prompt: "Use $allsource-partnerships to review the private Partnerships register, refresh evidence, and prepare relevant commercial enquiries for approval."

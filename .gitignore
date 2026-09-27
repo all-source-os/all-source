@@ -90,6 +90,9 @@ tasks
 # Prime MCP local data dir (WAL, Parquet, projection checkpoints)
 .prime/
 
+# Private operator imports and correspondence; never bundled into admin assets.
+.local/
+
 # AI Tools / IDE Assistants
 .agent/
 .agents/

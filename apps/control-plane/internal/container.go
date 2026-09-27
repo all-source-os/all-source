@@ -166,6 +166,7 @@ type Container struct {
 	ClaimTrialAgentUC     *usecases.ClaimTrialAgentUseCase
 	AgentPaymentHistoryUC *usecases.GetAgentPaymentHistoryUseCase
 	DesignPartnerUC       *usecases.DesignPartnerUseCase
+	PartnershipsUC        *usecases.PartnershipsUseCase
 
 	// Use Cases — Webhooks
 	ProcessLSWebhookUC     *usecases.ProcessLemonSqueezyWebhookUseCase
@@ -735,6 +736,7 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 		ClaimTrialAgentUC:            claimTrialAgentUC,
 		AgentPaymentHistoryUC:        agentPaymentHistoryUC,
 		DesignPartnerUC:              designPartnerUC,
+		PartnershipsUC:               usecases.NewPartnershipsUseCase(cfg.CoreClient),
 		AlertHandler:                 alertHandler,
 		SLOHandler:                   sloHandler,
 		AdminTenantHandler:           adminTenantHandler,
