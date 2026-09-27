@@ -14,6 +14,8 @@ pub mod prime_api;
 mod retained_query;
 #[cfg(feature = "multi-tenant")]
 pub mod tenant_api;
+#[cfg(feature = "multi-tenant")]
+pub mod tenant_query_usage_api;
 pub mod websocket;
 
 // Public API re-exports

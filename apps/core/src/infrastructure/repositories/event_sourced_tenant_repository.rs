@@ -16,6 +16,8 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+mod query_usage;
+
 /// Event-sourced TenantRepository backed by SystemMetadataStore.
 ///
 /// Tenant lifecycle events are stored in the `_system:tenant:*` stream and
@@ -53,6 +55,7 @@ pub struct EventSourcedTenantRepository {
     /// counter after N concurrent increments equals the exact sum. See
     /// `increment_usage`.
     usage_locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
+    query_usage: DashMap<String, query_usage::QueryUsageState>,
 }
 
 impl EventSourcedTenantRepository {
@@ -66,6 +69,7 @@ impl EventSourcedTenantRepository {
             system_store,
             cache,
             usage_locks: Arc::new(DashMap::new()),
+            query_usage: DashMap::new(),
         };
         repo.rebuild_cache();
         repo
@@ -161,6 +165,11 @@ impl EventSourcedTenantRepository {
                         tenant.update_metadata(metadata.clone());
                     }
                 }
+                if let Some(receipt) = payload.get(query_usage::ADMITTED) {
+                    self.apply_query_usage(query_usage::ADMITTED, tenant_id_str, receipt);
+                } else if let Some(receipt) = payload.get(query_usage::RESET) {
+                    self.apply_query_usage(query_usage::RESET, tenant_id_str, receipt);
+                }
             }
             t if t == tenant_events::SUSPENDED => {
                 if let Some(mut entry) = self.cache.get_mut(tenant_id_str) {
@@ -174,6 +183,7 @@ impl EventSourcedTenantRepository {
             }
             t if t == tenant_events::DELETED => {
                 self.cache.remove(tenant_id_str);
+                self.query_usage.remove(tenant_id_str);
             }
             t if t == tenant_events::QUOTA_UPDATED => {
                 if let Some(mut entry) = self.cache.get_mut(tenant_id_str)
@@ -255,6 +265,10 @@ impl TenantRepository for EventSourcedTenantRepository {
 
     async fn save(&self, tenant: &Tenant) -> Result<()> {
         let id_str = tenant.id().as_str().to_string();
+        let lock = self.usage_lock_for(&id_str);
+        let _guard = lock.lock().await;
+        let mut metadata = tenant.metadata().clone();
+        self.preserve_query_meter(&id_str, &mut metadata)?;
 
         if self.cache.contains_key(&id_str) {
             // Update existing
@@ -262,14 +276,16 @@ impl TenantRepository for EventSourcedTenantRepository {
                 "name": tenant.name(),
                 "description": tenant.description(),
                 "is_demo": tenant.is_demo(),
-                "metadata": tenant.metadata(),
+                "metadata": metadata,
             });
             self.emit_event(tenant_events::UPDATED, &id_str, payload)?;
 
             // Also update quotas if changed
-            if let Some(cached) = self.cache.get(&id_str)
-                && cached.quotas() != tenant.quotas()
-            {
+            let quotas_changed = self
+                .cache
+                .get(&id_str)
+                .is_some_and(|cached| cached.quotas() != tenant.quotas());
+            if quotas_changed {
                 let quota_payload = serde_json::to_value(tenant.quotas()).unwrap_or_default();
                 self.emit_event(tenant_events::QUOTA_UPDATED, &id_str, quota_payload)?;
             }
@@ -338,6 +354,8 @@ impl TenantRepository for EventSourcedTenantRepository {
 
     async fn delete(&self, id: &TenantId) -> Result<bool> {
         let id_str = id.as_str();
+        let lock = self.usage_lock_for(id_str);
+        let _guard = lock.lock().await;
         if !self.cache.contains_key(id_str) {
             return Ok(false);
         }
@@ -347,6 +365,8 @@ impl TenantRepository for EventSourcedTenantRepository {
 
     async fn update_quotas(&self, id: &TenantId, quotas: TenantQuotas) -> Result<bool> {
         let id_str = id.as_str();
+        let lock = self.usage_lock_for(id_str);
+        let _guard = lock.lock().await;
         if !self.cache.contains_key(id_str) {
             return Ok(false);
         }
@@ -365,6 +385,8 @@ impl TenantRepository for EventSourcedTenantRepository {
         mode: SchemaEnforcement,
     ) -> Result<bool> {
         let id_str = id.as_str();
+        let lock = self.usage_lock_for(id_str);
+        let _guard = lock.lock().await;
         if !self.cache.contains_key(id_str) {
             return Ok(false);
         }
@@ -378,6 +400,8 @@ impl TenantRepository for EventSourcedTenantRepository {
 
     async fn update_usage(&self, id: &TenantId, usage: TenantUsage) -> Result<bool> {
         let id_str = id.as_str();
+        let lock = self.usage_lock_for(id_str);
+        let _guard = lock.lock().await;
         if !self.cache.contains_key(id_str) {
             return Ok(false);
         }
@@ -520,6 +544,7 @@ impl TenantRepository for EventSourcedTenantRepository {
         };
 
         deep_merge_metadata(&mut metadata, partial);
+        self.preserve_query_meter(id_str, &mut metadata)?;
 
         // Mirror save()/increment_usage()'s UPDATED payload so replay keeps
         // name/description/is_demo alongside the merged metadata.
@@ -548,6 +573,8 @@ impl TenantRepository for EventSourcedTenantRepository {
 
     async fn activate(&self, id: &TenantId) -> Result<bool> {
         let id_str = id.as_str();
+        let lock = self.usage_lock_for(id_str);
+        let _guard = lock.lock().await;
         if !self.cache.contains_key(id_str) {
             return Ok(false);
         }
@@ -557,11 +584,36 @@ impl TenantRepository for EventSourcedTenantRepository {
 
     async fn deactivate(&self, id: &TenantId) -> Result<bool> {
         let id_str = id.as_str();
+        let lock = self.usage_lock_for(id_str);
+        let _guard = lock.lock().await;
         if !self.cache.contains_key(id_str) {
             return Ok(false);
         }
         self.emit_event(tenant_events::SUSPENDED, id_str, json!({}))?;
         Ok(true)
+    }
+
+    async fn admit_query_usage(
+        &self,
+        id: &TenantId,
+        request: crate::domain::entities::query_usage::QueryUsageRequest,
+    ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageDecision>> {
+        self.admit_query(id, request).await
+    }
+
+    async fn reset_query_usage(
+        &self,
+        id: &TenantId,
+        request: crate::domain::entities::query_usage::QueryUsageReset,
+    ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageResetDecision>> {
+        self.reset_queries(id, request).await
+    }
+
+    async fn get_query_usage(
+        &self,
+        id: &TenantId,
+    ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageSnapshot>> {
+        self.query_usage_snapshot(id).await
     }
 }
 

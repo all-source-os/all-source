@@ -216,6 +216,20 @@ pub async fn serve_v1(
             post(increment_usage_handler),
         )
         .route(
+            "/api/v1/tenants/{id}/usage/queries/admit",
+            post(super::tenant_query_usage_api::admit_query_usage_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(2_048)),
+        )
+        .route(
+            "/api/v1/tenants/{id}/usage/queries",
+            get(super::tenant_query_usage_api::query_usage_handler),
+        )
+        .route(
+            "/api/v1/tenants/{id}/usage/queries/reset",
+            post(super::tenant_query_usage_api::reset_query_usage_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(2_048)),
+        )
+        .route(
             "/api/v1/tenants/{id}/schema-enforcement",
             put(update_schema_enforcement_handler),
         )

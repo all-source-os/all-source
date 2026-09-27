@@ -4,6 +4,7 @@ pub mod event;
 pub mod event_store_fork;
 pub mod event_stream;
 pub mod projection;
+pub mod query_usage;
 pub mod schema;
 pub mod tenant;
 

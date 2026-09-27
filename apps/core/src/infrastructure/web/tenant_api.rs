@@ -69,8 +69,9 @@ pub struct UpdateTenantRequest {
     pub is_demo: Option<bool>,
     pub quotas: Option<TenantQuotas>,
     /// Operational metadata (subscription tier, quotas, billing). Replaces the
-    /// tenant's metadata when present — callers send the full merged map. This
-    /// is how the Control Plane persists subscription/entitlement state.
+    /// tenant's metadata when present — callers send the full merged map.
+    /// Once durable query admission owns the meter, its counter is preserved.
+    /// The explicit reset API advances its separate query-period generation.
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -262,10 +263,12 @@ pub async fn get_tenant_handler(
 /// Deep-merges the JSON object body into `metadata`, preserving every sibling
 /// key, and persists atomically against concurrent quota bumps. The Query
 /// Service uses this to store a tenant's opaque enabled-projection set
-/// without clobbering `metadata.quotas` — Core does not interpret the merged
-/// keys (see `docs/proposals/PER_TENANT_PROJECTIONS.md`). Unlike the admin-only
-/// `PUT /tenants/:id` (which replaces the whole blob), this is scoped: a caller
-/// may patch only its own tenant; admins may patch any.
+/// without clobbering `metadata.quotas`. Non-admin callers cannot patch billing
+/// objects, and a managed query counter is preserved even for admin patches.
+/// Other merged keys remain opaque (see `docs/proposals/PER_TENANT_PROJECTIONS.md`).
+/// The current router requires admin permission for all tenant paths. This
+/// handler additionally enforces tenant scope and billing ownership if reused
+/// behind a tenant-facing transport; it does not grant that transport permission.
 pub async fn merge_tenant_metadata_handler(
     State(state): State<AppState>,
     Authenticated(auth_ctx): Authenticated,
@@ -288,6 +291,21 @@ pub async fn merge_tenant_metadata_handler(
         return Err((
             StatusCode::BAD_REQUEST,
             "metadata patch must be a JSON object".to_string(),
+        ));
+    }
+
+    // Billing policy and canonical meters are service-owned even when the
+    // caller owns this tenant. Opaque product metadata remains tenant-scoped.
+    if ["quotas", "subscription", "overage"]
+        .iter()
+        .any(|key| partial.get(*key).is_some())
+        && auth_ctx
+            .require_permission(crate::infrastructure::security::auth::Permission::Admin)
+            .is_err()
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Billing metadata requires administrator authority".into(),
         ));
     }
 
@@ -587,7 +605,15 @@ pub async fn update_tenant_handler(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Json(TenantResponse::from_domain(&tenant)))
+    // A managed meter may have preserved a newer counter than the caller sent.
+    // Return the persisted representation, not that stale request snapshot.
+    let persisted = state
+        .tenant_repo
+        .find_by_id(&tid)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "Tenant not found".to_string()))?;
+    Ok(Json(TenantResponse::from_domain(&persisted)))
 }
 
 /// Delete tenant (admin only)

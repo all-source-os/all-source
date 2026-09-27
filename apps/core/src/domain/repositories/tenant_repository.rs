@@ -88,6 +88,8 @@ pub trait TenantRepository: Send + Sync {
     ///
     /// If the tenant doesn't exist, it will be created.
     /// If it exists, it will be updated.
+    /// Event-sourced backends preserve an already managed query counter;
+    /// explicit query resets use `reset_query_usage`, not a stale snapshot.
     ///
     /// # Arguments
     /// * `tenant` - The tenant to save
@@ -257,6 +259,39 @@ pub trait TenantRepository: Send + Sync {
         count: u64,
     ) -> Result<Option<u64>>;
 
+    /// Durably admit a bounded query operation against the canonical quota.
+    /// Backends without atomic counter/receipt persistence must refuse.
+    async fn admit_query_usage(
+        &self,
+        _id: &TenantId,
+        _request: crate::domain::entities::query_usage::QueryUsageRequest,
+    ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageDecision>> {
+        Err(crate::error::AllSourceError::InternalError(
+            "Durable query admission is unavailable".into(),
+        ))
+    }
+
+    async fn get_query_usage(
+        &self,
+        _id: &TenantId,
+    ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageSnapshot>> {
+        Err(crate::error::AllSourceError::InternalError(
+            "Durable query admission is unavailable".into(),
+        ))
+    }
+
+    /// Explicitly advance a managed query meter's period generation. Replaying
+    /// the same transition cannot erase charges made after its first commit.
+    async fn reset_query_usage(
+        &self,
+        _id: &TenantId,
+        _request: crate::domain::entities::query_usage::QueryUsageReset,
+    ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageResetDecision>> {
+        Err(crate::error::AllSourceError::InternalError(
+            "Durable query reset is unavailable".into(),
+        ))
+    }
+
     /// Activate a tenant
     ///
     /// # Arguments
@@ -323,6 +358,8 @@ pub trait TenantRepository: Send + Sync {
     /// (and any other key) untouched. Core does NOT interpret these keys — it is
     /// the generic storage path the Query Service uses to persist a tenant's
     /// enabled projection set (see `docs/proposals/PER_TENANT_PROJECTIONS.md`).
+    /// An event-sourced backend preserves the canonical query counter after
+    /// durable admission owns it; generic metadata cannot reset that meter.
     ///
     /// Returns the merged metadata, or `None` if the tenant does not exist.
     ///

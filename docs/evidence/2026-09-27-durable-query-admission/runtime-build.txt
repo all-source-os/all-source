@@ -1,0 +1,2 @@
+   Compiling allsource-core v0.25.1 (/Users/decebaldobrica/Projects/founder-mode/all-source/apps/core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 27.45s

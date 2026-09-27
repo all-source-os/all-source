@@ -1,0 +1,4 @@
+    Checking allsource-core v0.25.1 (/Users/decebaldobrica/Projects/founder-mode/all-source/apps/core)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.58s
+warning: the following packages contain code that will be rejected by a future version of Rust: nix v0.31.2, proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
