@@ -1,0 +1,13 @@
+diff --git a/apps/core/src/infrastructure/persistence/archive_budget.rs b/apps/core/src/infrastructure/persistence/archive_budget.rs
+index 639a19c5..e8880ec7 100644
+--- a/apps/core/src/infrastructure/persistence/archive_budget.rs
++++ b/apps/core/src/infrastructure/persistence/archive_budget.rs
+@@ -31,7 +31,7 @@ impl Default for ArchiveReadLimits {
+             max_file_bytes: 32 * 1024 * 1024,
+             max_compressed_bytes: 256 * 1024 * 1024,
+             max_uncompressed_bytes: 256 * 1024 * 1024,
+-            max_rows: 250_000,
++            max_rows: 750_000,
+         }
+     }
+ }

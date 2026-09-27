@@ -21,9 +21,17 @@ use std::{
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "explicit filesystem capacity probe: creates 16,100 synthetic Parquet files"]
 async fn bounded_http_warmup_accepts_existing_archive_shape() {
+    compatibility_probe(16_100, 90_064).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "known row-capacity regression t-40896f: creates 566,486 synthetic events"]
+async fn bounded_http_warmup_accepts_existing_dense_archive_shape() {
+    compatibility_probe(112, 566_486).await;
+}
+
+async fn compatibility_probe(files: usize, events_count: usize) {
     const TENANT: &str = "synthetic-cold-compatibility";
-    const FILES: usize = 16_100;
-    const EVENTS: usize = 90_064;
     let directory = tempfile::TempDir::new().unwrap();
     let started = Instant::now();
     let storage = ParquetStorage::new(directory.path()).unwrap();
@@ -42,17 +50,17 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
     // Generate the real schema once, then split its unique records directly.
     // This read-capacity fixture avoids 16,100 production fsync pairs; it is
     // not a durability/crash test and never changes the production writer.
-    let events: Vec<_> = (0..EVENTS).map(make_event).collect();
+    let events: Vec<_> = (0..events_count).map(make_event).collect();
     let seed = storage
         .write_atomic_parquet(TENANT, "events-seed", &events)
         .unwrap();
     let mut reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&seed).unwrap())
         .unwrap()
-        .with_batch_size(EVENTS)
+        .with_batch_size(events_count)
         .build()
         .unwrap();
     let batch = reader.next().unwrap().unwrap();
-    assert_eq!(batch.num_rows(), EVENTS);
+    assert_eq!(batch.num_rows(), events_count);
     assert!(reader.next().is_none());
     drop(reader);
     drop(events);
@@ -60,8 +68,8 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
         .set_compression(ParquetStorageConfig::default().compression)
         .build();
     let mut index = 0;
-    for file in 0..FILES {
-        let count = 5 + usize::from(file < EVENTS - FILES * 5);
+    for file in 0..files {
+        let count = events_count / files + usize::from(file < events_count % files);
         let path = seed
             .parent()
             .unwrap()
@@ -76,14 +84,15 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
         writer.close().unwrap();
         index += count;
     }
+    drop(batch);
     std::fs::remove_file(seed).unwrap();
-    assert_eq!(index, EVENTS);
+    assert_eq!(index, events_count);
     assert_eq!(
         storage.list_parquet_files_for_tenant(TENANT).unwrap().len(),
-        FILES
+        files
     );
     eprintln!(
-        "synthetic seed: files={FILES} events={EVENTS} elapsed={:?}",
+        "synthetic seed: files={files} events={events_count} elapsed={:?}",
         started.elapsed()
     );
     drop(storage);
@@ -118,12 +127,18 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
         store.total_events()
     );
     if let Err(error) = result {
-        assert!(error.to_string().contains("elapsed time"));
-        assert_eq!(store.total_events(), 0);
+        assert!(
+            error.to_string().contains("elapsed time")
+                || error.to_string().contains("budget exceeded: rows")
+        );
+        // Time can expire during cache application after full decode. A
+        // resident prefix remains unverified; HTTP must finish hydration and
+        // deduplicate it before the later command can use this history.
+        assert!(!store.is_tenant_loaded(TENANT));
     } else {
         // A faster machine may finish inside four seconds. Start HTTP cold
         // regardless, without appending anything in the diagnostic control.
-        assert_eq!(store.total_events(), EVENTS);
+        assert_eq!(store.total_events(), events_count);
         store.evict_tenant(TENANT);
         assert_eq!(store.total_events(), 0);
     }
@@ -167,7 +182,7 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
         .await
         .unwrap();
         eprintln!("verified HTTP warmup: elapsed={:?}", started.elapsed());
-        assert_eq!(store.total_events(), EVENTS);
+        assert_eq!(store.total_events(), events_count);
         assert_eq!(store.get_entity_version("synthetic-entity-0"), 1);
         assert_eq!(
             client
@@ -183,7 +198,7 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
         assert_eq!(response.status(), 200, "{}", response.text().await.unwrap());
     }
     assert_eq!(store.get_entity_version("synthetic-entity-0"), 2);
-    assert_eq!(store.total_events(), EVENTS + 1);
+    assert_eq!(store.total_events(), events_count + 1);
     server.abort();
     assert!(server.await.unwrap_err().is_cancelled());
 }
