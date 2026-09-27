@@ -10,7 +10,7 @@ type Connection = {
   resource: string;
   expires_at: number;
   operations: string[];
-  status: "active" | "expired" | "revoked";
+  status: "pending" | "active" | "expired" | "revoked";
 };
 
 async function request<T>(operation: string, body: unknown): Promise<T> {
@@ -170,12 +170,14 @@ export function CustomerConnections() {
                   <h3 className="font-semibold">
                     {connection.client_id === "claude-code" ? "Claude Code" : "Claude"}
                   </h3>
-                  <span className="capitalize">{connection.status}</span>
+                  <span className="capitalize">
+                    {connection.status === "pending" ? "Awaiting connection" : connection.status}
+                  </span>
                 </div>
                 <p>Expires {new Date(connection.expires_at * 1000).toLocaleString()}</p>
                 <p className="break-all text-muted-foreground">{connection.resource}</p>
                 <p className="font-mono text-base">{connection.id}</p>
-                {connection.status === "active" && (
+                {(connection.status === "active" || connection.status === "pending") && (
                   <Button
                     variant="outline"
                     disabled={busy}

@@ -83,7 +83,8 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionGrant do
       (expires - created) in 1..86_400 and now >= created and now < expires
   end
 
-  defp valid_resource?(value) when is_binary(value) and byte_size(value) in 1..512 do
+  @doc false
+  def valid_resource?(value) when is_binary(value) and byte_size(value) in 1..512 do
     case URI.new(value) do
       {:ok, %URI{scheme: "https", host: host, userinfo: nil, query: nil, fragment: nil}}
       when is_binary(host) and byte_size(host) > 0 ->
@@ -94,5 +95,5 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionGrant do
     end
   end
 
-  defp valid_resource?(_), do: false
+  def valid_resource?(_), do: false
 end

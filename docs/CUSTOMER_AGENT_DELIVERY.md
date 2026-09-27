@@ -73,6 +73,13 @@ proof and release distribution remain required. Production issuance is not enabl
 
 ## Required acceptance
 
+[Remote authorization service evidence](evidence/2026-09-27-remote-customer-authorization/README.md)
+adds exact hosted-client/redirect/resource S256 checks, encrypted expiring codes,
+pending-grant denial and single-use Core activation with replay revocation. Actual
+Core crash/restart and existing compiled local MCP regressions passed. Public
+OAuth endpoints, browser consent and remote MCP HTTP transport are still unwired;
+this internal service does not complete the remote connection or authorize release.
+
 1. Normal customer request produces only a pending proposal and the correct product review/display.
 2. Agent credential, forged approved flag and chat assent cannot execute the gated action.
 3. Wrong tenant/user, stale revision, expired approval and replay are denied without duplicate effects.

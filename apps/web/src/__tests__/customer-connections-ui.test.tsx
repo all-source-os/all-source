@@ -76,4 +76,37 @@ describe("customer consent and connection settings", () => {
     await screen.findByRole("alert");
     expect(screen.queryByLabelText("Connection credential")).not.toBeInTheDocument();
   });
+  it("lets the owner revoke a hosted authorization before its code is redeemed", async () => {
+    const id = "b".repeat(32);
+    let revoked = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        if (url.endsWith("revoke")) {
+          expect(JSON.parse(init.body as string)).toEqual({ id });
+          revoked = true;
+          return Response.json({ data: { revoked: true } });
+        }
+        return Response.json({
+          data: {
+            connections: [
+              {
+                id,
+                client_id: "claude-ai",
+                resource: "https://api.example.test/mcp",
+                expires_at: 2_000_000_000,
+                status: revoked ? "revoked" : "pending",
+              },
+            ],
+          },
+        });
+      })
+    );
+    render(<CustomerConnections />);
+    await screen.findByText("Awaiting connection");
+    fireEvent.click(screen.getByRole("button", { name: "Revoke bbbbbbbb" }));
+    await screen.findByText("revoked");
+    expect(screen.queryByRole("button", { name: "Revoke bbbbbbbb" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Connection credential")).not.toBeInTheDocument();
+  });
 });

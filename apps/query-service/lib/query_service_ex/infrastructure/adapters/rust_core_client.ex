@@ -996,7 +996,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   @doc "Read an admin-only system config value from the leader, without caching or retry."
   @spec get_config_for_authorization(String.t()) :: {:ok, term()} | {:error, atom()}
   def get_config_for_authorization(key) do
-    if valid_authorization_config_key?(key) do
+    if valid_authorization_config_key?(key) or valid_remote_activation_key?(key) do
       fetch_config_for_authorization(key)
     else
       {:error, :invalid_key}
@@ -1045,6 +1045,11 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
 
   defp valid_authorization_config_key?(_), do: false
 
+  defp valid_remote_activation_key?(key) when is_binary(key) and byte_size(key) <= 128,
+    do: Regex.match?(~r/\Acustomer_agent_v2\.remote_redeemed\.[0-9a-f]{32}\z/, key)
+
+  defp valid_remote_activation_key?(_), do: false
+
   @doc "Read the bounded customer connection registry and its durable Core revision."
   def get_customer_connection_registry(tenant) do
     with {:ok, key} <- connection_registry_key(tenant) do
@@ -1071,30 +1076,48 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
          true <- is_map(value),
          {:ok, encoded} <- Jason.encode(value),
          true <- byte_size(encoded) <= 60_000 do
-      condition =
-        if is_nil(revision), do: %{kind: "absent"}, else: %{kind: "revision", revision: revision}
-
-      body = %{key: key, value: value, condition: condition, changed_by: "customer-agent-service"}
-
-      case Tesla.post(authorization_client(), "/api/v1/config/conditional/set", body) do
-        {:ok,
-         %Tesla.Env{status: 200, body: %{"key" => ^key, "saved" => true, "revision" => next}}} ->
-          if valid_config_revision?(next) and next != revision,
-            do: :ok,
-            else: {:error, :storage_unavailable}
-
-        {:ok,
-         %Tesla.Env{
-           status: 409,
-           body: %{"error" => "Concurrency error: Configuration precondition failed"}
-         }} ->
-          {:error, :conflict}
-
-        _ ->
-          {:error, :storage_unavailable}
-      end
+      conditional_authorization_write(key, value, revision)
     else
       _ -> {:error, :storage_unavailable}
+    end
+  end
+
+  @doc "Activate a remote grant once; an existing receipt can never be replaced here."
+  def activate_customer_remote_grant(id, hash, now) do
+    if is_binary(id) and Regex.match?(~r/\A[0-9a-f]{32}\z/, id) and
+         is_binary(hash) and Regex.match?(~r/\A[0-9a-f]{64}\z/, hash) and
+         is_integer(now) and now >= 0 do
+      conditional_authorization_write(
+        "customer_agent_v2.remote_redeemed." <> id,
+        %{"version" => 1, "token_hash" => hash, "redeemed_at" => now},
+        nil
+      )
+    else
+      {:error, :invalid_request}
+    end
+  end
+
+  defp conditional_authorization_write(key, value, revision) do
+    condition =
+      if is_nil(revision), do: %{kind: "absent"}, else: %{kind: "revision", revision: revision}
+
+    body = %{key: key, value: value, condition: condition, changed_by: "customer-agent-service"}
+
+    case Tesla.post(authorization_client(), "/api/v1/config/conditional/set", body) do
+      {:ok, %Tesla.Env{status: 200, body: %{"key" => ^key, "saved" => true, "revision" => next}}} ->
+        if valid_config_revision?(next) and next != revision,
+          do: :ok,
+          else: {:error, :storage_unavailable}
+
+      {:ok,
+       %Tesla.Env{
+         status: 409,
+         body: %{"error" => "Concurrency error: Configuration precondition failed"}
+       }} ->
+        {:error, :conflict}
+
+      _ ->
+        {:error, :storage_unavailable}
     end
   end
 

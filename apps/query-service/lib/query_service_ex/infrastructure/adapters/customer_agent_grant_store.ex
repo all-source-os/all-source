@@ -43,6 +43,43 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
 
   @spec verify_credential(term(), term(), term(), term()) :: {:ok, map()} | {:error, atom()}
   def verify_credential(token, binding, operation, now) do
+    with {:ok, record} <- verify_base(token, binding, operation, now),
+         {:ok, "active"} <- activation_state(record, now) do
+      {:ok, Map.take(record, @context_fields)}
+    else
+      {:error, :storage_unavailable} = error -> error
+      _ -> {:error, :unauthorized}
+    end
+  end
+
+  @doc "Consume a PKCE-validated remote authorization once. Replay revokes its credential."
+  @impl true
+  def activate_remote(token, binding, now) do
+    with true <- is_map(binding) and binding["client_id"] == "claude-ai",
+         {:ok, record} <- verify_base(token, binding, "read_context", now),
+         true <- now < record["created_at"] + 300 do
+      case RustCoreClient.activate_customer_remote_grant(record["id"], digest(token), now) do
+        :ok ->
+          :ok
+
+        {:error, :conflict} ->
+          case persist_marker(record["id"]) do
+            :ok -> {:error, :unauthorized}
+            error -> error
+          end
+
+        _ ->
+          {:error, :storage_unavailable}
+      end
+    else
+      {:error, :storage_unavailable} = error -> error
+      _ -> {:error, :unauthorized}
+    end
+  rescue
+    _ -> {:error, :storage_unavailable}
+  end
+
+  defp verify_base(token, binding, operation, now) do
     with true <- ConnectionGrant.valid_binding?(binding),
          {:ok, id} <- token_id(token),
          {:ok, record} <- fetch(binding["tenant_id"], id),
@@ -50,7 +87,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
          true <- ConnectionConsent.valid?(record) and is_nil(record["revoked_at"]),
          true <- ConnectionGrant.valid_for?(record, binding, operation, now),
          :ok <- not_revoked(id) do
-      {:ok, Map.take(record, @context_fields)}
+      {:ok, record}
     else
       {:error, :storage_unavailable} = error -> error
       _ -> {:error, :unauthorized}
@@ -176,12 +213,35 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore do
 
       true ->
         case not_revoked(record["id"]) do
-          :ok -> {:ok, "active"}
+          :ok -> activation_state(record, now)
           {:error, :unauthorized} -> {:ok, "revoked"}
           error -> error
         end
     end
   end
+
+  defp activation_state(%{"client_id" => "claude-code"}, _now), do: {:ok, "active"}
+
+  defp activation_state(%{"client_id" => "claude-ai"} = record, now) do
+    case RustCoreClient.get_config_for_authorization(
+           "customer_agent_v2.remote_redeemed." <> record["id"]
+         ) do
+      {:error, :not_found} ->
+        {:ok, "pending"}
+
+      {:ok, %{"version" => 1, "token_hash" => hash, "redeemed_at" => stamp} = receipt}
+      when map_size(receipt) == 3 and is_integer(stamp) ->
+        if hash == record["token_hash"] and stamp >= record["created_at"] and
+             stamp < record["created_at"] + 300 and stamp <= now,
+           do: {:ok, "active"},
+           else: {:error, :storage_unavailable}
+
+      _ ->
+        {:error, :storage_unavailable}
+    end
+  end
+
+  defp activation_state(_, _), do: {:error, :unauthorized}
 
   defp matches_secret?(%{"token_hash" => hash}, token),
     do: Plug.Crypto.secure_compare(hash, digest(token))

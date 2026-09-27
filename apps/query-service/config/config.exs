@@ -96,7 +96,8 @@ config :query_service_ex,
 # Configure Tesla HTTP client
 config :query_service_ex,
   customer_agent_access_store: QueryServiceEx.Infrastructure.Adapters.CustomerAgentAccessStore,
-  customer_connection_store: QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore
+  customer_connection_store: QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore,
+  customer_authorization_code: QueryServiceEx.Infrastructure.Adapters.CustomerAuthorizationCode
 
 config :tesla,
   disable_deprecated_builder_warning: true

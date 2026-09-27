@@ -4,4 +4,5 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionPort do
   @callback list(String.t(), String.t(), integer()) :: {:ok, list()} | {:error, atom()}
   @callback fetch(String.t(), String.t()) :: {:ok, map()} | {:error, atom()}
   @callback revoke(map(), String.t(), integer()) :: :ok | {:error, atom()}
+  @callback activate_remote(String.t(), map(), integer()) :: :ok | {:error, atom()}
 end

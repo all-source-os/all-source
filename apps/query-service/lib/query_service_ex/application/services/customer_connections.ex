@@ -78,14 +78,16 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
     end
   end
 
-  defp eligible(binding, now) do
+  @doc false
+  def eligible(binding, now) do
     with {:ok, tenant} <- access().tenant(binding["tenant_id"]),
          {:ok, members} <- access().members(binding["tenant_id"]) do
       Eligibility.check(tenant, members, binding, now)
     end
   end
 
-  defp binding(actor, client) do
+  @doc false
+  def binding(actor, client) do
     %{
       "tenant_id" => actor["tenant_id"],
       "subject_id" => actor["subject_id"],

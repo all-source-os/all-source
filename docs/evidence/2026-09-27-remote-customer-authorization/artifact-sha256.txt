@@ -1,0 +1,2 @@
+530adda2b4d65744e8a2f31e0060a22908f0410394c4361e39b25327993b9065  target/debug/allsource-core
+65b2640ee09e6f072db36c1c9444e59b4d3fa83348c9675a035da6dfe5cdc405  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/bin/mcp_server_elixir
