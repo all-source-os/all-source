@@ -19,6 +19,13 @@ source authorization or a human decision. Stop with that explicit incomplete
 state when the requested job requires an unavailable binding. No public endpoint,
 customer installation or processing consent follows from this local profile.
 
+Internal source selection and pending comparison services now have synthetic
+Core-backed recovery and ownership tests. They have no discovered customer tool
+binding yet. Do not call guessed preparation/status/result names or treat that
+internal implementation as permission to disclose data. Existing metadata-only
+consent remains unchanged; selected evidence requires separate consent before
+future transport activation.
+
 ## Intended request
 
 Prepare a tenant event timeline and show what a replay would affect before I approve anything

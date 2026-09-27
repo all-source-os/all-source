@@ -9,6 +9,11 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
     import Plug.Conn
     def init(opts), do: opts
 
+    # Global UsageReporter can flush another test's buffered meters while this
+    # fixture owns the configured Core URL. These are not run-source requests.
+    def call(%{request_path: "/api/v1/tenants/" <> _} = conn, _opts),
+      do: send_resp(conn, 200, "{}")
+
     def call(conn, opts) do
       conn = fetch_query_params(conn)
 

@@ -35,6 +35,7 @@ defmodule QueryServiceEx.Application.Services.CustomerAgentAccess do
          "operation" => operation,
          "granted_operations" => grant["operations"],
          "grant_expires_at" => grant["expires_at"],
+         "consent_version" => grant["consent"]["version"],
          "verified_at" => finished
        })}
     else

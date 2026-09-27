@@ -26,7 +26,8 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 | Customer Claude skill | draft | Local portable package; validation is separate from actual use |
 | MCP runtime and shared rules | partially verified locally | Compiled stdio and HTTP profiles → real Query Service → Core, two discovered tools, typed validation, matching text/structured results and revoked reconnect denial; no preparation/status/result binding |
 | Human gate and display | not-tested | Actual product interaction and agent-credential denial needed |
-| Shared run evidence substrate | internal implementation | [Typed conditional capture, bounded timeline and comparison](plans/2026-09-27-agent-run-evidence-contract.md); actual Core concurrency and recovery proof, no source-disclosure route or customer proposal binding yet |
+| Shared run evidence substrate | internal implementation | [Typed conditional capture, bounded timeline and comparison](plans/2026-09-27-agent-run-evidence-contract.md); actual Core concurrency and recovery proof, no source-disclosure route or customer-facing proposal binding yet |
+| Source references and pending comparisons | internal implementation | [Owner/grant-bound pins and durable pending records](plans/2026-09-27-customer-evidence-reviews.md), separate evidence consent, restart/retry/deletion proof; no transport, metering, human approval or UI binding yet |
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |

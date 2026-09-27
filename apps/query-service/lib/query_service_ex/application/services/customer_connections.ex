@@ -6,6 +6,7 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
   determine issuance; expired billing never prevents an owner from revoking.
   Sequential checks are not an atomic membership/billing/credential transaction.
   """
+  alias QueryServiceEx.Domain.CustomerAgent.ConnectionConsent
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionGrant
   alias QueryServiceEx.Domain.CustomerAgent.Eligibility
 
@@ -64,6 +65,30 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
     else
       false -> {:error, :access_denied}
       error -> error
+    end
+  rescue
+    _ -> {:error, :storage_unavailable}
+  end
+
+  @doc "Authorize source selection for an already-authenticated product actor, not an agent credential."
+  def evidence_owner(actor, id, now) do
+    with {:ok, record} <- connections().fetch(actor["tenant_id"], id),
+         binding = binding(actor, record["client_id"]),
+         true <- ConnectionGrant.matches_owner?(record, binding),
+         true <- ConnectionConsent.valid?(record),
+         true <- record["consent"]["version"] == ConnectionConsent.evidence_version(),
+         true <- ConnectionGrant.valid_for?(record, binding, "prepare_proposal", now),
+         {:ok, eligibility} <- eligible(binding, now),
+         {:ok, receipts} <- connections().list(actor["tenant_id"], actor["subject_id"], now),
+         [%{"status" => "active"}] <- Enum.filter(receipts, &(&1["id"] == id)) do
+      {:ok,
+       Map.merge(
+         eligibility,
+         Map.merge(binding, %{"grant_id" => id, "grant_expires_at" => record["expires_at"]})
+       )}
+    else
+      {:error, :storage_unavailable} = error -> error
+      _ -> {:error, :access_denied}
     end
   rescue
     _ -> {:error, :storage_unavailable}

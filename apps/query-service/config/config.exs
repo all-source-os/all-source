@@ -102,6 +102,9 @@ config :query_service_ex,
   agent_run_source: QueryServiceEx.Infrastructure.Adapters.AgentRunStore,
   agent_run_writer: QueryServiceEx.Infrastructure.Adapters.AgentRunStore
 
+config :query_service_ex,
+  customer_review_store: QueryServiceEx.Infrastructure.Adapters.CustomerReviewStore
+
 config :tesla,
   disable_deprecated_builder_warning: true
 
