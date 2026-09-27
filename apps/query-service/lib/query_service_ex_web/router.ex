@@ -154,6 +154,9 @@ defmodule QueryServiceExWeb.Router do
 
     post("/context", CustomerAgentController, :context, log: false)
     post("/validate", CustomerAgentController, :validate, log: false)
+    post("/connections/list", CustomerConnectionsController, :index, log: false)
+    post("/connections/create", CustomerConnectionsController, :create, log: false)
+    post("/connections/revoke", CustomerConnectionsController, :revoke, log: false)
   end
 
   scope "/api/auth", QueryServiceExWeb do

@@ -12,44 +12,58 @@ Bindings require tenant, subject, client and exact HTTPS resource (no credential
 query or fragment). Lifetime is at most 24 hours; clock rollback and exact expiry
 deny use. The schema is `allsource-customer-grant-v1`.
 
-`Infrastructure.Adapters.CustomerAgentGrantStore` implements internal issue,
-credential verification and revoke operations through existing admin-only Core
-system config records. It generates a 128-bit random handle and a 256-bit random secret;
-only SHA-256 of the complete opaque credential is stored. The one-time plaintext
-has an `asreview_v1_` prefix and is structurally distinct from a user/API-key JWT.
-No secret is returned if Core fails to acknowledge storage.
+`Infrastructure.Adapters.CustomerAgentGrantStore` now implements issue, list,
+credential verification and revoke through a conditional tenant registry at
+`customer_agent_v2.connections.<sha256(tenant)>`. A 128-bit random handle and
+256-bit secret form an `asreview_v2_` credential. Only its SHA-256 hash persists.
+Grant, exact binding, consent and issuance accounting commit in one Core revision.
+No secret returns before the mandatory conditional-write acknowledgement.
 
-Grant key: `customer_agent_v1.grant.<random id>`, containing version,
-binding, allowed operations, validity interval, active status and token hash.
+Consent `review-metadata-v1` identifies the selected host, permitted operations,
+acceptance time and fields: workspace identity, membership role, MCP entitlement
+and proposal validation. This is a recorded selection, not host attestation or
+action approval. Missing, stale or mismatched consent denies use. Only context
+and validation operations fit this consent; source data requires renewed consent.
+
+The registry allows at most 16 unexpired, unrevoked connections per tenant and
+64 issuances in a rolling 24 hours. These are abuse bounds, not pricing or seats.
+Concurrent writers retry only Core's exact precondition conflict, at most four
+attempts, with fresh revisions. Current-view receipts older than a day are pruned
+on issuance; revocation/expiry does not replenish the rolling-day allowance.
+Clock rollback cannot refill it. Encoded registry writes are capped at 60 KB.
+
 Revocation writes an independent `customer_agent_v1.revoked.<random id>` record.
 Any existing marker denies access, including malformed or false values. Only a
 genuine missing-marker response permits credential verification to continue;
 storage failures deny access. No deletion or reactivation is exposed by this
-adapter. Repeated revocation is idempotent; issuance generates a fresh handle.
+adapter. The marker commits before registry bookkeeping; a later bookkeeping
+failure can report unavailable while the credential is already denied. Retrying
+is safe while its receipt remains. Issuance always generates a fresh handle.
 
 This supersedes the initial tenant-metadata implementation in `00f70228`.
 Billing persists a complete tenant metadata map; a delayed write could restore
 an older active grant after revocation. A regression reproduced that flaw.
 Separate system records prevent billing writes from touching grants, and a late
-grant-record rewrite cannot remove the independent revocation marker. Existing
+registry rewrite cannot remove the independent revocation marker. Existing
 Core config endpoints require Admin and acknowledge after system WAL persistence.
 The service credential remains server-only; customers never receive it.
 An administrator with arbitrary Core config access remains trusted and could
 delete these records; this is not protection against a compromised administrator.
 
 Every successful credential verification performs two current leader reads:
-grant then revocation marker. `RustCoreClient.get_config_for_authorization/1`
-and `put_config_for_authorization/2` restrict keys to these two namespaces,
-use the configured Core write URL and apply a five-second timeout per request
-with no retries. `get_tenant_for_authorization/1` uses the same leader client and
+registry then revocation marker. The narrowly scoped registry methods derive
+their key from a validated tenant and require Core's UUID revision. Revocation
+methods restrict keys to the existing security namespaces. All use the configured
+Core write URL with five-second request timeouts and no transport retries.
+`get_tenant_for_authorization/1` uses the same leader client and
 rejects invalid tenant path components. Ordinary read/write methods retain their
 existing routing, timeouts and retries. No local credential cache or fallback
 success is used. A failed or uncertain write returns failure.
 
 No production grants were issued by the initial internal implementation.
-This version deliberately does not read or migrate its old tenant-metadata
-records; there is no legacy fallback. The schema/token prefix stays v1 because
-the customer connection has not been released.
+This version deliberately does not read or migrate old tenant-metadata or
+unconsented v1 credentials. They fail closed and require reconnect. The pure
+binding schema remains v1; token and durable registry formats are v2.
 
 Credential checks use a constant-time hash comparison and exact binding/scope
 checks. Wrong tenant, subject, client, resource, operation, missing/revoked grant,
@@ -133,28 +147,40 @@ configuration stays outside tool arguments. See the
 
 ## Work still required before use
 
-1. **Issue/revoke authority and discovery.** Wire primitives through the existing
-   product runtime. The restricted MCP bindings exist, but issuance/revocation
-   still needs authentication outside this adapter;
-   its arguments are trusted server context, not permission to expose these
-   methods directly. Add product connection UI, explicit host/field consent,
-   per-client restrictions and discovery. Remote OAuth, if chosen, needs PKCE and
-   exact redirect validation. Local stdio needs real process/owner binding.
+The website now has `/dashboard/settings/connections` and a cookie-only proxy
+for list/create/revoke. It verifies origin, rejects supplied Authorization,
+forwards no unrelated cookies/query values, bounds bodies/timeouts, disables
+caching/redirects, and returns fixed errors. The generic proxies cannot bypass
+that route. Query Service independently verifies signed, verified-email product
+sessions, denies API keys/demo/impersonation, derives tenant/subject/resource,
+and rechecks current membership. Issuance additionally checks entitlement before
+and after storing; billing expiry does not prevent owner revocation.
+`CUSTOMER_CONNECTIONS_ENABLED` defaults off in both services and is evaluated
+at runtime by the website. This form issues only the local Claude Code profile;
+remote Claude must use its future PKCE flow. See the
+[connection consent evidence](../evidence/2026-09-27-customer-connections/README.md).
+
+1. **Transport and discovery.** Local stdio still needs real process/OS-owner
+   binding and configuration delivery; a chosen client name is insufficient.
+   Remote OAuth requires PKCE, exact redirects, resource binding and actual
+   claude.ai verification. Both hosts remain required. Do not enable production
+   issuance before those release gates pass.
 2. **Complete live authority.** Current stored membership and entitlement are
    checked, with durable owner provisioning for new OAuth workspaces and the
    existing auth-service email identity binding, verified-email invitations and
-   conditional member edits. Legacy OAuth ownership, production rollout, explicit host/field consent
+   conditional member edits. Legacy OAuth ownership, production rollout
    and source ownership remain unresolved. The internal grant adapter's success
    alone is only credential verification. Neither that primitive nor the new
    access service grants human authority. Preserve the actual Indie catalog,
    trial and renewal rules while reconciling account onboarding.
-3. **Storage and cost controls.** Add authoritative per-tenant grant count,
-   concurrency limits and retention/tombstone policy before exposing issuance.
-   HTTP input is bounded at 64 KiB before the generic parser, with no raw-body
+3. **Storage and cost controls.** Current issuance counts and concurrency are
+   durable and bounded. Final immutable-history/tombstone retention and deletion
+   policy remains open; pruning is not erasure. HTTP input is bounded at 4 KiB
+   for management and 64 KiB for tools before the generic parser, with no raw-body
    duplicate. The existing per-process rate limiter and fixed error responses
    are wired; protocol input and client results have size checks. These are not
-   complete streaming-memory or distributed concurrency/cost controls. System
-   record growth is currently not capped by the internal adapter. Revocation disables access;
+   complete streaming-memory or distributed tool-cost controls. Lifetime system
+   history is not capped by rolling-day issuance limits. Revocation disables access;
    it does not erase immutable Core audit history. Local real-Core SIGKILL/restart
    tests now prove grant/revocation WAL recovery and denial after stale tenant
    and grant writes. They do not prove replication, failover, production topology

@@ -47,7 +47,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
 
         assert response_status(response) == 201
 
-        assert {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], now, 120)
+        assert {:ok, issued} = issue(binding, ["read_context"], now, 120)
 
         assert {:ok, _} =
                  CustomerAgentGrantStore.verify_credential(
@@ -57,7 +57,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
                    now
                  )
 
-        assert_admin_boundary(issued.id)
+        assert_admin_boundary(issued.id, binding["tenant_id"])
         issued
       end)
 
@@ -73,8 +73,8 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
 
       {:ok, tenant} = RustCoreClient.get_tenant_for_authorization(binding["tenant_id"])
 
-      {:ok, grant} =
-        RustCoreClient.get_config_for_authorization("customer_agent_v1.grant." <> issued.id)
+      {:ok, grant, _revision} =
+        RustCoreClient.get_customer_connection_registry(binding["tenant_id"])
 
       assert :ok = CustomerAgentGrantStore.revoke(binding, issued.id, now + 1)
 
@@ -88,11 +88,17 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
 
       assert response_status(response) == 200
 
-      assert {:ok, _} =
-               RustCoreClient.put_config_for_authorization(
-                 "customer_agent_v1.grant." <> issued.id,
-                 grant
-               )
+      key =
+        "customer_agent_v2.connections." <>
+          Base.encode16(:crypto.hash(:sha256, binding["tenant_id"]), case: :lower)
+
+      assert response_status(
+               Tesla.post(RustCoreClient.write_client(), "/api/v1/config", %{
+                 key: key,
+                 value: grant,
+                 changed_by: "synthetic-stale-writer"
+               })
+             ) == 200
 
       assert {:error, :unauthorized} =
                CustomerAgentGrantStore.verify_credential(
@@ -150,7 +156,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
 
         set_metadata(client, binding, metadata)
         set_members(client, binding, members)
-        assert {:ok, issued} = CustomerAgentGrantStore.issue(binding, ["read_context"], now, 120)
+        assert {:ok, issued} = issue(binding, ["read_context"], now, 120)
 
         assert {:ok, context} =
                  CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
@@ -259,12 +265,12 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
     assert response_status(response) == 200
   end
 
-  defp assert_admin_boundary(id) do
+  defp assert_admin_boundary(id, tenant) do
     admin = Application.fetch_env!(:query_service_ex, :core_api_key)
     Application.put_env(:query_service_ex, :core_api_key, "Bearer " <> token("developer"))
 
     assert {:error, :storage_unavailable} =
-             RustCoreClient.get_config_for_authorization("customer_agent_v1.grant." <> id)
+             RustCoreClient.get_customer_connection_registry(tenant)
 
     assert {:error, :storage_unavailable} =
              RustCoreClient.put_config_for_authorization("customer_agent_v1.revoked." <> id, %{
@@ -277,4 +283,14 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
   # Avoid printing Tesla.Env, which contains the synthetic Authorization header.
   defp response_status({:ok, %{status: status}}), do: status
   defp response_status(_), do: :request_failed
+
+  defp issue(binding, operations, now, ttl) do
+    CustomerAgentGrantStore.issue(
+      binding,
+      operations,
+      %{"accepted" => true, "version" => "review-metadata-v1"},
+      now,
+      ttl
+    )
+  end
 end

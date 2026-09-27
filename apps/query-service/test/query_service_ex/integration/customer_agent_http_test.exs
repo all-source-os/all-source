@@ -289,7 +289,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
            ) == 200
 
     assert {:ok, issued} =
-             CustomerAgentGrantStore.issue(
+             issue(
                @binding,
                ["read_context", "validate_proposal"],
                System.system_time(:second),
@@ -297,6 +297,16 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
              )
 
     issued
+  end
+
+  defp issue(binding, operations, now, ttl) do
+    CustomerAgentGrantStore.issue(
+      binding,
+      operations,
+      %{"accepted" => true, "version" => "review-metadata-v1"},
+      now,
+      ttl
+    )
   end
 
   defp request(context, operation, token, body) do

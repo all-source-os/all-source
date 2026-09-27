@@ -1,0 +1,5 @@
+530adda2b4d65744e8a2f31e0060a22908f0410394c4361e39b25327993b9065  target/debug/allsource-core
+65b2640ee09e6f072db36c1c9444e59b4d3fa83348c9675a035da6dfe5cdc405  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/bin/mcp_server_elixir
+4d0ab38c2f34b57bb3c48d25a5a676224bd7692927b071ecf097424f4e0ea6f4  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Infrastructure.CustomerReviewClient.beam
+a35a4afa3f9746db8cae116e09ec8dda3f692e30de06e32b8eb8081c7206c518  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Protocol.CustomerReview.beam
+709382f30f908c5d333207aac292333fcf682806295014bc451b798cefde2ef0  apps/web/.next/BUILD_ID

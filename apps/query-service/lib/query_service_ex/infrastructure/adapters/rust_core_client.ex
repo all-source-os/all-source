@@ -1045,6 +1045,76 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
 
   defp valid_authorization_config_key?(_), do: false
 
+  @doc "Read the bounded customer connection registry and its durable Core revision."
+  def get_customer_connection_registry(tenant) do
+    with {:ok, key} <- connection_registry_key(tenant) do
+      case Tesla.get(authorization_client(), "/api/v1/config/#{key}") do
+        {:ok,
+         %Tesla.Env{status: 200, body: %{"key" => ^key, "value" => value, "revision" => revision}}} ->
+          if valid_config_revision?(revision),
+            do: {:ok, value, revision},
+            else: {:error, :storage_unavailable}
+
+        {:ok, %Tesla.Env{status: 404}} ->
+          {:error, :not_found}
+
+        _ ->
+          {:error, :storage_unavailable}
+      end
+    end
+  end
+
+  @doc "Commit connections and consent together; old Core versions must fail closed."
+  def put_customer_connection_registry(tenant, value, revision) do
+    with {:ok, key} <- connection_registry_key(tenant),
+         true <- is_nil(revision) or valid_config_revision?(revision),
+         true <- is_map(value),
+         {:ok, encoded} <- Jason.encode(value),
+         true <- byte_size(encoded) <= 60_000 do
+      condition =
+        if is_nil(revision), do: %{kind: "absent"}, else: %{kind: "revision", revision: revision}
+
+      body = %{key: key, value: value, condition: condition, changed_by: "customer-agent-service"}
+
+      case Tesla.post(authorization_client(), "/api/v1/config/conditional/set", body) do
+        {:ok,
+         %Tesla.Env{status: 200, body: %{"key" => ^key, "saved" => true, "revision" => next}}} ->
+          if valid_config_revision?(next) and next != revision,
+            do: :ok,
+            else: {:error, :storage_unavailable}
+
+        {:ok,
+         %Tesla.Env{
+           status: 409,
+           body: %{"error" => "Concurrency error: Configuration precondition failed"}
+         }} ->
+          {:error, :conflict}
+
+        _ ->
+          {:error, :storage_unavailable}
+      end
+    else
+      _ -> {:error, :storage_unavailable}
+    end
+  end
+
+  defp connection_registry_key(tenant) when is_binary(tenant) and byte_size(tenant) in 1..128 do
+    if Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, tenant) do
+      hash = :sha256 |> :crypto.hash(tenant) |> Base.encode16(case: :lower)
+      {:ok, "customer_agent_v2.connections." <> hash}
+    else
+      {:error, :invalid_tenant}
+    end
+  end
+
+  defp connection_registry_key(_), do: {:error, :invalid_tenant}
+
+  defp valid_config_revision?(revision) when is_binary(revision),
+    do:
+      Regex.match?(~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/, revision)
+
+  defp valid_config_revision?(_), do: false
+
   defp authorization_client do
     url =
       Application.get_env(:query_service_ex, :core_write_url) ||

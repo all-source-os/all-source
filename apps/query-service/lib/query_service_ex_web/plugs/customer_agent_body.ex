@@ -30,7 +30,12 @@ defmodule QueryServiceExWeb.Plugs.CustomerAgentBody do
   end
 
   defp read(conn) do
-    case read_body(conn, length: 65_536, read_length: 65_536, read_timeout: 5_000) do
+    limit =
+      if String.starts_with?(conn.request_path, "/api/customer-agent/connections/"),
+        do: 4_096,
+        else: 65_536
+
+    case read_body(conn, length: limit, read_length: limit, read_timeout: 5_000) do
       {:ok, body, conn} ->
         case Jason.decode(body) do
           {:ok, params} when is_map(params) -> %{conn | body_params: params}

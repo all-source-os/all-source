@@ -29,7 +29,7 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
-| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, grant isolation/WAL recovery, bounded HTTP input, log redaction, initial OAuth/email workspace ownership and verified-email team joins; issuance, consent, legacy ownership migration, retention and deployed consistency remain open |
+| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, conditional consent/grant issuance, owner listing/revoke UI, durable issuance bounds, WAL recovery, initial OAuth/email ownership and verified-email joins; transport owner/PKCE, legacy ownership migration, retention and deployed consistency remain open |
 | Production discovery/distribution | not-tested | Verified endpoint, binding/config guide and release package |
 | Qualified customer outcome | unknown | Existing BET gate evidence remains authoritative |
 
@@ -37,7 +37,7 @@ Schema implementation: [v1 types and exact boundaries](plans/2026-09-26-customer
 with [fixture and existing replay-domain evidence](evidence/2026-09-26-customer-agent-contract/README.md).
 The schema alone creates no human authority. Subsequent
 [restricted runtime and access evidence](evidence/2026-09-26-customer-agent-live-access/README.md)
-covers local eligibility/validation only. Both runtime flags default off. No
+covers local eligibility/validation only. Review and connection flags default off. No
 customer connection, deployment, complete human journey or outcome is claimed.
 
 [Workspace ownership evidence](evidence/2026-09-27-customer-workspace-ownership/README.md)
@@ -53,6 +53,14 @@ used synthetic identities and real Core storage. This is ordinary team setup,
 not a customer connection, a consequential-action approval or native Claude
 proof. Drain old team writers before deploying the new Control Plane revision;
 Core and Query Service must already support the new format.
+
+[Connection consent evidence](evidence/2026-09-27-customer-connections/README.md)
+covers synthetic browser issuance, one-time secret display, private receipts and
+revocation through actual Query Service/Core. Concurrent issuance and limits
+survive Core restart. The local form records versioned host/field consent, but
+does not prove an OS owner, install a host connector, prepare a review, or confer
+human action authority. Production issuance stays disabled. Unconsented v1
+credentials deliberately require reconnect; remote credentials await PKCE.
 
 ## Required acceptance
 

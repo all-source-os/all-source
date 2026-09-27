@@ -31,11 +31,11 @@ async function buildProxyResponse(response: Response): Promise<NextResponse> {
   });
 }
 
-async function proxyToQueryService(
-  request: NextRequest,
-  path: string
-): Promise<NextResponse> {
+async function proxyToQueryService(request: NextRequest, path: string): Promise<NextResponse> {
   const url = new URL(`/api/v1/${path}`, getQueryServiceUrl());
+  if (url.pathname.startsWith("/api/customer-agent/connections")) {
+    return NextResponse.json({ error: "Unsupported connection route" }, { status: 404 });
+  }
 
   // Forward query params
   request.nextUrl.searchParams.forEach((value, key) => {
@@ -76,7 +76,12 @@ async function proxyToQueryService(
     const response = await fetch(url.toString(), { ...fetchOptions, redirect: "manual" });
 
     // Follow redirects server-side, preserving method, body, and auth headers
-    if (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+    if (
+      response.status === 301 ||
+      response.status === 302 ||
+      response.status === 307 ||
+      response.status === 308
+    ) {
       const location = response.headers.get("location");
       if (location) {
         const redirectResponse = await fetch(location, fetchOptions);
@@ -86,10 +91,7 @@ async function proxyToQueryService(
 
     return buildProxyResponse(response);
   } catch (_error) {
-    return NextResponse.json(
-      { error: "Failed to reach Query Service" },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "Failed to reach Query Service" }, { status: 502 });
   }
 }
 

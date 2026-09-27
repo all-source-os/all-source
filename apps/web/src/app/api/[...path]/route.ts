@@ -45,6 +45,10 @@ async function buildProxyResponse(response: Response): Promise<NextResponse> {
 
 async function proxyToQueryService(request: NextRequest, path: string): Promise<NextResponse> {
   const url = new URL(`/api/${path}`, getQueryServiceUrl());
+  // Connection management belongs to the cookie/CSRF-protected specific route.
+  if (url.pathname.startsWith("/api/customer-agent/connections")) {
+    return NextResponse.json({ error: "Unsupported connection route" }, { status: 404 });
+  }
 
   // Forward query params
   request.nextUrl.searchParams.forEach((value, key) => {
@@ -85,7 +89,12 @@ async function proxyToQueryService(request: NextRequest, path: string): Promise<
     const response = await fetch(url.toString(), { ...fetchOptions, redirect: "manual" });
 
     // Follow redirects server-side, preserving method, body, and auth headers
-    if (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+    if (
+      response.status === 301 ||
+      response.status === 302 ||
+      response.status === 307 ||
+      response.status === 308
+    ) {
       const location = response.headers.get("location");
       if (location) {
         const redirectResponse = await fetch(location, fetchOptions);

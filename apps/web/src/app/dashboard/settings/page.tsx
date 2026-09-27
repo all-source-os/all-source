@@ -181,6 +181,12 @@ export default function SettingsPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Google */}
+                    <Link
+                      className="inline-flex text-base font-medium underline underline-offset-4"
+                      href="/dashboard/settings/connections"
+                    >
+                      Manage agent connections
+                    </Link>
                     <div className="flex items-center justify-between rounded-lg border border-border p-4">
                       <div className="flex items-center gap-3">
                         <Icons.google className="h-6 w-6" />
