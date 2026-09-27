@@ -1,7 +1,10 @@
 use super::*;
 use parquet::{
     data_type::Int64Type,
-    file::{properties::WriterProperties, writer::SerializedFileWriter},
+    file::{
+        properties::WriterProperties, reader::FileReader, serialized_reader::SerializedFileReader,
+        writer::SerializedFileWriter,
+    },
     schema::parser::parse_message_type,
 };
 use std::sync::Arc;

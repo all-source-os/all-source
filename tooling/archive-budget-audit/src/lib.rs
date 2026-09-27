@@ -1,4 +1,4 @@
-use parquet::file::{reader::FileReader, serialized_reader::SerializedFileReader};
+use parquet::file::metadata::ParquetMetaDataReader;
 use serde::Serialize;
 use std::{
     fs::{self, File},
@@ -241,11 +241,18 @@ fn footer(mut file: File, cap: u64) -> Result<(u64, u64)> {
     if &tail[4..] != b"PAR1" || size > before.len() - 12 || size > cap {
         return Err("invalid or oversized parquet footer");
     }
-    let check_file = file.try_clone().map_err(|_| "uncloneable file handle")?;
-    let reader = SerializedFileReader::new(file).map_err(|_| "invalid parquet metadata")?;
+    // Decode exactly the bounded bytes inspected above. Giving the parser a
+    // live File would let a concurrently replaced footer request a larger read.
+    file.seek(SeekFrom::Start(before.len() - 8 - size))
+        .map_err(|_| "unseekable parquet metadata")?;
+    let mut bytes = vec![0; usize::try_from(size).map_err(|_| "footer size overflow")?];
+    file.read_exact(&mut bytes)
+        .map_err(|_| "unreadable parquet metadata")?;
+    let metadata =
+        ParquetMetaDataReader::decode_metadata(&bytes).map_err(|_| "invalid parquet metadata")?;
     let mut rows = 0;
     let mut bytes = 0;
-    for group in reader.metadata().row_groups() {
+    for group in metadata.row_groups() {
         add(
             &mut rows,
             u64::try_from(group.num_rows()).map_err(|_| "negative row count")?,
@@ -255,7 +262,7 @@ fn footer(mut file: File, cap: u64) -> Result<(u64, u64)> {
             u64::try_from(group.total_byte_size()).map_err(|_| "negative decoded size")?,
         )?;
     }
-    let after = check_file
+    let after = file
         .metadata()
         .map_err(|_| "unreadable final file metadata")?;
     if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
