@@ -1,5 +1,6 @@
 defmodule QueryServiceEx.Integration.QueryUsageAdmissionTest do
   use ExUnit.Case, async: false
+  alias QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStore, as: Usage
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
   alias QueryServiceEx.TestSupport.CustomerAgentCore, as: Core
   import QueryServiceEx.TestSupport.CustomerAgentCore, only: [with_core: 2]
@@ -13,6 +14,31 @@ defmodule QueryServiceEx.Integration.QueryUsageAdmissionTest do
 
   setup do
     Core.setup_context()
+  end
+
+  test "Query Service adapter replays the exact final-unit receipt after Core restart", context do
+    input = Map.new(request(1), fn {key, value} -> {Atom.to_string(key), value} end)
+
+    original =
+      with_core(context, fn ->
+        create(1)
+        assert {:ok, %{"period" => 0, "used" => 0, "managed" => false}} = Usage.snapshot(@tenant)
+        assert {:ok, %{receipt: receipt, replayed: false}} = Usage.admit(@tenant, input)
+        assert receipt["used"] == 1
+        receipt
+      end)
+
+    with_core(context, fn ->
+      assert {:ok, %{receipt: ^original, replayed: true}} = Usage.admit(@tenant, input)
+      assert {:ok, %{"period" => 0, "used" => 1, "managed" => true}} = Usage.snapshot(@tenant)
+      second = Map.new(request(1), fn {key, value} -> {Atom.to_string(key), value} end)
+      assert {:error, :query_quota_exceeded} = Usage.admit(@tenant, second)
+
+      assert {:error, :query_period_changed} =
+               Usage.admit(@tenant, Map.put(input, "expected_period", 1))
+
+      assert used() == 1
+    end)
   end
 
   test "durable admission recovers its exact receipt after hard restart", context do
