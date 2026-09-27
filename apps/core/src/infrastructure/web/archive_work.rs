@@ -1,10 +1,10 @@
-//! Conditional archive I/O must not occupy Tokio's request workers. Admission
+//! Strict archive I/O must not occupy Tokio's request workers. Admission
 //! stays owned by the blocking closure, including after its caller disconnects.
 
 use crate::{
     domain::entities::Event,
     error::{AllSourceError, Result},
-    store::EventStore,
+    store::{EventStore, ReadScope},
 };
 use std::{
     sync::{
@@ -43,6 +43,26 @@ pub(super) async fn append(
     }
     run(Arc::clone(&SLOTS), RESPONSE_TIMEOUT, move |cancellation| {
         store.ingest_with_expected_version_cancellable(&event, expected, Some(&cancellation))
+    })
+    .await
+}
+
+pub(super) async fn retained_query(
+    store: Arc<EventStore>,
+    tenant: String,
+    entity: String,
+    limit: usize,
+) -> Result<(Vec<Event>, usize)> {
+    run(Arc::clone(&SLOTS), RESPONSE_TIMEOUT, move |cancellation| {
+        // Core is an internal service. Its gateway supplies the authoritative
+        // tenant; entity-level customer grants are enforced before this call.
+        store.query_retained_entity_cancellable(
+            &tenant,
+            &entity,
+            limit,
+            &ReadScope::unrestricted(),
+            Some(&cancellation),
+        )
     })
     .await
 }
@@ -89,7 +109,7 @@ where
             "Conditional archive worker failed".into(),
         )),
         Err(_) => Err(AllSourceError::QueueFull(
-            "Conditional archive response deadline exceeded; append outcome may be uncertain"
+            "Strict archive response deadline exceeded; conditional append outcome may be uncertain"
                 .into(),
         )),
     }

@@ -137,3 +137,57 @@ ingestion adds the new batch size to the resident counter, not the whole store
 size. Projection replay effects, tenant/entity counter keying, external archive
 mutation and retained-history high-water marks remain separate constraints.
 This follow-up still does not implement the strict HTTP read attestation.
+
+## Strict retained-entity protocol follow-up
+
+With cache residency protected, callers can now explicitly request
+`GET /api/v1/events/query?integrity=retained-entity-v1`. The request requires one
+authoritative tenant, one entity and an explicit limit from 1 to 1,001. It refuses
+time/type/payload filters, nonzero offsets, descending order and unknown protocol
+versions. Requests without this selector retain the legacy tolerant behavior.
+
+The store strictly hydrates retained archives, acquires a residency lease,
+rechecks completeness, then holds both that lease and the event read lock through
+selection/materialization. The entity index is capped before copying offsets;
+each offset must still match its event ID and entity. Tenant and explicit
+`ReadScope` filtering apply before returning events. A concurrent append cannot
+change the vector during materialization, and eviction cannot remove verified
+history until the read finishes. Cancellation and the original work deadline
+are checked before success, including after materialization.
+
+The operation refuses more than 1,001 indexed entity entries. It counts serialized
+event bytes without allocating a second payload-sized buffer, leaving 16 KiB of
+envelope space inside the customer's 2 MiB transport cap. All retained matching
+events must fit that byte budget even when the requested page is smaller.
+Index entries are still keyed by entity alone, so another tenant using the same
+entity can conservatively consume the entry cap; this never authorizes access.
+
+Strict HTTP reads share the existing two-worker/sixteen-waiter admission pool
+with conditional appends. Blocking archive work stays off Tokio request workers,
+and cancellation retains its worker permit until the closure exits. Success
+includes exactly this attestation object, alongside ordinary page counts:
+
+```json
+{
+  "archive_integrity": {
+    "protocol": "retained-entity-v1",
+    "tenant_id": "authoritative-tenant",
+    "entity_id": "requested-entity"
+  }
+}
+```
+
+`entity_version` is omitted for strict results rather than reading an unlocked
+global counter after the snapshot. `has_more` and `total_count` remain explicit;
+an attestation alone is not proof that the returned page includes every event.
+The internal customer run adapter requests 1,001 rows, requires the exact bound
+attestation, verifies complete-page counts, and refuses histories above its
+1,000-event domain limit. An older Core silently ignoring the new parameter
+returns no attestation and is refused. There is no fallback or retry.
+
+This establishes completeness of the verified retained cache/archive snapshot,
+not proof that retention or external file deletion never removed history. It
+does not establish durable high-water marks, indefinite operation deduplication,
+human approval, customer credentials or feature activation. Existing production
+conditional users include Resend ingestion into arbitrary routed tenants;
+compatibility cannot be inferred solely from the small operator tenants.

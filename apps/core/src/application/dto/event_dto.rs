@@ -84,6 +84,16 @@ pub struct QueryEventsResponse {
     /// Current version of the entity (present only when query filters by entity_id)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entity_version: Option<u64>,
+    /// Present only after a bounded, strict read of this retained entity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archive_integrity: Option<RetainedEntityIntegrity>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RetainedEntityIntegrity {
+    pub protocol: &'static str,
+    pub tenant_id: String,
+    pub entity_id: String,
 }
 
 /// DTO for a single event in responses

@@ -82,6 +82,23 @@ impl EventIndex {
             .map(|entries| entries.clone())
     }
 
+    /// Refuse an oversized entity before allocating its offset vector.
+    pub(crate) fn get_by_entity_bounded(
+        &self,
+        entity_id: &str,
+        max: usize,
+    ) -> Result<Vec<IndexEntry>> {
+        let Some(entries) = self.entity_index.get(entity_id) else {
+            return Ok(Vec::new());
+        };
+        if entries.len() > max {
+            return Err(crate::error::AllSourceError::StorageError(
+                "Strict retained entity exceeds its event budget".into(),
+            ));
+        }
+        Ok(entries.clone())
+    }
+
     /// Get all event offsets for an event type
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn get_by_type(&self, event_type: &str) -> Option<Vec<IndexEntry>> {

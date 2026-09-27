@@ -3084,6 +3084,9 @@ impl Default for EventStore {
     }
 }
 
+#[path = "store_strict_read.rs"]
+mod strict_read;
+
 #[cfg(all(test, feature = "server"))]
 #[path = "store_archive_work_tests.rs"]
 mod archive_work_tests;

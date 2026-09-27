@@ -15,7 +15,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStore do
     with true <- Event.tenant?(tenant) and Event.uuid?(run_id),
          {:ok, url} <- url(),
          {:ok, body} <- bounded(fn -> request(url, tenant, run_id) end),
-         {:ok, events} <- complete(body) do
+         {:ok, events} <- complete(body, tenant, run_id) do
       {:ok, events}
     else
       {:error, :run_too_large} = error -> error
@@ -89,7 +89,8 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStore do
           params: [
             tenant_id: tenant,
             entity_id: Event.entity(tenant, run_id),
-            limit: Timeline.limit() + 1
+            limit: Timeline.limit() + 1,
+            integrity: "retained-entity-v1"
           ]
         ] ++
           options(@max_bytes)
@@ -131,7 +132,20 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStore do
 
   defp chunk(_, {request, response}, _), do: {:halt, {request, %{response | body: :unavailable}}}
 
-  defp complete(%{
+  defp complete(body, tenant, run_id) do
+    expected = %{
+      "protocol" => "retained-entity-v1",
+      "tenant_id" => tenant,
+      "entity_id" => Event.entity(tenant, run_id)
+    }
+
+    case body do
+      %{"archive_integrity" => ^expected} -> complete_events(body)
+      _ -> {:error, :source_unavailable}
+    end
+  end
+
+  defp complete_events(%{
          "events" => events,
          "count" => count,
          "total_count" => total,
@@ -142,10 +156,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStore do
     if count <= Timeline.limit(), do: {:ok, events}, else: {:error, :run_too_large}
   end
 
-  defp complete(%{"total_count" => total}) when is_integer(total) and total > 1_000,
+  defp complete_events(%{"total_count" => total}) when is_integer(total) and total > 1_000,
     do: {:error, :run_too_large}
 
-  defp complete(_), do: {:error, :source_unavailable}
+  defp complete_events(_), do: {:error, :source_unavailable}
 
   defp bounded(fun) do
     task =

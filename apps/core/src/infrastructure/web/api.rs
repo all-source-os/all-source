@@ -553,11 +553,18 @@ pub struct EventOffsetParam {
     pub offset: Option<usize>,
 }
 
+/// Opt-in integrity protocol. Omission preserves the legacy tolerant query.
+#[derive(Debug, Default, Deserialize)]
+pub struct EventIntegrityParam {
+    pub integrity: Option<String>,
+}
+
 pub async fn query_events(
     OptionalAuth(auth): OptionalAuth,
     Query(req): Query<QueryEventsRequest>,
     Query(order_param): Query<EventOrderParam>,
     Query(offset_param): Query<EventOffsetParam>,
+    Query(integrity_param): Query<EventIntegrityParam>,
     State(store): State<SharedStore>,
 ) -> Result<Json<QueryEventsResponse>> {
     let offset = offset_param.offset.unwrap_or(0);
@@ -590,6 +597,21 @@ pub async fn query_events(
         .clone()
         .or_else(|| auth.as_ref().map(|a| a.tenant_id().to_string()));
 
+    if let Some(protocol) = integrity_param.integrity {
+        return super::retained_query::query(
+            store,
+            QueryEventsRequest {
+                tenant_id: enforced_tenant,
+                ..req
+            },
+            offset,
+            descending,
+            &protocol,
+        )
+        .await
+        .map(Json);
+    }
+
     // FAIL CLOSED (tenant isolation): the public events query must NEVER return
     // cross-tenant results. The gateway always injects an auth-derived tenant_id
     // (and overwrites any client-supplied one); if neither a request tenant nor
@@ -603,6 +625,7 @@ pub async fn query_events(
             total_count: 0,
             has_more: false,
             entity_version: None,
+            archive_integrity: None,
         }));
     }
 
@@ -639,6 +662,7 @@ pub async fn query_events(
         total_count,
         has_more,
         entity_version,
+        archive_integrity: None,
     }))
 }
 
@@ -2579,6 +2603,7 @@ mod tests {
             Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
+            Query::try_from_uri(&uri).unwrap(),
             State(store.clone()),
         )
         .await
@@ -2685,10 +2710,17 @@ mod tests {
             let order: Query<EventOrderParam> = Query::try_from_uri(&uri).unwrap();
             let off: Query<EventOffsetParam> = Query::try_from_uri(&uri).unwrap();
             assert_eq!(off.0.offset, Some(offset), "offset must deserialize");
-            query_events(OptionalAuth(None), req, order, off, State(store.clone()))
-                .await
-                .unwrap()
-                .0
+            query_events(
+                OptionalAuth(None),
+                req,
+                order,
+                off,
+                Query::try_from_uri(&uri).unwrap(),
+                State(store.clone()),
+            )
+            .await
+            .unwrap()
+            .0
         }
 
         let p1 = page(&store, 10, 0).await;
@@ -2907,6 +2939,7 @@ mod tests {
             .unwrap();
         query_events(
             OptionalAuth(None),
+            Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
@@ -3226,6 +3259,7 @@ mod tests {
             Query(QueryEventsRequest::default()),
             Query(EventOrderParam { order: None }),
             Query(EventOffsetParam { offset: None }),
+            Query(EventIntegrityParam::default()),
             State(store.clone()),
         )
         .await
@@ -3246,6 +3280,7 @@ mod tests {
             }),
             Query(EventOrderParam { order: None }),
             Query(EventOffsetParam { offset: None }),
+            Query(EventIntegrityParam::default()),
             State(store),
         )
         .await

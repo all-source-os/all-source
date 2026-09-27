@@ -51,14 +51,15 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
   end
 
   test "fixed leader query carries only authoritative tenant and bounded run handle" do
-    fixture(200, Jason.encode!(%{events: [], count: 0, total_count: 0, has_more: false}))
+    fixture(200, Jason.encode!(complete_response()))
     assert {:ok, []} = AgentRunStore.events(F.tenant(), F.uuid(1))
     assert_receive {:source_read, "GET", params, ["Bearer synthetic-only"]}
 
     assert params == %{
              "tenant_id" => F.tenant(),
              "entity_id" => Event.entity(F.tenant(), F.uuid(1)),
-             "limit" => "1001"
+             "limit" => "1001",
+             "integrity" => "retained-entity-v1"
            }
 
     refute_receive {:source_read, _, _, _}
@@ -79,7 +80,30 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
   end
 
   test "partial history cannot become a complete evidence record" do
-    fixture(200, Jason.encode!(%{events: [], count: 0, total_count: 1, has_more: true}))
+    fixture(200, Jason.encode!(%{complete_response() | total_count: 1, has_more: true}))
+    assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
+  end
+
+  test "a legacy complete-looking response cannot attest retained history" do
+    fixture(200, Jason.encode!(%{events: [], count: 0, total_count: 0, has_more: false}))
+    assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
+  end
+
+  test "an attestation for another tenant is refused even when empty" do
+    body = put_in(complete_response(), [:archive_integrity, :tenant_id], "synthetic-other")
+    fixture(200, Jason.encode!(body))
+    assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
+  end
+
+  test "an attestation for another entity is refused even when empty" do
+    body = put_in(complete_response(), [:archive_integrity, :entity_id], "synthetic-other")
+    fixture(200, Jason.encode!(body))
+    assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
+  end
+
+  test "an unsupported integrity protocol is refused" do
+    body = put_in(complete_response(), [:archive_integrity, :protocol], "retained-entity-v2")
+    fixture(200, Jason.encode!(body))
     assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
   end
 
@@ -160,6 +184,20 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStoreTest do
 
     {:append, request} = AppendCommand.prepare(command, [])
     request
+  end
+
+  defp complete_response do
+    %{
+      events: [],
+      count: 0,
+      total_count: 0,
+      has_more: false,
+      archive_integrity: %{
+        protocol: "retained-entity-v1",
+        tenant_id: F.tenant(),
+        entity_id: Event.entity(F.tenant(), F.uuid(1))
+      }
+    }
   end
 
   defp fixture(status, body) do
