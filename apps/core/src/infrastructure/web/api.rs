@@ -297,7 +297,8 @@ pub async fn ingest_event(
     let event_id = event.id;
     let timestamp = event.timestamp;
 
-    let new_version = store.ingest_with_expected_version(&event, expected_version)?;
+    let new_version =
+        super::archive_work::append(Arc::clone(&store), event, expected_version).await?;
 
     tracing::info!("Event ingested: {}", event_id);
 
@@ -415,9 +416,8 @@ pub async fn ingest_event_v1(
     let event_id = event.id;
     let timestamp = event.timestamp;
 
-    let new_version = state
-        .store
-        .ingest_with_expected_version(&event, expected_version)?;
+    let new_version =
+        super::archive_work::append(Arc::clone(&state.store), event, expected_version).await?;
 
     // Semi-sync/sync: wait for follower ACK(s) before returning
     await_replication_ack(&state).await;
@@ -462,7 +462,8 @@ pub async fn ingest_events_batch(
         let event_id = event.id;
         let timestamp = event.timestamp;
 
-        let new_version = store.ingest_with_expected_version(&event, expected_version)?;
+        let new_version =
+            super::archive_work::append(Arc::clone(&store), event, expected_version).await?;
 
         ingested_events.push(IngestEventResponse {
             event_id,
@@ -510,9 +511,8 @@ pub async fn ingest_events_batch_v1(
         let event_id = event.id;
         let timestamp = event.timestamp;
 
-        let new_version = state
-            .store
-            .ingest_with_expected_version(&event, expected_version)?;
+        let new_version =
+            super::archive_work::append(Arc::clone(&state.store), event, expected_version).await?;
 
         ingested_events.push(IngestEventResponse {
             event_id,

@@ -21,6 +21,7 @@ use crate::{
     error::{AllSourceError, Result},
     infrastructure::{
         persistence::{
+            archive_budget::{ArchiveReadBudget, ArchiveReadLimits, check_cancelled},
             compaction::{CompactionConfig, CompactionManager},
             index::{EventIndex, IndexEntry},
             snapshot::{SnapshotConfig, SnapshotManager, SnapshotType},
@@ -181,6 +182,7 @@ pub struct EventStore {
     /// `ensure_tenant_loaded` and Step 2 of the sustainable data
     /// strategy.
     tenant_loader: Arc<TenantLoader>,
+    strict_archive_limits: ArchiveReadLimits,
 
     /// Cadence of the runtime checkpoint loop (Step 6). `None` means
     /// the loop is disabled — WAL grows until boot. Production reads
@@ -331,6 +333,7 @@ impl EventStore {
         let (event_broadcast_tx, _) = tokio::sync::broadcast::channel(1024);
 
         let store = Self {
+            strict_archive_limits: config.strict_archive_limits,
             events: Arc::new(RwLock::new(Vec::new())),
             index: Arc::new(EventIndex::new()),
             projections: Arc::new(RwLock::new(projections)),
@@ -574,6 +577,16 @@ impl EventStore {
         event: &Event,
         expected_version: Option<u64>,
     ) -> Result<u64> {
+        self.ingest_with_expected_version_cancellable(event, expected_version, None)
+    }
+
+    pub(crate) fn ingest_with_expected_version_cancellable(
+        &self,
+        event: &Event,
+        expected_version: Option<u64>,
+        cancellation: Option<&Arc<std::sync::atomic::AtomicBool>>,
+    ) -> Result<u64> {
+        check_cancelled(cancellation.map(Arc::as_ref))?;
         // Reject writes in read-only (replica) mode before touching the WAL.
         self.ensure_writable()?;
 
@@ -582,17 +595,19 @@ impl EventStore {
         // OCC needs durable history, but ordinary appends must keep lazy loading:
         // hydrating a large archive here would stall unrelated HTTP writes.
         if expected_version.is_some() {
-            self.ensure_tenant_loaded_with_integrity(event.tenant_id_str(), true)?;
+            self.ensure_tenant_loaded_budgeted(event.tenant_id_str(), true, cancellation.cloned())?;
         }
 
         let entity_id = event.entity_id_str().to_string();
         let _durable = self.durability_gate.read();
+        check_cancelled(cancellation.map(Arc::as_ref))?;
         let mut stored_event = event.clone();
 
         // Atomic version check + append: hold the DashMap entry lock
         // to prevent TOCTOU races between check and write.
         let new_version = {
             let mut version_entry = self.entity_versions.entry(entity_id.clone()).or_insert(0);
+            check_cancelled(cancellation.map(Arc::as_ref))?;
             let current = *version_entry;
 
             if let Some(expected) = expected_version
@@ -1538,6 +1553,15 @@ impl EventStore {
         tenant_id: &str,
         require_complete: bool,
     ) -> Result<()> {
+        self.ensure_tenant_loaded_budgeted(tenant_id, require_complete, None)
+    }
+
+    fn ensure_tenant_loaded_budgeted(
+        &self,
+        tenant_id: &str,
+        require_complete: bool,
+        cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
+    ) -> Result<()> {
         let is_loaded = || {
             self.tenant_loader.is_loaded(tenant_id)
                 && (!require_complete || self.tenant_loader.is_complete(tenant_id))
@@ -1546,6 +1570,11 @@ impl EventStore {
         if is_loaded() {
             return Ok(());
         }
+
+        let mut budget = require_complete.then(|| {
+            ArchiveReadBudget::new(self.strict_archive_limits.clone())
+                .with_cancellation(cancellation)
+        });
 
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
             // No persistent storage to load from. Mark loaded so we
@@ -1558,7 +1587,11 @@ impl EventStore {
         // Singleflight: get-or-insert the per-tenant lock and try to
         // acquire it within the timeout budget.
         let lock = self.tenant_loader.lock_for(tenant_id);
-        let timeout = self.tenant_loader.load_timeout();
+        let timeout = if let Some(budget) = &budget {
+            self.tenant_loader.load_timeout().min(budget.remaining()?)
+        } else {
+            self.tenant_loader.load_timeout()
+        };
         let _guard = lock.try_lock_for(timeout).ok_or_else(|| {
             AllSourceError::StorageError(format!(
                 "ensure_tenant_loaded timed out after {timeout:?} waiting for in-flight load of \
@@ -1573,21 +1606,38 @@ impl EventStore {
         }
 
         let started = std::time::Instant::now();
-        let (events, complete) = storage
-            .read()
-            .load_events_for_tenant_with_integrity(tenant_id, require_complete)?;
+        let (events, complete) = {
+            let storage = if let Some(budget) = &budget {
+                storage.try_read_for(budget.remaining()?).ok_or_else(|| {
+                    AllSourceError::StorageError("Strict archive storage lock timed out".into())
+                })?
+            } else {
+                storage.read()
+            };
+            storage.load_events_for_tenant_with_integrity(tenant_id, budget.as_mut())?
+        };
         let read_count = events.len();
 
         let before = self.events.read().len();
-        for event in events {
-            self.append_loaded_event(event);
-        }
+        let load_result = (|| -> Result<()> {
+            for event in events {
+                if let Some(budget) = &budget {
+                    budget.check()?;
+                }
+                self.append_loaded_event(event);
+            }
+            if let Some(budget) = &budget {
+                budget.check()?;
+            }
+            Ok(())
+        })();
         let applied = self.events.read().len() - before;
 
         // total_ingested only counts events newly added to memory.
         // Dedupe (e.g. WAL events re-checkpointed to Parquet) makes
         // applied < read_count possible.
         *self.total_ingested.write() += applied as u64;
+        load_result?;
         self.tenant_loader
             .mark_loaded_with_integrity(tenant_id, complete);
 
@@ -2662,6 +2712,9 @@ impl EventStore {
 /// Configuration for EventStore
 #[derive(Debug, Clone, Default)]
 pub struct EventStoreConfig {
+    /// Limits for cold integrity-sensitive loads. Generic queries retain their
+    /// existing policy. Configured by the embedding service, never by callers.
+    pub strict_archive_limits: ArchiveReadLimits,
     /// Optional directory for persistent Parquet storage (v0.2 feature)
     pub storage_dir: Option<PathBuf>,
 
@@ -2946,6 +2999,10 @@ impl Default for EventStore {
         Self::new()
     }
 }
+
+#[cfg(all(test, feature = "server"))]
+#[path = "store_archive_work_tests.rs"]
+mod archive_work_tests;
 
 #[cfg(test)]
 mod tests {

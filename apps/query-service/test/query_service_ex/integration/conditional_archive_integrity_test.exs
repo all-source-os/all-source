@@ -60,6 +60,27 @@ defmodule QueryServiceEx.Integration.ConditionalArchiveIntegrityTest do
     assert File.read!(context.corrupt) == "unknown synthetic archive"
   end
 
+  test "an oversized archive refuses conditional writes before decoding", context do
+    limit = 32 * 1024 * 1024
+
+    File.open!(context.corrupt, [:write, :binary], fn file ->
+      assert {:ok, ^limit} = :file.position(file, limit)
+      IO.binwrite(file, <<0>>)
+    end)
+
+    for _restart <- 1..2 do
+      with_core(context, fn ->
+        assert {:ok, %{status: 500, body: body}} = append("conditional", 0)
+        assert body["error"] =~ "Strict archive read budget exceeded: file bytes"
+        assert {:ok, %{"events" => []}} = query("conditional")
+        assert {:ok, %{status: 500}} = append("conditional", 0)
+        assert {:ok, %{status: 200}} = Tesla.get(RustCoreClient.write_client(), "/health")
+      end)
+    end
+
+    assert File.stat!(context.corrupt).size == limit + 1
+  end
+
   defp assert_refused do
     assert {:ok, %{status: 500, body: body}} = append("conditional", 0)
     assert body["error"] =~ "Cannot verify conditional version from incomplete archive"

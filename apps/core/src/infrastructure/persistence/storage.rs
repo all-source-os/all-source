@@ -1,3 +1,4 @@
+use super::archive_budget::ArchiveReadBudget;
 use crate::{
     domain::entities::Event,
     error::{AllSourceError, Result},
@@ -846,20 +847,51 @@ impl ParquetStorage {
     /// per-tenant identity survives the round trip.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn load_events_from_file(&self, file_path: &Path, tenant_id: &str) -> Result<Vec<Event>> {
+        self.load_events_from_file_with_budget(file_path, tenant_id, None)
+    }
+
+    fn load_events_from_file_with_budget(
+        &self,
+        file_path: &Path,
+        tenant_id: &str,
+        mut budget: Option<&mut ArchiveReadBudget>,
+    ) -> Result<Vec<Event>> {
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
+        if let Some(budget) = budget.as_deref() {
+            budget.check()?;
+        }
         let file = File::open(file_path).map_err(|e| {
             AllSourceError::StorageError(format!("Failed to open parquet file: {e}"))
         })?;
 
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+        if let Some(budget) = budget.as_deref_mut() {
+            let metadata = file.metadata().map_err(|error| {
+                AllSourceError::StorageError(format!("Failed to inspect archive file: {error}"))
+            })?;
+            budget.compressed(metadata.len())?;
+        }
+        let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+        if let Some(budget) = budget.as_deref_mut() {
+            for group in builder.metadata().row_groups() {
+                budget.decoded_metadata(group.num_rows(), group.total_byte_size())?;
+            }
+            builder = builder.with_batch_size(256);
+        }
         let reader = builder.build()?;
 
         let mut events = Vec::new();
 
         for batch in reader {
+            if let Some(budget) = budget.as_deref() {
+                budget.check()?;
+            }
             let batch_events = self.record_batch_to_events(&batch?, tenant_id)?;
             events.extend(batch_events);
+        }
+
+        if let Some(budget) = budget {
+            budget.check()?;
         }
 
         Ok(events)
@@ -987,12 +1019,17 @@ impl ParquetStorage {
         find_parquet_files_recursive(&tenant_root)
     }
 
-    fn list_complete_tenant_archive(&self, tenant_id: &str) -> Result<Vec<PathBuf>> {
+    fn list_complete_tenant_archive(
+        &self,
+        tenant_id: &str,
+        budget: &mut ArchiveReadBudget,
+    ) -> Result<Vec<PathBuf>> {
+        budget.check()?;
         let safe = sanitize_tenant_id_for_path(tenant_id)?;
         let root = self.storage_dir.join(safe);
         match fs::symlink_metadata(&root) {
             Ok(metadata) if metadata.is_dir() => {
-                find_parquet_files_recursive_with_integrity(&root, true)
+                find_parquet_files_recursive_with_integrity(&root, Some(budget))
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
             _ => Err(AllSourceError::StorageError(
@@ -1022,17 +1059,18 @@ impl ParquetStorage {
     /// passed `tenant_id` onto every reconstructed event.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn load_events_for_tenant(&self, tenant_id: &str) -> Result<Vec<Event>> {
-        self.load_events_for_tenant_with_integrity(tenant_id, false)
+        self.load_events_for_tenant_with_integrity(tenant_id, None)
             .map(|(events, _complete)| events)
     }
 
     pub(crate) fn load_events_for_tenant_with_integrity(
         &self,
         tenant_id: &str,
-        require_complete: bool,
+        mut budget: Option<&mut ArchiveReadBudget>,
     ) -> Result<(Vec<Event>, bool)> {
-        let parquet_files = if require_complete {
-            self.list_complete_tenant_archive(tenant_id)?
+        let require_complete = budget.is_some();
+        let parquet_files = if let Some(budget) = budget.as_deref_mut() {
+            self.list_complete_tenant_archive(tenant_id, budget)?
         } else {
             self.list_parquet_files_for_tenant(tenant_id)?
         };
@@ -1042,7 +1080,7 @@ impl ParquetStorage {
             "load_events_for_tenant: walking tenant subtree only"
         );
 
-        let mut events = Vec::with_capacity(parquet_files.len() * self.config.batch_size);
+        let mut events = Vec::new();
         let mut skipped = 0usize;
         for file_path in parquet_files {
             tracing::debug!(
@@ -1054,7 +1092,11 @@ impl ParquetStorage {
             // The lazy-load path can hit a corrupt file just as easily as
             // boot can — failing the whole tenant load on one bad file
             // would brick every query for that tenant.
-            match self.load_events_from_file(&file_path, tenant_id) {
+            match self.load_events_from_file_with_budget(
+                &file_path,
+                tenant_id,
+                budget.as_deref_mut(),
+            ) {
                 Ok(file_events) => events.extend(file_events),
                 Err(e) => {
                     tracing::error!(
@@ -1066,9 +1108,12 @@ impl ParquetStorage {
                     );
                     skipped += 1;
                     if require_complete {
-                        return Err(AllSourceError::StorageError(
-                            "Cannot verify conditional version from incomplete archive".into(),
-                        ));
+                        if let Some(budget) = budget.as_deref() {
+                            budget.check()?;
+                        }
+                        return Err(AllSourceError::StorageError(format!(
+                            "Cannot verify conditional version from incomplete archive: {e}"
+                        )));
                     }
                 }
             }
@@ -1348,17 +1393,21 @@ fn list_flat_layout_files(root: &Path) -> Result<Vec<PathBuf>> {
 /// not followed — the storage tree is mounted from a single volume and
 /// chasing symlinks invites cycles.
 fn find_parquet_files_recursive(root: &Path) -> Result<Vec<PathBuf>> {
-    find_parquet_files_recursive_with_integrity(root, false)
+    find_parquet_files_recursive_with_integrity(root, None)
 }
 
 fn find_parquet_files_recursive_with_integrity(
     root: &Path,
-    require_complete: bool,
+    mut budget: Option<&mut ArchiveReadBudget>,
 ) -> Result<Vec<PathBuf>> {
+    let require_complete = budget.is_some();
     let mut out = Vec::new();
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
 
     while let Some(dir) = stack.pop() {
+        if let Some(budget) = budget.as_deref() {
+            budget.check()?;
+        }
         let entries = match fs::read_dir(&dir) {
             Ok(e) => e,
             // Root must exist (we created it in `new`); subdirectories may
@@ -1373,6 +1422,9 @@ fn find_parquet_files_recursive_with_integrity(
         };
 
         for entry in entries {
+            if let Some(budget) = budget.as_deref_mut() {
+                budget.entry()?;
+            }
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(error) if require_complete => {
@@ -1403,12 +1455,18 @@ fn find_parquet_files_recursive_with_integrity(
                     .and_then(|ext| ext.to_str())
                     .is_some_and(|ext| ext == "parquet")
             {
+                if let Some(budget) = budget.as_deref_mut() {
+                    budget.file()?;
+                }
                 out.push(path);
             }
         }
     }
 
     out.sort();
+    if let Some(budget) = budget {
+        budget.check()?;
+    }
     Ok(out)
 }
 

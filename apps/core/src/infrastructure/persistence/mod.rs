@@ -1,6 +1,7 @@
 // Persistence infrastructure layer
 // Contains storage implementations, WAL, snapshots, compaction, and indexing
 
+pub mod archive_budget;
 pub mod arena_pool;
 pub mod backup;
 pub mod batch_processor;
@@ -22,6 +23,7 @@ pub mod tenant_loader;
 pub mod wal;
 
 // Re-exports for convenience
+pub use archive_budget::ArchiveReadLimits;
 pub use arena_pool::{
     ArenaPoolStats, PooledArena, ScopedArena, SizedBufferPool, arena_stats, get_arena,
     get_arena_with_capacity,
