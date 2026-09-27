@@ -1,4 +1,8 @@
 //! Explicit production-shape capacity probe. Never uses customer data.
+// Match the server allocator; a system-allocator test is not a runtime memory probe.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use allsource_core::{
     domain::entities::Event,
     infrastructure::{
@@ -14,6 +18,7 @@ use parquet::{
 };
 use std::{
     fs::File,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -30,8 +35,63 @@ async fn bounded_http_warmup_accepts_existing_dense_archive_shape() {
     compatibility_probe(112, 566_486).await;
 }
 
+const TENANT: &str = "synthetic-cold-compatibility";
+const FIXTURE_MARKER: &str = "synthetic-capacity-fixture.json";
+
+#[test]
+#[ignore = "operator-only fixture generation: retains a synthetic temp directory for isolated measurement"]
+fn generate_dense_archive_capacity_fixture() {
+    let directory = seed_archive(112, 566_486);
+    std::fs::write(
+        directory.path().join(FIXTURE_MARKER),
+        serde_json::to_vec(&fixture_marker()).unwrap(),
+    )
+    .unwrap();
+    eprintln!("capacity fixture retained: {}", directory.keep().display());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "operator-only fresh-process measurement; needs an owned synthetic fixture copy"]
+async fn proposed_row_policy_http_only_in_existing_synthetic_fixture() {
+    let directory = PathBuf::from(
+        std::env::var_os("ALLSOURCE_SYNTHETIC_CAPACITY_DIR")
+            .expect("set ALLSOURCE_SYNTHETIC_CAPACITY_DIR to an owned fixture copy"),
+    );
+    let marker: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.join(FIXTURE_MARKER)).unwrap()).unwrap();
+    assert_eq!(
+        marker,
+        fixture_marker(),
+        "not the generated synthetic fixture"
+    );
+    let background_bytes = std::env::var("ALLSOURCE_CAPACITY_BACKGROUND_BYTES")
+        .ok()
+        .map_or(0, |value| value.parse::<usize>().unwrap());
+    assert!(background_bytes <= 3 * 1024 * 1024 * 1024);
+    // Touch each page and retain it through hydration. This reserves measured
+    // headroom without attributing generated fixture allocations to the server.
+    let background = vec![1_u8; background_bytes];
+    std::hint::black_box(&background);
+    eprintln!("background resident reservation: {background_bytes} bytes");
+    // Keep the proposed limit local to this explicit measurement. Production
+    // defaults and the known-red compatibility regression remain unchanged.
+    http_probe(&directory, 566_486, false, Some(750_000)).await;
+    std::hint::black_box(&background);
+}
+
+fn fixture_marker() -> serde_json::Value {
+    serde_json::json!({
+        "protocol": "synthetic-dense-capacity-v1", "tenant": TENANT,
+        "files": 112, "events": 566_486,
+    })
+}
+
 async fn compatibility_probe(files: usize, events_count: usize) {
-    const TENANT: &str = "synthetic-cold-compatibility";
+    let directory = seed_archive(files, events_count);
+    http_probe(directory.path(), events_count, true, None).await;
+}
+
+fn seed_archive(files: usize, events_count: usize) -> tempfile::TempDir {
     let directory = tempfile::TempDir::new().unwrap();
     let started = Instant::now();
     let storage = ParquetStorage::new(directory.path()).unwrap();
@@ -96,10 +156,18 @@ async fn compatibility_probe(files: usize, events_count: usize) {
         started.elapsed()
     );
     drop(storage);
+    directory
+}
 
-    let (config, _) = EventStoreConfig::from_env_vars(
+async fn http_probe(
+    directory: &Path,
+    events_count: usize,
+    direct_control: bool,
+    proposed_rows: Option<u64>,
+) {
+    let (mut config, _) = EventStoreConfig::from_env_vars(
         None,
-        Some(directory.path().to_str().unwrap().into()),
+        Some(directory.to_str().unwrap().into()),
         None,
         None,
         None,
@@ -107,40 +175,45 @@ async fn compatibility_probe(files: usize, events_count: usize) {
         None,
         None,
     );
+    if let Some(rows) = proposed_rows {
+        config.strict_archive_limits.max_rows = rows;
+    }
     let store = Arc::new(EventStore::with_config(config));
-    let started = Instant::now();
-    let control_store = Arc::clone(&store);
-    let result = tokio::task::spawn_blocking(move || {
-        control_store.query_retained_entity(
-            TENANT,
-            "synthetic-entity-0",
-            10,
-            &ReadScope::unrestricted(),
-        )
-    })
-    .await
-    .unwrap();
-    eprintln!(
-        "direct cold read: elapsed={:?} error={:?} resident={}",
-        started.elapsed(),
-        result.as_ref().err(),
-        store.total_events()
-    );
-    if let Err(error) = result {
-        assert!(
-            error.to_string().contains("elapsed time")
-                || error.to_string().contains("budget exceeded: rows")
+    if direct_control {
+        let started = Instant::now();
+        let control_store = Arc::clone(&store);
+        let result = tokio::task::spawn_blocking(move || {
+            control_store.query_retained_entity(
+                TENANT,
+                "synthetic-entity-0",
+                10,
+                &ReadScope::unrestricted(),
+            )
+        })
+        .await
+        .unwrap();
+        eprintln!(
+            "direct cold read: elapsed={:?} error={:?} resident={}",
+            started.elapsed(),
+            result.as_ref().err(),
+            store.total_events()
         );
-        // Time can expire during cache application after full decode. A
-        // resident prefix remains unverified; HTTP must finish hydration and
-        // deduplicate it before the later command can use this history.
-        assert!(!store.is_tenant_loaded(TENANT));
-    } else {
-        // A faster machine may finish inside four seconds. Start HTTP cold
-        // regardless, without appending anything in the diagnostic control.
-        assert_eq!(store.total_events(), events_count);
-        store.evict_tenant(TENANT);
-        assert_eq!(store.total_events(), 0);
+        if let Err(error) = result {
+            assert!(
+                error.to_string().contains("elapsed time")
+                    || error.to_string().contains("budget exceeded: rows")
+            );
+            // Time can expire during cache application after full decode. A
+            // resident prefix remains unverified; HTTP must finish hydration and
+            // deduplicate it before the later command can use this history.
+            assert!(!store.is_tenant_loaded(TENANT));
+        } else {
+            // A faster machine may finish inside four seconds. Start HTTP cold
+            // regardless, without appending anything in the diagnostic control.
+            assert_eq!(store.total_events(), events_count);
+            store.evict_tenant(TENANT);
+            assert_eq!(store.total_events(), 0);
+        }
     }
     let app = Router::new()
         .route("/events", post(api::ingest_event))

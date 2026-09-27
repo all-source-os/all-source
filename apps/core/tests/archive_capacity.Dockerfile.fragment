@@ -1,0 +1,10 @@
+# Append to apps/core/Dockerfile for local-only capacity measurements.
+# This extends the same enterprise + analytics dependency/build stages.
+FROM builder-enterprise AS capacity-probe
+COPY apps/core/tests/archive_compatibility.rs apps/core/tests/archive_compatibility.rs
+RUN cargo test --release --features enterprise,analytics --test archive_compatibility --no-run && \
+    find target/release/deps -maxdepth 1 -type f -name 'archive_compatibility-*' -perm -111 \
+      -exec cp '{}' /archive-capacity-probe \;
+
+FROM scratch AS capacity-binary
+COPY --from=capacity-probe /archive-capacity-probe /archive-capacity-probe
