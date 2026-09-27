@@ -58,6 +58,20 @@ All commands use
 `gtimeout -k 15 300`; Mix runs in `apps/query-service`, and explicit integration
 sets `ALLSOURCE_CORE_BINARY` to the repository's built `target/debug/allsource-core`.
 
+## CI formatter follow-up
+
+The implementation was signed and pushed as
+`72be57fc0daf8f64f5e54e4476fcd9d4b696de39`. CI's Elixir 1.18 formatter requested a
+different line wrap from local Elixir 1.19. Alias-only correction
+`03b7e1efb6550dad3aa0bdfdcaa0ba62ca39b2ba` passed local formatting and
+warnings-as-errors compilation, followed by the complete
+[CI run 36315219978](https://github.com/all-source-os/all-source/actions/runs/36315219978)
+and [Docker Build 36315219992](https://github.com/all-source-os/all-source/actions/runs/36315219992).
+CI formatting, compile, Credo and Dialyzer all passed. The CI test summary reports
+`6 doctests, 1233 tests, 0 failures, 126 excluded, 2 skipped`; excluded integration
+tests are not counted as executed proof. The source manifest includes the final
+alias correction. No behavior or runtime activation changed in that correction.
+
 ## Limits
 
 This proves internal services, not an end-to-end customer product flow. The

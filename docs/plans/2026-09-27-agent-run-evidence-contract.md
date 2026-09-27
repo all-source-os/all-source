@@ -43,11 +43,16 @@ test, model identity, person, signature or outcome.
 The real HTTP reproduction returned acknowledgement versions `[1,2,3]` while
 stored events returned `[1,1,1]`. Core's conditional append now stamps its assigned
 version before WAL persistence and uses the same event for storage, subscribers
-and projections. It hydrates cold tenant history before checking the expected
-version, so a write immediately after Parquet-only startup cannot start at zero.
-The change applies to the existing HTTP single/batch append path, with or without
-`expected_version`; it does not rewrite old events or change the separate generic
-embedded `ingest`/batch APIs.
+and projections. Conditional writes hydrate cold tenant history before checking
+the expected version, so a conditional write immediately after Parquet-only
+startup cannot start at zero. Ordinary writes without `expected_version` retain
+lazy loading: they must not scan the tenant archive before acknowledging an
+append. The first rollout exposed and rolled back an unconditional hydration
+regression; see the [deployment record](../evidence/2026-09-27-core-foundation-deploy/README.md).
+Version stamping applies to the existing HTTP single/batch append path, with or
+without `expected_version`; it does not rewrite old events or change the separate
+generic embedded `ingest`/batch APIs. Ordinary cold appends do not establish a
+durable sequence high-water mark across restarts.
 
 The read model requires a complete retained run of at most 1,000 events,
 unique event IDs, versions exactly `1..N`, one initial `run.started`, and an
@@ -61,7 +66,10 @@ counter isolation, cache-eviction races and retention/high-water-mark semantics
 are not solved here. The new namespaced run key and strict sequence/causation
 checks prevent this reader from treating ambiguous history as verified order.
 Do not extend the ordering claim to arbitrary legacy streams. A data-center
-failover test has not run.
+failover test has not run. The existing archive loader skips unreadable files;
+conditional writes do not yet have a separate strict completeness check. Cold
+hydration also lacks a bound on total archive-read time. Both remain activation
+gates for customer evidence capture, not guarantees established by these tests.
 
 ## Read model and comparison
 

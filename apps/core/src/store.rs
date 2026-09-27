@@ -579,8 +579,11 @@ impl EventStore {
 
         // Validate event first (before any locking)
         self.validate_event(event)?;
-        // OCC must include durable history even when this tenant's cache is cold.
-        self.ensure_tenant_loaded(event.tenant_id_str())?;
+        // OCC needs durable history, but ordinary appends must keep lazy loading:
+        // hydrating a large archive here would stall unrelated HTTP writes.
+        if expected_version.is_some() {
+            self.ensure_tenant_loaded(event.tenant_id_str())?;
+        }
 
         let entity_id = event.entity_id_str().to_string();
         let _durable = self.durability_gate.read();
