@@ -1,0 +1,27 @@
+running 1 test
+synthetic seed: files=112 events=566486 elapsed=10.462390458s
+direct cold read: elapsed=4.077846791s error=Some(StorageError("Strict archive read budget exceeded: elapsed time")) resident=96573
+cold HTTP: elapsed=5.005247416s status=503 Service Unavailable
+verified HTTP warmup: elapsed=8.203738541s
+test bounded_http_warmup_accepts_existing_dense_archive_shape ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 23.20s
+
+       24.31 real        21.62 user         1.38 sys
+          1716977664  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              128984  page reclaims
+                   1  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   4  messages sent
+                   5  messages received
+                   1  signals received
+                 203  voluntary context switches
+               14597  involuntary context switches
+            13737384  instructions retired
+             6499408  cycles elapsed
+             1114400  peak memory footprint

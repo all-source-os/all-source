@@ -1,0 +1,20 @@
+running 1 test
+synthetic seed: files=112 events=566486 elapsed=10.60973675s
+direct cold read: elapsed=1.370977042s error=Some(StorageError("Cannot verify conditional version from incomplete archive: Storage error: Strict archive read budget exceeded: rows")) resident=0
+cold HTTP: elapsed=1.359480041s status=500 Internal Server Error
+
+thread 'bounded_http_warmup_accepts_existing_dense_archive_shape' (67097872) panicked at apps/core/tests/archive_compatibility.rs:195:9:
+assertion `left == right` failed: {"error":"Storage error: Cannot verify conditional version from incomplete archive: Storage error: Strict archive read budget exceeded: rows"}
+  left: 500
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test bounded_http_warmup_accepts_existing_dense_archive_shape ... FAILED
+
+failures:
+
+failures:
+    bounded_http_warmup_accepts_existing_dense_archive_shape
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 13.37s
+
+error: test failed, to rerun pass `-p allsource-core --test archive_compatibility`
