@@ -1,0 +1,30 @@
+Candidate default: 600,000 rows. Fly strict archive workers: 1.
+
+cargo test -p allsource-core --all-features --tests
+Exit 0. 47 suites; 2,351 passed, 14 ignored, no failures.
+Raw local transcript: /private/tmp/archive-row-policy-core-all.log
+
+cargo test -p allsource-core --all-features --test archive_compatibility bounded_http_warmup_accepts -- --ignored --test-threads=1 --nocapture
+Exit 0. 2 passed, no failures. Full transcript: default-policy-compatibility.txt
+These explicit cases are ignored during ordinary CI because they generate
+16,100 Parquet files or 566,486 unique events. Both were executed here.
+
+cargo clippy -p allsource-core --all-features --all-targets -- -D warnings
+Exit 0. Full transcript: selected-policy-clippy.txt
+
+cargo fmt --all --check
+Exit 0.
+
+cargo build -p allsource-core --bin allsource-core --features enterprise,analytics
+Exit 0. Frozen binary: /private/tmp/allsource-row-policy-core-1H2T9B/allsource-core
+SHA-256: 47c455dc4bd3eeb91a7ea1d548ea68538597d94224e5db1facaaaf6096bfcb44
+Hash verified unchanged after the HTTP run.
+
+ALLSOURCE_CORE_BINARY=<frozen binary> MIX_ENV=test mix test --include integration --seed 342434
+  test/query_service_ex/integration/agent_run_ordering_test.exs
+  test/query_service_ex/integration/agent_run_recorder_test.exs
+  test/query_service_ex/integration/agent_run_evidence_test.exs
+  test/query_service_ex/integration/conditional_archive_integrity_test.exs
+  test/query_service_ex/integration/strict_retained_read_test.exs
+  test/query_service_ex/integration/customer_evidence_review_test.exs
+Exit 0. 18 tests, 0 failures. Full transcript: selected-policy-http.txt

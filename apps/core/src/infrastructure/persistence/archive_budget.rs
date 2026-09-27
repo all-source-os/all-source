@@ -31,7 +31,10 @@ impl Default for ArchiveReadLimits {
             max_file_bytes: 32 * 1024 * 1024,
             max_compressed_bytes: 256 * 1024 * 1024,
             max_uncompressed_bytes: 256 * 1024 * 1024,
-            max_rows: 250_000,
+            // The existing 566,486-row archive needs headroom. A 600,000-row
+            // synthetic load fits the measured 4 GiB / single-worker envelope;
+            // 750,000 rows OOM under the same 2.5 GiB background reservation.
+            max_rows: 600_000,
         }
     }
 }
@@ -166,6 +169,20 @@ mod tests {
         assert!(budget.decoded_metadata(1, 0).is_err());
         let mut total = u64::MAX;
         assert!(charge(&mut total, 1, u64::MAX, "test").is_err());
+    }
+
+    #[test]
+    fn default_row_budget_accepts_existing_dense_history_but_refuses_growth_past_ceiling() {
+        let mut budget = ArchiveReadBudget::new(ArchiveReadLimits::default());
+        budget.decoded_metadata(566_486, 81_181_257).unwrap();
+        budget.decoded_metadata(33_514, 0).unwrap();
+        assert!(
+            budget
+                .decoded_metadata(1, 0)
+                .unwrap_err()
+                .to_string()
+                .contains("budget exceeded: rows")
+        );
     }
 
     #[test]

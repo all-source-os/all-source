@@ -1,0 +1,37 @@
+
+running 1 test
+background resident reservation: 2684354560 bytes
+Command terminated by signal 9
+	Command being timed: "timeout -s KILL 90 /probe proposed_row_policy_http_only_in_existing_synthetic_fixture --ignored --exact --nocapture"
+	User time (seconds): 1.68
+	System time (seconds): 0.64
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0m 2.33s
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 4193272
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2833
+	Minor (reclaiming a frame) page faults: 4154
+	Voluntary context switches: 87
+	Involuntary context switches: 2769
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+/sys/fs/cgroup/memory.max:4294967296
+/sys/fs/cgroup/memory.swap.max:0
+/sys/fs/cgroup/memory.peak:4294967296
+/sys/fs/cgroup/memory.events:low 0
+/sys/fs/cgroup/memory.events:high 0
+/sys/fs/cgroup/memory.events:max 9296
+/sys/fs/cgroup/memory.events:oom 1
+/sys/fs/cgroup/memory.events:oom_kill 1
+/sys/fs/cgroup/memory.events:oom_group_kill 0
+/sys/fs/cgroup/cpu.max:200000 100000

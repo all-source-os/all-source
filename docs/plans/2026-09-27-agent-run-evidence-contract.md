@@ -62,18 +62,39 @@ Conflicting lifecycle transitions fail closed. Historical gaps are never repaire
 by timestamp sorting or renumbering.
 
 Existing Core counters are keyed by entity, not a tenant/entity tuple. Broader
-counter isolation, cache-eviction races and retention/high-water-mark semantics
-are not solved here. The new namespaced run key and strict sequence/causation
-checks prevent this reader from treating ambiguous history as verified order.
+counter isolation and retention/high-water-mark semantics are not solved here.
+Cache residency leases and generation checks now protect verified reads and
+conditional writes from the reproduced eviction races; see the
+[residency evidence](../evidence/2026-09-27-archive-cache-residency/README.md).
+The namespaced run key and strict sequence/causation checks prevent this reader
+from treating ambiguous retained history as verified order.
 Do not extend the ordering claim to arbitrary legacy streams. A data-center
 failover test has not run. Conditional writes now require every discovered archive
 file to load, including when a prior tolerant query warmed the cache; see the
 [integrity repair](../evidence/2026-09-27-conditional-archive-integrity/README.md).
-Generic queries still skip unreadable files. Customer reads need a strict
-completeness contract before a contiguous partial result can be described as
-complete retained evidence. Cold hydration also lacks a bound on total archive
-read time. These remain activation gates for customer evidence capture, not
-guarantees established by the conditional-write tests.
+Generic queries still skip unreadable files. The internal customer reader now
+requires the explicit `retained-entity-v1` response attestation, exact tenant and
+entity binding, complete-page counts and a bounded snapshot. An older Core that
+ignores the selector is refused. Strict response copies use the persisted
+microsecond timestamp precision, keeping the evidence digest stable across
+archive reload. See the [strict-read evidence](../evidence/2026-09-27-strict-retained-read/README.md)
+and [precision regression](../evidence/2026-09-27-strict-timestamp-stability/README.md).
+
+Strict hydration now has input caps and a four-second cooperative direct-work
+budget. HTTP isolates work in a bounded pool, returns within its five-second
+deadline and may finish verified cache warming inside a separate 30-second
+budget. A departed caller cannot authorize an append after warming. The Fly
+configuration selects one worker; the candidate row cap is 600,000 after local
+constrained Linux measurements admitted the known dense archive and rejected
+the 750,000-row proposal by OOM. See the [capacity evidence](../evidence/2026-09-27-isolated-archive-capacity/README.md).
+These are source changes, not assertions
+that production release 46 includes the new protocol or budgets. Existing-data
+compatibility and rollout remain activation gates under `t-e1d5cf`/`t-40896f`.
+
+Complete retained evidence is not proof that retention or external file deletion
+never removed history. Durable run reuse and SDK execution guards remain work
+in `t-e3d99f`; this read-only review surface grants no execution authority and
+does not broaden its claim to indefinite idempotency for legacy streams.
 
 ## Read model and comparison
 

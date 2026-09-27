@@ -1,0 +1,39 @@
+#0 building with "orbstack" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 665B 0.2s done
+#1 DONE 0.7s
+
+#2 [internal] load metadata for docker.io/library/allsource-capacity-local:7a66beb6
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.1s
+
+#4 [upper-bound-probe 1/4] FROM docker.io/library/allsource-capacity-local:7a66beb6
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 150B 0.1s done
+#5 DONE 0.5s
+
+#6 [upper-bound-probe 2/4] COPY apps/core/tests/archive_compatibility.rs apps/core/tests/archive_compatibility.rs
+#6 CACHED
+
+#7 [upper-bound-probe 3/4] RUN CARGO_BUILD_JOBS=4 cargo test --release -p allsource-core --features enterprise,analytics --test archive_compatibility --no-run &&     find target/release/deps -maxdepth 1 -type f -name 'archive_compatibility-*' -perm -111       -exec cp '{}' /archive-capacity-probe ;
+#7 CACHED
+
+#8 [upper-bound-probe 4/4] RUN cp target/release/deps/archive_compatibility-c489038760202318 /archive-capacity-probe
+#8 DONE 16.6s
+
+#9 [capacity-binary 1/1] COPY --from=upper-bound-probe /archive-capacity-probe /archive-capacity-probe
+#9 DONE 0.1s
+
+#10 exporting to client directory
+#10 copying files 4.10MB 0.1s
+#10 copying files 17.31MB 0.2s done
+#10 DONE 0.2s
+
+View build details: docker-desktop://dashboard/build/orbstack/orbstack/ya8x9z8b6rgo9cq2vqyl9qdvu

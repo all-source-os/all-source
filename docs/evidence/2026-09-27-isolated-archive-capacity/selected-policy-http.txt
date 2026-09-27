@@ -1,0 +1,25 @@
+[info] [ProjectionSync] ETS cache initialized
+[info] [Cluster] Clustering disabled (CLUSTER_STRATEGY=none)
+[info] [RateLimiter] Started with ETS table rate_limiter_buckets
+[info] [CircuitBreaker] Started with threshold=5, reset_timeout=30000ms
+[info] [ApiKeyStore] Started ETS cache :api_key_store (durable backing: Core)
+[info] [DemoReset] Disabled (set DEMO_RESET_ENABLED=true to enable)
+[info] [ConsistentHash] Started with 1 node(s)
+[info] Starting Horde.RegistryImpl with name QueryServiceEx.Cluster.DistributedRegistry
+[info] Starting Horde.DynamicSupervisorImpl with name QueryServiceEx.Cluster.DistributedSupervisor
+[info] [Membership] Started on node nonode@nohost
+[info] ProjectionServer[index] subscribed to events:type:index
+[info] ProjectionSupervisor started projection: indices
+[info] ProjectionServer[portfolio] subscribed to events:type:portfolio
+[info] ProjectionSupervisor started projection: portfolios
+[info] ProjectionServer[saga] subscribed to events:type:saga
+[info] ProjectionSupervisor started projection: sagas
+[info] ProjectionServer[trade] subscribed to events:type:trade
+[info] ProjectionSupervisor started projection: trades
+[info] [CoreWebSocketClient] Disabled, not connecting
+Running ExUnit with seed: 342434, max_cases: 24
+Including tags: [:integration]
+
+..................
+Finished in 14.3 seconds (0.00s async, 14.3s sync)
+18 tests, 0 failures

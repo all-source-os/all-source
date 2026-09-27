@@ -2,7 +2,9 @@
 # This extends the same enterprise + analytics dependency/build stages.
 FROM builder-enterprise AS capacity-probe
 COPY apps/core/tests/archive_compatibility.rs apps/core/tests/archive_compatibility.rs
-RUN CARGO_BUILD_JOBS=4 cargo test --release --features enterprise,analytics --test archive_compatibility --no-run && \
+RUN find target/release/deps -maxdepth 1 -type f -name 'archive_compatibility-*' -perm -111 -delete && \
+    CARGO_BUILD_JOBS=4 cargo test --release --features enterprise,analytics --test archive_compatibility --no-run && \
+    test "$(find target/release/deps -maxdepth 1 -type f -name 'archive_compatibility-*' -perm -111 | wc -l)" -eq 1 && \
     find target/release/deps -maxdepth 1 -type f -name 'archive_compatibility-*' -perm -111 \
       -exec cp '{}' /archive-capacity-probe \;
 

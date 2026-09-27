@@ -1,0 +1,19 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.04s
+warning: the following packages contain code that will be rejected by a future version of Rust: nix v0.31.2, proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/archive_compatibility.rs (target/debug/deps/archive_compatibility-b255618b90bd999f)
+
+running 2 tests
+test bounded_http_warmup_accepts_existing_archive_shape ... synthetic seed: files=16100 events=90064 elapsed=8.074750542s
+direct cold read: elapsed=4.022787042s error=Some(StorageError("Strict archive read budget exceeded: elapsed time")) resident=0
+cold HTTP: elapsed=5.005048083s status=503 Service Unavailable
+verified HTTP warmup: elapsed=5.757144291s
+ok
+test bounded_http_warmup_accepts_existing_dense_archive_shape ... synthetic seed: files=112 events=566486 elapsed=10.804061375s
+direct cold read: elapsed=4.158891834s error=Some(StorageError("Strict archive read budget exceeded: elapsed time")) resident=65537
+cold HTTP: elapsed=5.00269375s status=503 Service Unavailable
+verified HTTP warmup: elapsed=9.013762583s
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 45.04s
+

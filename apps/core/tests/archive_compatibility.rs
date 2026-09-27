@@ -30,7 +30,7 @@ async fn bounded_http_warmup_accepts_existing_archive_shape() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "known row-capacity regression t-40896f: creates 566,486 synthetic events"]
+#[ignore = "explicit dense archive regression t-40896f: creates 566,486 synthetic events"]
 async fn bounded_http_warmup_accepts_existing_dense_archive_shape() {
     compatibility_probe(112, 566_486).await;
 }
@@ -41,10 +41,11 @@ const FIXTURE_MARKER: &str = "synthetic-capacity-fixture.json";
 #[test]
 #[ignore = "operator-only fixture generation: retains a synthetic temp directory for isolated measurement"]
 fn generate_dense_archive_capacity_fixture() {
-    let directory = seed_archive(112, 566_486);
+    let events_count = fixture_rows();
+    let directory = seed_archive(112, events_count);
     std::fs::write(
         directory.path().join(FIXTURE_MARKER),
-        serde_json::to_vec(&fixture_marker()).unwrap(),
+        serde_json::to_vec(&fixture_marker(events_count)).unwrap(),
     )
     .unwrap();
     eprintln!("capacity fixture retained: {}", directory.keep().display());
@@ -53,6 +54,7 @@ fn generate_dense_archive_capacity_fixture() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "operator-only fresh-process measurement; needs an owned synthetic fixture copy"]
 async fn proposed_row_policy_http_only_in_existing_synthetic_fixture() {
+    let events_count = fixture_rows();
     let directory = PathBuf::from(
         std::env::var_os("ALLSOURCE_SYNTHETIC_CAPACITY_DIR")
             .expect("set ALLSOURCE_SYNTHETIC_CAPACITY_DIR to an owned fixture copy"),
@@ -61,7 +63,7 @@ async fn proposed_row_policy_http_only_in_existing_synthetic_fixture() {
         serde_json::from_slice(&std::fs::read(directory.join(FIXTURE_MARKER)).unwrap()).unwrap();
     assert_eq!(
         marker,
-        fixture_marker(),
+        fixture_marker(events_count),
         "not the generated synthetic fixture"
     );
     let background_bytes = std::env::var("ALLSOURCE_CAPACITY_BACKGROUND_BYTES")
@@ -73,16 +75,28 @@ async fn proposed_row_policy_http_only_in_existing_synthetic_fixture() {
     let background = vec![1_u8; background_bytes];
     std::hint::black_box(&background);
     eprintln!("background resident reservation: {background_bytes} bytes");
-    // Keep the proposed limit local to this explicit measurement. Production
-    // defaults and the known-red compatibility regression remain unchanged.
-    http_probe(&directory, 566_486, false, Some(750_000)).await;
+    // Keep the experimental limit local to this explicit measurement. It can
+    // reproduce the rejected 750,000-row proposal without widening runtime policy.
+    http_probe(&directory, events_count, false, Some(750_000)).await;
     std::hint::black_box(&background);
 }
 
-fn fixture_marker() -> serde_json::Value {
+fn fixture_rows() -> usize {
+    let rows = std::env::var_os("ALLSOURCE_CAPACITY_ROWS").map_or(566_486, |value| {
+        value
+            .to_str()
+            .expect("capacity row count must be Unicode")
+            .parse::<usize>()
+            .expect("capacity row count must be an integer")
+    });
+    assert!((566_486..=750_000).contains(&rows));
+    rows
+}
+
+fn fixture_marker(events_count: usize) -> serde_json::Value {
     serde_json::json!({
         "protocol": "synthetic-dense-capacity-v1", "tenant": TENANT,
-        "files": 112, "events": 566_486,
+        "files": 112, "events": events_count,
     })
 }
 

@@ -1,0 +1,8 @@
+
+running 1 test
+synthetic seed: files=112 events=600000 elapsed=1.56886621s
+capacity fixture retained: /tmp/.tmpWcbO0z
+test generate_dense_archive_capacity_fixture ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.58s
+

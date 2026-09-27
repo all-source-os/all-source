@@ -1,0 +1,4 @@
+4ba66c1aebf96ded51f963a4522ef614b66940680c46f8c9b192edccf4b92967  apps/core/src/infrastructure/persistence/archive_budget.rs
+e7c81d88c9f39107c7c73b7c6c3ff0cfa3250f499d5dd972428abc07a50e91ed  apps/core/tests/archive_compatibility.rs
+88b9c02ceac20bac7f0923f5935ae245fe646cff01133eeaa337d8f5d3590e09  apps/core/tests/archive_capacity.Dockerfile.fragment
+95fd9d7395c27d3861749ac0deb9250de463df09953e04e72d757f513232ef6e  apps/core/fly.toml

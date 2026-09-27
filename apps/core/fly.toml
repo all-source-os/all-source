@@ -16,10 +16,10 @@ primary_region = "iad"  # US East (Virginia) - change to your preferred region
 
   # Sustainable data strategy (Steps 1-6, landed 2026-04-27 — see
   # docs/proposals/SUSTAINABLE_DATA_STRATEGY.md). The cache budget is
-  # the headline fix for issue #160 (2026-04-25 OOM during WAL replay):
-  # resident set is now bounded regardless of dataset size. 2 GiB on
-  # the 4 GiB VM leaves headroom for the Rust runtime, replication
-  # buffers, and the Parquet flush staging area.
+  # eviction target introduced after issue #160 (WAL replay OOM) is
+  # based on estimated event bytes, not total process RSS. Keep
+  # headroom for indices, the runtime and archive staging; this soft
+  # cache limit alone cannot prevent OOM during a cold load.
   ALLSOURCE_CACHE_BYTES = "2147483648"
   # Admit one strict cold loader at a time on this 4 GiB machine. The
   # worker retains its slot after an HTTP timeout until warming actually ends.
@@ -74,12 +74,11 @@ min_machines_running = 1
   # shared-cpu-2x to unlock 4 GiB (shared-cpu-1x caps at 2 GiB).
   cpu_kind = "shared"
   cpus = 2
-  # 4 GiB host with a 2 GiB ALLSOURCE_CACHE_BYTES budget (above). The
-  # cache budget — not the VM size — is the load-bearing OOM control
-  # post-Step-3. The remaining ~2 GiB is headroom for the Rust runtime,
-  # replication buffers, and the Parquet flush staging area. The VM can
-  # be downsized once the budget runs at steady state with margin to
-  # spare; don't shrink it in the same change as flipping the budget on.
+  # 4 GiB host with a 2 GiB estimated cache target and one strict
+  # archive worker. Constrained Linux evidence supports 600,000 rows
+  # for the measured synthetic shape, not arbitrary concurrent load.
+  # See docs/evidence/2026-09-27-isolated-archive-capacity/. Do not
+  # downsize or widen row/worker limits without new headroom evidence.
   memory_mb = 4096
 
 [mounts]
