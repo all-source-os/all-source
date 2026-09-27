@@ -56,7 +56,7 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentCore do
       ])
 
     try do
-      wait_ready(port, context.url, 30)
+      wait_ready(port, context.url, 30, "")
       fun.()
     after
       stop_core(port)
@@ -78,15 +78,17 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentCore do
       "ALLSOURCE_BOOTSTRAP_API_KEY" => "",
       "ALLSOURCE_BOOTSTRAP_TENANT" => "",
       "ALLSOURCE_RESP_PORT" => "",
-      "RUST_LOG" => "error"
+      "RUST_LOG" => "info"
     }
   end
 
-  defp wait_ready(_port, _url, 0),
-    do: flunk("Owned Core process did not become ready within deadline")
+  defp wait_ready(port, _url, 0, output) do
+    output = drain_output(port, 100, output)
+    flunk("Owned Core process did not become ready within deadline. Child output:\n" <> output)
+  end
 
-  defp wait_ready(port, url, attempts) do
-    drain_output(port, 100)
+  defp wait_ready(port, url, attempts, output) do
+    output = drain_output(port, 100, output)
     client = Tesla.client([{Tesla.Middleware.Timeout, timeout: 300}], Tesla.Adapter.Hackney)
 
     case Tesla.get(client, url <> "/health") do
@@ -96,20 +98,26 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentCore do
       _ ->
         # test-hang-allow: bounded readiness retry; at most 30 attempts.
         Process.sleep(100)
-        wait_ready(port, url, attempts - 1)
+        wait_ready(port, url, attempts - 1, output)
     end
   end
 
-  defp drain_output(_port, 0), do: :ok
+  defp drain_output(_port, 0, output), do: output
 
-  defp drain_output(port, remaining) do
+  defp drain_output(port, remaining, output) do
     receive do
-      {^port, {:data, _data}} -> drain_output(port, remaining - 1)
-      {^port, {:exit_status, status}} -> flunk("Owned Core process exited with status #{status}")
+      {^port, {:data, data}} ->
+        drain_output(port, remaining - 1, output_tail(output <> data))
+
+      {^port, {:exit_status, status}} ->
+        flunk("Owned Core process exited with status #{status}. Child output:\n" <> output)
     after
-      0 -> :ok
+      0 -> output
     end
   end
+
+  defp output_tail(output) when byte_size(output) <= 16_384, do: output
+  defp output_tail(output), do: binary_part(output, byte_size(output) - 16_384, 16_384)
 
   defp stop_core(port) do
     case Port.info(port, :os_pid) do

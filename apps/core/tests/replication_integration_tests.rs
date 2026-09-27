@@ -80,7 +80,9 @@ async fn test_leader_follower_wal_replication() {
     // ---------------------------------------------------------------
     // 3. Create the follower EventStore and start the WAL receiver.
     // ---------------------------------------------------------------
-    let follower_store = Arc::new(EventStore::new());
+    let follower_store = Arc::new(EventStore::with_config(EventStoreConfig::with_persistence(
+        follower_dir.path().join("archive"),
+    )));
 
     let leader_addr = format!("127.0.0.1:{replication_port}");
     let follower_wal_dir = follower_dir.path().join("follower-wal");
@@ -207,12 +209,44 @@ async fn test_leader_follower_wal_replication() {
         receiver_status.total_replayed,
     );
 
+    // The follower must keep buffered copies resident, then reload the same
+    // network-replicated events after their archive flush and cache eviction.
+    follower_store.evict_tenant("default");
+    assert_eq!(follower_store.total_events(), num_events);
+    follower_store.flush_storage().unwrap();
+    follower_store.evict_tenant("default");
+    assert_eq!(follower_store.total_events(), 0);
+    let query = QueryEventsRequest {
+        tenant_id: Some("default".into()),
+        ..Default::default()
+    };
+    let leader_ids: Vec<_> = leader_store
+        .query(&query)
+        .unwrap()
+        .iter()
+        .map(|event| event.id)
+        .collect();
+    let reloaded_ids: Vec<_> = follower_store
+        .query(&query)
+        .unwrap()
+        .iter()
+        .map(|event| event.id)
+        .collect();
+    assert_eq!(reloaded_ids, leader_ids);
+
     // ---------------------------------------------------------------
     // 7. Clean up: shut down receiver and abort shipper.
     // ---------------------------------------------------------------
     receiver.shutdown();
+    receiver_handle.abort();
     shipper_handle.abort();
-    let _ = receiver_handle.await;
+    // test-hang-allow: owned loopback tasks are aborted and joined with a deadline.
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), receiver_handle)
+        .await
+        .expect("owned receiver must exit after abort");
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), shipper_handle)
+        .await
+        .expect("owned shipper must exit after abort");
 }
 
 #[tokio::test]

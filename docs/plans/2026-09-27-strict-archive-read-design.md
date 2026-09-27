@@ -106,3 +106,34 @@ Source boundaries: `apps/core/src/infrastructure/persistence/archive_budget.rs`,
 `apps/core/src/infrastructure/web/archive_work.rs`, and
 `apps/core/src/infrastructure/web/api.rs`. Verification is recorded separately
 under `docs/evidence/2026-09-27-strict-archive-work/`.
+
+## Cache lifetime follow-up
+
+Two synthetic reproductions confirmed stale writes: eviction removed a buffered
+predecessor before its Parquet flush, and eviction between strict hydration and
+the version check reset the counter to zero. Both accepted `expected_version=0`
+for an entity with an existing event.
+
+A cache residency read/write gate now protects writers, cache application and
+eviction's index/version rebuild. Conditional appends acquire a read lease and
+recheck completeness before their version check; a lost verified cache refuses
+the write. Cold archive I/O runs outside this gate. A per-tenant generation is
+captured before reading and checked under the lease before applying history, so
+eviction during the read cannot certify an outdated combination of disk/cache.
+Cache application and its completeness marker share the lease.
+
+Eviction acquires the exclusive lease but never performs or waits for disk I/O.
+It needs immediate exclusive access to the storage owner and no pending batch
+for the tenant. An in-flight flush, pending batch, read-only store or missing
+archive retains resident history. Existing cache budgets are soft: if the LRU
+candidate cannot safely be evicted, enforcement returns instead of spinning or
+discarding its only queryable copy. Normal flush/checkpoint can later make it
+eligible. Replicated events also enter the configured Parquet buffer before
+cache eviction can consider them eligible.
+
+Hydration deduplicates and accounts each inserted event under the event lock;
+it no longer subtracts global vector lengths across concurrent work. Batch
+ingestion adds the new batch size to the resident counter, not the whole store
+size. Projection replay effects, tenant/entity counter keying, external archive
+mutation and retained-history high-water marks remain separate constraints.
+This follow-up still does not implement the strict HTTP read attestation.

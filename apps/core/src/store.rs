@@ -183,6 +183,10 @@ pub struct EventStore {
     /// strategy.
     tenant_loader: Arc<TenantLoader>,
     strict_archive_limits: ArchiveReadLimits,
+    /// Eviction must not reset indexes/versions underneath a writer or a
+    /// certified cache load. Acquire before durability, events and storage locks.
+    cache_residency_gate: RwLock<()>,
+    cache_generations: DashMap<String, u64>,
 
     /// Cadence of the runtime checkpoint loop (Step 6). `None` means
     /// the loop is disabled — WAL grows until boot. Production reads
@@ -334,6 +338,8 @@ impl EventStore {
 
         let store = Self {
             strict_archive_limits: config.strict_archive_limits,
+            cache_residency_gate: RwLock::new(()),
+            cache_generations: DashMap::new(),
             events: Arc::new(RwLock::new(Vec::new())),
             index: Arc::new(EventIndex::new()),
             projections: Arc::new(RwLock::new(projections)),
@@ -598,6 +604,12 @@ impl EventStore {
             self.ensure_tenant_loaded_budgeted(event.tenant_id_str(), true, cancellation.cloned())?;
         }
 
+        let _resident = self.cache_residency_gate.read();
+        if expected_version.is_some() && !self.tenant_loader.is_complete(event.tenant_id_str()) {
+            return Err(AllSourceError::StorageError(
+                "Verified archive was evicted before the conditional write".into(),
+            ));
+        }
         let entity_id = event.entity_id_str().to_string();
         let _durable = self.durability_gate.read();
         check_cancelled(cancellation.map(Arc::as_ref))?;
@@ -758,6 +770,7 @@ impl EventStore {
             return Err(e);
         }
 
+        let _resident = self.cache_residency_gate.read();
         let _durable = self.durability_gate.read();
 
         // Write to WAL FIRST for durability (v0.2 feature)
@@ -886,7 +899,9 @@ impl EventStore {
             self.validate_event(event)?;
         }
 
+        let _resident = self.cache_residency_gate.read();
         let _durable = self.durability_gate.read();
+        let batch_count = batch.len();
 
         // Phase 2: Write all events to WAL (before write lock, for durability)
         if let Some(ref wal) = self.wal {
@@ -934,12 +949,11 @@ impl EventStore {
             events.push(event);
         }
 
-        let total_events = events.len();
         drop(projections);
         drop(events);
 
         let mut total = self.total_ingested.write();
-        *total += total_events as u64;
+        *total += batch_count as u64;
 
         Ok(())
     }
@@ -955,6 +969,7 @@ impl EventStore {
         #[cfg(feature = "server")]
         let timer = self.metrics.ingestion_duration_seconds.start_timer();
 
+        let _resident = self.cache_residency_gate.read();
         let mut events = self.events.write();
         let offset = events.len();
 
@@ -987,6 +1002,12 @@ impl EventStore {
             .entity_versions
             .entry(event.entity_id_str().to_string())
             .or_insert(0) += 1;
+
+        if !self.read_only
+            && let Some(storage) = &self.storage
+        {
+            storage.read().append_event(event.clone())?;
+        }
 
         // Store the event in memory
         events.push(event.clone());
@@ -1201,6 +1222,7 @@ impl EventStore {
             return Ok(0);
         };
 
+        let _resident = self.cache_residency_gate.read();
         let events = storage.read().load_all_events()?;
         let read_count = events.len();
         let tenants: Vec<String> = events
@@ -1210,14 +1232,10 @@ impl EventStore {
             .into_iter()
             .map(str::to_owned)
             .collect();
-        let before = self.events.read().len();
+        let mut applied = 0;
         for event in events {
-            self.append_loaded_event(event);
+            applied += usize::from(self.append_loaded_event(event));
         }
-        let applied = self.events.read().len() - before;
-
-        // The pile is now the authoritative full history.
-        *self.total_ingested.write() = self.events.read().len() as u64;
         // Every tenant in the archive is now fully in memory. Unmarked, the
         // first `ensure_tenant_loaded` for each re-reads its whole subtree and
         // applies nothing.
@@ -1605,6 +1623,22 @@ impl EventStore {
             return Ok(());
         }
 
+        let generation = {
+            let _resident = if let Some(budget) = &budget {
+                self.cache_residency_gate
+                    .try_read_for(budget.remaining()?)
+                    .ok_or_else(|| {
+                        AllSourceError::StorageError(
+                            "Strict archive residency lock timed out".into(),
+                        )
+                    })?
+            } else {
+                self.cache_residency_gate.read()
+            };
+            self.cache_generations
+                .get(tenant_id)
+                .map_or(0, |value| *value)
+        };
         let started = std::time::Instant::now();
         let (events, complete) = {
             let storage = if let Some(budget) = &budget {
@@ -1618,28 +1652,42 @@ impl EventStore {
         };
         let read_count = events.len();
 
-        let before = self.events.read().len();
+        let resident = if let Some(budget) = &budget {
+            self.cache_residency_gate
+                .try_read_for(budget.remaining()?)
+                .ok_or_else(|| {
+                    AllSourceError::StorageError("Strict archive residency lock timed out".into())
+                })?
+        } else {
+            self.cache_residency_gate.read()
+        };
+        if self
+            .cache_generations
+            .get(tenant_id)
+            .map_or(0, |value| *value)
+            != generation
+        {
+            return Err(AllSourceError::StorageError(
+                "Archive cache changed while loading retained history".into(),
+            ));
+        }
+        let mut applied = 0;
         let load_result = (|| -> Result<()> {
             for event in events {
                 if let Some(budget) = &budget {
                     budget.check()?;
                 }
-                self.append_loaded_event(event);
+                applied += usize::from(self.append_loaded_event(event));
             }
             if let Some(budget) = &budget {
                 budget.check()?;
             }
             Ok(())
         })();
-        let applied = self.events.read().len() - before;
-
-        // total_ingested only counts events newly added to memory.
-        // Dedupe (e.g. WAL events re-checkpointed to Parquet) makes
-        // applied < read_count possible.
-        *self.total_ingested.write() += applied as u64;
         load_result?;
         self.tenant_loader
             .mark_loaded_with_integrity(tenant_id, complete);
+        drop(resident);
 
         tracing::info!(
             tenant_id = tenant_id,
@@ -1693,7 +1741,13 @@ impl EventStore {
                 );
                 return;
             };
-            self.evict_tenant(&victim);
+            if !self.try_evict_tenant(&victim) {
+                tracing::warn!(
+                    tenant_id = victim,
+                    "cache eviction refused; retaining resident history"
+                );
+                return;
+            }
             if !self.tenant_loader.over_budget() {
                 return;
             }
@@ -1717,10 +1771,9 @@ impl EventStore {
     /// subsequent query triggers a fresh `ensure_tenant_loaded`.
     ///
     /// **Parquet is canonical, in-memory is just cache.** This
-    /// only affects the in-memory side. Disk data is untouched —
-    /// that's why eviction is safe even for tenants with
-    /// recently-ingested data: a query after eviction transparently
-    /// re-reads from Parquet.
+    /// only affects the in-memory side. Pending or in-flight archive writes,
+    /// read-only stores and stores without an archive retain their cache.
+    /// Eviction is best-effort; a later query reloads completed archive writes.
     ///
     /// Projection state is NOT rolled back. Projections accumulate
     /// across boots and tenants (their durability story is
@@ -1735,6 +1788,36 @@ impl EventStore {
     /// done. Eviction is the cold path; the working set should
     /// stay in budget so this rarely fires.
     pub fn evict_tenant(&self, tenant_id: &str) {
+        self.try_evict_tenant(tenant_id);
+    }
+
+    fn try_evict_tenant(&self, tenant_id: &str) -> bool {
+        let _resident = self.cache_residency_gate.write();
+        let Some(storage) = &self.storage else {
+            // There is no archive from which to reconstruct an in-memory store.
+            return false;
+        };
+        if self.read_only {
+            return false;
+        }
+        // Never perform or wait for disk I/O under the exclusive cache gate.
+        // A pending or in-flight flush means memory still owns queryable data.
+        let Some(storage) = storage.try_write() else {
+            return false;
+        };
+        if storage.has_pending_tenant_events(tenant_id) {
+            return false;
+        }
+        {
+            let mut generation = self
+                .cache_generations
+                .entry(tenant_id.to_string())
+                .or_insert(0);
+            let Some(next) = generation.checked_add(1) else {
+                return false;
+            };
+            *generation = next;
+        }
         let mut events = self.events.write();
         let before = events.len();
         let evicted_bytes = self.tenant_loader.bytes_for(tenant_id);
@@ -1747,9 +1830,8 @@ impl EventStore {
             // Tenant had no events in memory. Still clear loader
             // state (e.g. a "loaded with zero events" marker) so
             // is_tenant_loaded reports the right thing.
-            drop(events);
             self.tenant_loader.mark_unloaded(tenant_id);
-            return;
+            return true;
         }
 
         // Rebuild the index — Vec offsets shifted under retain().
@@ -1776,8 +1858,6 @@ impl EventStore {
                 .entry(event.entity_id_str().to_string())
                 .or_insert(0) += 1;
         }
-        drop(events);
-
         self.tenant_loader.mark_unloaded(tenant_id);
 
         // total_ingested under Steps 2-3 means "events currently
@@ -1785,6 +1865,7 @@ impl EventStore {
         let mut t = self.total_ingested.write();
         *t = t.saturating_sub(dropped as u64);
         drop(t);
+        drop(events);
 
         // Step 3 #4: cache observability. Increment the eviction
         // counter, refresh the resident-bytes gauge.
@@ -1802,6 +1883,7 @@ impl EventStore {
             bytes_freed = evicted_bytes,
             "evicted tenant from memory cache"
         );
+        true
     }
 
     /// Approximate resident bytes a single tenant occupies in the
@@ -1838,15 +1920,15 @@ impl EventStore {
     /// The check is O(1) — DashMap probe by UUID — and the
     /// alternative (loading every tenant before truncating WAL)
     /// would defeat the lazy-load.
-    fn append_loaded_event(&self, event: Event) {
+    fn append_loaded_event(&self, event: Event) -> bool {
+        let mut events = self.events.write();
         if self.index.get_by_id(&event.id).is_some() {
-            return;
+            return false;
         }
 
         let event_bytes = event.estimated_size_bytes();
         let tenant = event.tenant_id_str().to_string();
 
-        let mut events = self.events.write();
         let offset = events.len();
 
         if let Err(e) = self.index.index_event(
@@ -1873,6 +1955,8 @@ impl EventStore {
         // index/projection path doesn't leave the counter inflated.
         // The DashMap update is itself the last fallible step.
         self.tenant_loader.add_bytes(&tenant, event_bytes);
+        *self.total_ingested.write() += 1;
+        true
     }
 
     /// Manually create a snapshot for an entity
@@ -3003,6 +3087,10 @@ impl Default for EventStore {
 #[cfg(all(test, feature = "server"))]
 #[path = "store_archive_work_tests.rs"]
 mod archive_work_tests;
+
+#[cfg(test)]
+#[path = "store_archive_consistency_tests.rs"]
+mod archive_consistency_tests;
 
 #[cfg(test)]
 mod tests {

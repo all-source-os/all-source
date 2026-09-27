@@ -345,6 +345,16 @@ impl ParquetStorage {
         Ok(())
     }
 
+    /// Call while holding exclusive access to the storage owner: a shared
+    /// access check alone cannot exclude a batch already drained by a flush.
+    pub(crate) fn has_pending_tenant_events(&self, tenant_id: &str) -> bool {
+        self.current_batches
+            .lock()
+            .unwrap()
+            .get(tenant_id)
+            .is_some_and(|events| !events.is_empty())
+    }
+
     /// Flush a single tenant's pending events into its partition file.
     ///
     /// File path: `storage_dir/<sanitized_tenant_id>/<yyyy-mm>/events-<ts>-<uuid>.parquet`.

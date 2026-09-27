@@ -158,5 +158,48 @@ contract remains required before source disclosure is enabled. This repair adds
 conditional-write integrity, not that broader read attestation.
 
 No customer input, production credential, host upload or live feature activation
-is involved in these synthetic fixtures. The production image built from the
-base commit does not contain this subsequent repair.
+is involved in these synthetic fixtures. These limitations describe this source
+revision; the subsequent budget and worker repair is recorded separately.
+
+## Production rollout: release 46
+
+The complete decoder/enumeration repair, signed source
+`0b51f7d4a894798cadac13210b34b5520e9a10a9`, was built from a clean export using
+the existing `runtime-alpine` target. Image tag
+`registry.fly.io/allsource-core:core-0b51f7d4-20260927` resolves to
+`sha256:bdf4922db0d9199b4acc5075fbc2d249c223e4de425b4c1394a12897a25ffd58`.
+The registry manifest was independently read after refreshing the expiring Fly
+CLI registry credential. The build's builder-cleanup timeout followed a
+successful push and was not treated as deployment proof.
+
+All exact-source gates passed before deployment:
+
+- [CI 36321005295](https://github.com/all-source-os/all-source/actions/runs/36321005295)
+- [Docker Build 36321005282](https://github.com/all-source-os/all-source/actions/runs/36321005282)
+- [Security Scanning 36321005261](https://github.com/all-source-os/all-source/actions/runs/36321005261)
+
+Recovery snapshot `vs_R1m58Q2aG0pUkyVZeYM8jmP` was observed in `created` status,
+created `2026-09-27T13:33:19Z`, retention five days, incremental size 92,395,751
+bytes, digest `e303e3e34d9720fa6877316786a11f95cb6d9018cdeca9350ae0b5d95debed05`.
+The listing also contained an in-progress placeholder with the same ID; the
+completed entry with creation time and digest supplied the snapshot evidence.
+
+Deployment resolved and installed the exact digest as release 46,
+`rel_k96wz9rvmd4qznl0`. The running machine reported revision `0b51f7d4`,
+version 0.25.1, on existing machine `7817667a276368` in `iad`, two shared CPUs,
+4,096 MiB RAM and encrypted 10 GiB volume `vol_vwjoq95l03qzy88r` at `/app/data`.
+UID, entrypoint and private-network configuration remain the existing Alpine
+deployment configuration. Release 45's digest remains the rollback target; no
+snapshot restore or data deletion occurred.
+
+Fresh verification at 13:45 UTC passed direct Core health, Query Service
+backend/WebSocket readiness, Control Plane Core health and public web health.
+Direct Core reported healthy event-sourced metadata with 27,843 system events;
+the Fly startup check also passed at 13:44:06 UTC. No claim about WAL corruption
+counts is inferred from this health response.
+A further readiness response at 13:59:36 UTC remained healthy for both backend
+and WebSocket connectivity.
+
+This rollout does **not** include `4ea1706f`'s archive budgets, worker admission
+or cancellation checks, nor the later cache-residency work. It deploys no Query
+Service, Control Plane, web or MCP changes and activates no customer feature.
