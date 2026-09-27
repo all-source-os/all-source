@@ -92,3 +92,17 @@ decoder/enumeration repair. Release 46's exact image, CI gates, snapshot and
 fresh health checks are recorded in the
 [integrity rollout](../2026-09-27-conditional-archive-integrity/README.md#production-rollout-release-46).
 No customer flag, credential, host upload or human authority was enabled.
+
+## Candidate build verification
+
+Clean source `712304343835529ae32bbca31730714447ffdc60` built and pushed
+`registry.fly.io/allsource-core:core-71230434-20260927`. Registry inspection
+confirmed digest
+`sha256:7f73bfb6bb339482fb51e285373fbd97cf1fa1154df56432a5e790fa509937f2`.
+The builder reported a cleanup deadline after the successful push; the command
+exited zero and independent registry inspection succeeded. CI 36324515894,
+Docker 36324515825 and Security 36324515920 subsequently completed successfully.
+
+This candidate was not deployed. It excludes the later strict-read protocol and
+compaction refusal repair; its cold-work defaults also need production
+compatibility resolution. Release 46 remains in place.

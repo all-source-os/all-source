@@ -70,3 +70,41 @@ The source and local binary manifests identify proof inputs. Temporary logs:
 `/private/tmp/strict-read-{client-red,client-green,core,snapshot,clippy,elixir,binary,http,credo}.log`
 and `/private/tmp/strict-retained-entity.log`. The committed tests are the durable
 reproduction; fixtures use synthetic credentials and owned temporary archives.
+
+## Post-commit rollout checks
+
+Signed source `205422471931a13a7120e6097cce894e62f8b464` was verified equal to
+`origin/main`. All source manifest entries passed in clean export
+`/private/tmp/allsource-core-20542247-ACb9tL` before starting its build-only
+runtime-alpine image. This is not a production deployment.
+
+The additional required Dialyzer gate passed with the existing ignore file
+unchanged: seven existing filtered findings and one unused-filter diagnostic.
+Log: `/private/tmp/strict-read-dialyzer.log`.
+
+A bounded, read-only production filesystem metadata scan completed successfully.
+It used a shell one-liner rather than installing a diagnostic runtime on the
+production machine, and returned only aggregate counts/bytes:
+
+| Measurement | Observed |
+| --- | ---: |
+| Tenant archive directories containing Parquet | 64 |
+| Parquet files | 246,215 |
+| Total compressed bytes | 1,293,801,569 |
+| Tenants above 50,000-file cap | 1 |
+| Tenants above 256 MiB total compressed cap | 1 |
+| Tenants with a file above 32 MiB | 0 |
+| Largest tenant file count | 219,353 |
+| Largest tenant compressed bytes | 1,092,911,296 |
+
+This scan did not decode payloads, identify customer tenants in its output,
+measure cold decode latency or prove every archive fits the row/uncompressed
+budgets. Gateway backend/WebSocket readiness remained healthy at
+2026-09-27T14:28:13Z. Production still runs release 46. The observation confirms
+that the new defaults are not universally compatible; rollout remains pending.
+
+Compatibility review also found a separate destructive compaction path: a
+selected unreadable input was skipped during decode but later removed with the
+other originals. Synthetic reproduction and repair are tracked as `t-079e5c`.
+The image building from this document's original source does not contain that
+later repair. No production compaction was invoked.

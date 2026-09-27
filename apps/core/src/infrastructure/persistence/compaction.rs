@@ -557,15 +557,18 @@ impl CompactionManager {
                     .unwrap_or_else(|| "default".to_string()),
                 None => "default".to_string(),
             };
-            match storage.load_events_from_file_path(&fi.path, &event_tenant) {
-                Ok(mut e) => events.append(&mut e),
-                Err(e) => {
-                    tracing::error!(
-                        file = %fi.path.display(),
-                        "failed to read parquet file for compaction: {e}"
-                    );
-                }
-            }
+            // Every selected input must be readable before any retention,
+            // archive, snapshot or deletion step can run. Skipping a failed
+            // input would later delete it as if its contents were preserved.
+            let mut loaded = storage
+                .load_events_from_file_path(&fi.path, &event_tenant)
+                .map_err(|error| {
+                    AllSourceError::StorageError(format!(
+                        "Compaction refused unreadable candidate {}: {error}",
+                        fi.path.display()
+                    ))
+                })?;
+            events.append(&mut loaded);
         }
 
         if events.is_empty() {

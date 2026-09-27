@@ -30,7 +30,7 @@ defmodule QueryServiceEx.Integration.StrictRetainedReadTest do
     end)
   end
 
-  test "a tolerant read of a damaged archive cannot authorize agent evidence", context do
+  test "tolerant reads and compaction cannot erase damaged archive evidence", context do
     with_core(context, fn ->
       assert {:ok, %{status: 200}} = append()
     end)
@@ -39,11 +39,19 @@ defmodule QueryServiceEx.Integration.StrictRetainedReadTest do
     File.mkdir_p!(partition)
     corrupt = Path.join(partition, "events-unreadable.parquet")
     File.write!(corrupt, "synthetic unreadable retained history")
+    File.write!(Path.join(partition, "events-unreadable-second.parquet"), "synthetic unreadable")
 
     for _restart <- 1..2 do
       with_core(context, fn ->
         assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
         assert {:ok, %{"events" => [_event]}} = legacy_query()
+        originals = retained_files(context)
+        assert map_size(originals) >= 3
+
+        assert {:ok, %{status: 200}} =
+                 Tesla.post(RustCoreClient.write_client(), "/api/v1/compaction/trigger", %{})
+
+        assert retained_files(context) == originals
         assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(1))
         assert {:error, :source_unavailable} = AgentRunStore.events(F.tenant(), F.uuid(2))
         assert {:ok, %{status: 200}} = Tesla.get(RustCoreClient.write_client(), "/health")
@@ -51,6 +59,13 @@ defmodule QueryServiceEx.Integration.StrictRetainedReadTest do
     end
 
     assert File.read!(corrupt) == "synthetic unreadable retained history"
+  end
+
+  defp retained_files(context) do
+    context.directory
+    |> Path.join("storage/#{F.tenant()}/**/*.parquet")
+    |> Path.wildcard()
+    |> Map.new(&{&1, File.read!(&1)})
   end
 
   defp assert_history do

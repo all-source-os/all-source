@@ -1,0 +1,1 @@
+c18a361c6bcfbab6caa3ff04d18702b53464798afa22e387d816dfcb232c8388  target/debug/allsource-core
