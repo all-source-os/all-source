@@ -7,6 +7,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
   alias QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
   alias QueryServiceEx.TestSupport.CustomerAgentClaude
+  alias QueryServiceEx.TestSupport.CustomerAgentConnection
   alias QueryServiceEx.TestSupport.CustomerAgentCore
 
   @moduletag :integration
@@ -143,7 +144,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
     with_core(context, fn ->
       issued = provision()
 
-      with_mcp(context, issued.token, fn port ->
+      with_mcp(context, issued.token, fn port, path ->
         assert %{"result" => %{"serverInfo" => %{"name" => "allsource-customer-review"}}} =
                  rpc(port, 1, "initialize", %{
                    "protocolVersion" => "2025-06-18",
@@ -174,6 +175,22 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
                  context_response["result"]["content"]
 
         assert Jason.decode!(context_text) == context_response["result"]["structuredContent"]
+
+        File.chmod!(path, 0o644)
+
+        assert %{"result" => %{"isError" => true}} =
+                 rpc(port, "shared-file", "tools/call", %{
+                   "name" => "allsource_review_context",
+                   "arguments" => %{}
+                 })
+
+        File.chmod!(path, 0o600)
+
+        assert %{"result" => %{"isError" => false}} =
+                 rpc(port, "private-file", "tools/call", %{
+                   "name" => "allsource_review_context",
+                   "arguments" => %{}
+                 })
 
         assert %{
                  "result" => %{
@@ -214,7 +231,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
                  })
       end)
 
-      with_mcp(context, issued.token, fn port ->
+      with_mcp(context, issued.token, fn port, _path ->
         assert %{"result" => %{"isError" => true}} =
                  rpc(port, 7, "tools/call", %{
                    "name" => "allsource_review_context",
@@ -347,15 +364,12 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
   defp status(_), do: :request_failed
 
   defp with_mcp(context, token, fun) do
+    path = CustomerAgentConnection.write(context, token, @binding)
+
     env =
       %{
         "ALLSOURCE_CUSTOMER_REVIEW" => "true",
-        "CUSTOMER_REVIEW_URL" => context.query_url,
-        "CUSTOMER_REVIEW_GRANT" => token,
-        "CUSTOMER_REVIEW_TENANT" => @binding["tenant_id"],
-        "CUSTOMER_REVIEW_SUBJECT" => @binding["subject_id"],
-        "CUSTOMER_REVIEW_CLIENT" => @binding["client_id"],
-        "CUSTOMER_REVIEW_RESOURCE" => @binding["resource"],
+        "CUSTOMER_REVIEW_CONNECTION_FILE" => path,
         "CORE_API_KEY" => "",
         "ALLSOURCE_CORE_API_KEY" => "",
         "CORE_MODE" => "remote",
@@ -375,7 +389,7 @@ defmodule QueryServiceEx.Integration.CustomerAgentHTTPTest do
       ])
 
     try do
-      fun.(port)
+      fun.(port, path)
     after
       case Port.info(port, :os_pid) do
         {:os_pid, pid} ->

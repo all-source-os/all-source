@@ -11,7 +11,9 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentCore do
 
   def setup_context do
     suffix = :crypto.strong_rand_bytes(8) |> Base.encode16(case: :lower)
-    directory = Path.join(System.tmp_dir!(), "allsource-grant-core-#{suffix}")
+    # Customer MCP fixtures require real paths, with no symlinked /var or /tmp.
+    root = if :os.type() == {:unix, :darwin}, do: "/private/tmp", else: System.tmp_dir!()
+    directory = Path.join(root, "allsource-grant-core-#{suffix}")
     File.mkdir!(directory)
     File.chmod!(directory, 0o700)
     keys = [:core_url, :core_write_url, :core_read_urls, :core_api_key]

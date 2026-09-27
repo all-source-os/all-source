@@ -33,6 +33,10 @@ The MCP server translates natural language into precise event store queries, ret
 
 ## Quick Start
 
+For the restricted, consent-bound customer review profile, use
+[Local customer review connection](CUSTOMER_CONNECTIONS.md). Its OS-owner-checked
+private file is separate from the general event-store connection below.
+
 ### 1. Start AllSource Services
 
 ```bash

@@ -606,10 +606,23 @@ jobs:
         working-directory: apps/mcp-server-elixir
     env:
       MIX_ENV: test
+      RUSTUP_TOOLCHAIN: stable
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Set up connection reader toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Verify OS-owner connection reader
+        timeout-minutes: 5
+        run: |
+          cargo fmt --manifest-path tooling/customer-connection/Cargo.toml --check
+          cargo clippy --locked --manifest-path tooling/customer-connection/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path tooling/customer-connection/Cargo.toml
 
       - name: Set up Elixir
         uses: erlef/setup-beam@v1

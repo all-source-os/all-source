@@ -39,3 +39,5 @@ _rel/
 .env
 .env.local
 
+/tooling/customer-connection/target/
+/priv/bin/allsource-customer-connection

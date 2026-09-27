@@ -1,0 +1,5 @@
+530adda2b4d65744e8a2f31e0060a22908f0410394c4361e39b25327993b9065  target/debug/allsource-core
+47839827b7f80978b1898b33c901fb9b13aa9a6d14c091c386b2b41e2cd5904e  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/bin/allsource-customer-connection
+47839827b7f80978b1898b33c901fb9b13aa9a6d14c091c386b2b41e2cd5904e  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/priv/bin/allsource-customer-connection
+1d2977bdd58a8cd1beb72da8407ca50fe6a6b06259ae3e83be2e0dbcea6c463d  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Infrastructure.CustomerConnectionFile.beam
+60a2be7a4a0f45dc75682ad24fafa2d9c5d2610144ae90eac1c3caa7683aba6e  apps/mcp-server-elixir/_build/prod/rel/mcp_server_elixir/lib/mcp_server_elixir-0.25.1/ebin/Elixir.McpServerElixir.Infrastructure.CustomerReviewClient.beam

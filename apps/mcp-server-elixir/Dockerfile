@@ -16,7 +16,7 @@ ARG VERSION=dev
 ARG REVISION=unknown
 
 # Install build dependencies
-RUN apk add --no-cache git build-base
+RUN apk add --no-cache git build-base cargo rust
 
 # Set build environment
 ENV MIX_ENV=prod
@@ -37,6 +37,7 @@ RUN mix deps.get --only $MIX_ENV && \
 
 # Copy source code
 COPY lib lib
+COPY tooling/customer-connection tooling/customer-connection
 
 # Compile and create release
 RUN mix compile && \

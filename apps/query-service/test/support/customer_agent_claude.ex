@@ -6,12 +6,17 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentClaude do
   budget. Not a customer install, processing consent or outcome claim.
   """
 
+  alias QueryServiceEx.TestSupport.CustomerAgentConnection
+
   def run(context, token, binding, mcp_binary, claude_binary) do
     directory = Path.join(context.directory, "claude-host")
     skill = Path.join(directory, ".claude/skills/allsource-customer")
     File.mkdir_p!(Path.dirname(skill))
     File.cp_r!(Path.expand("../../../../skills/allsource-customer", __DIR__), skill)
     config_file = Path.join(directory, "mcp.json")
+
+    connection_file =
+      CustomerAgentConnection.write(context, token, binding)
 
     config = %{
       mcpServers: %{
@@ -20,12 +25,7 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentClaude do
           args: ["start"],
           env: %{
             "ALLSOURCE_CUSTOMER_REVIEW" => "true",
-            "CUSTOMER_REVIEW_URL" => context.query_url,
-            "CUSTOMER_REVIEW_GRANT" => token,
-            "CUSTOMER_REVIEW_TENANT" => binding["tenant_id"],
-            "CUSTOMER_REVIEW_SUBJECT" => binding["subject_id"],
-            "CUSTOMER_REVIEW_CLIENT" => binding["client_id"],
-            "CUSTOMER_REVIEW_RESOURCE" => binding["resource"],
+            "CUSTOMER_REVIEW_CONNECTION_FILE" => connection_file,
             "CORE_API_KEY" => "",
             "ALLSOURCE_CORE_API_KEY" => "",
             "CORE_MODE" => "remote",

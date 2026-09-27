@@ -160,8 +160,13 @@ at runtime by the website. This form issues only the local Claude Code profile;
 remote Claude must use its future PKCE flow. See the
 [connection consent evidence](../evidence/2026-09-27-customer-connections/README.md).
 
-1. **Transport and discovery.** Local stdio still needs real process/OS-owner
-   binding and configuration delivery; a chosen client name is insufficient.
+1. **Transport and discovery.** Local stdio now loads an owner-only private file
+   through a packaged Rust reader using actual OS UID, descriptor-relative path,
+   file mode/link/ACL and size checks. The one-time product handoff includes a
+   private installer and credential-free Claude Code command. Owner/root copying
+   and programs sharing a UID are outside that boundary. Native-host proof,
+   Linux build proof and public distribution remain required. See the
+   [local owner/install evidence](../evidence/2026-09-27-local-customer-connection/README.md).
    Remote OAuth requires PKCE, exact redirects, resource binding and actual
    claude.ai verification. Both hosts remain required. Do not enable production
    issuance before those release gates pass.

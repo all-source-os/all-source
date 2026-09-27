@@ -1,3 +1,36 @@
+defmodule Mix.Tasks.Compile.CustomerConnection do
+  use Mix.Task.Compiler
+
+  @moduledoc false
+  @recursive true
+
+  def run(_args) do
+    root = Path.join(__DIR__, "tooling/customer-connection")
+    cargo = System.find_executable("cargo") || Mix.raise("Rust cargo is required")
+
+    {_output, status} =
+      System.cmd(
+        cargo,
+        ["build", "--release", "--locked", "--manifest-path", root <> "/Cargo.toml"],
+        into: IO.stream(:stdio, :line),
+        stderr_to_stdout: true,
+        env: [{"CARGO_TARGET_DIR", root <> "/target"}]
+      )
+
+    if status != 0, do: Mix.raise("Customer connection reader build failed")
+    destination = Path.join(__DIR__, "priv/bin")
+    File.mkdir_p!(destination)
+
+    File.cp!(
+      root <> "/target/release/allsource-customer-connection",
+      destination <> "/allsource-customer-connection"
+    )
+
+    File.chmod!(destination <> "/allsource-customer-connection", 0o755)
+    {:ok, []}
+  end
+end
+
 defmodule McpServerElixir.MixProject do
   use Mix.Project
 
@@ -6,6 +39,7 @@ defmodule McpServerElixir.MixProject do
       app: :mcp_server_elixir,
       version: "0.25.1",
       elixir: "~> 1.17",
+      compilers: [:customer_connection] ++ Mix.compilers(),
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -68,8 +102,15 @@ defmodule McpServerElixir.MixProject do
       mcp_server_elixir: [
         include_executables_for: [:unix],
         applications: [runtime_tools: :permanent],
-        steps: [:assemble, :tar]
+        steps: [:assemble, &install_connection_command/1, :tar]
       ]
     ]
+  end
+
+  defp install_connection_command(release) do
+    destination = Path.join(release.path, "bin/allsource-customer-connection")
+    File.cp!(Path.join(__DIR__, "priv/bin/allsource-customer-connection"), destination)
+    File.chmod!(destination, 0o755)
+    release
   end
 end

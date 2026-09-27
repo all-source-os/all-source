@@ -67,6 +67,7 @@ RUN mix deps.get --only $MIX_ENV && \
 # Copy source + the Rustler NIF crate (native/core_nif builds standalone)
 COPY lib lib
 COPY native native
+COPY tooling/customer-connection tooling/customer-connection
 
 # Compile (builds the NIF via Rustler) and assemble the release
 RUN mix compile && \

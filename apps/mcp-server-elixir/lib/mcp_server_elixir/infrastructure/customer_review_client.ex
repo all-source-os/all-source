@@ -2,16 +2,13 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewClient do
   @moduledoc """
   Customer review profile's sole network boundary. It never holds a Core admin
   key, follows redirects, calls a general query endpoint or retries a request.
-  Credentials and bindings come from process configuration, not tool arguments.
+  Credentials and bindings come from an OS-owner-checked file, not tool arguments.
   """
 
   @spec call(String.t(), map()) :: {:ok, map()} | {:error, atom()}
   def call(operation, arguments) when operation in ["context", "validate"] do
-    config = Application.get_env(:mcp_server_elixir, :customer_review_connection, %{})
-
-    with %{url: url, token: token, binding: binding} <- config,
-         true <- valid_url?(url) and is_binary(token) and byte_size(token) <= 128,
-         true <- is_map(binding),
+    with {:ok, %{"url" => url, "token" => token, "binding" => binding}} <-
+           McpServerElixir.Infrastructure.CustomerConnectionFile.load(),
          body = Map.put(arguments, "binding", binding),
          {:ok, encoded} <- Jason.encode(body),
          true <- byte_size(encoded) <= 65_536 do
@@ -66,17 +63,4 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewClient do
         {:error, :access_unavailable}
     end
   end
-
-  defp valid_url?(url) when is_binary(url) and byte_size(url) <= 512 do
-    case URI.new(url) do
-      {:ok, %URI{scheme: scheme, host: host, path: path, userinfo: nil, query: nil, fragment: nil}}
-      when is_binary(host) and host != "" and path in [nil, "", "/"] ->
-        scheme == "https" or (scheme == "http" and host in ["127.0.0.1", "::1"])
-
-      _ ->
-        false
-    end
-  end
-
-  defp valid_url?(_), do: false
 end

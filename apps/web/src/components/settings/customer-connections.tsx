@@ -2,6 +2,7 @@
 
 import { Button } from "@allsource/ui";
 import { useCallback, useEffect, useState } from "react";
+import { CustomerConnectionSetup, type IssuedConnection } from "./customer-connection-setup";
 
 type Connection = {
   id: string;
@@ -11,7 +12,6 @@ type Connection = {
   operations: string[];
   status: "active" | "expired" | "revoked";
 };
-type Issued = { id: string; token: string; expires_at: number; binding: Record<string, string> };
 
 async function request<T>(operation: string, body: unknown): Promise<T> {
   const response = await fetch(`/api/customer-agent/connections/${operation}`, {
@@ -30,7 +30,7 @@ async function request<T>(operation: string, body: unknown): Promise<T> {
 export function CustomerConnections() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accepted, setAccepted] = useState(false);
-  const [issued, setIssued] = useState<Issued | null>(null);
+  const [issued, setIssued] = useState<IssuedConnection | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,7 +51,7 @@ export function CustomerConnections() {
     setNotice("");
     try {
       if (operation === "create") {
-        const result = await request<Issued>("create", {
+        const result = await request<IssuedConnection>("create", {
           client_id: "claude-code",
           operations: ["read_context", "validate_proposal"],
           ttl: 3600,
@@ -108,7 +108,7 @@ export function CustomerConnections() {
       {issued && (
         <section className="space-y-4 rounded-xl border p-6" aria-labelledby="one-time-secret">
           <h2 id="one-time-secret" className="text-xl font-semibold">
-            Save your connection credential
+            Install your connection
           </h2>
           <p>
             Shown once. Expires {new Date(issued.expires_at * 1000).toLocaleString()}. Keep it
@@ -125,18 +125,8 @@ export function CustomerConnections() {
             autoComplete="off"
             className="w-full rounded-md border bg-background p-3 font-mono text-base"
           />
+          <CustomerConnectionSetup key={issued.id} issued={issued} />
           <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                void navigator.clipboard
-                  .writeText(issued.token)
-                  .then(() => setNotice("Credential copied."))
-                  .catch(() => setError("Copy failed. Select the credential to copy it."));
-              }}
-            >
-              Copy credential
-            </Button>
             <Button variant="outline" onClick={() => setIssued(null)}>
               Hide credential
             </Button>

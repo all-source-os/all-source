@@ -37,3 +37,6 @@ logs/
 .fetch
 .elixir_ls/
 erl_crash.dump
+
+tooling/customer-connection/target/
+priv/bin/

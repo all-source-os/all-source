@@ -1,0 +1,17 @@
+[package]
+name = "allsource-customer-connection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+libc = "=0.2.189"
+serde_json = "=1.0.151"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
