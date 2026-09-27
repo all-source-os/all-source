@@ -1,0 +1,59 @@
+[info] [ProjectionSync] ETS cache initialized
+[info] [Cluster] Clustering disabled (CLUSTER_STRATEGY=none)
+[info] [RateLimiter] Started with ETS table rate_limiter_buckets
+[info] [CircuitBreaker] Started with threshold=5, reset_timeout=30000ms
+[info] [ApiKeyStore] Started ETS cache :api_key_store (durable backing: Core)
+[info] [DemoReset] Disabled (set DEMO_RESET_ENABLED=true to enable)
+[info] [ConsistentHash] Started with 1 node(s)
+[info] Starting Horde.RegistryImpl with name QueryServiceEx.Cluster.DistributedRegistry
+[info] Starting Horde.DynamicSupervisorImpl with name QueryServiceEx.Cluster.DistributedSupervisor
+[info] [Membership] Started on node nonode@nohost
+[info] ProjectionServer[index] subscribed to events:type:index
+[info] ProjectionSupervisor started projection: indices
+[info] ProjectionServer[portfolio] subscribed to events:type:portfolio
+[info] ProjectionSupervisor started projection: portfolios
+[info] ProjectionServer[saga] subscribed to events:type:saga
+[info] ProjectionSupervisor started projection: sagas
+[info] ProjectionServer[trade] subscribed to events:type:trade
+[info] ProjectionSupervisor started projection: trades
+[info] [CoreWebSocketClient] Disabled, not connecting
+Running ExUnit with seed: 42017, max_cases: 24
+Excluding tags: [:integration]
+
+....
+
+  1) test actual dispatcher crash logs do not disclose private call or active tenant data (QueryServiceEx.Application.Services.CustomerReviewWorkTest)
+     test/query_service_ex/application/services/customer_review_work_test.exs:175
+     Refute with =~ failed
+     code:  refute logs =~ "synthetic-private"
+     left:  "[error] GenServer QueryServiceEx.Application.Services.CustomerReviewWorkTest.Dispatcher terminating\n** (stop) :redacted\n    (query_service_ex 0.25.1) lib/query_service_ex/application/services/customer_review_work_dispatcher.ex:24: QueryServiceEx.Application.Services.CustomerReviewWorkDispatcher.handle_call({:unexpected, \"synthetic-private-request\"}, {#PID<0.489.0>, [:alias | #Reference<0.0.62595.2787964261.3838902275.65900>]}, %{tasks: QueryServiceEx.Application.Services.CustomerReviewWorkTest.Tasks, deadline_ms: 5000, jobs: %{#Reference<0.0.63491.2787964261.3838902275.65889> => %{owner: #Reference<0.2787964261.3838836739.65886>, timer: #Reference<0.2787964261.3838836739.65890>, result: {:error, :review_unavailable}, task: %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.496.0>, pid: #PID<0.498.0>, ref: #Reference<0.0.63491.2787964261.3838902275.65889>}, from: {#PID<0.497.0>, [:alias | #Reference<0.0.63619.2787964261.3838902275.65884>]}, replied: false, tenant: \"synthetic-private-tenant\"}}})\n    (stdlib 7.1) gen_server.erl:2470: :gen_server.try_handle_call/4\n    (stdlib 7.1) gen_server.erl:2499: :gen_server.handle_msg/3\n    (stdlib 7.1) proc_lib.erl:333: :proc_lib.init_p_do_apply/3\nLast message (from #PID<0.489.0>): :redacted\nState: %{active: 1}\nClient #PID<0.489.0> is alive\n\n    (stdlib 7.1) gen.erl:262: :gen.do_call/4\n    (elixir 1.19.1) lib/gen_server.ex:1139: GenServer.call/3\n    test/query_service_ex/application/services/customer_review_work_test.exs:184: anonymous fn/3 in QueryServiceEx.Application.Services.CustomerReviewWorkTest.\"test actual dispatcher crash logs do not disclose private call or active tenant data\"/1\n    (ex_unit 1.19.1) lib/ex_unit/capture_log.ex:121: ExUnit.CaptureLog.with_log/2\n    (ex_unit 1.19.1) lib/ex_unit/capture_log.ex:83: ExUnit.CaptureLog.capture_log/2\n    test/query_service_ex/application/services/customer_review_work_test.exs:182: QueryServiceEx.Application.Services.CustomerReviewWorkTest.\"test actual dispatcher crash logs do not disclose private call or active tenant data\"/1\n    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2\n    (ex_unit 1.19.1) lib/ex_unit/capture_log.ex:121: ExUnit.CaptureLog.with_log/2\n    (ex_unit 1.19.1) lib/ex_unit/runner.ex:477: anonymous fn/3 in ExUnit.Runner.maybe_capture_log/3\n    (stdlib 7.1) timer.erl:599: :timer.tc/2\n    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4\n"
+     right: "synthetic-private"
+     stacktrace:
+       test/query_service_ex/application/services/customer_review_work_test.exs:193: (test)
+
+     The following output was logged:
+     [error] GenServer QueryServiceEx.Application.Services.CustomerReviewWorkTest.Dispatcher terminating
+     ** (stop) :redacted
+         (query_service_ex 0.25.1) lib/query_service_ex/application/services/customer_review_work_dispatcher.ex:24: QueryServiceEx.Application.Services.CustomerReviewWorkDispatcher.handle_call({:unexpected, "synthetic-private-request"}, {#PID<0.489.0>, [:alias | #Reference<0.0.62595.2787964261.3838902275.65900>]}, %{tasks: QueryServiceEx.Application.Services.CustomerReviewWorkTest.Tasks, deadline_ms: 5000, jobs: %{#Reference<0.0.63491.2787964261.3838902275.65889> => %{owner: #Reference<0.2787964261.3838836739.65886>, timer: #Reference<0.2787964261.3838836739.65890>, result: {:error, :review_unavailable}, task: %Task{mfa: {:erlang, :apply, 2}, owner: #PID<0.496.0>, pid: #PID<0.498.0>, ref: #Reference<0.0.63491.2787964261.3838902275.65889>}, from: {#PID<0.497.0>, [:alias | #Reference<0.0.63619.2787964261.3838902275.65884>]}, replied: false, tenant: "synthetic-private-tenant"}}})
+         (stdlib 7.1) gen_server.erl:2470: :gen_server.try_handle_call/4
+         (stdlib 7.1) gen_server.erl:2499: :gen_server.handle_msg/3
+         (stdlib 7.1) proc_lib.erl:333: :proc_lib.init_p_do_apply/3
+     Last message (from #PID<0.489.0>): :redacted
+     State: %{active: 1}
+     Client #PID<0.489.0> is alive
+     
+         (stdlib 7.1) gen.erl:262: :gen.do_call/4
+         (elixir 1.19.1) lib/gen_server.ex:1139: GenServer.call/3
+         test/query_service_ex/application/services/customer_review_work_test.exs:184: anonymous fn/3 in QueryServiceEx.Application.Services.CustomerReviewWorkTest."test actual dispatcher crash logs do not disclose private call or active tenant data"/1
+         (ex_unit 1.19.1) lib/ex_unit/capture_log.ex:121: ExUnit.CaptureLog.with_log/2
+         (ex_unit 1.19.1) lib/ex_unit/capture_log.ex:83: ExUnit.CaptureLog.capture_log/2
+         test/query_service_ex/application/services/customer_review_work_test.exs:182: QueryServiceEx.Application.Services.CustomerReviewWorkTest."test actual dispatcher crash logs do not disclose private call or active tenant data"/1
+         (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+         (ex_unit 1.19.1) lib/ex_unit/capture_log.ex:121: ExUnit.CaptureLog.with_log/2
+         (ex_unit 1.19.1) lib/ex_unit/runner.ex:477: anonymous fn/3 in ExUnit.Runner.maybe_capture_log/3
+         (stdlib 7.1) timer.erl:599: :timer.tc/2
+         (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+     
+......
+Finished in 0.4 seconds (0.00s async, 0.4s sync)
+11 tests, 1 failure

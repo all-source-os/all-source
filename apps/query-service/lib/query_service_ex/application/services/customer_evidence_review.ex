@@ -17,7 +17,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
   def prepare(token, binding, input, now) do
-    CustomerReviewDeadline.run(fn -> do_prepare(token, binding, input, now) end)
+    CustomerReviewDeadline.run(binding, fn -> do_prepare(token, binding, input, now) end)
   end
 
   defp do_prepare(token, binding, input, now) do
@@ -58,7 +58,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
   end
 
   def read(token, binding, id, version, request_id, now, operation \\ "read_review") do
-    CustomerReviewDeadline.run(fn ->
+    CustomerReviewDeadline.run(binding, fn ->
       do_read(token, binding, id, version, request_id, now, operation)
     end)
   end

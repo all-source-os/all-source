@@ -33,7 +33,13 @@ the exact owner, connection, operation and intent. A receipt records usage; it i
 not source consent or human approval. When these operations are eventually
 discovered, preserve the schema-provided retry identity unchanged. Do not mint a
 new key to bypass an expiry, quota, changed-period or changed-intent refusal.
-Work limits across replicas and billing reset integration still block activation.
+Workflow admission is now bounded per Query Service instance; retained source
+reads from every gateway use the existing leader's shared archive pool. A busy
+refusal starts no workflow and consumes no query units. Cancellation can follow
+an already committed usage receipt or pending draft, so preserve the original
+identity if the user retries; do not start parallel retry loops. These are
+internal service guarantees, not newly discovered tools. Billing reset adoption,
+product and host delivery gates still block activation.
 
 ## Intended request
 

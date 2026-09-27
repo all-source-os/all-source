@@ -51,6 +51,9 @@ defmodule QueryServiceEx.Application do
         # Async usage increment reporter (buffers and flushes to Core)
         QueryServiceEx.UsageReporter,
 
+        # Own bounded review tasks through caller cancellation and dispatcher restarts.
+        QueryServiceEx.Application.Services.CustomerReviewWork,
+
         # ETS cache for analytics results
         QueryServiceEx.Infrastructure.Adapters.AnalyticsCache,
 

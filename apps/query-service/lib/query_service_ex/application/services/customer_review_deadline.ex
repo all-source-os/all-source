@@ -1,20 +1,10 @@
 defmodule QueryServiceEx.Application.Services.CustomerReviewDeadline do
-  @moduledoc "End-to-end bound for internal review work. Timeout may follow a committed draft; retry uses its idempotency key."
-  def run(fun) do
-    task =
-      Task.async(fn ->
-        try do
-          fun.()
-        rescue
-          _ -> {:error, :review_unavailable}
-        catch
-          _, _ -> {:error, :review_unavailable}
-        end
-      end)
+  @moduledoc "Bounded supervised review work. Cancellation may follow a committed draft; retry preserves its operation ID."
+  alias QueryServiceEx.Application.Services.CustomerReviewWorkDispatcher
 
-    case Task.yield(task, 20_000) || Task.shutdown(task, :brutal_kill) do
-      {:ok, result} -> result
-      _ -> {:error, :review_unavailable}
-    end
+  def run(identity, fun) when is_map(identity) do
+    CustomerReviewWorkDispatcher.run(identity["tenant_id"], fun)
   end
+
+  def run(_, _), do: {:error, :review_unavailable}
 end

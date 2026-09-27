@@ -250,6 +250,14 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
         for _ <- 1..4, do: Task.async(fn -> Review.prepare(grant.token, @binding, input, now) end)
 
       results = Task.await_many(tasks, 30_000)
+      assert Enum.all?(results, &(match?({:ok, _}, &1) or &1 == {:error, :review_busy}))
+
+      results =
+        Enum.map(results, fn
+          {:error, :review_busy} -> Review.prepare(grant.token, @binding, input, now)
+          result -> result
+        end)
+
       assert Enum.all?(results, &match?({:ok, %{state: "pending", approved: false}}, &1))
       assert results |> Enum.uniq() |> length() == 1
       assert {:ok, %{"used" => 4}} = Usage.snapshot(@tenant)

@@ -11,7 +11,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
   @consent %{"accepted" => true, "version" => "selected-run-evidence-v1"}
 
   def share(actor, connection, input, now) do
-    CustomerReviewDeadline.run(fn -> do_share(actor, connection, input, now) end)
+    CustomerReviewDeadline.run(actor, fn -> do_share(actor, connection, input, now) end)
   end
 
   defp do_share(actor, connection, input, now) do
