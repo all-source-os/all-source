@@ -59,9 +59,10 @@ func (cp *ControlPlane) emailAuthService(c *gin.Context, signup bool, name, emai
 	var result struct {
 		Token string `json:"token"`
 		User  struct {
-			ID    string `json:"id"`
-			Email string `json:"email"`
-			Name  string `json:"name"`
+			ID            string `json:"id"`
+			Email         string `json:"email"`
+			Name          string `json:"name"`
+			EmailVerified bool   `json:"emailVerified"`
 		} `json:"user"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&result); err != nil || result.Token == "" || !authUserIDPattern.MatchString(result.User.ID) || result.User.Email == "" {
@@ -81,7 +82,8 @@ func (cp *ControlPlane) emailAuthService(c *gin.Context, signup bool, name, emai
 	now := time.Now()
 	claims := &Claims{
 		UserID: result.User.ID, Username: result.User.Name, Email: result.User.Email,
-		Name: result.User.Name, TenantID: tenantID, Role: entities.RoleDeveloper, Provider: "email",
+		EmailVerified: result.User.EmailVerified,
+		Name:          result.User.Name, TenantID: tenantID, Role: entities.RoleDeveloper, Provider: "email",
 		StandardClaims: jwt.StandardClaims{Subject: result.User.ID, Issuer: "allsource", IssuedAt: now.Unix(), ExpiresAt: now.Add(7 * 24 * time.Hour).Unix()},
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(cp.authClient.jwtSecret))

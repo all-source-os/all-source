@@ -45,6 +45,12 @@ func TestEmailAuthService(t *testing.T) {
 					_, _ = w.Write([]byte(`{"token":"opaque"}`)) //nolint:errcheck // test response
 					return
 				}
+				if tc.name == "returning-login" {
+					if err := json.NewEncoder(w).Encode(map[string]any{"token": "opaque", "user": map[string]any{"id": "user-123", "email": "owner@example.test", "name": "Example", "emailVerified": true}}); err != nil {
+						t.Error("synthetic auth response failed")
+					}
+					return
+				}
 				_, _ = w.Write([]byte(`{"token":"opaque","user":{"id":"user-123","email":"owner@example.test","name":"Example"}}`)) //nolint:errcheck // test response
 			}))
 			defer auth.Close()
@@ -53,6 +59,10 @@ func TestEmailAuthService(t *testing.T) {
 			core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls++
 				w.Header().Set("Content-Type", "application/json")
+				if strings.HasPrefix(r.URL.Path, "/api/v1/config/customer_agent_v1.member_workspace.") {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
 				if r.URL.Path == "/api/v1/config/conditional/set" {
 					_, _ = w.Write([]byte(`{"key":"team:email-user-123:members","saved":true,"revision":"synthetic-revision"}`)) //nolint:errcheck // test response
 					return
@@ -131,6 +141,9 @@ func TestEmailAuthService(t *testing.T) {
 				}
 				if data.NewUser != (tc.tenantStatus == 201) {
 					t.Fatal("wrong onboarding flag")
+				}
+				if claims.EmailVerified != (tc.name == "returning-login") {
+					t.Fatal("email verification proof was not preserved")
 				}
 			}
 		})

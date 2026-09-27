@@ -333,7 +333,15 @@ func memberCountFromCore(ctx context.Context, core clients.CoreClient, tenantID 
 	}
 	var members []json.RawMessage
 	if err := json.Unmarshal(b, &members); err != nil {
-		return 0, false
+		var state struct {
+			Version     int                        `json:"schema_version"`
+			Members     []json.RawMessage          `json:"members"`
+			Invitations map[string]json.RawMessage `json:"invitations"`
+		}
+		if json.Unmarshal(b, &state) != nil || state.Version != 2 || state.Members == nil || state.Invitations == nil {
+			return 0, false
+		}
+		members = state.Members
 	}
 	return len(members), true
 }

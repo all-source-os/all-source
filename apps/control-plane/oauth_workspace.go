@@ -33,6 +33,9 @@ func (cp *ControlPlane) oauthWorkspace(ctx context.Context, subject, email, name
 	if !workspaceSubjectPattern.MatchString(subject) || cp.client == nil {
 		return "", false, errWorkspaceUnavailable
 	}
+	if selected, found, err := cp.memberWorkspace(ctx, subject); err != nil || found {
+		return selected, false, err
+	}
 	key := workspaceRegistryKey(subject)
 	entry, found, err := cp.workspaceConfig(ctx, key)
 	if err != nil {
@@ -100,6 +103,9 @@ func (cp *ControlPlane) emailWorkspace(ctx context.Context, subject, email, name
 	if !authUserIDPattern.MatchString(subject) || cp.client == nil {
 		return "", false, errWorkspaceUnavailable
 	}
+	if selected, found, err := cp.memberWorkspace(ctx, subject); err != nil || found {
+		return selected, false, err
+	}
 	tenantID = "email-" + subject
 	created, err := cp.createRegisteredWorkspace(ctx, tenantID, name)
 	if err != nil {
@@ -121,12 +127,12 @@ func (cp *ControlPlane) initializeWorkspaceOwner(ctx context.Context, tenant, su
 	if err != nil || !found {
 		return errWorkspaceUnavailable
 	}
-	var members []TeamMember
-	if json.Unmarshal(value, &members) != nil || len(members) > 1000 {
+	state, err := decodeTeamState(value)
+	if err != nil {
 		return errWorkspaceUnavailable
 	}
 	matched := 0
-	for _, member := range members {
+	for _, member := range state.Members {
 		if member.UserID == subject {
 			if member.Role != roleAdmin && member.Role != roleMember {
 				return errWorkspaceMembership

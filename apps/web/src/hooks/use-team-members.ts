@@ -17,6 +17,7 @@ export function useTeamMembers() {
   const inviteMember = async (request: InviteMemberRequest) => {
     const response = await apiClient.inviteTeamMember(request);
     if (response.error) throw new Error(response.error.message);
+    if (!response.data?.token) throw new Error("Invitation was not created. Try again.");
     mutate("/api/team/members");
     return response.data;
   };
@@ -36,8 +37,10 @@ export function useTeamMembers() {
 
   return {
     members: data?.members || [],
-    seatLimit: data?.seat_limit || 1,
+    seatLimit: data?.seat_limit ?? null,
     seatsUsed: data?.seats_used || 0,
+    canManage: data?.can_manage === true,
+    currentUserId: data?.current_user_id,
     isLoading,
     error: error?.message,
     inviteMember,

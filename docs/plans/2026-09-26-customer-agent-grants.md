@@ -93,8 +93,16 @@ conditional registry, then persist its initial owner. Email sign-in retains its
 existing immutable auth-user-ID workspace binding and initializes the same
 owner list. Neither path overwrites an existing member list or resets billing.
 Legacy email-slug OAuth tenants receive no inferred owner. Incomplete legacy
-email metadata, invitation lifecycle and concurrent team edits remain unresolved.
+email metadata and ownership migration remain unresolved. Team changes now
+recheck current stored administration and use conditional revisions. Invitation
+acceptance requires verified email, consumes its receipt alongside membership,
+and durably selects the workspace for later sign-ins. The product has code
+creation and authenticated join UI; no invitation email is sent. Legacy v1
+invites require reissue. Both legacy member arrays and v2 member/receipt envelopes
+are supported by current readers.
 See [workspace provisioning evidence](../evidence/2026-09-27-customer-workspace-ownership/README.md).
+See [team authority and browser evidence](../evidence/2026-09-27-team-membership/README.md)
+for deployment order and the limits of ordinary session revocation.
 
 Eligibility requires an active, non-demo tenant and explicit persisted MCP scope.
 It preserves current `active`, `on_trial`, `trialing` and `past_due` statuses,
@@ -134,8 +142,8 @@ configuration stays outside tool arguments. See the
    exact redirect validation. Local stdio needs real process/owner binding.
 2. **Complete live authority.** Current stored membership and entitlement are
    checked, with durable owner provisioning for new OAuth workspaces and the
-   existing auth-service email identity binding. Legacy OAuth ownership,
-   invitation lifecycle, concurrent member edits, explicit host/field consent
+   existing auth-service email identity binding, verified-email invitations and
+   conditional member edits. Legacy OAuth ownership, production rollout, explicit host/field consent
    and source ownership remain unresolved. The internal grant adapter's success
    alone is only credential verification. Neither that primitive nor the new
    access service grants human authority. Preserve the actual Indie catalog,
@@ -157,8 +165,9 @@ configuration stays outside tool arguments. See the
    versions and ownership. Revocation and reconnect denial are now proven through
    the compiled MCP process and real HTTP/Core stack. Native Claude host proof is
    separate and still pending; the optional test requires approval for external
-   processing. No user session, proposal store, human receipt, product display
-   or deployment is included here.
+   processing. Ordinary team session switching is implemented, but no proposal
+   store, consequential-action human receipt, review display or production
+   deployment is included here.
 
 No customer credential was minted against production, no private source was
 retrieved, and no second pilot was activated. The task's acceptance criteria stay

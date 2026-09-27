@@ -29,7 +29,7 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
-| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, grant isolation/WAL recovery, bounded HTTP input, log redaction and initial OAuth/email workspace ownership; issuance, consent, legacy/invite membership, retention and deployed consistency remain open |
+| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, grant isolation/WAL recovery, bounded HTTP input, log redaction, initial OAuth/email workspace ownership and verified-email team joins; issuance, consent, legacy ownership migration, retention and deployed consistency remain open |
 | Production discovery/distribution | not-tested | Verified endpoint, binding/config guide and release package |
 | Qualified customer outcome | unknown | Existing BET gate evidence remains authoritative |
 
@@ -45,6 +45,14 @@ covers Control Plane signup through actual Core, conditional configuration,
 atomic initial trial metadata and recovery. Core must be upgraded before this
 Control Plane change. It does not complete customer connection issuance or
 authorize any MCP scope absent from current billing metadata.
+
+[Team membership evidence](evidence/2026-09-27-team-membership/README.md) covers
+conditional member edits, single-use admission receipts and verified-email
+session switching through the actual website proxy. A local browser journey
+used synthetic identities and real Core storage. This is ordinary team setup,
+not a customer connection, a consequential-action approval or native Claude
+proof. Drain old team writers before deploying the new Control Plane revision;
+Core and Query Service must already support the new format.
 
 ## Required acceptance
 

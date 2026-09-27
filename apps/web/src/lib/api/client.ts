@@ -435,16 +435,22 @@ export class ApiClient {
   }
 
   async removeTeamMember(userId: string): Promise<ApiResponse<void>> {
-    return this.request<void>(`/api/team/members/${userId}`, {
+    return this.request<void>(`/api/team/members/${encodeURIComponent(userId)}`, {
       method: "DELETE",
     });
   }
 
-  async updateTeamMemberRole(userId: string, role: string): Promise<ApiResponse<TeamMember>> {
-    return this.request<TeamMember>(`/api/team/members/${userId}/role`, {
-      method: "PUT",
-      body: JSON.stringify({ role }),
-    });
+  async updateTeamMemberRole(
+    userId: string,
+    role: string
+  ): Promise<ApiResponse<{ message: string }>> {
+    return this.request<{ message: string }>(
+      `/api/team/members/${encodeURIComponent(userId)}/role`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ role }),
+      }
+    );
   }
 
   // Agent key management
@@ -919,33 +925,32 @@ export interface TimelineGap {
 
 // Team Management types
 export interface TeamMember {
-  id: string;
   user_id: string;
   email: string;
   name: string;
-  role: "owner" | "admin" | "member" | "viewer";
+  role: "admin" | "member";
   joined_at: string;
-  status: "active" | "pending";
 }
 
 export interface TeamMembersResponse {
   members: TeamMember[];
-  seat_limit: number;
+  seat_limit: number | null;
   seats_used: number;
+  can_manage: boolean;
+  current_user_id: string;
 }
 
 export interface InviteMemberRequest {
   email: string;
-  role: "admin" | "member" | "viewer";
+  role: "admin" | "member";
 }
 
 export interface Invitation {
-  id: string;
+  token: string;
   email: string;
   role: string;
-  invited_by: string;
-  invited_at: string;
-  status: "pending" | "accepted" | "expired";
+  created_at: string;
+  expires_at: string;
 }
 
 // Agent key types

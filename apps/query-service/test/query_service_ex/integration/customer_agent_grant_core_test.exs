@@ -166,8 +166,17 @@ defmodule QueryServiceEx.Integration.CustomerAgentGrantCoreTest do
       client = RustCoreClient.write_client()
       assert {:ok, _} = CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
 
+      # Control Plane upgrades the same record to an atomic member/receipt envelope.
+      set_members(client, binding, %{
+        "schema_version" => 2,
+        "members" => members,
+        "invitations" => %{}
+      })
+
+      assert {:ok, _} = CustomerAgentAccess.verify(issued.token, binding, "read_context", now)
+
       # Membership revocation must matter even while the credential is valid.
-      set_members(client, binding, [])
+      set_members(client, binding, %{"schema_version" => 2, "members" => [], "invitations" => %{}})
 
       assert {:ok, _} =
                CustomerAgentGrantStore.verify_credential(

@@ -25,15 +25,16 @@ import (
 
 // Claims represents JWT claims
 type Claims struct {
-	UserID   string        `json:"sub"`
-	Username string        `json:"username"`
-	Email    string        `json:"email,omitempty"`
-	Name     string        `json:"name,omitempty"`
-	TenantID string        `json:"tenant_id"`
-	Role     entities.Role `json:"role"`
-	Provider string        `json:"provider,omitempty"`
-	IsAPIKey bool          `json:"is_api_key,omitempty"`
-	IsDemo   bool          `json:"is_demo,omitempty"`
+	UserID        string        `json:"sub"`
+	Username      string        `json:"username"`
+	Email         string        `json:"email,omitempty"`
+	EmailVerified bool          `json:"email_verified,omitempty"`
+	Name          string        `json:"name,omitempty"`
+	TenantID      string        `json:"tenant_id"`
+	Role          entities.Role `json:"role"`
+	Provider      string        `json:"provider,omitempty"`
+	IsAPIKey      bool          `json:"is_api_key,omitempty"`
+	IsDemo        bool          `json:"is_demo,omitempty"`
 	// ViewAs marks a read-only "view as tenant" impersonation token minted by
 	// SignViewAsJWT. It is the defense-in-depth marker the write-refusal
 	// middleware (ViewAsWriteRefusal) hard-rejects on any mutating method, in
@@ -49,11 +50,15 @@ type Claims struct {
 
 // AuthContext holds authentication information for a request
 type AuthContext struct {
-	UserID   string
-	Username string
-	TenantID string
-	Role     entities.Role
-	IsAPIKey bool
+	UserID        string
+	Username      string
+	TenantID      string
+	Role          entities.Role
+	IsAPIKey      bool
+	Email         string
+	EmailVerified bool
+	Provider      string
+	ViewAs        bool
 }
 
 // roleForEmail returns RoleAdmin if the email is in the ADMIN_EMAILS allowlist
@@ -407,11 +412,15 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 
 		// Create auth context
 		authCtx := &AuthContext{
-			UserID:   claims.UserID,
-			Username: claims.Username,
-			TenantID: claims.TenantID,
-			Role:     claims.Role,
-			IsAPIKey: claims.IsAPIKey,
+			UserID:        claims.UserID,
+			Username:      claims.Username,
+			TenantID:      claims.TenantID,
+			Role:          claims.Role,
+			IsAPIKey:      claims.IsAPIKey,
+			Email:         claims.Email,
+			EmailVerified: claims.EmailVerified,
+			Provider:      claims.Provider,
+			ViewAs:        claims.ViewAs,
 		}
 
 		// Store in context
@@ -496,84 +505,46 @@ type oauthUserResult struct {
 // inviteToken is optional; if non-empty and valid, the user joins the existing tenant referenced
 // by the invite instead of creating a new isolated one.
 func (cp *ControlPlane) findOrCreateOAuthUser(provider, providerID, email, name, inviteToken string) (*oauthUserResult, error) {
-	// Generate a deterministic user ID from provider info
-	userID := fmt.Sprintf("oauth:%s:%s", provider, providerID)
+	return cp.completeOAuthSignIn(provider, &providerUserInfo{ProviderID: providerID, Email: email, Name: name}, inviteToken)
+}
 
-	// If an invite token is present, resolve the tenant from the invite rather than
-	// creating a new isolated one for this user.
-	if inviteToken != "" {
-		invite, resolveErr := cp.resolveInvite(context.Background(), inviteToken, email)
-		if resolveErr != nil {
-			// Invalid or expired invite — fall through to normal registration.
-			log.Printf("warn: invite token %q invalid or expired: %v", inviteToken, resolveErr)
-		} else {
-			// Valid invite found — provision the user into the existing tenant.
-			tenantID := invite.TenantID
-
-			// Record the user as a member of this team.
-			if addErr := cp.AddTeamMember(context.Background(), tenantID, TeamMember{
-				UserID:   userID,
-				Email:    email,
-				Name:     name,
-				Role:     invite.Role,
-				JoinedAt: time.Now().UTC().Format(time.RFC3339),
-			}, invite.InvitedBy); addErr != nil {
-				log.Printf("warn: AddTeamMember failed for tenant %s user %s: %v", logsafe.String(tenantID), logsafe.String(userID), addErr)
-			}
-
-			// Mark invite as accepted by deleting it from config.
-			if delErr := cp.coreClient.DeleteConfig(context.Background(), teamInviteConfigKey(inviteToken)); delErr != nil {
-				log.Printf("warn: failed to delete invite token %s: %v", logsafe.String(inviteToken), delErr)
-			}
-
-			// Sign JWT for this user in the existing tenant.
-			now := time.Now()
-			claims := &Claims{
-				UserID:   userID,
-				Username: name,
-				Email:    email,
-				Name:     name,
-				TenantID: tenantID,
-				Role:     roleForEmail(email),
-				Provider: provider,
-				StandardClaims: jwt.StandardClaims{
-					ExpiresAt: now.Add(7 * 24 * time.Hour).Unix(),
-					IssuedAt:  now.Unix(),
-					Issuer:    "allsource",
-					Subject:   userID,
-				},
-			}
-			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-			tokenString, signErr := token.SignedString([]byte(cp.authClient.jwtSecret))
-			if signErr != nil {
-				return nil, fmt.Errorf("failed to sign JWT: %w", signErr)
-			}
-			return &oauthUserResult{
-				Token:     tokenString,
-				UserID:    userID,
-				TenantID:  tenantID,
-				IsNewUser: true,
-			}, nil
-		}
+func (cp *ControlPlane) completeOAuthSignIn(provider string, identity *providerUserInfo, inviteToken string) (*oauthUserResult, error) {
+	if identity == nil {
+		return nil, errTeamForbidden
 	}
-
+	userID := fmt.Sprintf("oauth:%s:%s", provider, identity.ProviderID)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	tenantID, isNewUser, err := cp.oauthWorkspace(ctx, userID, email, name)
+	var tenantID string
+	var isNewUser bool
+	var err error
+	if inviteToken != "" {
+		if !identity.EmailVerified {
+			return nil, errTeamForbidden
+		}
+		tenantID, isNewUser, err = cp.acceptTeamInvitation(ctx, inviteToken, userID, identity.Email, identity.Name)
+	} else {
+		tenantID, isNewUser, err = cp.oauthWorkspace(ctx, userID, identity.Email, identity.Name)
+	}
 	if err != nil {
 		return nil, err
+	}
+	role := entities.RoleDeveloper
+	if identity.EmailVerified {
+		role = roleForEmail(identity.Email)
 	}
 
 	// Sign JWT
 	now := time.Now()
 	claims := &Claims{
-		UserID:   userID,
-		Username: name,
-		Email:    email,
-		Name:     name,
-		TenantID: tenantID,
-		Role:     roleForEmail(email),
-		Provider: provider,
+		UserID:        userID,
+		Username:      identity.Name,
+		Email:         identity.Email,
+		EmailVerified: identity.EmailVerified,
+		Name:          identity.Name,
+		TenantID:      tenantID,
+		Role:          role,
+		Provider:      provider,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: now.Add(7 * 24 * time.Hour).Unix(),
 			IssuedAt:  now.Unix(),

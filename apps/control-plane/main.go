@@ -617,6 +617,7 @@ func (cp *ControlPlane) setupRoutes() {
 	cp.router.GET("/api/v1/teams/invite/:token", cp.GetInviteHandler)
 	teams := api.Group("/teams")
 	teams.POST("/invite", cp.InviteHandler)
+	teams.POST("/join", cp.TeamJoinHandler)
 	teams.GET("/members", RequirePermission(entities.PermissionRead), cp.ListMembersHandler)
 	teams.PUT("/members/:id", cp.UpdateMemberRoleHandler)
 	teams.DELETE("/members/:id", cp.DeleteMemberHandler)

@@ -337,7 +337,7 @@ func (cp *ControlPlane) OAuthCallback(c *gin.Context) {
 	}
 
 	// Create or find user + sign JWT (pass invite token so the user joins the right tenant).
-	result, err := cp.findOrCreateOAuthUser(provider, userInfo.ProviderID, userInfo.Email, userInfo.Name, inviteToken)
+	result, err := cp.completeOAuthSignIn(provider, userInfo, inviteToken)
 	if err != nil {
 		log.Printf("[OAuth] User creation/JWT signing failed: %v", err)
 		c.Redirect(http.StatusFound, redirectTarget+"/login?error=auth_failed")
@@ -354,9 +354,10 @@ func (cp *ControlPlane) OAuthCallback(c *gin.Context) {
 
 // providerUserInfo holds user information fetched from an OAuth provider.
 type providerUserInfo struct {
-	ProviderID string
-	Email      string
-	Name       string
+	ProviderID    string
+	Email         string
+	Name          string
+	EmailVerified bool
 }
 
 // stringFromMap safely extracts a string value from a map, returning "" if missing or wrong type.
@@ -481,20 +482,17 @@ func fetchGitHubUserInfo(client *resty.Client, token string) (*providerUserInfo,
 		name = stringFromMap(user, "login")
 	}
 
-	// Try to get email from user profile first
-	email := stringFromMap(user, "email")
-	if email == "" {
-		// Fetch from emails API
-		email, err = fetchGitHubPrimaryEmail(client, token)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get github email: %w", err)
-		}
+	// Public profile text does not prove control of an invitation's email.
+	email, err := fetchGitHubPrimaryEmail(client, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get github email: %w", err)
 	}
 
 	return &providerUserInfo{
-		ProviderID: providerID,
-		Email:      email,
-		Name:       name,
+		ProviderID:    providerID,
+		Email:         email,
+		Name:          name,
+		EmailVerified: true,
 	}, nil
 }
 
@@ -531,14 +529,7 @@ func fetchGitHubPrimaryEmail(client *resty.Client, token string) (string, error)
 			}
 		}
 	}
-	// Fall back to first email
-	if len(emails) > 0 {
-		if addr, ok := emails[0]["email"].(string); ok {
-			return addr, nil
-		}
-	}
-
-	return "", fmt.Errorf("no email found in github account")
+	return "", fmt.Errorf("no verified email found in github account")
 }
 
 func fetchGoogleUserInfo(client *resty.Client, token string) (*providerUserInfo, error) {
@@ -569,8 +560,9 @@ func fetchGoogleUserInfo(client *resty.Client, token string) (*providerUserInfo,
 	}
 
 	return &providerUserInfo{
-		ProviderID: providerID,
-		Email:      email,
-		Name:       name,
+		ProviderID:    providerID,
+		Email:         email,
+		Name:          name,
+		EmailVerified: boolFromMap(user, "verified_email"),
 	}, nil
 }

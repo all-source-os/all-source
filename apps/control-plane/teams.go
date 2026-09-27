@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -30,16 +32,6 @@ type TeamMember struct {
 	JoinedAt string `json:"joined_at"`
 }
 
-// TeamInvite represents a pending team invite.
-type TeamInvite struct {
-	Token     string `json:"token"`
-	TenantID  string `json:"tenant_id"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	InvitedBy string `json:"invited_by"`
-	CreatedAt string `json:"created_at"`
-}
-
 // InviteRequest is the request body for creating an invite.
 type InviteRequest struct {
 	Email string `json:"email" binding:"required"`
@@ -50,11 +42,6 @@ const (
 	roleAdmin  = "admin"
 	roleMember = "member"
 )
-
-// teamInviteConfigKey returns the Core config key for an invite token.
-func teamInviteConfigKey(token string) string {
-	return "team:invite:" + token
-}
 
 // teamMembersConfigKey returns the Core config key for a tenant's member list.
 func teamMembersConfigKey(tenantID string) string {
@@ -78,14 +65,10 @@ func (cp *ControlPlane) InviteHandler(c *gin.Context) {
 	if authCtx == nil {
 		return
 	}
-	if authCtx.Role != roleAdmin {
-		c.JSON(403, gin.H{"error": "forbidden", "message": "admin role required to invite team members"})
-		return
-	}
-
 	var req InviteRequest
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "invalid request", "message": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request", "message": "Enter a valid email and team role."})
 		return
 	}
 
@@ -98,35 +81,20 @@ func (cp *ControlPlane) InviteHandler(c *gin.Context) {
 		return
 	}
 
-	token, err := generateInviteToken()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	token, invite, err := cp.createTeamInvitation(ctx, authCtx, req.Email, role)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "internal_error", "message": "failed to generate invite token"})
+		respondTeamError(c, err)
 		return
 	}
-
-	invite := TeamInvite{
-		Token:     token,
-		TenantID:  authCtx.TenantID,
-		Email:     req.Email,
-		Role:      role,
-		InvitedBy: authCtx.UserID,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-
-	if storeErr := cp.coreClient.SetConfig(c.Request.Context(), clients.SetConfigRequest{
-		Key:       teamInviteConfigKey(token),
-		Value:     invite,
-		ChangedBy: authCtx.UserID,
-	}); storeErr != nil {
-		c.JSON(500, gin.H{"error": "internal_error", "message": "failed to store invite"})
-		return
-	}
-
+	c.Header("Cache-Control", "no-store")
 	c.JSON(201, gin.H{
 		"token":      token,
-		"email":      req.Email,
+		"email":      invite.Email,
 		"role":       role,
 		"created_at": invite.CreatedAt,
+		"expires_at": invite.ExpiresAt,
 	})
 }
 
@@ -134,31 +102,32 @@ func (cp *ControlPlane) InviteHandler(c *gin.Context) {
 // GET /api/v1/teams/invite/:token
 // Public — used by the frontend to show the user what they're joining before OAuth.
 func (cp *ControlPlane) GetInviteHandler(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	token := c.Param("token")
 	if token == "" {
 		c.JSON(400, gin.H{"error": "missing token"})
 		return
 	}
 
-	entry, err := cp.coreClient.GetConfig(c.Request.Context(), teamInviteConfigKey(token))
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	tenant, _, invite, err := cp.lookupTeamInvitation(ctx, token)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "not_found", "message": "invite not found or expired"})
 		return
 	}
 
-	invite, parseErr := parseInviteFromConfig(entry.Value)
-	if parseErr != nil {
-		c.JSON(500, gin.H{"error": "internal_error", "message": "malformed invite record"})
+	if invite.AcceptedBy != "" {
+		c.JSON(410, gin.H{"error": "invite already accepted"})
 		return
 	}
-
+	c.Header("Cache-Control", "no-store")
 	c.JSON(200, gin.H{
-		"token":      invite.Token,
 		"email":      invite.Email,
 		"role":       invite.Role,
-		"tenant_id":  invite.TenantID,
-		"invited_by": invite.InvitedBy,
+		"tenant_id":  tenant,
 		"created_at": invite.CreatedAt,
+		"expires_at": invite.ExpiresAt,
 	})
 }
 
@@ -170,13 +139,23 @@ func (cp *ControlPlane) ListMembersHandler(c *gin.Context) {
 		return
 	}
 
-	members, err := cp.getTeamMembers(c.Request.Context(), authCtx.TenantID)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	snapshot, err := cp.readTeamSnapshot(ctx, authCtx.TenantID)
 	if err != nil {
-		// No members stored yet is not an error — return empty list.
-		members = []TeamMember{}
+		respondTeamError(c, err)
+		return
 	}
-
-	c.JSON(200, gin.H{"members": members})
+	role := teamRole(snapshot.State, authCtx.UserID)
+	if authCtx.IsAPIKey || role == "" {
+		respondTeamError(c, errTeamForbidden)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(200, gin.H{
+		"members": snapshot.State.Members, "seats_used": len(snapshot.State.Members),
+		"seat_limit": nil, "can_manage": role == roleAdmin, "current_user_id": authCtx.UserID,
+	})
 }
 
 // DeleteMemberHandler removes a member from the team.
@@ -187,11 +166,6 @@ func (cp *ControlPlane) DeleteMemberHandler(c *gin.Context) {
 	if authCtx == nil {
 		return
 	}
-	if authCtx.Role != roleAdmin {
-		c.JSON(403, gin.H{"error": "forbidden", "message": "admin role required to remove team members"})
-		return
-	}
-
 	memberID := c.Param("id")
 	if memberID == "" {
 		c.JSON(400, gin.H{"error": "missing member id"})
@@ -202,29 +176,12 @@ func (cp *ControlPlane) DeleteMemberHandler(c *gin.Context) {
 		return
 	}
 
-	members, err := cp.getTeamMembers(c.Request.Context(), authCtx.TenantID)
-	if err != nil {
-		c.JSON(404, gin.H{"error": "not_found", "message": "member not found"})
-		return
-	}
-
-	updated := make([]TeamMember, 0, len(members))
-	found := false
-	for _, m := range members {
-		if m.UserID == memberID {
-			found = true
-			continue
-		}
-		updated = append(updated, m)
-	}
-
-	if !found {
-		c.JSON(404, gin.H{"error": "not_found", "message": "member not found"})
-		return
-	}
-
-	if saveErr := cp.saveTeamMembers(c.Request.Context(), authCtx.TenantID, updated, authCtx.UserID); saveErr != nil {
-		c.JSON(500, gin.H{"error": "internal_error", "message": "failed to update members"})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	if err := cp.editTeam(ctx, authCtx, func(state *teamState) error {
+		return removeTeamMember(state, memberID)
+	}); err != nil {
+		respondTeamError(c, err)
 		return
 	}
 
@@ -239,11 +196,6 @@ func (cp *ControlPlane) UpdateMemberRoleHandler(c *gin.Context) {
 	if authCtx == nil {
 		return
 	}
-	if authCtx.Role != roleAdmin {
-		c.JSON(403, gin.H{"error": "forbidden", "message": "admin role required to change member roles"})
-		return
-	}
-
 	memberID := c.Param("id")
 	if memberID == "" {
 		c.JSON(400, gin.H{"error": "missing member id"})
@@ -253,8 +205,9 @@ func (cp *ControlPlane) UpdateMemberRoleHandler(c *gin.Context) {
 	var req struct {
 		Role string `json:"role" binding:"required"`
 	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "invalid request", "message": err.Error()})
+		c.JSON(400, gin.H{"error": "invalid request", "message": "Enter a valid team role."})
 		return
 	}
 	if req.Role != roleAdmin && req.Role != "member" {
@@ -262,118 +215,30 @@ func (cp *ControlPlane) UpdateMemberRoleHandler(c *gin.Context) {
 		return
 	}
 
-	members, err := cp.getTeamMembers(c.Request.Context(), authCtx.TenantID)
-	if err != nil {
-		c.JSON(404, gin.H{"error": "not_found", "message": "member not found"})
-		return
-	}
-
-	found := false
-	for i, m := range members {
-		if m.UserID == memberID {
-			members[i].Role = req.Role
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		c.JSON(404, gin.H{"error": "not_found", "message": "member not found"})
-		return
-	}
-
-	if saveErr := cp.saveTeamMembers(c.Request.Context(), authCtx.TenantID, members, authCtx.UserID); saveErr != nil {
-		c.JSON(500, gin.H{"error": "internal_error", "message": "failed to update member role"})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	if err := cp.editTeam(ctx, authCtx, func(state *teamState) error {
+		return changeTeamRole(state, memberID, req.Role)
+	}); err != nil {
+		respondTeamError(c, err)
 		return
 	}
 
 	c.JSON(200, gin.H{"message": "role updated"})
 }
 
-// AddTeamMember appends a member to the tenant's member list in Core config.
-// Called by the OAuth invite-accept flow (US-004).
-func (cp *ControlPlane) AddTeamMember(ctx context.Context, tenantID string, member TeamMember, callerID string) error {
-	members, err := cp.getTeamMembers(ctx, tenantID)
-	if err != nil {
-		members = []TeamMember{}
+func respondTeamError(c *gin.Context, err error) {
+	status, code := 503, "team_unavailable"
+	switch {
+	case errors.Is(err, errTeamForbidden), errors.Is(err, errTeamInvitationDenied):
+		status, code = 403, "forbidden"
+	case errors.Is(err, errTeamConflict), errors.Is(err, errTeamLastAdmin):
+		status, code = 409, "team_conflict"
+	case errors.Is(err, errTeamNotFound):
+		status, code = 404, "not_found"
 	}
-
-	// Deduplicate: skip if already a member.
-	for _, m := range members {
-		if m.UserID == member.UserID {
-			return nil
-		}
-	}
-
-	members = append(members, member)
-	return cp.saveTeamMembers(ctx, tenantID, members, callerID)
-}
-
-// getTeamMembers fetches the member list from Core config.
-func (cp *ControlPlane) getTeamMembers(ctx context.Context, tenantID string) ([]TeamMember, error) {
-	entry, err := cp.coreClient.GetConfig(ctx, teamMembersConfigKey(tenantID))
-	if err != nil {
-		return nil, err
-	}
-	if entry == nil {
-		return []TeamMember{}, nil
-	}
-	return parseMembersFromConfig(entry.Value)
-}
-
-// saveTeamMembers persists the member list to Core config.
-func (cp *ControlPlane) saveTeamMembers(ctx context.Context, tenantID string, members []TeamMember, callerID string) error {
-	return cp.coreClient.SetConfig(ctx, clients.SetConfigRequest{
-		Key:       teamMembersConfigKey(tenantID),
-		Value:     members,
-		ChangedBy: callerID,
-	})
-}
-
-// parseInviteFromConfig converts the raw config value into a TeamInvite.
-func parseInviteFromConfig(raw any) (*TeamInvite, error) {
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return nil, fmt.Errorf("marshal invite: %w", err)
-	}
-	var invite TeamInvite
-	if err := json.Unmarshal(b, &invite); err != nil {
-		return nil, fmt.Errorf("unmarshal invite: %w", err)
-	}
-	return &invite, nil
-}
-
-// parseMembersFromConfig converts the raw config value into []TeamMember.
-func parseMembersFromConfig(raw any) ([]TeamMember, error) {
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return nil, fmt.Errorf("marshal members: %w", err)
-	}
-	var members []TeamMember
-	if err := json.Unmarshal(b, &members); err != nil {
-		return nil, fmt.Errorf("unmarshal members: %w", err)
-	}
-	return members, nil
-}
-
-// resolveInvite looks up a pending invite by token and validates it for the given email.
-// Returns the invite if it exists and either has no email restriction or matches the given email.
-func (cp *ControlPlane) resolveInvite(ctx context.Context, token, email string) (*TeamInvite, error) {
-	if token == "" {
-		return nil, fmt.Errorf("no token")
-	}
-	entry, err := cp.coreClient.GetConfig(ctx, teamInviteConfigKey(token))
-	if err != nil || entry == nil {
-		return nil, fmt.Errorf("invite not found")
-	}
-	invite, err := parseInviteFromConfig(entry.Value)
-	if err != nil {
-		return nil, err
-	}
-	if invite.Email != "" && invite.Email != email {
-		return nil, fmt.Errorf("invite email mismatch")
-	}
-	return invite, nil
+	c.Header("Cache-Control", "no-store")
+	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": err.Error()}})
 }
 
 // teamAgentKeysConfigKey returns the Core config key for a tenant's agent key list.

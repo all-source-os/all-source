@@ -29,9 +29,18 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerAgentAccessStore do
   @impl true
   def members(tenant_id) do
     case RustCoreClient.get_team_members_for_authorization(tenant_id) do
-      {:ok, members} when is_list(members) -> {:ok, members}
-      {:error, :not_found} -> {:error, :access_denied}
-      _ -> {:error, :storage_unavailable}
+      {:ok, members} when is_list(members) ->
+        {:ok, members}
+
+      {:ok, %{"schema_version" => 2, "members" => members, "invitations" => invitations}}
+      when is_list(members) and is_map(invitations) ->
+        {:ok, members}
+
+      {:error, :not_found} ->
+        {:error, :access_denied}
+
+      _ ->
+        {:error, :storage_unavailable}
     end
   rescue
     _ -> {:error, :storage_unavailable}
