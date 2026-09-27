@@ -9,12 +9,12 @@ Founder decision: 25 September 2026. Required target; contract specified and cus
 - Human decision: The tenant operator reviews the evidence in the product and explicitly authorises any consequential replay or infrastructure action through its separate human gate.
 - Domain boundary: No arbitrary queries, cross-tenant payloads, secrets, replay execution, infrastructure change or subscription action from this customer review skill. Existing ingestion SDK functionality is not redefined by this review-surface amendment.
 - Skill package: [customer skill](../skills/allsource-customer/SKILL.md); distribute the complete directory and local references when release gates pass. No public install/discovery endpoint is claimed here.
-- MCP contract: [logical operations and bindings](../skills/allsource-customer/references/workflow.md). The existing Elixir server has an opt-in profile with eligibility/validation and three separately gated two-run evidence preparation/retrieval tools. Product source selection, consequential human approval, complete handoff and native host proof remain unfinished; production flags stay off.
+- MCP contract: [logical operations and bindings](../skills/allsource-customer/references/workflow.md). The existing Elixir server has an opt-in profile with eligibility/validation and three separately gated two-run evidence preparation/retrieval tools. Selected run sharing and comparison display are verified locally. Consequential human approval, complete handoff and native host proof remain unfinished; production flags stay off.
 - Approval enforcement: [human-only gate contract](../skills/allsource-customer/references/human-gate.md). Agent credentials cannot approve; product binds human actor/role, exact version/hash, action, scope, expiry and replay-resistant receipt. OAuth connection consent is separate.
 
 ## Product surface and data
 
-Implement review within the existing product workspace or a clearly authenticated product-owned MCP App view. Show source evidence, calculations, changes, unknowns, entitlement and next action. No new deployed route is claimed. The no-UI fallback is an accessible normal-product review with an opaque reference, never a data-bearing/bearer URL. The human-only gate has the same enforcement in both views.
+The local product workspace at `/dashboard/tools/agent-reviews` supports explicit run-source sharing, saved-source recovery, revocation and exact pending comparison display. It shows evidence provenance, differences and unknowns. No deployed route or consequential approval control is claimed. The no-UI fallback is an accessible normal-product review with an opaque reference, never a data-bearing/bearer URL. The required human-only gate must have the same enforcement in both views.
 
 Pending drafts use the current product persistence/privacy architecture. Any change to a local-only or founder-private boundary needs a specific processing/consent amendment before customer data is sent. This delivery requirement alone does not authorise exporting that data. Product data stays out of analytics and tool metadata. Existing paid/free rules and host commerce restrictions remain binding.
 
@@ -25,9 +25,11 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 | Product MCP/HITL contract | specified | This record and bundled references |
 | Customer Claude skill | draft | Local portable package; validation is separate from actual use |
 | MCP runtime and shared rules | partially verified locally | Compiled stdio and HTTP profiles → real Query Service → Core, two metadata tools plus three separately gated comparison preparation/retrieval tools, closed schemas, matching text/structured output and revoked reconnect denial; no human approval or delivered outcome |
-| Human gate and display | not-tested | Actual product interaction and agent-credential denial needed |
+| Product evidence display | partially verified locally | [Actual Next → Query Service → Core browser proof](evidence/2026-09-27-product-evidence-workspace/README.md), desktop/mobile sharing, comparison, revoke and recovery; synthetic identity presentation, no consequential approval |
+| Consequential human gate | unfinished | Current operator authority, exact approved source/action, one-use approval and product accept/edit/reject journey still required |
+| Replay execution identity | partially verified locally | [Durable one-dispatch journal](plans/2026-09-27-tracked-replay-design.md) reuses tenant projection engine; actual Core restart and acknowledgement-loss tests. Internal foundation only; not human approval or exact-source integrity |
 | Shared run evidence substrate | partially bound locally | [Typed conditional capture, bounded timeline and comparison](plans/2026-09-27-agent-run-evidence-contract.md); actual Core concurrency and recovery proof; selected two-run comparisons now have default-off MCP transport |
-| Source references and pending comparisons | partially verified locally | [Owner/grant-bound pins and durable pending records](plans/2026-09-27-customer-evidence-reviews.md), separate evidence consent, restart/retry/deletion proof; [canonical query admission](plans/2026-09-27-metered-evidence-workflow-design.md), [supervised workflow limits/cancellation](plans/2026-09-27-customer-review-work-bounds-design.md), and [restricted transport](evidence/2026-09-27-customer-evidence-bindings/README.md) tested locally. Billing reset adoption, human approval and product UI remain open |
+| Source references and pending comparisons | partially verified locally | [Owner/grant-bound pins and durable pending records](plans/2026-09-27-customer-evidence-reviews.md), separate evidence consent, restart/retry/deletion proof; [canonical query admission](plans/2026-09-27-metered-evidence-workflow-design.md), [supervised workflow limits/cancellation](plans/2026-09-27-customer-review-work-bounds-design.md), and [restricted transport](evidence/2026-09-27-customer-evidence-bindings/README.md) tested locally. Selected-run product UI is verified below; billing reset adoption and human approval remain open |
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
@@ -94,8 +96,16 @@ a clean committed-tree build. See the [connection runbook](runbooks/CUSTOMER_REM
 adds product-session source sharing and separately gated comparison preparation,
 review and result-status bindings. Exact final-unit retries survive Core restart;
 source/grant revocation prevents disclosure. MCP validates outputs before returning
-matching text and structured content. Public activation, product source/review UI,
-remote evidence-consent UI and human action authority are still incomplete.
+matching text and structured content. Public activation, complete native remote
+evidence-consent journey and human action authority are still incomplete.
+
+[Product evidence workspace proof](evidence/2026-09-27-product-evidence-workspace/README.md)
+adds explicit selected-run inspection/sharing, saved workspace recovery, source
+revocation and the same pending comparison shown to the agent. The actual local
+browser used Next, Query Service and Core, with synthetic session presentation.
+Desktop and mobile interaction, keyboard focus, no horizontal overflow and
+revocation denial passed. This proves source/review display, not action approval,
+native host installation, production activation or a qualified customer outcome.
 
 ## Required acceptance
 

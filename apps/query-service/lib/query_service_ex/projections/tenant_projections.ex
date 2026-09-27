@@ -40,6 +40,8 @@ defmodule QueryServiceEx.Projections.TenantProjections do
 
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
   alias QueryServiceEx.Projections.Catalog
+  alias QueryServiceEx.Projections.ReplayRecord
+  alias QueryServiceEx.Projections.TrackedReplays
   alias QueryServiceExWeb.ChannelBroadcaster
 
   @state_table :tenant_projection_state
@@ -154,6 +156,11 @@ defmodule QueryServiceEx.Projections.TenantProjections do
     GenServer.call(__MODULE__, {:rebuild, tenant_id, template_name})
   end
 
+  @doc false
+  def rebuild_tracked(record) do
+    GenServer.call(__MODULE__, {:rebuild_tracked, record})
+  end
+
   @doc "List replay jobs belonging to one tenant."
   @spec list_replays(String.t()) :: [map()]
   def list_replays(tenant_id) when is_binary(tenant_id) do
@@ -196,6 +203,7 @@ defmodule QueryServiceEx.Projections.TenantProjections do
   @impl GenServer
   def handle_call({:enable, tenant_id, template_name}, _from, state) do
     {:ok, template} = Catalog.fetch(template_name)
+    state = cancel_tracked_build(state, {tenant_id, template_name})
 
     :ets.insert(@status_table, {{tenant_id, template_name}, :building})
     state = ensure_tenant_subscription(state, tenant_id)
@@ -207,30 +215,16 @@ defmodule QueryServiceEx.Projections.TenantProjections do
 
   @impl GenServer
   def handle_call({:rebuild, tenant_id, template_name}, _from, state) do
-    key = {tenant_id, template_name}
+    begin_rebuild(state, tenant_id, template_name, nil)
+  end
 
-    cond do
-      not Catalog.valid?(template_name) ->
-        {:reply, {:error, :unknown_template}, state}
-
-      status(tenant_id, template_name) == nil ->
-        {:reply, {:error, :projection_not_enabled}, state}
-
-      Map.has_key?(state.builds, key) ->
-        {:reply, {:error, :already_running}, state}
-
-      true ->
-        {:ok, template} = Catalog.fetch(template_name)
-        replay = new_replay(template_name)
-        :ets.insert(@status_table, {key, :building})
-
-        state =
-          state
-          |> ensure_tenant_subscription(tenant_id)
-          |> put_in([:replays, replay.replay_id], Map.put(replay, :tenant_id, tenant_id))
-          |> start_build(tenant_id, template, replay.replay_id)
-
-        {:reply, {:ok, public_replay(replay)}, state}
+  @impl GenServer
+  def handle_call({:rebuild_tracked, record}, _from, state) do
+    if ReplayRecord.valid?(record, record["tenant_id"], record["operation_id"]) and
+         record["status"] == "unknown" do
+      begin_rebuild(state, record["tenant_id"], record["projection_name"], record)
+    else
+      {:reply, {:error, :invalid_replay}, state}
     end
   end
 
@@ -266,11 +260,8 @@ defmodule QueryServiceEx.Projections.TenantProjections do
         key = {tenant_id, replay.projection_name}
         :ets.insert(@status_table, {key, :ready})
 
-        state = %{
-          state
-          | replays: Map.put(state.replays, replay_id, replay),
-            builds: Map.delete(state.builds, key)
-        }
+        state = update_replay(state, replay_id, fn _ -> replay end)
+        state = %{state | builds: Map.delete(state.builds, key)}
 
         {:reply, {:ok, public_replay(replay)}, state}
 
@@ -299,6 +290,7 @@ defmodule QueryServiceEx.Projections.TenantProjections do
 
   @impl GenServer
   def handle_call({:disable, tenant_id, template_name}, _from, state) do
+    state = cancel_tracked_build(state, {tenant_id, template_name})
     # Drop the status, then all per-entity state rows for this projection.
     :ets.delete(@status_table, {tenant_id, template_name})
 
@@ -497,11 +489,39 @@ defmodule QueryServiceEx.Projections.TenantProjections do
 
   # -- Internal: atomic builds --
 
-  defp start_build(state, tenant_id, template, replay_id) do
+  defp begin_rebuild(state, tenant_id, template_name, tracking) do
+    key = {tenant_id, template_name}
+
+    cond do
+      not Catalog.valid?(template_name) ->
+        {:reply, {:error, :unknown_template}, state}
+
+      status(tenant_id, template_name) == nil ->
+        {:reply, {:error, :projection_not_enabled}, state}
+
+      Map.has_key?(state.builds, key) ->
+        {:reply, {:error, :already_running}, state}
+
+      true ->
+        {:ok, template} = Catalog.fetch(template_name)
+        replay = new_replay(template_name, tracking)
+        :ets.insert(@status_table, {key, :building})
+
+        state =
+          state
+          |> ensure_tenant_subscription(tenant_id)
+          |> put_in([:replays, replay.replay_id], Map.put(replay, :tenant_id, tenant_id))
+          |> start_build(tenant_id, template, replay.replay_id, replay_cutoff(tracking))
+
+        {:reply, {:ok, public_replay(replay)}, state}
+    end
+  end
+
+  defp start_build(state, tenant_id, template, replay_id, cutoff \\ nil) do
     server = self()
     token = make_ref()
     key = {tenant_id, template.name}
-    cutoff = now_iso8601()
+    cutoff = cutoff || now_iso8601()
 
     Task.Supervisor.start_child(QueryServiceEx.Projections.BackfillSupervisor, fn ->
       build_projection(server, tenant_id, template, token, cutoff)
@@ -676,11 +696,12 @@ defmodule QueryServiceEx.Projections.TenantProjections do
     end
   end
 
-  defp new_replay(projection_name) do
+  defp new_replay(projection_name, tracking) do
     now = now_iso8601()
 
     %{
-      replay_id: generate_id(),
+      replay_id: if(tracking, do: tracking["replay_id"], else: generate_id()),
+      tracking: tracking,
       projection_name: projection_name,
       status: "running",
       started_at: now,
@@ -695,12 +716,44 @@ defmodule QueryServiceEx.Projections.TenantProjections do
     }
   end
 
-  defp public_replay(replay), do: Map.delete(replay, :tenant_id)
+  defp public_replay(replay), do: Map.drop(replay, [:tenant_id, :tracking])
 
   defp update_replay(state, replay_id, fun) do
     case Map.fetch(state.replays, replay_id) do
-      {:ok, replay} -> %{state | replays: Map.put(state.replays, replay_id, fun.(replay))}
-      :error -> state
+      {:ok, replay} ->
+        next = fun.(replay)
+        persist_terminal(next)
+        %{state | replays: Map.put(state.replays, replay_id, next)}
+
+      :error ->
+        state
+    end
+  end
+
+  defp persist_terminal(%{tracking: record, status: status} = replay)
+       when is_map(record) and status in ["completed", "failed", "cancelled"] do
+    Task.Supervisor.start_child(QueryServiceEx.Projections.BackfillSupervisor, fn ->
+      TrackedReplays.persist(record, replay)
+    end)
+
+    :ok
+  catch
+    :exit, _ -> :ok
+  end
+
+  defp persist_terminal(_), do: :ok
+
+  defp replay_cutoff(nil), do: nil
+  defp replay_cutoff(record), do: record["cutoff"]
+
+  defp cancel_tracked_build(state, key) do
+    with %{replay_id: id} when is_binary(id) <- Map.get(state.builds, key),
+         %{tracking: record} when is_map(record) <- Map.get(state.replays, id) do
+      update_replay(state, id, fn replay ->
+        %{replay | status: "cancelled", completed_at: now_iso8601(), updated_at: now_iso8601()}
+      end)
+    else
+      _ -> state
     end
   end
 
