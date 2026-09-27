@@ -183,6 +183,8 @@ pub struct EventStore {
     /// strategy.
     tenant_loader: Arc<TenantLoader>,
     strict_archive_limits: ArchiveReadLimits,
+    #[cfg(feature = "server")]
+    http_archive_warmup_timeout: Option<std::time::Duration>,
     /// Eviction must not reset indexes/versions underneath a writer or a
     /// certified cache load. Acquire before durability, events and storage locks.
     cache_residency_gate: RwLock<()>,
@@ -338,6 +340,8 @@ impl EventStore {
 
         let store = Self {
             strict_archive_limits: config.strict_archive_limits,
+            #[cfg(feature = "server")]
+            http_archive_warmup_timeout: config.http_archive_warmup_timeout,
             cache_residency_gate: RwLock::new(()),
             cache_generations: DashMap::new(),
             events: Arc::new(RwLock::new(Vec::new())),
@@ -1580,6 +1584,52 @@ impl EventStore {
         require_complete: bool,
         cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
     ) -> Result<()> {
+        self.ensure_tenant_loaded_with_limits(
+            tenant_id,
+            require_complete,
+            cancellation,
+            &self.strict_archive_limits,
+        )
+    }
+
+    #[cfg(feature = "server")]
+    pub(crate) fn prepare_http_append(
+        &self,
+        event: &Event,
+        cancellation: &Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<()> {
+        self.ensure_writable()?;
+        self.validate_event(event)?;
+        self.prepare_http_archive(event.tenant_id_str(), cancellation)
+    }
+
+    /// An admitted HTTP worker owns this bounded cache warmup even if its
+    /// caller leaves. Cancellation still prevents the subsequent operation.
+    #[cfg(feature = "server")]
+    pub(crate) fn prepare_http_archive(
+        &self,
+        tenant_id: &str,
+        cancellation: &Arc<std::sync::atomic::AtomicBool>,
+    ) -> Result<()> {
+        crate::domain::value_objects::TenantId::new(tenant_id.to_string())?;
+        check_cancelled(Some(cancellation.as_ref()))?;
+        if let Some(timeout) = self.http_archive_warmup_timeout {
+            let limits = ArchiveReadLimits {
+                timeout,
+                ..self.strict_archive_limits.clone()
+            };
+            self.ensure_tenant_loaded_with_limits(tenant_id, true, None, &limits)?;
+        }
+        check_cancelled(Some(cancellation.as_ref()))
+    }
+
+    fn ensure_tenant_loaded_with_limits(
+        &self,
+        tenant_id: &str,
+        require_complete: bool,
+        cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
+        limits: &ArchiveReadLimits,
+    ) -> Result<()> {
         let is_loaded = || {
             self.tenant_loader.is_loaded(tenant_id)
                 && (!require_complete || self.tenant_loader.is_complete(tenant_id))
@@ -1589,10 +1639,8 @@ impl EventStore {
             return Ok(());
         }
 
-        let mut budget = require_complete.then(|| {
-            ArchiveReadBudget::new(self.strict_archive_limits.clone())
-                .with_cancellation(cancellation)
-        });
+        let mut budget = require_complete
+            .then(|| ArchiveReadBudget::new(limits.clone()).with_cancellation(cancellation));
 
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
             // No persistent storage to load from. Mark loaded so we
@@ -2799,6 +2847,10 @@ pub struct EventStoreConfig {
     /// Limits for cold integrity-sensitive loads. Generic queries retain their
     /// existing policy. Configured by the embedding service, never by callers.
     pub strict_archive_limits: ArchiveReadLimits,
+    /// Optional service-owned HTTP cache warmup deadline. It reuses strict
+    /// input caps and may outlive its caller, but cannot complete a cancelled
+    /// operation. Embedded stores default off; server config enables 30 seconds.
+    pub http_archive_warmup_timeout: Option<std::time::Duration>,
     /// Optional directory for persistent Parquet storage (v0.2 feature)
     pub storage_dir: Option<PathBuf>,
 
@@ -3020,6 +3072,9 @@ impl EventStoreConfig {
         };
         config.cache_byte_budget = cache_byte_budget;
         config.checkpoint_interval_secs = checkpoint_interval_secs;
+        config.http_archive_warmup_timeout = storage_dir
+            .as_ref()
+            .map(|_| std::time::Duration::from_secs(30));
 
         let mode = match (&storage_dir, &wal_dir) {
             (Some(_), Some(_)) if wal_enabled => "wal+parquet",

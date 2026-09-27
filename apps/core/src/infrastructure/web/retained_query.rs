@@ -4,6 +4,7 @@ use crate::{
     application::dto::{
         EventDto, QueryEventsRequest, QueryEventsResponse, RetainedEntityIntegrity,
     },
+    domain::value_objects::{EntityId, TenantId},
     error::{AllSourceError, Result},
     store::EventStore,
 };
@@ -39,6 +40,8 @@ pub(super) async fn query(
             "Strict retained read requires tenant_id, entity_id and limit 1..1001".into(),
         ));
     };
+    TenantId::new(tenant.clone())?;
+    EntityId::new(entity.clone())?;
     let (events, total_count) =
         archive_work::retained_query(store, tenant.clone(), entity.clone(), limit).await?;
     let count = events.len();
