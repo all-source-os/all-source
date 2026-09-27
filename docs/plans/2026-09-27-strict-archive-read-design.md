@@ -47,7 +47,9 @@ The four-second work budget leaves space inside the five-second Core response
 deadline and six-second internal customer store transport deadline. These are
 conservative admission defaults, not claims about how quickly an arbitrary
 production archive will load. A legitimate larger or slower cold archive is
-refused. There are currently no environment-variable overrides for these limits.
+refused. Archive input limits have no environment-variable overrides. The later
+warmup design adds `ALLSOURCE_ARCHIVE_WORKERS`, bounded to one or two workers;
+Fly selects one to limit simultaneous cold-load staging.
 
 Arithmetic overflow, negative metadata, a missing budget, or elapsed/cancelled
 work cannot silently widen strict admission. Generic reads do not use this
@@ -162,8 +164,9 @@ events must fit that byte budget even when the requested page is smaller.
 Index entries are still keyed by entity alone, so another tenant using the same
 entity can conservatively consume the entry cap; this never authorizes access.
 
-Strict HTTP reads share the existing two-worker/sixteen-waiter admission pool
-with conditional appends. Blocking archive work stays off Tokio request workers,
+Strict HTTP reads share the bounded worker pool and sixteen waiting slots with
+conditional appends (two workers by default; Fly config selects one).
+Blocking archive work stays off Tokio request workers,
 and cancellation retains its worker permit until the closure exits. Success
 includes exactly this attestation object, alongside ordinary page counts:
 

@@ -21,6 +21,9 @@ primary_region = "iad"  # US East (Virginia) - change to your preferred region
   # the 4 GiB VM leaves headroom for the Rust runtime, replication
   # buffers, and the Parquet flush staging area.
   ALLSOURCE_CACHE_BYTES = "2147483648"
+  # Admit one strict cold loader at a time on this 4 GiB machine. The
+  # worker retains its slot after an HTTP timeout until warming actually ends.
+  ALLSOURCE_ARCHIVE_WORKERS = "1"
   # Step 6: checkpoint cadence (Parquet flush + WAL truncate). Bounds
   # cold-restart replay to ~one minute of writes regardless of how
   # large the dataset has grown.

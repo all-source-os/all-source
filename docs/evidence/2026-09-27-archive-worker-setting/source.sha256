@@ -1,0 +1,3 @@
+42c6b3ef3e9cb9920a1f7cfd6ade63d30eade5c966331183439eebf2b599f0f4  apps/core/src/infrastructure/web/archive_work.rs
+dbc189998c09e539b6a4e002d8090688d812bf699f3882d18f73adfcf682a415  apps/core/fly.toml
+48ca5d81467861ee7b0592d238635a4fd29ff8718058880fe3276dc1645c8a0f  apps/query-service/test/support/customer_agent_core.ex

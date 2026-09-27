@@ -15,9 +15,28 @@ use std::{
 };
 use tokio::sync::Semaphore;
 
-static SLOTS: LazyLock<Arc<WorkPool>> = LazyLock::new(|| Arc::new(WorkPool::new(2, 16)));
+static SLOTS: LazyLock<Arc<WorkPool>> = LazyLock::new(|| {
+    Arc::new(WorkPool::new(
+        configured_workers(std::env::var("ALLSOURCE_ARCHIVE_WORKERS")),
+        16,
+    ))
+});
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
 const ADMISSION_TIMEOUT: Duration = Duration::from_millis(100);
+
+fn configured_workers(value: std::result::Result<String, std::env::VarError>) -> usize {
+    match value {
+        Ok(value) if value == "1" => 1,
+        Ok(value) if value == "2" => 2,
+        Err(std::env::VarError::NotPresent) => 2,
+        _ => {
+            // Invalid configuration must not disable admission or silently
+            // widen the staging-memory allowance of a one-worker deployment.
+            tracing::warn!("Invalid ALLSOURCE_ARCHIVE_WORKERS; limiting strict work to one worker");
+            1
+        }
+    }
+}
 
 struct WorkPool {
     active: Arc<Semaphore>,
@@ -120,6 +139,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn operator_worker_setting_cannot_disable_or_widen_the_bounded_pool() {
+        assert_eq!(configured_workers(Err(std::env::VarError::NotPresent)), 2);
+        for (setting, expected) in [("1", 1), ("2", 2)] {
+            let pool = WorkPool::new(configured_workers(Ok(setting.into())), 16);
+            assert_eq!(pool.active.available_permits(), expected);
+            assert_eq!(pool.waiting.available_permits(), 16);
+        }
+        for invalid in ["", "0", "3", "16", "-1", " 2", "2\n", "unlimited"] {
+            assert_eq!(configured_workers(Ok(invalid.into())), 1);
+        }
+        assert_eq!(
+            configured_workers(Err(std::env::VarError::NotUnicode("unreadable".into()))),
+            1
+        );
+    }
 
     #[tokio::test(flavor = "current_thread")]
     async fn admission_queue_has_bounded_capacity_and_wait() {

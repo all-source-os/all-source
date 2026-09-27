@@ -60,9 +60,27 @@ with the timestamp fix later signed as `99a161d6` and the capacity helper copied
 in explicitly. Its helper precedes the semantically equivalent Clippy cleanup
 from `map(...).unwrap_or(0)` to `map_or(0, ...)`; separate hashes record both.
 
-Linux build/result, bounded concurrency policy and production compatibility
-remain outstanding until recorded below. Raising the row limit based only on
+Linux result and production compatibility remain outstanding until recorded
+below. A bounded one-or-two worker setting has separate
+[local verification](../2026-09-27-archive-worker-setting/README.md); the
+capacity export predates that setting and measures one request with the original
+pool. Raising the row limit based only on
 the native result would not establish headroom for two concurrent loaders plus
 the configured 2 GiB cache. Corruption, file/byte/entry bounds, request deadlines,
 cancelled-write protection and the original archive-shape regression must remain
 covered by subsequent verification. Production stays on release 46.
+
+## Local build attempts
+
+The first local build completed the production enterprise binary stage, then
+reached its 1,800-second execution limit while compiling test-only dependencies.
+The exec process returned 124 and BuildKit marked build
+`x7ahho4nu8ygk73gyh5rgpall` as `Error` with the test stage `CANCELED`. No capacity
+executable was exported. An observation timeout was not treated as termination.
+
+After that terminal result, a second local build reused the completed stages
+with a 3,600-second execution limit. The test build now uses four compiler jobs,
+matching the production build. The export also includes the signed helper's
+equivalent `map_or` cleanup; `export-retry.sha256` records this distinct input.
+The original `export.sha256` remains historical evidence for the first attempt.
+No remote builder or registry push was involved.

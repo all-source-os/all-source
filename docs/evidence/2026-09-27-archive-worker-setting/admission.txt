@@ -1,0 +1,21 @@
+   Compiling allsource-core v0.25.1 (/Users/decebaldobrica/Projects/founder-mode/all-source/apps/core)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `allsource-core` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 53.73s
+warning: the following packages contain code that will be rejected by a future version of Rust: nix v0.31.2, proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/allsource_core-e9011297a9404bea)
+
+running 6 tests
+test infrastructure::web::archive_work::tests::operator_worker_setting_cannot_disable_or_widen_the_bounded_pool ... ok
+test infrastructure::web::archive_work::tests::dropping_a_queued_caller_releases_only_its_queue_slot ... ok
+test infrastructure::web::archive_work::tests::blocked_archive_work_leaves_the_request_runtime_available ... ok
+test infrastructure::web::archive_work::tests::caller_cancellation_keeps_admission_until_blocking_work_exits ... ok
+test infrastructure::web::archive_work::tests::deadline_cancels_work_but_does_not_release_its_capacity ... ok
+test infrastructure::web::archive_work::tests::admission_queue_has_bounded_capacity_and_wait ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 2012 filtered out; finished in 0.11s
+

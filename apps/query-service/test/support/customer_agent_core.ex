@@ -73,6 +73,7 @@ defmodule QueryServiceEx.TestSupport.CustomerAgentCore do
       "ALLSOURCE_DEV_MODE" => "false",
       "ALLSOURCE_AUTH_DISABLED" => "false",
       "ALLSOURCE_ROLE" => "leader",
+      "ALLSOURCE_ARCHIVE_WORKERS" => "1",
       "ALLSOURCE_REPLICATION_ENABLED" => "false",
       "ALLSOURCE_CLUSTER_ENABLED" => "false",
       "ALLSOURCE_BOOTSTRAP_API_KEY" => "",

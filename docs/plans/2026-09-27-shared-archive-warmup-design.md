@@ -24,6 +24,27 @@ whole-tenant cold reads but requires a separate crash/compaction/retention desig
 Bounded cache warming uses the existing loader, generation checks and residency
 guards without adding a durable store, queue, retry or index format.
 
+## Deployment worker bound
+
+`ALLSOURCE_ARCHIVE_WORKERS` selects one or two strict HTTP workers per process.
+Absent configuration preserves the original two-worker default. Invalid values,
+including zero and non-Unicode values, restrict admission to one worker; they
+cannot disable the bound or silently exceed the supported maximum. Configuration
+is read once when the shared pool is created, not from request data.
+
+The Fly configuration selects one worker. A fresh native measurement of the
+existing dense archive shape consumed 1.33 GiB peak RSS with the server allocator.
+Two such loaders plus the configured 2 GiB cache have no demonstrated headroom
+on the 4 GiB host. Serializing strict operations bounds that staging concurrency;
+the worker still retains its permit until it exits after timeout or disconnect.
+Sixteen waiting slots, 100 ms admission and 5 s responses remain unchanged.
+
+This setting does not bound generic legacy loading, total process RSS or the
+soft cache budget. It does not raise the 250,000-row limit. A constrained Linux
+capacity result is still required before changing row admission. The actual
+Core HTTP/restart fixture selects one worker to exercise the deployment setting,
+including its existing concurrent command burst and recovery assertions.
+
 ## Lifecycle
 
 1. Validate the tenant and observe request cancellation before starting warmup.
