@@ -9,12 +9,19 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStoreTest do
     import Plug.Conn
     def init(options), do: options
 
-    # Another suite's buffered reporter can flush this unrelated demo tenant.
+    # Other suites' buffered reporters can flush unrelated tenants.
     # Calls for this test's tenant still get captured, including legacy fallback.
     def call(conn, opts) do
-      if String.ends_with?(conn.request_path, "/api/v1/tenants/t-demo/usage/increment"),
+      if unrelated_usage?(conn.request_path, opts[:tenant]),
         do: send_resp(conn, 200, "{}"),
         else: capture(conn, opts)
+    end
+
+    defp unrelated_usage?(path, tenant) do
+      case Regex.run(~r{/api/v1/tenants/([^/]+)/usage/increment\z}, path, capture: :all_but_first) do
+        [other] -> other != tenant
+        _ -> false
+      end
     end
 
     defp capture(conn, opts) do
@@ -244,7 +251,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStoreTest do
   defp fixture(reply) do
     server =
       start_supervised!(
-        {Bandit, plug: {Fixture, owner: self(), reply: reply}, ip: {127, 0, 0, 1}, port: 0},
+        {Bandit,
+         plug: {Fixture, owner: self(), reply: reply, tenant: @tenant},
+         ip: {127, 0, 0, 1},
+         port: 0},
         id: make_ref()
       )
 

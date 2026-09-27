@@ -1,7 +1,7 @@
 defmodule QueryServiceEx.Domain.CustomerAgent.PendingReview do
   @moduledoc "Minimal pending review metadata. No approval or execution state can be constructed here."
-  alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.CustomerAgent.Proposal
+  alias QueryServiceEx.Domain.CustomerAgent.ReviewOperation, as: Operation
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
   @keys ~w(schema_version id tenant_id subject_id client_id resource grant_id version state proposal request_sha256 digest view_schema authority_version created_at expires_at)
@@ -9,7 +9,7 @@ defmodule QueryServiceEx.Domain.CustomerAgent.PendingReview do
   @authority "allsource-operator-review-v1"
 
   def new(owner, proposal, report, operation, now, expires_at) do
-    with true <- Owner.valid?(owner) and Event.uuid?(operation),
+    with true <- Owner.valid?(owner) and Operation.valid_at?(operation, now),
          true <- Owner.timestamp?(now) and Owner.timestamp?(expires_at),
          true <- (expires_at - now) in 1..86_400,
          true <-

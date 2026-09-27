@@ -65,6 +65,27 @@ defmodule QueryServiceEx.Domain.CustomerAgent.EligibilityTest do
     end
   end
 
+  test "metered access preserves identity and entitlement after consuming the final unit" do
+    exhausted = put_in(@tenant, ["metadata", "quotas", "queries_used"], 50_000)
+    assert {:error, :access_denied} = Eligibility.check(exhausted, @members, @binding, @now)
+
+    assert {:ok, %{"queries_remaining" => 0}} =
+             Eligibility.check_metered(exhausted, @members, @binding, @now)
+
+    assert {:error, :access_denied} = Eligibility.check_metered(exhausted, [], @binding, @now)
+    inactive = put_in(exhausted, ["metadata", "subscription", "status"], "expired")
+
+    assert {:error, :access_denied} =
+             Eligibility.check_metered(inactive, @members, @binding, @now)
+
+    for value <- [nil, -1, "50000", 50_000.0] do
+      invalid = put_in(exhausted, ["metadata", "quotas", "queries_used"], value)
+
+      assert {:error, :access_denied} =
+               Eligibility.check_metered(invalid, @members, @binding, @now)
+    end
+  end
+
   test "unknown, duplicate, removed and service identities cannot borrow another member's access" do
     for members <- [
           [],

@@ -26,6 +26,15 @@ internal implementation as permission to disclose data. Existing metadata-only
 consent remains unchanged; selected evidence requires separate consent before
 future transport activation.
 
+Those internal services now admit canonical query usage before source reads and
+preserve the original metering request through uncertain replies and restart.
+The internal retry contract uses a one-hour `UTC-seconds:UUID` identity, bound to
+the exact owner, connection, operation and intent. A receipt records usage; it is
+not source consent or human approval. When these operations are eventually
+discovered, preserve the schema-provided retry identity unchanged. Do not mint a
+new key to bypass an expiry, quota, changed-period or changed-intent refusal.
+Work limits across replicas and billing reset integration still block activation.
+
 ## Intended request
 
 Prepare a tenant event timeline and show what a replay would affect before I approve anything

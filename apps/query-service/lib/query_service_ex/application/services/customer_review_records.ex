@@ -36,5 +36,6 @@ defmodule QueryServiceEx.Application.Services.CustomerReviewRecords do
   end
 
   def revoke(tenant, kind, id), do: store().revoke(tenant, kind, id)
+  def active?(tenant, kind, id), do: store().active?(tenant, kind, id)
   defp store, do: Application.fetch_env!(:query_service_ex, :customer_review_store)
 end

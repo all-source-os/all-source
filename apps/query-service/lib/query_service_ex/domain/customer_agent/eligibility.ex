@@ -15,12 +15,18 @@ defmodule QueryServiceEx.Domain.CustomerAgent.Eligibility do
   @max_integer 9_007_199_254_740_991
 
   @spec check(term(), term(), term(), term()) :: {:ok, map()} | {:error, :access_denied}
-  def check(tenant, members, binding, now) do
+  def check(tenant, members, binding, now), do: check(tenant, members, binding, now, :available)
+
+  @doc "Current access without claiming a query unit; the caller must obtain atomic Core admission before source work."
+  def check_metered(tenant, members, binding, now),
+    do: check(tenant, members, binding, now, :admission_required)
+
+  defp check(tenant, members, binding, now, budget) do
     with true <- ConnectionGrant.valid_binding?(binding),
          true <- is_integer(now) and now >= 0,
          true <- active_tenant?(tenant, binding["tenant_id"]),
          {:ok, role} <- member_role(members, binding["subject_id"]),
-         {:ok, entitlement} <- entitlement(tenant["metadata"], now) do
+         {:ok, entitlement} <- entitlement(tenant["metadata"], now, budget) do
       {:ok, Map.put(entitlement, "membership_role", role)}
     else
       _ -> {:error, :access_denied}
@@ -47,12 +53,12 @@ defmodule QueryServiceEx.Domain.CustomerAgent.Eligibility do
 
   defp member_role(_, _), do: {:error, :access_denied}
 
-  defp entitlement(%{"subscription" => sub, "quotas" => quotas} = metadata, now)
+  defp entitlement(%{"subscription" => sub, "quotas" => quotas} = metadata, now, budget)
        when is_map(sub) and is_map(quotas) do
     with true <- active_status?(sub["status"]),
          true <- quotas["mcp_scope"] in @scopes,
          {:ok, deadline} <- deadline(sub, metadata, now),
-         {:ok, remaining} <- query_budget(quotas) do
+         {:ok, remaining} <- query_budget(quotas, budget) do
       {:ok,
        %{
          "mcp_scope" => quotas["mcp_scope"],
@@ -62,7 +68,7 @@ defmodule QueryServiceEx.Domain.CustomerAgent.Eligibility do
     end
   end
 
-  defp entitlement(_, _), do: {:error, :access_denied}
+  defp entitlement(_, _, _), do: {:error, :access_denied}
 
   # Mirrors Control Plane SubscriptionIsActive, including its dunning grace.
   defp active_status?(status) when is_binary(status), do: String.downcase(status) in @statuses
@@ -105,12 +111,17 @@ defmodule QueryServiceEx.Domain.CustomerAgent.Eligibility do
 
   defp timestamp(_), do: {:error, :access_denied}
 
-  defp query_budget(%{"queries_quota" => -1}), do: {:ok, -1}
+  defp query_budget(%{"queries_quota" => -1}, :available), do: {:ok, -1}
 
-  defp query_budget(%{"queries_quota" => limit, "queries_used" => used})
+  defp query_budget(%{"queries_quota" => limit, "queries_used" => used}, :admission_required)
+       when is_integer(limit) and limit in -1..@max_integer and is_integer(used) and
+              used in 0..@max_integer,
+       do: {:ok, if(limit == -1, do: -1, else: max(0, limit - used))}
+
+  defp query_budget(%{"queries_quota" => limit, "queries_used" => used}, :available)
        when is_integer(limit) and limit in 1..@max_integer and is_integer(used) and
               used >= 0 and used < limit,
        do: {:ok, limit - used}
 
-  defp query_budget(_), do: {:error, :access_denied}
+  defp query_budget(_, _), do: {:error, :access_denied}
 end

@@ -78,7 +78,7 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
          true <- ConnectionConsent.valid?(record),
          true <- record["consent"]["version"] == ConnectionConsent.evidence_version(),
          true <- ConnectionGrant.valid_for?(record, binding, "prepare_proposal", now),
-         {:ok, eligibility} <- eligible(binding, now),
+         {:ok, eligibility} <- metered_eligibility(binding, now),
          {:ok, receipts} <- connections().list(actor["tenant_id"], actor["subject_id"], now),
          [%{"status" => "active"}] <- Enum.filter(receipts, &(&1["id"] == id)) do
       {:ok,
@@ -108,6 +108,13 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
     with {:ok, tenant} <- access().tenant(binding["tenant_id"]),
          {:ok, members} <- access().members(binding["tenant_id"]) do
       Eligibility.check(tenant, members, binding, now)
+    end
+  end
+
+  defp metered_eligibility(binding, now) do
+    with {:ok, tenant} <- access().tenant(binding["tenant_id"]),
+         {:ok, members} <- access().members(binding["tenant_id"]) do
+      Eligibility.check_metered(tenant, members, binding, now)
     end
   end
 

@@ -60,7 +60,7 @@ defmodule QueryServiceEx.Domain.CustomerReviewWorkspaceTest do
              EvidenceSource.new(
                @owner,
                %{run_id: F.uuid(1), revision: 0, digest: F.hash(1)},
-               F.uuid(90),
+               "#{@now}:#{F.uuid(90)}",
                @now,
                300
              )
@@ -138,7 +138,7 @@ defmodule QueryServiceEx.Domain.CustomerReviewWorkspaceTest do
     report = %{state: "inconclusive", execution: "none"}
 
     assert {:ok, review} =
-             PendingReview.new(@owner, proposal, report, F.uuid(91), @now, @now + 60)
+             PendingReview.new(@owner, proposal, report, "#{@now}:#{F.uuid(91)}", @now, @now + 60)
 
     assert PendingReview.valid?(review, @owner["tenant_id"])
     assert PendingReview.digest(review, report) == review["digest"]
@@ -150,7 +150,14 @@ defmodule QueryServiceEx.Domain.CustomerReviewWorkspaceTest do
     refute PendingReview.valid?(Map.put(review, "approved", true), @owner["tenant_id"])
 
     assert {:error, :invalid_review} =
-             PendingReview.new(@owner, proposal, report, F.uuid(91), @now, @now + 301)
+             PendingReview.new(
+               @owner,
+               proposal,
+               report,
+               "#{@now}:#{F.uuid(91)}",
+               @now,
+               @now + 301
+             )
   end
 
   test "source issuance count is bounded across expired records during the rolling day" do
@@ -160,7 +167,7 @@ defmodule QueryServiceEx.Domain.CustomerReviewWorkspaceTest do
           EvidenceSource.new(
             @owner,
             %{run_id: F.uuid(n), revision: 1, digest: F.hash(n)},
-            F.uuid(n),
+            "#{@now}:#{F.uuid(n)}",
             @now,
             1
           )
@@ -173,7 +180,7 @@ defmodule QueryServiceEx.Domain.CustomerReviewWorkspaceTest do
       EvidenceSource.new(
         @owner,
         %{run_id: F.uuid(65), revision: 1, digest: F.hash(65)},
-        F.uuid(65),
+        "#{@now}:#{F.uuid(65)}",
         @now + 2,
         60
       )
@@ -186,7 +193,7 @@ defmodule QueryServiceEx.Domain.CustomerReviewWorkspaceTest do
       EvidenceSource.new(
         @owner,
         %{run_id: F.uuid(1), revision: 7, digest: F.hash(1)},
-        F.uuid(90),
+        "#{@now}:#{F.uuid(90)}",
         @now,
         600
       )

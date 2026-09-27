@@ -7,12 +7,13 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
   alias QueryServiceEx.Application.Services.CustomerAgentAccess
   alias QueryServiceEx.Application.Services.CustomerAgentReview
   alias QueryServiceEx.Application.Services.CustomerEvidenceSources, as: Sources
+  alias QueryServiceEx.Application.Services.CustomerQueryAdmission, as: Admission
   alias QueryServiceEx.Application.Services.CustomerReviewDeadline
   alias QueryServiceEx.Application.Services.CustomerReviewRecords, as: Records
   alias QueryServiceEx.Domain.AgentRun.Comparison
-  alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionConsent
   alias QueryServiceEx.Domain.CustomerAgent.PendingReview
+  alias QueryServiceEx.Domain.CustomerAgent.ReviewOperation, as: Operation
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
   def prepare(token, binding, input, now) do
@@ -23,9 +24,14 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
     with true <-
            is_map(input) and
              Enum.sort(Map.keys(input)) == ~w(expected_revision idempotency_key proposal),
-         true <- input["expected_revision"] === 0 and Event.uuid?(input["idempotency_key"]),
+         true <-
+           input["expected_revision"] === 0 and Operation.valid_at?(input["idempotency_key"], now),
          {:ok, owner} <- access(token, binding, "prepare_proposal", now),
          {:ok, proposal} <- CustomerAgentReview.validate(input["proposal"]),
+         :ok <- supported(proposal),
+         :ok <- recheck(owner, proposal),
+         :ok <-
+           Admission.admit(owner, "review.prepare", input["idempotency_key"], input, 2, now),
          {:ok, report, expiry} <- compare(owner, proposal, now),
          {:ok, record} <-
            PendingReview.new(
@@ -51,16 +57,19 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
     _ -> {:error, :storage_unavailable}
   end
 
-  def read(token, binding, id, version, now, operation \\ "read_review") do
-    CustomerReviewDeadline.run(fn -> do_read(token, binding, id, version, now, operation) end)
+  def read(token, binding, id, version, request_id, now, operation \\ "read_review") do
+    CustomerReviewDeadline.run(fn ->
+      do_read(token, binding, id, version, request_id, now, operation)
+    end)
   end
 
-  defp do_read(token, binding, id, version, now, operation) do
+  defp do_read(token, binding, id, version, request_id, now, operation) do
     with true <- Owner.id?(id) and version === 1 and operation in ~w(read_review read_result),
+         true <- Operation.valid_at?(request_id, now),
          {:ok, owner} <- access(token, binding, operation, now),
          {:ok, record} <- Records.fetch(owner["tenant_id"], "reviews", id),
          true <- Owner.matches?(record, owner) and now >= record["created_at"],
-         {:ok, response} <- current_view(owner, record, operation, now),
+         {:ok, response} <- current_view(owner, record, operation, request_id, now),
          {:ok, ^record} <- Records.fetch(owner["tenant_id"], "reviews", id),
          {:ok, _} <- access(token, binding, operation, System.system_time(:second)) do
       if record["expires_at"] <= System.system_time(:second),
@@ -76,11 +85,16 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
     _ -> {:error, :storage_unavailable}
   end
 
-  defp current_view(owner, record, operation, now) do
+  defp current_view(owner, record, operation, request_id, now) do
     if now >= record["expires_at"] do
       {:ok, receipt(record, "expired")}
     else
       with {:ok, proposal} <- CustomerAgentReview.validate(record["proposal"]),
+           :ok <- supported(proposal),
+           :ok <- recheck(owner, proposal),
+           purpose = if(operation == "read_result", do: "review.result", else: "review.read"),
+           :ok <-
+             Admission.admit(owner, purpose, request_id, [record["id"], record["digest"]], 2, now),
            {:ok, report, _expiry} <- compare(owner, proposal, now),
            :ok <- recheck(owner, proposal),
            true <- PendingReview.digest(record, report) == record["digest"] do
@@ -106,6 +120,14 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
       end
     end
   end
+
+  defp supported(%{
+         kind: "run_comparison",
+         sources: [%{"kind" => "run_evidence"}, %{"kind" => "run_evidence"}]
+       }),
+       do: :ok
+
+  defp supported(_), do: {:error, :unsupported_evidence}
 
   defp compare(owner, %{kind: "run_comparison", sources: [first, second]}, now) do
     with true <- first["kind"] == "run_evidence" and second["kind"] == "run_evidence",
@@ -139,7 +161,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
   end
 
   defp access(token, binding, operation, now) do
-    with {:ok, owner} <- CustomerAgentAccess.verify(token, binding, operation, now),
+    with {:ok, owner} <- CustomerAgentAccess.verify_metered(token, binding, operation, now),
          true <- owner["consent_version"] == ConnectionConsent.evidence_version() do
       {:ok, owner}
     else

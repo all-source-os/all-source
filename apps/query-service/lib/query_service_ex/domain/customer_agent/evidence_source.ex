@@ -1,6 +1,7 @@
 defmodule QueryServiceEx.Domain.CustomerAgent.EvidenceSource do
   @moduledoc "Expiring, owner/host/grant-bound references to a pinned typed run; no raw event payloads."
   alias QueryServiceEx.Domain.AgentRun.Event
+  alias QueryServiceEx.Domain.CustomerAgent.ReviewOperation, as: Operation
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
   @keys ~w(schema_version id tenant_id subject_id client_id resource grant_id kind locator revision sha256 request_sha256 created_at expires_at)
@@ -8,7 +9,7 @@ defmodule QueryServiceEx.Domain.CustomerAgent.EvidenceSource do
   def new(owner, run, operation, now, ttl) when is_map(owner) and is_map(run) do
     expiry = owner["grant_expires_at"]
 
-    if Owner.valid?(owner) and Event.uuid?(operation) and valid_run?(run) and
+    if Owner.valid?(owner) and Operation.valid_at?(operation, now) and valid_run?(run) and
          valid_lifetime?(now, ttl, expiry) do
       {:ok,
        Owner.take(owner)

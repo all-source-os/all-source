@@ -2,6 +2,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
   @moduledoc "Source selection by a verified product actor and resolution under a current scoped connection. No transport binding yet."
   alias QueryServiceEx.Application.Services.AgentRunEvidence
   alias QueryServiceEx.Application.Services.CustomerConnections
+  alias QueryServiceEx.Application.Services.CustomerQueryAdmission, as: Admission
   alias QueryServiceEx.Application.Services.CustomerReviewDeadline
   alias QueryServiceEx.Application.Services.CustomerReviewRecords, as: Records
   alias QueryServiceEx.Domain.CustomerAgent.EvidenceSource, as: Source
@@ -19,16 +20,25 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
              Enum.sort(Map.keys(input)) == ~w(consent operation_id revision run_id sha256 ttl),
          true <- input["consent"] == @consent,
          {:ok, owner} <- CustomerConnections.evidence_owner(actor, connection, now),
+         owner = cap_expiry(owner),
+         {:ok, candidate} <-
+           Source.new(
+             owner,
+             %{run_id: input["run_id"], revision: input["revision"], digest: input["sha256"]},
+             input["operation_id"],
+             now,
+             input["ttl"]
+           ),
+         :ok <- Records.active?(owner["tenant_id"], "sources", candidate["id"]),
+         :ok <-
+           Admission.admit(owner, "source.share", input["operation_id"], input, 1, now),
          {:ok, run} <- AgentRunEvidence.read(owner["tenant_id"], input["run_id"]),
          true <- run.revision === input["revision"] and run.digest == input["sha256"],
-         owner = cap_expiry(owner),
-         {:ok, source} <- Source.new(owner, run, input["operation_id"], now, input["ttl"]),
-         {:ok, stored} <- Records.insert(owner["tenant_id"], "sources", source, now),
+         {:ok, stored} <- Records.insert(owner["tenant_id"], "sources", candidate, now),
          {:ok, _} <-
            CustomerConnections.evidence_owner(actor, connection, System.system_time(:second)),
          :ok <-
-           Source.authorize(
-             stored,
+           recheck(
              owner,
              Source.reference(stored),
              System.system_time(:second)
@@ -36,6 +46,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
       {:ok, %{source: Source.reference(stored), expires_at: stored["expires_at"]}}
     else
       false -> {:error, :invalid_source_request}
+      {:error, :revoked} -> {:error, :source_denied}
       {:error, _} = error -> error
       _ -> {:error, :storage_unavailable}
     end
@@ -44,8 +55,10 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
   end
 
   def recheck(owner, reference, now) do
-    with {:ok, source} <- Records.fetch(owner["tenant_id"], "sources", reference["ref"]) do
-      Source.authorize(source, owner, reference, now)
+    case Records.fetch(owner["tenant_id"], "sources", reference["ref"]) do
+      {:ok, source} -> Source.authorize(source, owner, reference, now)
+      {:error, error} when error in [:not_found, :revoked] -> {:error, :source_denied}
+      error -> error
     end
   end
 

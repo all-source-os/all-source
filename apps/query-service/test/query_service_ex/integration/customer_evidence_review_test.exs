@@ -7,6 +7,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
   alias QueryServiceEx.Application.Services.CustomerReviewRecords, as: Records
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionConsent
   alias QueryServiceEx.Infrastructure.Adapters.CustomerAgentGrantStore, as: Grants
+  alias QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStore, as: Usage
   alias QueryServiceEx.Infrastructure.Adapters.CustomerReviewStore, as: Store
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
   alias QueryServiceEx.TestSupport.AgentRunFixture, as: F
@@ -90,12 +91,12 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
         assert receipt.persisted and not receipt.approved
         assert receipt.execution == "none"
         assert {:ok, ^receipt} = Review.prepare(grant.token, @binding, input, now + 1)
-        assert {:ok, view} = Review.read(grant.token, @binding, receipt.id, 1, now)
+        assert {:ok, view} = read_review(grant.token, @binding, receipt.id, 1, now)
         assert view.evidence.state == "divergent"
         assert view.evidence.first_divergence.change_number == 1
 
         assert {:ok, %{result_available: false, approved: false}} =
-                 Review.read(grant.token, @binding, receipt.id, 1, now, "read_result")
+                 read_review(grant.token, @binding, receipt.id, 1, now, "read_result")
 
         assert {:ok, workspace, _} = Store.load(@tenant)
         assert map_size(workspace["reviews"]) == 1
@@ -107,7 +108,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
     with_core(context, fn ->
       now = System.system_time(:second)
       assert {:ok, ^receipt} = Review.prepare(grant.token, @binding, input, now)
-      assert {:ok, ^view} = Review.read(grant.token, @binding, receipt.id, 1, now)
+      assert {:ok, ^view} = read_review(grant.token, @binding, receipt.id, 1, now)
       assert {:ok, workspace, _} = Store.load(@tenant)
       assert map_size(workspace["reviews"]) == 1
     end)
@@ -129,7 +130,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
         assert {:error, :source_denied} = Review.prepare(grant.token, @binding, input, now)
 
         assert {:ok, %{state: "unavailable"} = unavailable} =
-                 Review.read(grant.token, @binding, receipt.id, 1, now)
+                 read_review(grant.token, @binding, receipt.id, 1, now)
 
         refute Map.has_key?(unavailable, :evidence)
         {grant, receipt, reference}
@@ -139,12 +140,12 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
       assert {:error, :revoked} = Records.fetch(@tenant, "sources", reference["ref"])
 
       assert {:ok, %{state: "unavailable"}} =
-               Review.read(grant.token, @binding, receipt.id, 1, System.system_time(:second))
+               read_review(grant.token, @binding, receipt.id, 1, System.system_time(:second))
 
       assert :ok = Records.revoke(@tenant, "reviews", receipt.id)
 
       assert {:error, :access_denied} =
-               Review.read(grant.token, @binding, receipt.id, 1, System.system_time(:second))
+               read_review(grant.token, @binding, receipt.id, 1, System.system_time(:second))
     end)
   end
 
@@ -158,10 +159,10 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
       assert {:ok, receipt} = Review.prepare(grant.token, @binding, input, now)
       other = grant(now)
       assert {:error, :source_denied} = Review.prepare(other.token, @binding, input, now)
-      assert {:error, :access_denied} = Review.read(other.token, @binding, receipt.id, 1, now)
+      assert {:error, :access_denied} = read_review(other.token, @binding, receipt.id, 1, now)
 
       assert {:error, :access_denied} =
-               Review.read(
+               read_review(
                  grant.token,
                  Map.put(@binding, "subject_id", "outsider"),
                  receipt.id,
@@ -170,7 +171,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
                )
 
       assert {:error, :access_denied} =
-               Review.read(
+               read_review(
                  grant.token,
                  Map.put(@binding, "tenant_id", "other-tenant"),
                  receipt.id,
@@ -195,7 +196,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
                  old.id,
                  %{
                    "consent" => %{"accepted" => true, "version" => "selected-run-evidence-v1"},
-                   "operation_id" => F.uuid(99),
+                   "operation_id" => "#{now}:#{F.uuid(99)}",
                    "run_id" => F.uuid(1),
                    "revision" => 7,
                    "sha256" => F.hash(1),
@@ -205,7 +206,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
                )
 
       set_members([])
-      assert {:error, :access_denied} = Review.read(grant.token, @binding, receipt.id, 1, now)
+      assert {:error, :access_denied} = read_review(grant.token, @binding, receipt.id, 1, now)
     end)
   end
 
@@ -226,13 +227,13 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
                })
 
       assert {:ok, %{state: "superseded"} = stale} =
-               Review.read(grant.token, @binding, receipt.id, 1, now)
+               read_review(grant.token, @binding, receipt.id, 1, now)
 
       refute Map.has_key?(stale, :evidence)
       assert {:error, :source_changed} = Review.prepare(grant.token, @binding, input, now)
 
       assert {:ok, %{state: "expired"} = expired} =
-               Review.read(grant.token, @binding, receipt.id, 1, now + 61)
+               read_review(grant.token, @binding, receipt.id, 1, now + 61)
 
       refute Map.has_key?(expired, :proposal)
     end)
@@ -251,12 +252,15 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
       results = Task.await_many(tasks, 30_000)
       assert Enum.all?(results, &match?({:ok, %{state: "pending", approved: false}}, &1))
       assert results |> Enum.uniq() |> length() == 1
+      assert {:ok, %{"used" => 4}} = Usage.snapshot(@tenant)
       assert {:ok, workspace, _} = Store.load(@tenant)
       assert map_size(workspace["reviews"]) == 1
       reversed = update_in(input["proposal"]["sources"], &Enum.reverse/1)
 
       assert {:error, :idempotency_conflict} =
                Review.prepare(grant.token, @binding, reversed, now)
+
+      assert {:ok, %{"used" => 4}} = Usage.snapshot(@tenant)
 
       assert {:error, :invalid_preparation} =
                Review.prepare(grant.token, @binding, Map.put(input, "approved", true), now)
@@ -291,7 +295,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
                    grant.id,
                    %{
                      "consent" => %{"accepted" => true, "version" => "selected-run-evidence-v1"},
-                     "operation_id" => F.uuid(900 + number),
+                     "operation_id" => "#{now}:#{F.uuid(900 + number)}",
                      "run_id" => run_id,
                      "revision" => run.revision,
                      "sha256" => run.digest,
@@ -305,7 +309,7 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
 
     %{
       "expected_revision" => 0,
-      "idempotency_key" => F.uuid(999),
+      "idempotency_key" => "#{now}:#{F.uuid(999)}",
       "proposal" => %{
         "schema_version" => 1,
         "kind" => "run_comparison",
@@ -313,6 +317,11 @@ defmodule QueryServiceEx.Integration.CustomerEvidenceReviewTest do
         "sources" => refs
       }
     }
+  end
+
+  defp read_review(token, binding, id, version, now, operation \\ "read_review") do
+    request_id = "#{now}:#{F.uuid(3_000)}"
+    Review.read(token, binding, id, version, request_id, now, operation)
   end
 
   defp grant(now) do
