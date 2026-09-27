@@ -3,13 +3,17 @@
 Date: 27 September 2026. Target: existing `allsource-core` Fly application in
 the `allsource` organization, region `iad`.
 
+This record covers the failed first rollout, its successful rollback, and the
+separately verified lazy-append repair. The current candidate is the clean export
+of `91d9a13125ab02efb194c208fa5b33a9fac15489`; its rollout result is recorded below.
+
 ## Scope and source
 
 Build source is the clean git export of
 `a49d8c43359b99f198d8e814a7b0c80acf8ebb63`. Only root Cargo manifests,
 `.dockerignore`, `apps/core`, and the existing workspace manifest stubs enter the
-build context. The Core build inputs match the later review commit; uncommitted
-Prime, web analytics and outreach work is excluded.
+build context. Those Core inputs match review commits `72be57fc` and `03b7e1ef`;
+uncommitted Prime, web analytics and outreach work is excluded.
 
 This deploys the Core foundation, including stored event-version correction and
 conditional config records used by scoped connections and pending reviews. It
@@ -123,15 +127,57 @@ not claim those broader conditional-write guarantees or activate customer captur
 `source-sha256.txt` identifies the repaired Core source/tests/build inputs;
 `local-binary-sha256.txt` identifies the local HTTP proof binary.
 
+## Repaired image
+
+The clean `91d9a13125ab02efb194c208fa5b33a9fac15489` export matches every entry in
+`source-sha256.txt`. Its Alpine image was built and pushed successfully:
+
+- Tag: `registry.fly.io/allsource-core:core-91d9a131-20260927`
+- Digest: `sha256:898fdad1e6dd7a6273612820b481fd6e0b4ce04053dd22c458e910c9c475bbbb`
+- Build timestamp: `2026-09-27T11:52:44Z`
+- Same runtime target, UID, entrypoint, configuration and existing volume.
+
+The build printed a builder-release `deadline_exceeded` after the registry push
+completed, with exit code zero. Fly independently resolved the exact digest at
+deployment, and the running machine's image digest and revision label match it.
+All exact-source gates passed before deployment:
+
+- [CI 36317140237](https://github.com/all-source-os/all-source/actions/runs/36317140237)
+- [Docker Build 36317140232](https://github.com/all-source-os/all-source/actions/runs/36317140232)
+- [Security Scanning 36317140317](https://github.com/all-source-os/all-source/actions/runs/36317140317)
+
+The repair deployed as release 45 (`rel_gop4y7k4e4k8zn89`) at 12:24 UTC, retaining
+machine `7817667a276368`, the same encrypted volume, two shared CPUs and 4 GiB RAM.
+Fresh pre-rollout snapshot `vs_OV1ZjkJLP2ptzx9vq5Vk4Gq`, created at 12:11:49 UTC,
+was independently confirmed in `created` state with five-day retention. No
+snapshot restoration or data deletion was performed.
+
+Startup completed migration and recovered 27,814 system WAL events with zero
+corrupted entries. Direct Core health returned healthy version 0.25.1. Query
+Service backend/WebSocket readiness and Control Plane Core readiness passed at
+12:24:50–52 UTC after traffic resumed. A real tenant archive of 90,064 events
+finished hydration in 10.19 seconds during this window; tenant identity is omitted
+from this public record.
+
+At 12:27 UTC, roughly three minutes after startup, direct Core health, Query
+Service backend/WebSocket readiness, Control Plane readiness and web health still
+passed. System metadata advanced from 27,814 to 27,816 events, confirming writes
+continued after recovery. Machine memory reported 1,454 MiB available. This is
+a short post-rollout observation, not a long-duration load, failover or restoration
+test. Existing customer feature flags were not changed.
+
+The separately signed archive-integrity repair `d0497de4` is excluded from this
+image and has its own [verification record](../2026-09-27-conditional-archive-integrity/README.md).
+
 Build command, from the clean export:
 
 ```text
 flyctl deploy . --config apps/core/fly.toml --dockerfile apps/core/Dockerfile \
   --build-target runtime-alpine --remote-only --build-only --push --ha=false \
   --build-arg VERSION=0.25.1 \
-  --build-arg REVISION=a49d8c43359b99f198d8e814a7b0c80acf8ebb63 \
-  --build-arg BUILDTIME=2026-09-27T11:14:44Z \
-  --image-label core-a49d8c43-20260927
+  --build-arg REVISION=91d9a13125ab02efb194c208fa5b33a9fac15489 \
+  --build-arg BUILDTIME=2026-09-27T11:52:44Z \
+  --image-label core-91d9a131-20260927
 ```
 
 If the new image fails recovery, the application rollback uses the previous
