@@ -57,7 +57,8 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
   defp actor(conn) do
     with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
          true <- byte_size(token) in 1..8_192,
-         secret when is_binary(secret) and byte_size(secret) >= 32 <- System.get_env("JWT_SECRET"),
+         secret <- System.get_env("JWT_SECRET"),
+         true <- is_binary(secret) and byte_size(secret) >= 32,
          {true, %JOSE.JWT{fields: claims}, _} <-
            JOSE.JWT.verify_strict(JOSE.JWK.from_oct(secret), ["HS256"], token),
          true <- valid_session?(claims) do

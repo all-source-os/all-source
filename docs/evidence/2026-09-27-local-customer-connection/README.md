@@ -97,6 +97,29 @@ both Docker variants were not exercised locally. Linux CI now runs the Rust
 tests (including a POSIX ACL case), Clippy and formatting before MCP checks.
 Do not call that coverage passed until its actual result is available.
 
+### Subsequent CI observation and fixes
+
+For signed commit `ba81761fb8a5f305aed1bcb623671d4d0f106cb7`, the
+[Linux MCP quality job](https://github.com/all-source-os/all-source/actions/runs/36305418081/job/108581005854)
+completed successfully, including the POSIX ACL test, Rust formatting/Clippy,
+Elixir compilation, configured Credo, Dialyzer and the full MCP test step.
+The [Docker build run](https://github.com/all-source-os/all-source/actions/runs/36305418204)
+completed successfully for both MCP variants and both Query Service variants.
+This supersedes the pending Linux/container status above; it is not production
+deployment or native Claude host evidence.
+
+Two other jobs failed: Elixir 1.18 formatted a guarded `with` binding differently
+from local Elixir 1.19.1, and Go's `goconst` detected repeated email-auth paths.
+The follow-up separates the JWT-secret binding from its existing type/length
+check and names the two production auth paths. Behavior and test assertions stay
+unchanged. Local QS formatting and actual-Core connection tests passed (4 tests,
+0 failures, 1 intentional manual-browser skip). Control Plane lint reported zero
+issues and `TestEmailAuth` passed in an archived HEAD snapshot containing only
+the auth-path fix; concurrent, unrelated partnership edits were excluded.
+These follow-up checks do not claim the entire repository CI run passed.
+The original source/artifact manifests describe the earlier implementation,
+not these follow-up edits.
+
 The macOS absent-ACL handling was corrected after failing positive-file tests.
 [Apple's ACL implementation](https://raw.githubusercontent.com/apple-oss-distributions/Libc/main/posix1e/acl_file.c)
 reads the descriptor's FILESEC_ACL property; the observed no-property case is

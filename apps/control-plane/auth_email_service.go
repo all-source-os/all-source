@@ -19,13 +19,18 @@ import (
 
 var authUserIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,100}$`)
 
+const (
+	emailSignInPath = "/api/auth/sign-in/email"
+	emailSignUpPath = "/api/auth/sign-up/email"
+)
+
 // emailAuthService verifies credentials with the durable auth service, then
 // provisions a workspace and mints the JWT understood by CP and Query Service.
 // Opaque better-auth session tokens must never be presented as product JWTs.
 func (cp *ControlPlane) emailAuthService(c *gin.Context, signup bool, name, email, password string) {
-	path := "/api/auth/sign-in/email"
+	path := emailSignInPath
 	if signup {
-		path = "/api/auth/sign-up/email"
+		path = emailSignUpPath
 	}
 	body, err := json.Marshal(map[string]string{"name": name, "email": strings.ToLower(strings.TrimSpace(email)), "password": password})
 	if err != nil {
