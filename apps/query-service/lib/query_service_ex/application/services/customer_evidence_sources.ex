@@ -4,7 +4,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
   alias QueryServiceEx.Application.Services.CustomerConnections
   alias QueryServiceEx.Application.Services.CustomerReviewDeadline
   alias QueryServiceEx.Application.Services.CustomerReviewRecords, as: Records
-  alias QueryServiceEx.Domain.CustomerAgent.EvidenceSource
+  alias QueryServiceEx.Domain.CustomerAgent.EvidenceSource, as: Source
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
   @consent %{"accepted" => true, "version" => "selected-run-evidence-v1"}
@@ -22,18 +22,18 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
          {:ok, run} <- AgentRunEvidence.read(owner["tenant_id"], input["run_id"]),
          true <- run.revision === input["revision"] and run.digest == input["sha256"],
          owner = cap_expiry(owner),
-         {:ok, source} <- EvidenceSource.new(owner, run, input["operation_id"], now, input["ttl"]),
+         {:ok, source} <- Source.new(owner, run, input["operation_id"], now, input["ttl"]),
          {:ok, stored} <- Records.insert(owner["tenant_id"], "sources", source, now),
          {:ok, _} <-
            CustomerConnections.evidence_owner(actor, connection, System.system_time(:second)),
          :ok <-
-           EvidenceSource.authorize(
+           Source.authorize(
              stored,
              owner,
-             EvidenceSource.reference(stored),
+             Source.reference(stored),
              System.system_time(:second)
            ) do
-      {:ok, %{source: EvidenceSource.reference(stored), expires_at: stored["expires_at"]}}
+      {:ok, %{source: Source.reference(stored), expires_at: stored["expires_at"]}}
     else
       false -> {:error, :invalid_source_request}
       {:error, _} = error -> error
@@ -45,18 +45,18 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
 
   def recheck(owner, reference, now) do
     with {:ok, source} <- Records.fetch(owner["tenant_id"], "sources", reference["ref"]) do
-      EvidenceSource.authorize(source, owner, reference, now)
+      Source.authorize(source, owner, reference, now)
     end
   end
 
   def resolve(owner, reference, now) do
     with true <- is_map(reference) and Owner.id?(reference["ref"]),
          {:ok, source} <- Records.fetch(owner["tenant_id"], "sources", reference["ref"]),
-         :ok <- EvidenceSource.authorize(source, owner, reference, now),
+         :ok <- Source.authorize(source, owner, reference, now),
          {:ok, run} <- AgentRunEvidence.read(owner["tenant_id"], source["locator"]),
          true <- run.revision == source["revision"] and run.digest == source["sha256"],
          {:ok, ^source} <- Records.fetch(owner["tenant_id"], "sources", reference["ref"]),
-         :ok <- EvidenceSource.authorize(source, owner, reference, System.system_time(:second)) do
+         :ok <- Source.authorize(source, owner, reference, System.system_time(:second)) do
       {:ok, run, source["expires_at"]}
     else
       false -> {:error, :source_changed}
