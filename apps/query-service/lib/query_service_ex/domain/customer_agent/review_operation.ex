@@ -2,7 +2,7 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewOperation do
   @moduledoc "Immutable one-hour retry identity for metered customer evidence work."
   alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
-  @purposes ~w(source.share review.prepare review.read review.result)
+  @purposes ~w(source.inspect source.share review.prepare review.read review.result human.review)
 
   def issued_at(value) when is_binary(value) and byte_size(value) in 38..53 do
     with [time, nonce] <- String.split(value, ":"),

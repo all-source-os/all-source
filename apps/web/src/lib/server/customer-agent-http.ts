@@ -95,8 +95,14 @@ export async function boundedText(
   }
 }
 
-export async function queryConnection(path: string, body?: string, token?: string, form = false) {
-  const deadline = AbortSignal.timeout(9_000);
+export async function queryConnection(
+  path: string,
+  body?: string,
+  token?: string,
+  form = false,
+  timeout = 9_000
+) {
+  const deadline = AbortSignal.timeout(timeout);
   const base =
     process.env.QUERY_SERVICE_URL ||
     (process.env.NODE_ENV === "production"

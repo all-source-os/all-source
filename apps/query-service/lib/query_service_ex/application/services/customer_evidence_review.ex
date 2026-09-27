@@ -6,6 +6,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
   """
   alias QueryServiceEx.Application.Services.CustomerAgentAccess
   alias QueryServiceEx.Application.Services.CustomerAgentReview
+  alias QueryServiceEx.Application.Services.CustomerConnections
   alias QueryServiceEx.Application.Services.CustomerEvidenceSources, as: Sources
   alias QueryServiceEx.Application.Services.CustomerQueryAdmission, as: Admission
   alias QueryServiceEx.Application.Services.CustomerReviewDeadline
@@ -59,19 +60,32 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
 
   def read(token, binding, id, version, request_id, now, operation \\ "read_review") do
     CustomerReviewDeadline.run(binding, fn ->
-      do_read(token, binding, id, version, request_id, now, operation)
+      authorize = fn time -> access(token, binding, operation, time) end
+      purpose = if(operation == "read_result", do: "review.result", else: "review.read")
+      do_read(authorize, id, version, request_id, now, operation, purpose)
     end)
   end
 
-  defp do_read(token, binding, id, version, request_id, now, operation) do
+  @doc "Read through a verified product actor; no agent credential or approval authority is accepted."
+  def read_human(actor, connection, id, version, request_id, now) do
+    CustomerReviewDeadline.run(actor, fn ->
+      authorize = fn time ->
+        CustomerConnections.evidence_owner(actor, connection, time, "read_review")
+      end
+
+      do_read(authorize, id, version, request_id, now, "read_review", "human.review")
+    end)
+  end
+
+  defp do_read(authorize, id, version, request_id, now, operation, purpose) do
     with true <- Owner.id?(id) and version === 1 and operation in ~w(read_review read_result),
          true <- Operation.valid_at?(request_id, now),
-         {:ok, owner} <- access(token, binding, operation, now),
+         {:ok, owner} <- authorize.(now),
          {:ok, record} <- Records.fetch(owner["tenant_id"], "reviews", id),
          true <- Owner.matches?(record, owner) and now >= record["created_at"],
-         {:ok, response} <- current_view(owner, record, operation, request_id, now),
+         {:ok, response} <- current_view(owner, record, operation, request_id, now, purpose),
          {:ok, ^record} <- Records.fetch(owner["tenant_id"], "reviews", id),
-         {:ok, _} <- access(token, binding, operation, System.system_time(:second)) do
+         {:ok, _} <- authorize.(System.system_time(:second)) do
       if record["expires_at"] <= System.system_time(:second),
         do: {:ok, receipt(record, "expired")},
         else: {:ok, response}
@@ -85,14 +99,13 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
     _ -> {:error, :storage_unavailable}
   end
 
-  defp current_view(owner, record, operation, request_id, now) do
+  defp current_view(owner, record, operation, request_id, now, purpose) do
     if now >= record["expires_at"] do
       {:ok, receipt(record, "expired")}
     else
       with {:ok, proposal} <- CustomerAgentReview.validate(record["proposal"]),
            :ok <- supported(proposal),
            :ok <- recheck(owner, proposal),
-           purpose = if(operation == "read_result", do: "review.result", else: "review.read"),
            :ok <-
              Admission.admit(owner, purpose, request_id, [record["id"], record["digest"]], 2, now),
            {:ok, report, _expiry} <- compare(owner, proposal, now),

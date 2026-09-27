@@ -27,9 +27,10 @@ async function request<T>(operation: string, body: unknown): Promise<T> {
   return result.data as T;
 }
 
-export function CustomerConnections() {
+export function CustomerConnections({ evidenceEnabled = false }: { evidenceEnabled?: boolean }) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accepted, setAccepted] = useState(false);
+  const [scope, setScope] = useState("metadata");
   const [issued, setIssued] = useState<IssuedConnection | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -53,9 +54,21 @@ export function CustomerConnections() {
       if (operation === "create") {
         const result = await request<IssuedConnection>("create", {
           client_id: "claude-code",
-          operations: ["read_context", "validate_proposal"],
+          operations:
+            scope === "evidence"
+              ? [
+                  "read_context",
+                  "validate_proposal",
+                  "prepare_proposal",
+                  "read_review",
+                  "read_result",
+                ]
+              : ["read_context", "validate_proposal"],
           ttl: 3600,
-          consent: { accepted, version: "review-metadata-v1" },
+          consent: {
+            accepted,
+            version: scope === "evidence" ? "review-evidence-v2" : "review-metadata-v1",
+          },
         });
         setIssued(result);
         setAccepted(false);
@@ -81,13 +94,33 @@ export function CustomerConnections() {
         <h2 id="connection-consent" className="text-xl font-semibold">
           Connect Claude Code
         </h2>
+        {evidenceEnabled && (
+          <label className="block space-y-2">
+            <span>Connection access</span>
+            <select
+              className="w-full rounded-md border bg-background p-3 text-base"
+              value={scope}
+              disabled={busy || issued !== null}
+              onChange={(event) => {
+                setScope(event.target.value);
+                setAccepted(false);
+              }}
+            >
+              <option value="metadata">Workspace metadata only</option>
+              <option value="evidence">Metadata and selected run evidence</option>
+            </select>
+          </label>
+        )}
         <p>
           For one hour, Claude Code can read your workspace identity, membership role and MCP
           entitlement, and validate review proposals you provide.
         </p>
         <p className="text-muted-foreground">
-          Event content stays private. This connection cannot approve reviews or execute changes.
-          Data returned to Claude may be processed by Anthropic under your Claude account settings.
+          {scope === "evidence"
+            ? "After you explicitly share each run in Agent reviews, Claude Code can read its selected metadata and comparison evidence, prepare comparisons and read pending review status. These actions use your workspace query allowance. Unselected event content stays private."
+            : "Event content stays private."}{" "}
+          This connection cannot approve reviews or execute changes. Data returned to Claude may be
+          processed by Anthropic under your Claude account settings.
         </p>
         <label className="flex items-start gap-3">
           <input

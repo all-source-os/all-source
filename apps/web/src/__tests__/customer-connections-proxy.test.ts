@@ -7,7 +7,7 @@ import { POST as v1Post } from "@/app/api/v1/[...path]/route";
 
 const origin = "https://www.all-source.xyz";
 function token(extra = {}) {
-  return `header.${Buffer.from(JSON.stringify({ sub: "oauth:google:one", provider: "google", email_verified: true, ...extra })).toString("base64url")}.signature`;
+  return `header.${Buffer.from(JSON.stringify({ sub: "oauth:google:one", tenant_id: "synthetic-workspace", provider: "google", email_verified: true, ...extra })).toString("base64url")}.signature`;
 }
 function request(headers = {}, body = "{}", query = "") {
   return new NextRequest(`${origin}/api/customer-agent/connections/create${query}`, {
@@ -59,11 +59,12 @@ describe("customer connection browser boundary", () => {
     { authorization: "Bearer agent" },
     { cookie: "" },
     { cookie: "auth_token=header.bnVsbA.signature" },
-    ...["is_api_key", "view_as", "is_demo"].map((key) => ({
+    ...["is_api_key", "view_as", "is_demo", "act_as"].map((key) => ({
       cookie: `auth_token=${token({ [key]: true })}`,
     })),
     { cookie: `auth_token=${token({ email_verified: false })}` },
     { cookie: `auth_token=${token({ core_api_key: "secret" })}` },
+    { cookie: `auth_token=${token({ tenant_id: null })}` },
   ])("denies invalid browser authority %j", async (headers) => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
@@ -115,5 +116,40 @@ describe("customer connection browser boundary", () => {
     const response = await POST(request(), context);
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain("private raw detail");
+  });
+  it.each([
+    "inspect-run",
+    "share",
+    "workspace",
+    "revoke-source",
+    "read-review",
+  ])("gates %s separately and keeps private headers", async (operation) => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ data: {} }));
+    vi.stubGlobal("fetch", fetcher);
+    const route = { params: Promise.resolve({ operation }) };
+    expect((await POST(request(), route)).status).toBe(404);
+    expect(fetcher).not.toHaveBeenCalled();
+    vi.stubEnv("CUSTOMER_EVIDENCE_ENABLED", "true");
+    const response = await POST(request(), route);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+  it("blocks evidence consent creation when disabled and removes unknown upstream error codes", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    expect(
+      (
+        await POST(
+          request({}, JSON.stringify({ consent: { version: "review-evidence-v2" } })),
+          context
+        )
+      ).status
+    ).toBe(404);
+    expect(fetcher).not.toHaveBeenCalled();
+    fetcher.mockResolvedValue(
+      Response.json({ error: { code: "PRIVATE-CUSTOMER-DATA" } }, { status: 503 })
+    );
+    expect(await (await POST(request(), context)).text()).not.toContain("PRIVATE-CUSTOMER-DATA");
   });
 });

@@ -1,0 +1,12 @@
+$ vitest run src/__tests__/customer-connections-proxy.test.ts src/__tests__/customer-connections-ui.test.tsx src/__tests__/customer-connection-setup.test.tsx src/__tests__/customer-evidence-workspace.test.tsx src/__tests__/customer-remote-oauth.test.ts src/__tests__/customer-remote-consent.test.tsx
+
+ RUN  v4.1.5 /Users/decebaldobrica/Projects/founder-mode/all-source/apps/web
+
+(node:1350) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+ Test Files  6 passed (6)
+      Tests  46 passed (46)
+   Start at  21:29:14
+   Duration  2.88s (transform 498ms, setup 260ms, import 6.60s, tests 638ms, environment 1.56s)
+

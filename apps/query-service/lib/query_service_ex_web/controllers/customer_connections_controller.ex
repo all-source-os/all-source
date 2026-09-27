@@ -7,7 +7,9 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
   import Plug.Conn
 
   alias QueryServiceEx.Application.Services.CustomerConnections
+  alias QueryServiceEx.Application.Services.CustomerEvidenceReview
   alias QueryServiceEx.Application.Services.CustomerEvidenceSources
+  alias QueryServiceEx.Application.Services.CustomerHumanEvidence
   alias QueryServiceEx.RateLimiter
   alias QueryServiceExWeb.CustomerHumanSession
 
@@ -15,11 +17,15 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
   def create(conn, params), do: dispatch(conn, params, :create)
   def revoke(conn, params), do: dispatch(conn, params, :revoke)
   def share(conn, params), do: dispatch(conn, params, :share)
+  def inspect_run(conn, params), do: dispatch(conn, params, :inspect_run)
+  def workspace(conn, params), do: dispatch(conn, params, :workspace)
+  def read_review(conn, params), do: dispatch(conn, params, :read_review)
+  def revoke_source(conn, params), do: dispatch(conn, params, :revoke_source)
 
   defp dispatch(conn, params, operation) do
     with true <- Application.get_env(:query_service_ex, :customer_connections_enabled, false),
          true <-
-           operation != :share or
+           not evidence_request?(operation, params) or
              Application.get_env(:query_service_ex, :customer_evidence_enabled, false),
          true <- conn.query_string == "",
          {:allow, _} <- RateLimiter.check_rate("customer-connections:admission", :free),
@@ -39,7 +45,8 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
       when code in [:review_unavailable, :query_usage_unavailable, :clock_moved_backwards] ->
         error(conn, 503, "access_unavailable")
 
-      {:error, code} when code in [:review_busy, :query_usage_busy, :query_operation_capacity] ->
+      {:error, code}
+      when code in [:review_busy, :query_usage_busy, :query_operation_capacity, :workspace_limit] ->
         error(conn, 429, "review_busy")
 
       {:error, :query_quota_exceeded} ->
@@ -81,7 +88,46 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
        when map_size(params) == 2,
        do: CustomerEvidenceSources.share(actor, id, input, System.system_time(:second))
 
+  defp perform(:inspect_run, actor, %{"connection_id" => id, "source" => input} = params)
+       when map_size(params) == 2,
+       do: CustomerHumanEvidence.inspect_run(actor, id, input, System.system_time(:second))
+
+  defp perform(:workspace, actor, %{"connection_id" => id} = params)
+       when map_size(params) == 1,
+       do: CustomerHumanEvidence.workspace(actor, id, System.system_time(:second))
+
+  defp perform(:revoke_source, actor, %{"connection_id" => id, "source_id" => source} = params)
+       when map_size(params) == 2,
+       do: CustomerHumanEvidence.revoke_source(actor, id, source, System.system_time(:second))
+
+  defp perform(
+         :read_review,
+         actor,
+         %{
+           "connection_id" => connection,
+           "id" => id,
+           "version" => version,
+           "request_id" => request
+         } = params
+       )
+       when map_size(params) == 4,
+       do:
+         CustomerEvidenceReview.read_human(
+           actor,
+           connection,
+           id,
+           version,
+           request,
+           System.system_time(:second)
+         )
+
   defp perform(_, _, _), do: {:error, :invalid_request}
+
+  defp evidence_request?(:create, params),
+    do: get_in(params, ["consent", "version"]) == "review-evidence-v2"
+
+  defp evidence_request?(operation, _),
+    do: operation in [:share, :inspect_run, :workspace, :read_review, :revoke_source]
 
   defp error(conn, status, code),
     do:

@@ -1,50 +1,42 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { decodeJwtPayload } from "@/lib/server/session-token";
+import {
+  boundedText,
+  privateHeaders,
+  productSession,
+  queryConnection,
+  sameOrigin,
+} from "@/lib/server/customer-agent-http";
 
-const noStore = { "Cache-Control": "no-store" };
+const evidenceOperations = ["inspect-run", "share", "workspace", "revoke-source", "read-review"];
 const messages: Record<string, string> = {
   connection_limit: "Connection limit reached. Revoke an unused connection or try again tomorrow.",
-  access_denied: "A verified workspace session and eligible plan are required.",
+  access_denied: "A verified workspace session and eligible connection are required.",
   invalid_request: "Check your connection settings and consent, then retry.",
+  invalid_source: "This run could not be shared at that revision. Inspect it again before sharing.",
   rate_limited: "Too many requests. Try again shortly.",
+  review_busy: "Review capacity is busy. Retry the same request shortly.",
+  review_conflict:
+    "The request or billing period changed. Refresh saved work before starting again.",
+  review_expired: "This request expired. Refresh saved work before starting again.",
+  query_quota_exceeded: "Workspace query allowance reached. Review your plan before retrying.",
 };
-function failure(status: number, code: string) {
+
+function failure(status: number, rawCode: unknown) {
+  const code =
+    typeof rawCode === "string" && Object.hasOwn(messages, rawCode)
+      ? rawCode
+      : "access_unavailable";
   return NextResponse.json(
     {
-      error: { code, message: messages[code] || "Connection service unavailable. Retry shortly." },
+      error: {
+        code,
+        message:
+          messages[code] ||
+          "Connection service unavailable. The request may have completed. Retry the same request or refresh saved work.",
+      },
     },
-    { status, headers: noStore }
+    { status, headers: privateHeaders }
   );
-}
-
-async function boundedText(
-  stream: ReadableStream<Uint8Array> | null,
-  limit: number,
-  signal: AbortSignal
-) {
-  if (!stream) return "";
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  const abort = () => {
-    void reader.cancel().catch(() => {});
-  };
-  signal.addEventListener("abort", abort, { once: true });
-  try {
-    while (true) {
-      signal.throwIfAborted();
-      const { done, value } = await reader.read();
-      signal.throwIfAborted();
-      if (done) return Buffer.concat(chunks).toString("utf8");
-      size += value.byteLength;
-      if (size > limit) throw new Error("size limit");
-      chunks.push(value);
-    }
-  } finally {
-    signal.removeEventListener("abort", abort);
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
 }
 
 export async function POST(
@@ -52,43 +44,17 @@ export async function POST(
   { params }: { params: Promise<{ operation: string }> }
 ) {
   const { operation } = await params;
+  const evidence = process.env.CUSTOMER_EVIDENCE_ENABLED === "true";
   if (
     process.env.CUSTOMER_CONNECTIONS_ENABLED !== "true" ||
-    !["list", "create", "revoke"].includes(operation)
+    !["list", "create", "revoke", ...evidenceOperations].includes(operation) ||
+    (evidenceOperations.includes(operation) && !evidence)
   )
     return failure(404, "unavailable");
-  if (request.nextUrl.search || request.headers.has("authorization"))
+  if (request.nextUrl.search || request.headers.has("authorization") || !sameOrigin(request))
     return failure(403, "access_denied");
   const token = request.cookies.get("auth_token")?.value;
-  const claims = token ? decodeJwtPayload(token) : null;
-  if (
-    !token ||
-    token.length > 8192 ||
-    !claims ||
-    typeof claims !== "object" ||
-    Array.isArray(claims) ||
-    typeof claims.sub !== "string" ||
-    claims.email_verified !== true ||
-    !["google", "github", "email"].includes(String(claims.provider)) ||
-    claims.is_api_key ||
-    claims.view_as ||
-    claims.is_demo ||
-    claims.core_api_key ||
-    claims.api_key
-  )
-    return failure(401, "access_denied");
-  const configured = process.env.NEXT_PUBLIC_APP_URL;
-  const origin = configured
-    ? new URL(configured).origin
-    : process.env.NODE_ENV === "production"
-      ? null
-      : request.nextUrl.origin;
-  if (
-    !origin ||
-    request.headers.get("origin") !== origin ||
-    request.headers.get("sec-fetch-site") === "cross-site"
-  )
-    return failure(403, "access_denied");
+  if (!productSession(token)) return failure(401, "access_denied");
   if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json")
     return failure(415, "invalid_request");
   let body: string;
@@ -98,23 +64,18 @@ export async function POST(
     return failure(413, "invalid_request");
   }
   try {
-    const deadline = AbortSignal.timeout(45_000);
-    const base =
-      process.env.QUERY_SERVICE_URL ||
-      (process.env.NODE_ENV === "production"
-        ? "https://allsource-query.fly.dev"
-        : "http://localhost:3902");
-    const response = await fetch(new URL(`/api/customer-agent/connections/${operation}`, base), {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body,
-      cache: "no-store",
-      redirect: "error",
-      signal: deadline,
-    });
-    const result = JSON.parse(await boundedText(response.body, 65536, deadline));
-    if (!response.ok) return failure(response.status, result.error?.code || "access_unavailable");
-    return NextResponse.json(result, { headers: noStore });
+    const input = JSON.parse(body);
+    if (!input || typeof input !== "object" || Array.isArray(input))
+      return failure(400, "invalid_request");
+    if (operation === "create" && input.consent?.version === "review-evidence-v2" && !evidence)
+      return failure(404, "unavailable");
+  } catch {
+    return failure(400, "invalid_request");
+  }
+  try {
+    const result = await queryConnection(`connections/${operation}`, body, token, false, 45_000);
+    if (!result.ok) return failure(result.status, result.data.error?.code);
+    return NextResponse.json(result.data, { headers: privateHeaders });
   } catch {
     return failure(502, "access_unavailable");
   }

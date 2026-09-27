@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { connection } from "next/server";
 import { CustomerConnections } from "@/components/settings/customer-connections";
 import { remoteEnabled, remoteIssuer } from "@/lib/server/customer-agent-http";
@@ -35,7 +36,17 @@ export default async function ConnectionsPage() {
         </section>
       )}
       {process.env.CUSTOMER_CONNECTIONS_ENABLED === "true" ? (
-        <CustomerConnections />
+        <>
+          {process.env.CUSTOMER_EVIDENCE_ENABLED === "true" && (
+            <Link
+              className="inline-block text-base underline underline-offset-4"
+              href="/dashboard/tools/agent-reviews"
+            >
+              Open Agent reviews to share sources and inspect saved comparisons
+            </Link>
+          )}
+          <CustomerConnections evidenceEnabled={process.env.CUSTOMER_EVIDENCE_ENABLED === "true"} />
+        </>
       ) : (
         <p className="rounded-xl border p-6 text-base">Agent connections are not available yet.</p>
       )}

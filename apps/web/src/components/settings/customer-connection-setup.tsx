@@ -8,6 +8,7 @@ export type IssuedConnection = {
   token: string;
   expires_at: number;
   binding: Record<string, string>;
+  consent_version?: "review-metadata-v1" | "review-evidence-v2";
 };
 
 const clipboardReaders = {
@@ -43,6 +44,9 @@ export function CustomerConnectionSetup({ issued }: { issued: IssuedConnection }
     args: ["start"],
     env: {
       ALLSOURCE_CUSTOMER_REVIEW: "true",
+      ...(issued.consent_version === "review-evidence-v2"
+        ? { ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW: "true" }
+        : {}),
       CUSTOMER_REVIEW_CONNECTION_FILE: path,
     },
   };
@@ -179,7 +183,11 @@ export function CustomerConnectionSetup({ issued }: { issued: IssuedConnection }
           </Button>
           <p>
             Open Claude Code and check <code>/mcp</code>. This connection checks access and
-            validates proposals; it cannot approve or execute changes.
+            validates proposals
+            {issued.consent_version === "review-evidence-v2"
+              ? ", prepares comparisons from sources you share, and reads pending reviews"
+              : ""}
+            . It cannot approve or execute changes.
           </p>
         </li>
       </ol>

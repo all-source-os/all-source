@@ -6,6 +6,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("customer consent and connection settings", () => {
+  it("requires fresh consent after choosing evidence access", async () => {
+    const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("create")) {
+        expect(JSON.parse(init.body as string)).toMatchObject({
+          consent: { accepted: true, version: "review-evidence-v2" },
+          operations: [
+            "read_context",
+            "validate_proposal",
+            "prepare_proposal",
+            "read_review",
+            "read_result",
+          ],
+        });
+        return Response.json({
+          data: {
+            id: "a".repeat(32),
+            token: "synthetic",
+            expires_at: 2_000_000_000,
+            binding: {},
+            consent_version: "review-evidence-v2",
+          },
+        });
+      }
+      return Response.json({ data: { connections: [] } });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<CustomerConnections evidenceEnabled />);
+    await screen.findByText("No connections to display.");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.change(screen.getByLabelText("Connection access"), { target: { value: "evidence" } });
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Create connection" })).toBeDisabled();
+    expect(screen.getByText(/Anthropic under your Claude account/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Create connection" }));
+    await screen.findByLabelText("Connection credential");
+    expect(screen.getByLabelText("Connection access")).toBeDisabled();
+  });
   it("requires explicit consent, shows secret once, lists and revokes without model approval", async () => {
     const id = "a".repeat(32);
     let created = false;

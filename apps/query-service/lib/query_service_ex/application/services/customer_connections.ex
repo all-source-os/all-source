@@ -29,7 +29,8 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
            ) do
       case eligible(binding, System.system_time(:second)) do
         {:ok, _} ->
-          {:ok, Map.put(issued, :binding, binding)}
+          {:ok,
+           Map.merge(issued, %{binding: binding, consent_version: params["consent"]["version"]})}
 
         _ ->
           # Lost eligibility never returns a secret. Even if this compensating
@@ -71,13 +72,14 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
   end
 
   @doc "Authorize source selection for an already-authenticated product actor, not an agent credential."
-  def evidence_owner(actor, id, now) do
+  def evidence_owner(actor, id, now, operation \\ "prepare_proposal") do
     with {:ok, record} <- connections().fetch(actor["tenant_id"], id),
          binding = binding(actor, record["client_id"]),
          true <- ConnectionGrant.matches_owner?(record, binding),
          true <- ConnectionConsent.valid?(record),
          true <- record["consent"]["version"] == ConnectionConsent.evidence_version(),
-         true <- ConnectionGrant.valid_for?(record, binding, "prepare_proposal", now),
+         true <- operation in ~w(prepare_proposal read_review read_result),
+         true <- ConnectionGrant.valid_for?(record, binding, operation, now),
          {:ok, eligibility} <- metered_eligibility(binding, now),
          {:ok, receipts} <- connections().list(actor["tenant_id"], actor["subject_id"], now),
          [%{"status" => "active"}] <- Enum.filter(receipts, &(&1["id"] == id)) do

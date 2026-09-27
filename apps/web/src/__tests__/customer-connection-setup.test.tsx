@@ -16,7 +16,7 @@ const issued = {
 
 afterEach(() => vi.unstubAllGlobals());
 
-function setup(value = issued) {
+function setup(value: typeof issued & { consent_version?: "review-evidence-v2" } = issued) {
   const writeText = vi.fn().mockResolvedValue(undefined);
   vi.stubGlobal("navigator", { clipboard: { writeText } });
   render(<CustomerConnectionSetup issued={value} />);
@@ -59,6 +59,14 @@ describe("private connection installation", () => {
     );
     expect(host).not.toContain(issued.token);
     expect(host).not.toContain("CUSTOMER_REVIEW_GRANT");
+    expect(host).not.toContain("ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW");
+  });
+
+  it("enables evidence tools only for the issued evidence consent", async () => {
+    const clipboard = setup({ ...issued, consent_version: "review-evidence-v2" });
+    fireEvent.click(screen.getByRole("button", { name: "Copy Claude Code command" }));
+    await waitFor(() => expect(clipboard).toHaveBeenCalledTimes(1));
+    expect(clipboard.mock.calls[0]?.[0]).toContain('"ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW":"true"');
   });
 
   it("quotes metacharacters literally and rejects relative or multiline paths", async () => {
