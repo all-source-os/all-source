@@ -993,8 +993,9 @@ impl ParquetStorage {
     /// this one only opens files under `<storage_dir>/<tenant>/`.
     ///
     /// Returns an empty vec when the tenant has no on-disk data. Returns
-    /// an error if the tenant_id fails the path-safety whitelist or any
-    /// individual file fails to load.
+    /// an error if the tenant_id fails the path-safety whitelist or listing
+    /// fails. Individual unreadable files are logged and skipped for queries;
+    /// this tolerant result cannot establish a complete version for OCC.
     ///
     /// This is the read-side complement to per-tenant flushing. It's the
     /// foundation Step 2 (lazy per-tenant load on demand) needs: a way to
@@ -1006,6 +1007,15 @@ impl ParquetStorage {
     /// passed `tenant_id` onto every reconstructed event.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn load_events_for_tenant(&self, tenant_id: &str) -> Result<Vec<Event>> {
+        self.load_events_for_tenant_with_integrity(tenant_id, false)
+            .map(|(events, _complete)| events)
+    }
+
+    pub(crate) fn load_events_for_tenant_with_integrity(
+        &self,
+        tenant_id: &str,
+        require_complete: bool,
+    ) -> Result<(Vec<Event>, bool)> {
         let parquet_files = self.list_parquet_files_for_tenant(tenant_id)?;
         tracing::info!(
             tenant_id = tenant_id,
@@ -1032,9 +1042,15 @@ impl ParquetStorage {
                         tenant_id = tenant_id,
                         file = %file_path.display(),
                         error = %e,
-                        "Skipping unreadable parquet file in tenant subtree"
+                        require_complete,
+                        "Unreadable parquet file in tenant subtree"
                     );
                     skipped += 1;
+                    if require_complete {
+                        return Err(AllSourceError::StorageError(
+                            "Cannot verify conditional version from incomplete archive".into(),
+                        ));
+                    }
                 }
             }
         }
@@ -1045,7 +1061,7 @@ impl ParquetStorage {
             skipped_files = skipped,
             "load_events_for_tenant: complete"
         );
-        Ok(events)
+        Ok((events, skipped == 0))
     }
 
     /// Get the storage directory path.

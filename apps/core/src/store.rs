@@ -582,7 +582,7 @@ impl EventStore {
         // OCC needs durable history, but ordinary appends must keep lazy loading:
         // hydrating a large archive here would stall unrelated HTTP writes.
         if expected_version.is_some() {
-            self.ensure_tenant_loaded(event.tenant_id_str())?;
+            self.ensure_tenant_loaded_with_integrity(event.tenant_id_str(), true)?;
         }
 
         let entity_id = event.entity_id_str().to_string();
@@ -1515,10 +1515,12 @@ impl EventStore {
     /// Other tenants are unaffected — distinct lock per tenant.
     ///
     /// Returns `Err` if the tenant_id fails the path-safety
-    /// whitelist, the Parquet read fails, or another in-flight load
+    /// whitelist, directory listing fails, or another in-flight load
     /// holds the lock past the configured timeout. The caller (a
     /// query handler) is expected to surface that as a 5xx — see
-    /// Step 2's "no infinite hangs" acceptance criterion.
+    /// Step 2's "no infinite hangs" acceptance criterion. Individual
+    /// unreadable files retain the tolerant query policy. Conditional
+    /// writes use the integrity-aware path and require every file to load.
     ///
     /// On failure, `loaded` is NOT marked, so a transient error is
     /// retried on the next request rather than poisoning the tenant
@@ -1528,15 +1530,28 @@ impl EventStore {
     /// No-op (and Ok) when no Parquet storage is configured — the
     /// in-memory-only mode used by tests has nothing to hydrate.
     pub fn ensure_tenant_loaded(&self, tenant_id: &str) -> Result<()> {
+        self.ensure_tenant_loaded_with_integrity(tenant_id, false)
+    }
+
+    fn ensure_tenant_loaded_with_integrity(
+        &self,
+        tenant_id: &str,
+        require_complete: bool,
+    ) -> Result<()> {
+        let is_loaded = || {
+            self.tenant_loader.is_loaded(tenant_id)
+                && (!require_complete || self.tenant_loader.is_complete(tenant_id))
+        };
         // Fast path: warm tenant. Avoids the Mutex altogether.
-        if self.tenant_loader.is_loaded(tenant_id) {
+        if is_loaded() {
             return Ok(());
         }
 
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
             // No persistent storage to load from. Mark loaded so we
             // don't keep re-entering the slow path.
-            self.tenant_loader.mark_loaded(tenant_id);
+            self.tenant_loader
+                .mark_loaded_with_integrity(tenant_id, true);
             return Ok(());
         };
 
@@ -1553,12 +1568,14 @@ impl EventStore {
 
         // Re-check inside the lock — another thread may have completed
         // the load while we were waiting.
-        if self.tenant_loader.is_loaded(tenant_id) {
+        if is_loaded() {
             return Ok(());
         }
 
         let started = std::time::Instant::now();
-        let events = storage.read().load_events_for_tenant(tenant_id)?;
+        let (events, complete) = storage
+            .read()
+            .load_events_for_tenant_with_integrity(tenant_id, require_complete)?;
         let read_count = events.len();
 
         let before = self.events.read().len();
@@ -1571,7 +1588,8 @@ impl EventStore {
         // Dedupe (e.g. WAL events re-checkpointed to Parquet) makes
         // applied < read_count possible.
         *self.total_ingested.write() += applied as u64;
-        self.tenant_loader.mark_loaded(tenant_id);
+        self.tenant_loader
+            .mark_loaded_with_integrity(tenant_id, complete);
 
         tracing::info!(
             tenant_id = tenant_id,

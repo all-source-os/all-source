@@ -57,7 +57,9 @@ pub const DEFAULT_LOAD_TIMEOUT: Duration = Duration::from_secs(30);
 /// eviction policy compares the sum of these counters against the
 /// configured byte budget.
 pub struct TenantLoader {
-    loaded: DashMap<String, ()>,
+    // The value records whether this load verified every archive file. Tolerant
+    // queries may cache partial history; that cannot authorize an OCC write.
+    loaded: DashMap<String, bool>,
     locks: DashMap<String, Arc<Mutex<()>>>,
     bytes: DashMap<String, u64>,
     /// Last-used Instant per tenant — refreshed on every query
@@ -152,12 +154,22 @@ impl TenantLoader {
         self.loaded.contains_key(tenant_id)
     }
 
-    /// Record that this tenant has been hydrated. Idempotent.
+    /// Record that this tenant has been hydrated without asserting that
+    /// every archive file was readable. Conditional writes must verify
+    /// integrity before treating this cache as complete history.
     /// Also stamps a fresh `last_used` so the tenant immediately
     /// participates in LRU ordering and isn't picked as an
     /// eviction victim before its first explicit touch.
     pub fn mark_loaded(&self, tenant_id: &str) {
-        self.loaded.insert(tenant_id.to_string(), ());
+        self.mark_loaded_with_integrity(tenant_id, false);
+    }
+
+    pub(crate) fn is_complete(&self, tenant_id: &str) -> bool {
+        self.loaded.get(tenant_id).is_some_and(|entry| *entry)
+    }
+
+    pub(crate) fn mark_loaded_with_integrity(&self, tenant_id: &str, complete: bool) {
+        self.loaded.insert(tenant_id.to_string(), complete);
         self.last_used.insert(tenant_id.to_string(), Instant::now());
     }
 

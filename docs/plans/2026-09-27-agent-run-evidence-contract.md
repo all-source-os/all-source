@@ -66,10 +66,14 @@ counter isolation, cache-eviction races and retention/high-water-mark semantics
 are not solved here. The new namespaced run key and strict sequence/causation
 checks prevent this reader from treating ambiguous history as verified order.
 Do not extend the ordering claim to arbitrary legacy streams. A data-center
-failover test has not run. The existing archive loader skips unreadable files;
-conditional writes do not yet have a separate strict completeness check. Cold
-hydration also lacks a bound on total archive-read time. Both remain activation
-gates for customer evidence capture, not guarantees established by these tests.
+failover test has not run. Conditional writes now require every discovered archive
+file to load, including when a prior tolerant query warmed the cache; see the
+[integrity repair](../evidence/2026-09-27-conditional-archive-integrity/README.md).
+Generic queries still skip unreadable files. Customer reads need a strict
+completeness contract before a contiguous partial result can be described as
+complete retained evidence. Cold hydration also lacks a bound on total archive
+read time. These remain activation gates for customer evidence capture, not
+guarantees established by the conditional-write tests.
 
 ## Read model and comparison
 
