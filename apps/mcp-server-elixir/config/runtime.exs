@@ -2,6 +2,7 @@ import Config
 
 config :mcp_server_elixir,
   customer_review: System.get_env("ALLSOURCE_CUSTOMER_REVIEW") == "true",
+  customer_evidence_review: System.get_env("ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW") == "true",
   customer_review_connection_file: System.get_env("CUSTOMER_REVIEW_CONNECTION_FILE"),
   customer_review_http: System.get_env("ALLSOURCE_CUSTOMER_REVIEW_HTTP") == "true",
   customer_review_query_url: System.get_env("CUSTOMER_REVIEW_QUERY_URL"),

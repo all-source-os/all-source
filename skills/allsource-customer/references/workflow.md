@@ -4,42 +4,47 @@ Status: draft integration contract, not a live connector claim.
 
 ## Restricted implementation currently under verification
 
-The existing Elixir MCP server has an opt-in customer review profile. Its
-current discovery exposes exactly these bindings:
+The existing Elixir MCP server has an opt-in customer review profile. Actual
+discovery depends on the separate evidence flag. Neither flag implies production
+availability, consent or a completed human decision surface.
 
 | Discovered tool | Current result |
 |---|---|
-| `allsource_review_context` | Checks the opaque grant, current stored team membership and persisted MCP entitlement. Reports `eligibility_verified`, unresolved source access and unavailable preparation. It does not retrieve event data. |
+| `allsource_review_context` | Checks the opaque grant, current stored team membership and persisted MCP entitlement. Reports `eligibility_verified` and allowed operations. Preparation is available only with evidence consent, scope and server configuration. Source access remains unresolved until the specific pins are checked. |
 | `allsource_validate_review_proposal` | Runs the product's typed proposal and curated projection validation. Returns `valid_unresolved`, a request fingerprint, explicit unknowns, `persisted: false` and `approved: false`. |
+| `allsource_prepare_review` | Evidence flag only. Compares exactly two product-selected `run_evidence` references and saves a connection-owned pending review. Requires revision zero and a stable idempotency key; returns ID, version, digest, expiry and unknowns. Never approves or executes. |
+| `allsource_get_review` | Evidence flag only. Requires the exact review ID/version and a stable request key. Returns current pinned comparison evidence or an expired, superseded or unavailable status without evidence. |
+| `allsource_get_review_result` | Evidence flag only. Same identity requirements. A live review currently returns `pending`, `result_available: false`, `approved: false`, `execution: none`. No accepted outcome exists through this binding. |
 
-Check actual discovery before using either name. These bindings do not yet
-implement preparation, source resolution, saved review/status, product display
-or delivery. A successful eligibility or syntax check is not a pending draft,
-source authorization or a human decision. Stop with that explicit incomplete
-state when the requested job requires an unavailable binding. No public endpoint,
-customer installation or processing consent follows from this local profile.
+Check actual discovery before using any name. A successful eligibility or syntax
+check is not a pending draft, source authorization or a human decision. Stop with
+an explicit incomplete state when the requested job requires an unavailable
+binding. No public endpoint, installation or processing consent follows from
+this local profile. Event timelines, restart/replay preparation, product display,
+editing and human decisions remain incomplete.
 
-Internal source selection and pending comparison services now have synthetic
-Core-backed recovery and ownership tests. They have no discovered customer tool
-binding yet. Do not call guessed preparation/status/result names or treat that
-internal implementation as permission to disclose data. Existing metadata-only
-consent remains unchanged; selected evidence requires separate consent before
-future transport activation.
+Selected evidence requires `review-evidence-v2` connection consent and explicit
+product-session sharing of each pinned run. Existing `review-metadata-v1` grants
+cannot prepare or read evidence. An agent cannot share sources or upgrade its
+own grant. Product source-selection UI and remote OAuth evidence-consent UI are
+not complete; do not construct grants, source IDs or human-session calls yourself.
 
-Those internal services now admit canonical query usage before source reads and
+Evidence services admit canonical query usage before source reads and
 preserve the original metering request through uncertain replies and restart.
-The internal retry contract uses a one-hour `UTC-seconds:UUID` identity, bound to
+The retry contract uses a one-hour `UTC-seconds:UUID` identity, bound to
 the exact owner, connection, operation and intent. A receipt records usage; it is
-not source consent or human approval. When these operations are eventually
-discovered, preserve the schema-provided retry identity unchanged. Do not mint a
+not source consent or human approval. Preserve the schema-provided retry identity
+unchanged. Do not mint a
 new key to bypass an expiry, quota, changed-period or changed-intent refusal.
 Workflow admission is now bounded per Query Service instance; retained source
 reads from every gateway use the existing leader's shared archive pool. A busy
 refusal starts no workflow and consumes no query units. Cancellation can follow
 an already committed usage receipt or pending draft, so preserve the original
-identity if the user retries; do not start parallel retry loops. These are
-internal service guarantees, not newly discovered tools. Billing reset adoption,
-product and host delivery gates still block activation.
+identity if the user retries; do not start parallel retry loops. An uncertain
+reply can hide a committed draft; never claim nothing was saved. A source share
+costs one query, preparation costs two, and each new live review/result request
+costs two. Exact retries do not charge again. Billing reset adoption, product and
+host delivery gates still block activation.
 
 ## Intended request
 

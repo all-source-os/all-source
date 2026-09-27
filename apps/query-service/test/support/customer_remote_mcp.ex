@@ -10,6 +10,7 @@ defmodule QueryServiceEx.TestSupport.CustomerRemoteMCP do
       %{
         "ALLSOURCE_CUSTOMER_REVIEW" => "true",
         "ALLSOURCE_CUSTOMER_REVIEW_HTTP" => "true",
+        "ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW" => to_string(Map.get(context, :evidence, false)),
         "CUSTOMER_REVIEW_QUERY_URL" => context.query_url,
         "CUSTOMER_REVIEW_HTTP_PORT" => to_string(http_port),
         "CUSTOMER_REVIEW_HTTP_IP" => "127.0.0.1",

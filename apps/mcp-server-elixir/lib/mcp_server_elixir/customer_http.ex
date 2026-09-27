@@ -30,7 +30,8 @@ defmodule McpServerElixir.CustomerHTTP do
   defp authorized(conn) do
     with ["Bearer " <> credential] <- get_req_header(conn, "authorization"),
          true <- byte_size(credential) in 1..3_800,
-         {:ok, _} <- CustomerRemoteClient.call("context", %{}, credential) do
+         {:ok, %{"state" => "connection_verified"}} <-
+           CustomerRemoteClient.call("session", %{}, credential) do
       dispatch(conn, credential)
     else
       {:error, :rate_limited} -> respond(conn, 429, %{error: "rate_limited"})

@@ -62,7 +62,7 @@ defmodule QueryServiceEx.TestSupport.MeteredEvidenceFixture do
   def observe_reads,
     do: Application.put_env(:query_service_ex, :agent_run_source, ObservedSource)
 
-  def provision(limit, now) do
+  def provision(limit, now, binding \\ @binding) do
     assert {:ok, %{status: 201}} =
              Tesla.post(RustCoreClient.write_client(), "/api/v1/tenants", %{
                id: @tenant,
@@ -77,7 +77,7 @@ defmodule QueryServiceEx.TestSupport.MeteredEvidenceFixture do
 
     assert {:ok, grant} =
              Grants.issue(
-               @binding,
+               binding,
                ConnectionConsent.evidence_operations(),
                %{"accepted" => true, "version" => ConnectionConsent.evidence_version()},
                now,

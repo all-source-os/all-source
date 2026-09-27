@@ -9,7 +9,7 @@ Founder decision: 25 September 2026. Required target; contract specified and cus
 - Human decision: The tenant operator reviews the evidence in the product and explicitly authorises any consequential replay or infrastructure action through its separate human gate.
 - Domain boundary: No arbitrary queries, cross-tenant payloads, secrets, replay execution, infrastructure change or subscription action from this customer review skill. Existing ingestion SDK functionality is not redefined by this review-surface amendment.
 - Skill package: [customer skill](../skills/allsource-customer/SKILL.md); distribute the complete directory and local references when release gates pass. No public install/discovery endpoint is claimed here.
-- MCP contract: [logical operations and bindings](../skills/allsource-customer/references/workflow.md). The existing Elixir server now has an opt-in profile with two locally verified eligibility/validation bindings. Full preparation and handoff remain unavailable.
+- MCP contract: [logical operations and bindings](../skills/allsource-customer/references/workflow.md). The existing Elixir server has an opt-in profile with eligibility/validation and three separately gated two-run evidence preparation/retrieval tools. Product source selection, consequential human approval, complete handoff and native host proof remain unfinished; production flags stay off.
 - Approval enforcement: [human-only gate contract](../skills/allsource-customer/references/human-gate.md). Agent credentials cannot approve; product binds human actor/role, exact version/hash, action, scope, expiry and replay-resistant receipt. OAuth connection consent is separate.
 
 ## Product surface and data
@@ -24,10 +24,10 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 |---|---|---|
 | Product MCP/HITL contract | specified | This record and bundled references |
 | Customer Claude skill | draft | Local portable package; validation is separate from actual use |
-| MCP runtime and shared rules | partially verified locally | Compiled stdio and HTTP profiles → real Query Service → Core, two discovered tools, typed validation, matching text/structured results and revoked reconnect denial; no preparation/status/result binding |
+| MCP runtime and shared rules | partially verified locally | Compiled stdio and HTTP profiles → real Query Service → Core, two metadata tools plus three separately gated comparison preparation/retrieval tools, closed schemas, matching text/structured output and revoked reconnect denial; no human approval or delivered outcome |
 | Human gate and display | not-tested | Actual product interaction and agent-credential denial needed |
-| Shared run evidence substrate | internal implementation | [Typed conditional capture, bounded timeline and comparison](plans/2026-09-27-agent-run-evidence-contract.md); actual Core concurrency and recovery proof, no source-disclosure route or customer-facing proposal binding yet |
-| Source references and pending comparisons | internal implementation | [Owner/grant-bound pins and durable pending records](plans/2026-09-27-customer-evidence-reviews.md), separate evidence consent, restart/retry/deletion proof; [canonical query admission](plans/2026-09-27-metered-evidence-workflow-design.md) and [supervised workflow limits/cancellation](plans/2026-09-27-customer-review-work-bounds-design.md) tested locally. Billing reset adoption, transport, human approval and UI binding remain open |
+| Shared run evidence substrate | partially bound locally | [Typed conditional capture, bounded timeline and comparison](plans/2026-09-27-agent-run-evidence-contract.md); actual Core concurrency and recovery proof; selected two-run comparisons now have default-off MCP transport |
+| Source references and pending comparisons | partially verified locally | [Owner/grant-bound pins and durable pending records](plans/2026-09-27-customer-evidence-reviews.md), separate evidence consent, restart/retry/deletion proof; [canonical query admission](plans/2026-09-27-metered-evidence-workflow-design.md), [supervised workflow limits/cancellation](plans/2026-09-27-customer-review-work-bounds-design.md), and [restricted transport](evidence/2026-09-27-customer-evidence-bindings/README.md) tested locally. Billing reset adoption, human approval and product UI remain open |
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
@@ -89,6 +89,13 @@ consent and real Claude host verification are still open. This is synthetic
 local proof, not a production connection, source disclosure or action approval.
 The shared-tree web build included an unrelated analytics edit; deployment needs
 a clean committed-tree build. See the [connection runbook](runbooks/CUSTOMER_REMOTE_CONNECTIONS.md).
+
+[Evidence transport proof](evidence/2026-09-27-customer-evidence-bindings/README.md)
+adds product-session source sharing and separately gated comparison preparation,
+review and result-status bindings. Exact final-unit retries survive Core restart;
+source/grant revocation prevents disclosure. MCP validates outputs before returning
+matching text and structured content. Public activation, product source/review UI,
+remote evidence-consent UI and human action authority are still incomplete.
 
 ## Required acceptance
 

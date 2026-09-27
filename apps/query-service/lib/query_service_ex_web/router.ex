@@ -154,9 +154,13 @@ defmodule QueryServiceExWeb.Router do
 
     post("/context", CustomerAgentController, :context, log: false)
     post("/validate", CustomerAgentController, :validate, log: false)
+    post("/prepare", CustomerAgentController, :prepare, log: false)
+    post("/review", CustomerAgentController, :review, log: false)
+    post("/result", CustomerAgentController, :result, log: false)
     post("/connections/list", CustomerConnectionsController, :index, log: false)
     post("/connections/create", CustomerConnectionsController, :create, log: false)
     post("/connections/revoke", CustomerConnectionsController, :revoke, log: false)
+    post("/connections/share", CustomerConnectionsController, :share, log: false)
     post("/connections/authorize", CustomerOAuthController, :authorize, log: false)
     get("/oauth/metadata", CustomerOAuthController, :metadata, log: false)
     get("/oauth/resource", CustomerOAuthController, :resource, log: false)
@@ -164,6 +168,10 @@ defmodule QueryServiceExWeb.Router do
     post("/oauth/inspect", CustomerOAuthController, :inspect_request, log: false)
     post("/oauth/token", CustomerOAuthController, :token, log: false)
     post("/remote/context", CustomerAgentController, :remote_context, log: false)
+    post("/remote/session", CustomerAgentController, :remote_session, log: false)
+    post("/remote/prepare", CustomerAgentController, :remote_prepare, log: false)
+    post("/remote/review", CustomerAgentController, :remote_review, log: false)
+    post("/remote/result", CustomerAgentController, :remote_result, log: false)
     post("/remote/validate", CustomerAgentController, :remote_validate, log: false)
   end
 

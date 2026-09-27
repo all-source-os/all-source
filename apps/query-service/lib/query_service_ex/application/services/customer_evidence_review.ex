@@ -1,8 +1,8 @@
 defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
   @moduledoc """
   Connection-owned pending comparison reviews over explicitly shared run pins.
-  Calls current access checks before and after source work. No HTTP/MCP binding,
-  approval, external execution or ordinary ingestion change is added here.
+  Calls current access checks before and after source work. No approval, external
+  execution or ordinary ingestion change is added here.
   """
   alias QueryServiceEx.Application.Services.CustomerAgentAccess
   alias QueryServiceEx.Application.Services.CustomerAgentReview

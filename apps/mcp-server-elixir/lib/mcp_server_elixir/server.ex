@@ -69,7 +69,7 @@ defmodule McpServerElixir.Server do
         )
 
     if customer_review,
-      do: Logger.info("Customer review profile: eligibility and syntax validation only")
+      do: Logger.info("Customer review profile: restricted tools, no approval or execution")
 
     if system_admin,
       do:

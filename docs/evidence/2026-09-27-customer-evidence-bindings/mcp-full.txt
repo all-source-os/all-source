@@ -1,0 +1,1206 @@
+    Finished `release` profile [optimized] target(s) in 0.01s
+Running ExUnit with seed: 167733, max_cases: 1
+Excluding tags: [:integration, :embedded]
+
+
+McpServerElixir.Protocol.CustomerReviewTest [test/mcp_server_elixir/protocol/customer_review_test.exs]
+  * test malformed input stays bounded and never echoes request content [L#44]  * test malformed input stays bounded and never echoes request content (98.6ms) [L#44]
+  * test notifications have no reply; resources and arbitrary methods cannot bypass tool whitelist [L#65]  * test notifications have no reply; resources and arbitrary methods cannot bypass tool whitelist (0.02ms) [L#65]
+  * test existing stdio server dispatches customer profile exclusively even with admin flags [L#7]  * test existing stdio server dispatches customer profile exclusively even with admin flags (7.1ms) [L#7]
+
+McpServerElixir.Protocol.McpToolsSearchTest [test/mcp_server_elixir/protocol/mcp_tools_search_test.exs]
+  * test hybrid_search tool definition no required parameters (all optional) [L#148]  * test hybrid_search tool definition no required parameters (all optional) (20.3ms) [L#148]
+  * test semantic_search_events tool definition has optional limit parameter [L#50]  * test semantic_search_events tool definition has optional limit parameter (0.00ms) [L#50]
+  * test hybrid_search tool definition has optional keywords parameter [L#100]  * test hybrid_search tool definition has optional keywords parameter (0.00ms) [L#100]
+  * test hybrid_search tool definition time filters mention ISO timestamp format [L#128]  * test hybrid_search tool definition time filters mention ISO timestamp format (0.00ms) [L#128]
+  * test semantic_search_events tool definition has required query parameter [L#43]  * test semantic_search_events tool definition has required query parameter (0.00ms) [L#43]
+  * test hybrid_search tool definition has filters object with nested properties [L#107]  * test hybrid_search tool definition has filters object with nested properties (0.00ms) [L#107]
+  * test semantic_search_events tool definition has optional format parameter [L#63]  * test semantic_search_events tool definition has optional format parameter (0.00ms) [L#63]
+  * test list_tools/0 includes hybrid_search tool [L#15]  * test list_tools/0 includes hybrid_search tool (0.00ms) [L#15]
+  * test semantic_search_events tool definition has correct name [L#29]  * test semantic_search_events tool definition has correct name (0.00ms) [L#29]
+  * test hybrid_search tool definition has correct name [L#78]  * test hybrid_search tool definition has correct name (0.00ms) [L#78]
+  * test semantic_search_events tool definition has description with agent guidance [L#33]  * test semantic_search_events tool definition has description with agent guidance (0.00ms) [L#33]
+  * test hybrid_search tool definition has optional limit parameter [L#135]  * test hybrid_search tool definition has optional limit parameter (0.00ms) [L#135]
+  * test tool count list_tools returns 64 tools (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read) [L#157]  * test tool count list_tools returns 64 tools (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read) (0.00ms) [L#157]
+  * test hybrid_search tool definition has optional format parameter [L#141]  * test hybrid_search tool definition has optional format parameter (0.00ms) [L#141]
+  * test hybrid_search tool definition has description with agent guidance [L#82]  * test hybrid_search tool definition has description with agent guidance (0.00ms) [L#82]
+  * test hybrid_search tool definition has optional semantic_query parameter [L#93]  * test hybrid_search tool definition has optional semantic_query parameter (0.00ms) [L#93]
+  * test hybrid_search tool definition filters have correct types [L#119]  * test hybrid_search tool definition filters have correct types (0.00ms) [L#119]
+  * test list_tools/0 includes semantic_search_events tool [L#9]  * test list_tools/0 includes semantic_search_events tool (0.00ms) [L#9]
+  * test semantic_search_events tool definition has optional threshold parameter [L#56]  * test semantic_search_events tool definition has optional threshold parameter (0.00ms) [L#56]
+
+McpServerElixir.Protocol.McpToolsFleetTest [test/mcp_server_elixir/protocol/mcp_tools_fleet_test.exs]
+  * test reprovision_recovery_params/1 (dry-run pass-through) omitting confirm_tenant_id passes dry_run: true and supplies NO confirmation (no mutate) [L#342]  * test reprovision_recovery_params/1 (dry-run pass-through) omitting confirm_tenant_id passes dry_run: true and supplies NO confirmation (no mutate) (0.04ms) [L#342]
+  * test call_tool/3 system-admin gate every recovery_* tool returns the system-admin-not-enabled isError when system_admin is false [L#309]  * test call_tool/3 system-admin gate every recovery_* tool returns the system-admin-not-enabled isError when system_admin is false (0.02ms) [L#309]
+  * test read tool definitions tenant_health_assessment requires tenant_id and is read-only [L#113]  * test read tool definitions tenant_health_assessment requires tenant_id and is read-only (0.00ms) [L#113]
+  * test reprovision_recovery_params/1 (dry-run pass-through) default dry_run is true even when only tenant_id is given [L#352]  * test reprovision_recovery_params/1 (dry-run pass-through) default dry_run is true even when only tenant_id is given (0.00ms) [L#352]
+  * test tenant_notice definition (Phase 8 mutating) is ADMIN ONLY, carries the dry-run + confirm_token guard params + audience/severity [L#206]  * test tenant_notice definition (Phase 8 mutating) is ADMIN ONLY, carries the dry-run + confirm_token guard params + audience/severity (0.00ms) [L#206]
+  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) a SINGLE-tenant send defaults dry_run: false (no blast radius → applies) [L#264]  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) a SINGLE-tenant send defaults dry_run: false (no blast radius → applies) (0.00ms) [L#264]
+  * test reprovision_recovery_params/1 (dry-run pass-through) supplying dry_run:false + confirm_tenant_id forwards both to the CP unchanged [L#357]  * test reprovision_recovery_params/1 (dry-run pass-through) supplying dry_run:false + confirm_tenant_id forwards both to the CP unchanged (0.00ms) [L#357]
+  * test read tool definitions fleet_health_summary is read-only, ADMIN ONLY, no destructive params [L#105]  * test read tool definitions fleet_health_summary is read-only, ADMIN ONLY, no destructive params (0.00ms) [L#105]
+  * test tenant_notice definition (Phase 8 mutating) tenant_notice is OMITTED when system_admin is unset (control plane on) [L#233]  * test tenant_notice definition (Phase 8 mutating) tenant_notice is OMITTED when system_admin is unset (control plane on) (0.00ms) [L#233]
+  * test recovery tool definitions recovery_reprovision is DESTRUCTIVE: dry_run + typed confirm_tenant_id [L#143]  * test recovery tool definitions recovery_reprovision is DESTRUCTIVE: dry_run + typed confirm_tenant_id (0.00ms) [L#143]
+  * test list_tools/1 gating control plane enabled but system_admin unset shows read tools, OMITS every recovery_* [L#58]  * test list_tools/1 gating control plane enabled but system_admin unset shows read tools, OMITS every recovery_* (0.00ms) [L#58]
+  * test list_tools/1 gating system_admin true also exposes every recovery_* tool [L#74]  * test list_tools/1 gating system_admin true also exposes every recovery_* tool (0.00ms) [L#74]
+  * test recovery tool definitions recovery_batch enforces the Guarded-only action enum + max_tenants cap note [L#155]  * test recovery tool definitions recovery_batch enforces the Guarded-only action enum + max_tenants cap note (0.00ms) [L#155]
+  * test list_tools/1 gating system_admin true WITHOUT control plane still hides recovery_* (read gate is the floor) [L#84]  * test list_tools/1 gating system_admin true WITHOUT control plane still hides recovery_* (read gate is the floor) (0.00ms) [L#84]
+  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) an explicit dry_run + confirm_token are forwarded to the CP unchanged (cohort apply) [L#277]  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) an explicit dry_run + confirm_token are forwarded to the CP unchanged (cohort apply) (0.00ms) [L#277]
+  * test call_tool/3 system-admin gate read tools are NOT system-admin-gated (control-plane gate only) [L#324]  * test call_tool/3 system-admin gate read tools are NOT system-admin-gated (control-plane gate only) (0.00ms) [L#324]
+  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) cohort_audience?/1 distinguishes a single tenant from a cohort selector [L#293]  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) cohort_audience?/1 distinguishes a single tenant from a cohort selector (0.00ms) [L#293]
+  * test tenant_overview definition (Phase 8 read) is ADMIN ONLY, requires tenant_id, and carries NO mutating params [L#180]  * test tenant_overview definition (Phase 8 read) is ADMIN ONLY, requires tenant_id, and carries NO mutating params (0.00ms) [L#180]
+  * test tenant_overview definition (Phase 8 read) tenant_overview is HIDDEN when control plane is disabled [L#191]  * test tenant_overview definition (Phase 8 read) tenant_overview is HIDDEN when control plane is disabled (0.00ms) [L#191]
+  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) a COHORT send defaults dry_run: true (no implicit blast) and forwards the audience [L#249]  * test tenant_notice_params/1 (dry-run + confirm_token pass-through) a COHORT send defaults dry_run: true (no implicit blast) and forwards the audience (0.00ms) [L#249]
+  * test list_tools/1 gating control plane disabled hides every fleet tool [L#48]  * test list_tools/1 gating control plane disabled hides every fleet tool (0.01ms) [L#48]
+  * test recovery tool definitions every recovery_* tool carries ADMIN ONLY + a dry-run-by-default note [L#127]  * test recovery tool definitions every recovery_* tool carries ADMIN ONLY + a dry-run-by-default note (0.03ms) [L#127]
+
+McpServerElixir.Protocol.McpToolsSchemaTest [test/mcp_server_elixir/protocol/mcp_tools_schema_test.exs]
+  * test list_schemas tool definition has include_versions parameter [L#219]  * test list_schemas tool definition has include_versions parameter (0.02ms) [L#219]
+  * test migrate_schema tool definition has required subject parameter [L#162]  * test migrate_schema tool definition has required subject parameter (0.02ms) [L#162]
+  * test migrate_schema tool definition has description with agent guidance [L#152]  * test migrate_schema tool definition has description with agent guidance (0.01ms) [L#152]
+  * test infer_schema tool definition description mentions client-side inference [L#252]  * test infer_schema tool definition description mentions client-side inference (0.00ms) [L#252]
+  * test register_schema tool definition has required subject parameter [L#58]  * test register_schema tool definition has required subject parameter (0.02ms) [L#58]
+  * test migrate_schema tool definition has required new_definition parameter [L#168]  * test migrate_schema tool definition has required new_definition parameter (0.00ms) [L#168]
+  * test infer_schema tool definition has description with agent guidance [L#246]  * test infer_schema tool definition has description with agent guidance (0.00ms) [L#246]
+  * test infer_schema tool definition has required event_type parameter [L#257]  * test infer_schema tool definition has required event_type parameter (0.00ms) [L#257]
+  * test migrate_schema tool definition has dry_run parameter [L#180]  * test migrate_schema tool definition has dry_run parameter (0.00ms) [L#180]
+  * test validate_schema tool definition has description with agent guidance [L#107]  * test validate_schema tool definition has description with agent guidance (0.00ms) [L#107]
+  * test schema_diff tool definition has optional version_a and version_b parameters [L#308]  * test schema_diff tool definition has optional version_a and version_b parameters (0.00ms) [L#308]
+  * test list_schemas tool definition has correct name [L#198]  * test list_schemas tool definition has correct name (0.00ms) [L#198]
+  * test validate_schema tool definition has required payload parameter [L#124]  * test validate_schema tool definition has required payload parameter (0.00ms) [L#124]
+  * test schema tool description quality all tools have descriptions with decision guide [L#361]  * test schema tool description quality all tools have descriptions with decision guide (0.01ms) [L#361]
+  * test migrate_schema tool definition has transformations parameter [L#174]  * test migrate_schema tool definition has transformations parameter (0.00ms) [L#174]
+  * test register_schema tool definition description mentions data contracts and governance [L#53]  * test register_schema tool definition description mentions data contracts and governance (0.00ms) [L#53]
+  * test validate_schema tool definition description mentions validation and debugging [L#113]  * test validate_schema tool definition description mentions validation and debugging (0.00ms) [L#113]
+  * test schema_diff tool definition has required subject parameter [L#302]  * test schema_diff tool definition has required subject parameter (0.00ms) [L#302]
+  * test schema_diff tool definition has correct name [L#287]  * test schema_diff tool definition has correct name (0.00ms) [L#287]
+  * test register_schema tool definition has compatibility parameter with correct enum [L#72]  * test register_schema tool definition has compatibility parameter with correct enum (0.00ms) [L#72]
+  * test list_tools/0 returns 64 tools total (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read) [L#25]  * test list_tools/0 returns 64 tools total (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read) (0.00ms) [L#25]
+  * test infer_schema tool definition has correct name [L#242]  * test infer_schema tool definition has correct name (0.00ms) [L#242]
+  * test infer_schema tool definition has optional sample_size parameter [L#263]  * test infer_schema tool definition has optional sample_size parameter (0.00ms) [L#263]
+  * test register_schema tool definition has correct name [L#42]  * test register_schema tool definition has correct name (0.00ms) [L#42]
+  * test register_schema tool definition has optional tags parameter [L#79]  * test register_schema tool definition has optional tags parameter (0.00ms) [L#79]
+  * test list_schemas tool definition has no required parameters [L#225]  * test list_schemas tool definition has no required parameters (0.00ms) [L#225]
+  * test list_schemas tool definition has optional tag parameter [L#213]  * test list_schemas tool definition has optional tag parameter (0.00ms) [L#213]
+  * test register_schema tool definition has description with agent guidance [L#46]  * test register_schema tool definition has description with agent guidance (0.00ms) [L#46]
+  * test infer_schema tool definition has optional entity_id parameter [L#269]  * test infer_schema tool definition has optional entity_id parameter (0.00ms) [L#269]
+  * test validate_schema tool definition has optional version parameter [L#130]  * test validate_schema tool definition has optional version parameter (0.00ms) [L#130]
+  * test migrate_schema tool definition description mentions client-side computation [L#158]  * test migrate_schema tool definition description mentions client-side computation (0.00ms) [L#158]
+  * test migrate_schema tool definition has correct name [L#148]  * test migrate_schema tool definition has correct name (0.00ms) [L#148]
+  * test register_schema tool definition has optional description parameter [L#85]  * test register_schema tool definition has optional description parameter (0.00ms) [L#85]
+  * test validate_schema tool definition has correct name [L#103]  * test validate_schema tool definition has correct name (0.00ms) [L#103]
+  * test schema_diff tool definition has description with agent guidance [L#291]  * test schema_diff tool definition has description with agent guidance (0.00ms) [L#291]
+  * test schema_diff tool definition description mentions client-side diff [L#297]  * test schema_diff tool definition description mentions client-side diff (0.00ms) [L#297]
+  * test schema tool description quality all tools have descriptions with 'Common patterns' section [L#352]  * test schema tool description quality all tools have descriptions with 'Common patterns' section (0.01ms) [L#352]
+  * test validate_schema tool definition has required subject parameter [L#118]  * test validate_schema tool definition has required subject parameter (0.00ms) [L#118]
+  * test list_schemas tool definition has description with agent guidance [L#202]  * test list_schemas tool definition has description with agent guidance (0.00ms) [L#202]
+  * test schema tool description quality all tools have descriptions with usage guidance section [L#342]  * test schema tool description quality all tools have descriptions with usage guidance section (0.01ms) [L#342]
+  * test list_schemas tool definition description mentions discovery and governance [L#208]  * test list_schemas tool definition description mentions discovery and governance (0.00ms) [L#208]
+  * test list_tools/0 includes all 6 schema tools [L#13]  * test list_tools/0 includes all 6 schema tools (0.00ms) [L#13]
+  * test schema_diff tool definition has optional proposed parameter [L#316]  * test schema_diff tool definition has optional proposed parameter (0.00ms) [L#316]
+  * test register_schema tool definition has required definition parameter [L#65]  * test register_schema tool definition has required definition parameter (0.00ms) [L#65]
+
+McpServerElixir.ServerErrorReportingTest [test/mcp_server_elixir/server_error_reporting_test.exs]
+  * test encodable/1 keeps the server alive on any reason passes through values that are already encodable [L#54]  * test encodable/1 keeps the server alive on any reason passes through values that are already encodable (0.00ms) [L#54]
+  * test encodable/1 keeps the server alive on any reason a tuple reason survives JSON encoding [L#48]  * test encodable/1 keeps the server alive on any reason a tuple reason survives JSON encoding (15.4ms) [L#48]
+  * test encodable/1 keeps the server alive on any reason handles a non-encodable map key [L#69]  * test encodable/1 keeps the server alive on any reason handles a non-encodable map key (0.01ms) [L#69]
+  * test error_message/2 renders a non-string reason instead of dropping it [L#25]  * test error_message/2 renders a non-string reason instead of dropping it (0.01ms) [L#25]
+  * test error_message/2 bounds the length so a huge reason cannot flood the client [L#32]  * test error_message/2 bounds the length so a huge reason cannot flood the client (0.03ms) [L#32]
+  * test encodable/1 keeps the server alive on any reason a struct reason survives JSON encoding [L#44]  * test encodable/1 keeps the server alive on any reason a struct reason survives JSON encoding (7.5ms) [L#44]
+  * test error_message/2 names the tool and includes the underlying reason [L#18]  * test error_message/2 names the tool and includes the underlying reason (0.01ms) [L#18]
+  * test encodable/1 keeps the server alive on any reason recurses through maps and lists, and stringifies nested structs [L#62]  * test encodable/1 keeps the server alive on any reason recurses through maps and lists, and stringifies nested structs (0.02ms) [L#62]
+
+McpServerElixir.Protocol.McpToolsExplorationTest [test/mcp_server_elixir/protocol/mcp_tools_exploration_test.exs]
+  * test quick_stats description quality describes speed advantage [L#235]  * test quick_stats description quality describes speed advantage (0.01ms) [L#235]
+  * test quick_stats tool definition has metric parameter with correct enum [L#157]  * test quick_stats tool definition has metric parameter with correct enum (0.00ms) [L#157]
+  * test quick_stats tool definition description explains available metrics [L#141]  * test quick_stats tool definition description explains available metrics (0.00ms) [L#141]
+  * test tool count list_tools returns 64 tools [L#269]  * test tool count list_tools returns 64 tools (0.00ms) [L#269]
+  * test sample_events tool definition description explains stratification options [L#51]  * test sample_events tool definition description explains stratification options (0.00ms) [L#51]
+  * test quick_stats tool definition has optional entity_id filter parameter [L#166]  * test quick_stats tool definition has optional entity_id filter parameter (0.00ms) [L#166]
+  * test quick_stats description quality provides guidance for each metric type [L#254]  * test quick_stats description quality provides guidance for each metric type (0.00ms) [L#254]
+  * test exploration tools in decision workflow sample_events mentions quick_stats as alternative for stats-only [L#280]  * test exploration tools in decision workflow sample_events mentions quick_stats as alternative for stats-only (0.00ms) [L#280]
+  * test quick_stats tool definition has no required parameters [L#178]  * test quick_stats tool definition has no required parameters (0.00ms) [L#178]
+  * test sample_events tool definition has optional until parameter [L#93]  * test sample_events tool definition has optional until parameter (0.00ms) [L#93]
+  * test sample_events description quality describes use cases for data exploration [L#195]  * test sample_events description quality describes use cases for data exploration (0.00ms) [L#195]
+  * test quick_stats tool definition has correct name [L#119]  * test quick_stats tool definition has correct name (0.00ms) [L#119]
+  * test quick_stats tool definition has optional event_type filter parameter [L#172]  * test quick_stats tool definition has optional event_type filter parameter (0.00ms) [L#172]
+  * test sample_events tool definition description mentions sub-second response optimization [L#47]  * test sample_events tool definition description mentions sub-second response optimization (0.00ms) [L#47]
+  * test sample_events tool definition has format parameter with correct enum [L#99]  * test sample_events tool definition has format parameter with correct enum (0.00ms) [L#99]
+  * test sample_events tool definition has stratified_by parameter with correct enum [L#68]  * test sample_events tool definition has stratified_by parameter with correct enum (0.00ms) [L#68]
+  * test list_tools/0 includes quick_stats tool [L#19]  * test list_tools/0 includes quick_stats tool (0.00ms) [L#19]
+  * test quick_stats description quality compares to get_stats for exact counts [L#247]  * test quick_stats description quality compares to get_stats for exact counts (0.00ms) [L#247]
+  * test exploration tools in decision workflow quick_stats mentions sample_events for getting actual events [L#287]  * test exploration tools in decision workflow quick_stats mentions sample_events for getting actual events (0.00ms) [L#287]
+  * test sample_events tool definition has correct name [L#33]  * test sample_events tool definition has correct name (0.00ms) [L#33]
+  * test sample_events tool definition has optional entity_id filter parameter [L#75]  * test sample_events tool definition has optional entity_id filter parameter (0.00ms) [L#75]
+  * test quick_stats description quality explains approximation tradeoff [L#240]  * test quick_stats description quality explains approximation tradeoff (0.00ms) [L#240]
+  * test sample_events description quality includes decision guide comparing to other tools [L#220]  * test sample_events description quality includes decision guide comparing to other tools (0.00ms) [L#220]
+  * test sample_events tool definition has description with agent guidance [L#37]  * test sample_events tool definition has description with agent guidance (0.01ms) [L#37]
+  * test exploration tools in decision workflow both tools reference get_stats for comparison [L#294]  * test exploration tools in decision workflow both tools reference get_stats for comparison (0.00ms) [L#294]
+  * test quick_stats tool definition has description with agent guidance [L#123]  * test quick_stats tool definition has description with agent guidance (0.01ms) [L#123]
+  * test quick_stats tool definition description includes accuracy note [L#150]  * test quick_stats tool definition description includes accuracy note (0.00ms) [L#150]
+  * test quick_stats tool definition description emphasizes speed and approximation [L#133]  * test quick_stats tool definition description emphasizes speed and approximation (0.00ms) [L#133]
+  * test sample_events tool definition has optional event_type filter parameter [L#81]  * test sample_events tool definition has optional event_type filter parameter (0.00ms) [L#81]
+  * test sample_events tool definition has optional since parameter [L#87]  * test sample_events tool definition has optional since parameter (0.00ms) [L#87]
+  * test sample_events tool definition has no required parameters [L#106]  * test sample_events tool definition has no required parameters (0.00ms) [L#106]
+  * test sample_events description quality explains stratification strategies [L#200]  * test sample_events description quality explains stratification strategies (0.00ms) [L#200]
+  * test sample_events description quality provides performance guidance [L#213]  * test sample_events description quality provides performance guidance (0.00ms) [L#213]
+  * test list_tools/0 includes sample_events tool [L#13]  * test list_tools/0 includes sample_events tool (0.00ms) [L#13]
+  * test sample_events tool definition has sample_size parameter [L#60]  * test sample_events tool definition has sample_size parameter (0.00ms) [L#60]
+
+McpServerElixir.Protocol.McpToolsAdviceTest [test/mcp_server_elixir/protocol/mcp_tools_advice_test.exs]
+  * test advice content quality user_analytics includes pattern discovery tools [L#193]  * test advice content quality user_analytics includes pattern discovery tools (0.02ms) [L#193]
+  * test advice content quality compliance advice includes reconstruct_state for regulatory proof [L#175]  * test advice content quality compliance advice includes reconstruct_state for regulatory proof (0.01ms) [L#175]
+  * test get_query_advice tool definition has optional context parameter [L#58]  * test get_query_advice tool definition has optional context parameter (0.00ms) [L#58]
+  * test tool count list_tools returns 64 tools [L#204]  * test tool count list_tools returns 64 tools (0.00ms) [L#204]
+  * test handle_get_query_advice/2 includes context in output when provided [L#120]  * test handle_get_query_advice/2 includes context in output when provided (0.09ms) [L#120]
+  * test handle_get_query_advice/2 adds context-specific tips for user/customer context [L#145]  * test handle_get_query_advice/2 adds context-specific tips for user/customer context (0.09ms) [L#145]
+  * test get_query_advice tool definition use_case has correct enum values [L#44]  * test get_query_advice tool definition use_case has correct enum values (0.00ms) [L#44]
+  * test handle_get_query_advice/2 adds context-specific tips for payment context [L#128]  * test handle_get_query_advice/2 adds context-specific tips for payment context (0.09ms) [L#128]
+  * test handle_get_query_advice/2 returns advice for user_analytics use case [L#79]  * test handle_get_query_advice/2 returns advice for user_analytics use case (0.00ms) [L#79]
+  * test get_query_advice tool definition has correct name [L#23]  * test get_query_advice tool definition has correct name (0.00ms) [L#23]
+  * test get_query_advice tool definition has description with agent guidance [L#27]  * test get_query_advice tool definition has description with agent guidance (0.00ms) [L#27]
+  * test handle_get_query_advice/2 returns advice for debugging use case [L#89]  * test handle_get_query_advice/2 returns advice for debugging use case (0.00ms) [L#89]
+  * test get_query_advice tool definition has required use_case parameter [L#37]  * test get_query_advice tool definition has required use_case parameter (0.00ms) [L#37]
+  * test advice content quality audit_trail advice includes event_timeline as top recommendation [L#156]  * test advice content quality audit_trail advice includes event_timeline as top recommendation (0.00ms) [L#156]
+  * test advice content quality performance_analysis includes both stats and cluster_status [L#184]  * test advice content quality performance_analysis includes both stats and cluster_status (0.00ms) [L#184]
+  * test advice content quality debugging advice includes cluster_status check [L#166]  * test advice content quality debugging advice includes cluster_status check (0.00ms) [L#166]
+  * test handle_get_query_advice/2 returns advice for compliance use case [L#100]  * test handle_get_query_advice/2 returns advice for compliance use case (0.00ms) [L#100]
+  * test handle_get_query_advice/2 returns advice for performance_analysis use case [L#110]  * test handle_get_query_advice/2 returns advice for performance_analysis use case (0.00ms) [L#110]
+  * test handle_get_query_advice/2 adds context-specific tips for authentication context [L#136]  * test handle_get_query_advice/2 adds context-specific tips for authentication context (0.08ms) [L#136]
+  * test list_tools/0 includes get_query_advice tool [L#9]  * test list_tools/0 includes get_query_advice tool (0.00ms) [L#9]
+  * test handle_get_query_advice/2 returns advice for audit_trail use case [L#67]  * test handle_get_query_advice/2 returns advice for audit_trail use case (0.00ms) [L#67]
+
+McpServerElixir.Infrastructure.CoreWebSocketClientTest [test/mcp_server_elixir/infrastructure/core_websocket_client_test.exs]
+  * test URL configuration URL contains the events stream endpoint [L#179]  * test URL configuration URL contains the events stream endpoint (0.00ms) [L#179]
+  * test event broadcasting can subscribe to events:all topic [L#58]  * test event broadcasting can subscribe to events:all topic (0.03ms) [L#58]
+  * test event filters filters support event_type only [L#130]  * test event filters filters support event_type only (0.00ms) [L#130]
+  * test state management state tracks reconnection attempts [L#160]  * test state management state tracks reconnection attempts (0.00ms) [L#160]
+  * test configuration respects backoff configuration [L#36]  * test configuration respects backoff configuration (0.00ms) [L#36]
+  * test state management initial state has correct default values [L#138]  * test state management initial state has correct default values (0.00ms) [L#138]
+  * test event broadcasting can subscribe to event-type topic [L#90]  * test event broadcasting can subscribe to event-type topic (0.01ms) [L#90]
+  * test start_link/1 returns :ignore when disabled via config [L#11]  * test start_link/1 returns :ignore when disabled via config (0.00ms) [L#11]
+  * test configuration uses default URL when not configured [L#18]  * test configuration uses default URL when not configured (0.00ms) [L#18]
+  * test event filters filters can be set as a map [L#112]  * test event filters filters can be set as a map (0.00ms) [L#112]
+  * test configuration respects max reconnect attempts configuration [L#28]  * test configuration respects max reconnect attempts configuration (0.00ms) [L#28]
+  * test URL configuration supports ws:// protocol [L#169]  * test URL configuration supports ws:// protocol (0.00ms) [L#169]
+  * test URL configuration supports wss:// protocol for secure connections [L#174]  * test URL configuration supports wss:// protocol for secure connections (0.00ms) [L#174]
+  * test event filters empty filters are valid [L#119]  * test event filters empty filters are valid (0.00ms) [L#119]
+  * test event filters filters support entity_id only [L#124]  * test event filters filters support entity_id only (0.00ms) [L#124]
+  * test state management state tracks events received count [L#154]  * test state management state tracks events received count (0.00ms) [L#154]
+  * test start_link/1 returns :ignore when disabled [L#7]  * test start_link/1 returns :ignore when disabled (0.00ms) [L#7]
+  * test event broadcasting can subscribe to entity-specific topic [L#74]  * test event broadcasting can subscribe to entity-specific topic (0.01ms) [L#74]
+
+McpServerElixir.StdioStabilityTest [test/mcp_server_elixir/stdio_stability_test.exs]
+  * test the seam survives client-shaped input the tool layer never sees `arguments` sent as a JSON string answers -32603 instead of killing the session [L#157][error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "{\"entity_id\":\"e1\"}"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("{\"entity_id\":\"e1\"}", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:148: anonymous fn/2 in McpServerElixir.StdioStabilityTest.assert_survives/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:147: McpServerElixir.StdioStabilityTest.assert_survives/2
+    test/mcp_server_elixir/stdio_stability_test.exs:164: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees `arguments` sent as a JSON string answers -32603 instead of killing the session"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test the seam survives client-shaped input the tool layer never sees `arguments` sent as a JSON string answers -32603 instead of killing the session (11.1ms) [L#157]
+  * test the request-shape space every unparseable shape answers a single -32700 with a null id [L#407][warning] Failed to parse JSON-RPC request: %Jason.DecodeError{position: 0, token: nil, data: "not json at all"}
+[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+[warning] Failed to parse JSON-RPC request: "Missing 'method' field"
+[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+[warning] Failed to parse JSON-RPC request: %Jason.DecodeError{position: 33, token: nil, data: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":"}
+  * test the request-shape space every unparseable shape answers a single -32700 with a null id (2.7ms) [L#407]
+[warning] Failed to parse JSON-RPC request: %Jason.DecodeError{position: 40, token: nil, data: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"\\ud800\"}"}
+  * test the server GenServer survives a raising tool call a tools/call with missing arguments answers -32603 instead of crashing [L#101][error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{}
+
+    (erts 16.1.1) :erlang.map_get("entity_id", %{})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2323: McpServerElixir.Protocol.McpTools.handle_reconstruct_state/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:114: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the server GenServer survives a raising tool call a tools/call with missing arguments answers -32603 instead of crashing"/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:113: McpServerElixir.StdioStabilityTest."test the server GenServer survives a raising tool call a tools/call with missing arguments answers -32603 instead of crashing"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test the server GenServer survives a raising tool call a tools/call with missing arguments answers -32603 instead of crashing (1.7ms) [L#101]
+  * test a result Jason cannot encode degrades to an error send_response emits -32603 rather than raising [L#423][error] Response for id 21 is not JSON-encodable: %Protocol.UndefinedError{protocol: Jason.Encoder, value: #PID<0.597.0>, description: "Jason.Encoder protocol must always be explicitly implemented"}
+  * test a result Jason cannot encode degrades to an error send_response emits -32603 rather than raising (1.5ms) [L#423]
+  * test the seam survives client-shaped input the tool layer never sees `params` sent as a string answers -32603 instead of killing the session [L#175]  * test the seam survives client-shaped input the tool layer never sees `params` sent as a string answers -32603 instead of killing the session (0.5ms) [L#175]
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "reconstruct_state"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("reconstruct_state", "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:148: anonymous fn/2 in McpServerElixir.StdioStabilityTest.assert_survives/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:147: McpServerElixir.StdioStabilityTest.assert_survives/2
+    test/mcp_server_elixir/stdio_stability_test.exs:184: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees `params` sent as a string answers -32603 instead of killing the session"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test stdout carries JSON-RPC only no environment config re-points the default handler at stdout [L#67]  * test stdout carries JSON-RPC only no environment config re-points the default handler at stdout (0.6ms) [L#67]
+  * test a raising tool handler is reported, not fatal call_tool returns an error when a required argument is missing [L#83]  * test a raising tool handler is reported, not fatal call_tool returns an error when a required argument is missing (0.2ms) [L#83]
+[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{}
+
+    (erts 16.1.1) :erlang.map_get("entity_id", %{})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2323: McpServerElixir.Protocol.McpTools.handle_reconstruct_state/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    test/mcp_server_elixir/stdio_stability_test.exs:84: McpServerElixir.StdioStabilityTest."test a raising tool handler is reported, not fatal call_tool returns an error when a required argument is missing"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test the seam survives client-shaped input the tool layer never sees a notification whose handling raises is swallowed, not fatal [L#187]  * test the seam survives client-shaped input the tool layer never sees a notification whose handling raises is swallowed, not fatal (0.4ms) [L#187]
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "oops"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("oops", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:200: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees a notification whose handling raises is swallowed, not fatal"/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:199: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees a notification whose handling raises is swallowed, not fatal"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test a raising tool handler is reported, not fatal call_tool survives a handler that raises mid-flight [L#90]  * test a raising tool handler is reported, not fatal call_tool survives a handler that raises mid-flight (0.2ms) [L#90]
+[error] Tool event_timeline raised: ** (BadMapError) expected a map, got:
+
+    "not a map"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("not a map", "events", [])
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2508: McpServerElixir.Protocol.McpTools.handle_event_timeline/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    test/mcp_server_elixir/stdio_stability_test.exs:94: McpServerElixir.StdioStabilityTest."test a raising tool handler is reported, not fatal call_tool survives a handler that raises mid-flight"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives [L#388][error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "e1"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("e1", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    ["e1"]
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(["e1"], "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    5
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(5, "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    nil
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(nil, "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    true
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(true, "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{
+      "a" => %{
+        "a" => %{
+          "a" => %{
+            "a" => %{
+              "a" => %{
+                "a" => %{
+                  "a" => %{
+                    "a" => %{
+                      "a" => %{
+                        "a" => %{
+                          "a" => %{
+                            "a" => %{
+                              "a" => %{
+                                "a" => %{
+                                  "a" => %{
+                                    "a" => %{
+                                      "a" => %{
+                                        "a" => %{
+                                          "a" => %{
+                                            "a" => %{
+                                              "a" => %{
+                                                "a" => %{
+                                                  "a" => %{
+                                                    "a" => %{
+                                                      "a" => %{
+                                                        "a" => %{
+                                                          "a" => %{
+                                                            "a" => %{
+                                                              "a" => %{
+                                                                "a" => %{
+                                                                  "a" => %{
+                                                                    "a" => %{
+                                                                      "a" => %{
+                                                                        "a" => %{
+                                                                          "a" => %{
+                                                                            "a" => %{
+                                                                              "a" => %{
+                                                                                "a" => %{
+                                                                                  "a" => %{
+                                                                                    "a" => %{
+                                                                                      "a" => %{
+                                                                                        "a" => %{
+                                                                                          "a" => %{
+                                                                                            "a" => %{
+                                                                                              "a" => %{
+                                                                                                "a" => %{
+                                                                                                  "a" => %{
+                                                                                                    "a" => %{
+                                                                                                      "a" => %{
+                                                                                                        "a" => %{
+                                                                                                          "a" => %{
+                                                                                                            "a" => %{
+                                                                                                              "a" => %{
+                                                                                                                "a" => %{
+                                                                                                                  "a" => %{
+                                                                                                                    "a" => %{
+                                                                                                                      "a" => %{
+                                                                                                                        "a" => %{
+                                                                                                                          "a" => %{
+                                                                                                                            "a" => %{
+                                                                                                                              "a" => %{
+                                                                                                                                "a" => %{
+                                                                                                                                  "a" => %{
+                                                                                                                                    "a" => %{
+                                                                                                                                      "a" => %{
+                                                                                                                                        "a" => %{
+                                                                                                                                          "a" => %{
+                                                                                                                                            "a" => %{
+                                                                                                                                              "a" => %{
+                                                                                                                                                "a" => %{
+                                                                                                                                                  "a" => %{
+                                                                                                                                                    "a" => %{
+                                                                                                                                                      "a" => %{
+                                                                                                                                                        "a" => %{
+                                                                                                                                                          "a" => %{
+                                                                                                                                                            "a" => %{
+                                                                                                                                                              "a" => %{
+                                                                                                                                                                "a" => %{
+                                                                                                                                                                  "a" => %{
+                                                                                                                                                                    "a" => %{
+                                                                                                                                                                      "a" => %{
+                                                                                                                                                                        "a" => %{
+                                                            (truncated)
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "reconstruct_state"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("reconstruct_state", "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    [1, 2]
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get([1, 2], "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    nil
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(nil, "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (Protocol.UndefinedError) protocol String.Chars not implemented for Map. This protocol is implemented for: Atom, BitString, Date, DateTime, Decimal, ExJsonSchema.Schema.Ref, ExJsonSchema.Validator.Error.AdditionalItems, ExJsonSchema.Validator.Error.AdditionalProperties, ExJsonSchema.Validator.Error.AllOf, ExJsonSchema.Validator.Error.AnyOf, ExJsonSchema.Validator.Error.Const, ExJsonSchema.Validator.Error.Contains, ExJsonSchema.Validator.Error.ContentEncoding, ExJsonSchema.Validator.Error.ContentMediaType, ExJsonSchema.Validator.Error.Dependencies, ExJsonSchema.Validator.Error.Enum, ExJsonSchema.Validator.Error.False, ExJsonSchema.Validator.Error.Format, ExJsonSchema.Validator.Error.IfThenElse, ExJsonSchema.Validator.Error.ItemsNotAllowed, ExJsonSchema.Validator.Error.MaxItems, ExJsonSchema.Validator.Error.MaxLength, ExJsonSchema.Validator.Error.MaxProperties, ExJsonSchema.Validator.Error.Maximum, ExJsonSchema.Validator.Error.MinItems, ExJsonSchema.Validator.Error.MinLength, ExJsonSchema.Validator.Error.MinProperties, ExJsonSchema.Validator.Error.Minimum, ExJsonSchema.Validator.Error.MultipleOf, ExJsonSchema.Validator.Error.Not, ExJsonSchema.Validator.Error.OneOf, ExJsonSchema.Validator.Error.Pattern, ExJsonSchema.Validator.Error.PropertyNames, ExJsonSchema.Validator.Error.Required, ExJsonSchema.Validator.Error.Type, ExJsonSchema.Validator.Error.UniqueItems, Float, Integer, List, NaiveDateTime, Time, URI, Version, Version.Requirement
+
+Got value:
+
+    %{"a" => 1}
+
+    (elixir 1.19.1) lib/string/chars.ex:7: String.Chars.impl_for!/1
+    (elixir 1.19.1) lib/string/chars.ex:26: String.Chars.to_string/1
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:479: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{}
+
+    (erts 16.1.1) :erlang.map_get("entity_id", %{})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2323: McpServerElixir.Protocol.McpTools.handle_reconstruct_state/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request 42 raised: ** (FunctionClauseError) no function clause matching in McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:221: McpServerElixir.Server.process_request(%{id: 18, params: %{}, method: 42}, %{read_only: false, control_plane_enabled: false, system_admin: false, backend: McpServerElixir.StdioStabilityTest.StubBackend})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request nil raised: ** (FunctionClauseError) no function clause matching in McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:221: McpServerElixir.Server.process_request(%{id: 19, params: %{}, method: nil}, %{read_only: false, control_plane_enabled: false, system_admin: false, backend: McpServerElixir.StdioStabilityTest.StubBackend})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request %{"a" => 1} raised: ** (FunctionClauseError) no function clause matching in McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:221: McpServerElixir.Server.process_request(%{id: 20, params: %{}, method: %{"a" => 1}}, %{read_only: false, control_plane_enabled: false, system_admin: false, backend: McpServerElixir.StdioStabilityTest.StubBackend})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[warning] Unknown method: frobnicate
+  * test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives (15.2ms) [L#388]
+  * test the request-shape space no notification shape puts a single byte on the JSON-RPC stream [L#398]  * test the request-shape space no notification shape puts a single byte on the JSON-RPC stream (0.5ms) [L#398]
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "oops"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("oops", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:400: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space no notification shape puts a single byte on the JSON-RPC stream"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:399: McpServerElixir.StdioStabilityTest."test the request-shape space no notification shape puts a single byte on the JSON-RPC stream"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test explain_entity with no events reports the entity instead of blowing up on an empty event list [L#451]  * test explain_entity with no events reports the entity instead of blowing up on an empty event list (0.03ms) [L#451]
+  * test stdout carries JSON-RPC only Logger's default handler writes to stderr, not the protocol stream [L#59]  * test stdout carries JSON-RPC only Logger's default handler writes to stderr, not the protocol stream (0.00ms) [L#59]
+  * test the seam survives client-shaped input the tool layer never sees `arguments` sent as a list answers -32603 instead of killing the session [L#168][error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    ["e1"]
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(["e1"], "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:148: anonymous fn/2 in McpServerElixir.StdioStabilityTest.assert_survives/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:147: McpServerElixir.StdioStabilityTest.assert_survives/2
+    test/mcp_server_elixir/stdio_stability_test.exs:171: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees `arguments` sent as a list answers -32603 instead of killing the session"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+  * test the seam survives client-shaped input the tool layer never sees `arguments` sent as a list answers -32603 instead of killing the session (0.4ms) [L#168]
+
+McpServerElixir.Protocol.McpToolsDeveloperTest [test/mcp_server_elixir/protocol/mcp_tools_developer_test.exs]
+  * test debug_query tool definition has no required parameters [L#208]  * test debug_query tool definition has no required parameters (0.00ms) [L#208]
+  * test mock_events tool definition has tenant_id parameter [L#154]  * test mock_events tool definition has tenant_id parameter (0.00ms) [L#154]
+  * test mock_events tool definition has dry_run parameter [L#142]  * test mock_events tool definition has dry_run parameter (0.00ms) [L#142]
+  * test benchmark_query tool definition description mentions latency percentiles [L#240]  * test benchmark_query tool definition description mentions latency percentiles (0.00ms) [L#240]
+  * test generate_client tool definition has required language parameter with correct enum [L#55]  * test generate_client tool definition has required language parameter with correct enum (0.00ms) [L#55]
+  * test debug_query tool definition has correct name [L#172]  * test debug_query tool definition has correct name (0.00ms) [L#172]
+  * test benchmark_query tool definition description includes safety warning [L#235]  * test benchmark_query tool definition description includes safety warning (0.00ms) [L#235]
+  * test benchmark_query tool definition has required query parameter [L#246]  * test benchmark_query tool definition has required query parameter (0.00ms) [L#246]
+  * test debug_query tool definition description mentions execution plan [L#182]  * test debug_query tool definition description mentions execution plan (0.00ms) [L#182]
+  * test mock_events tool definition description includes safety warning [L#109]  * test mock_events tool definition description includes safety warning (0.00ms) [L#109]
+  * test debug_query tool definition description mentions optimization [L#186]  * test debug_query tool definition description mentions optimization (0.00ms) [L#186]
+  * test mock_events tool definition has count parameter [L#124]  * test mock_events tool definition has count parameter (0.00ms) [L#124]
+  * test debug_query tool definition has description with agent guidance [L#176]  * test debug_query tool definition has description with agent guidance (0.00ms) [L#176]
+  * test generate_client tool definition description mentions SDK and code generation [L#50]  * test generate_client tool definition description mentions SDK and code generation (0.00ms) [L#50]
+  * test mock_events tool definition description mentions test data generation [L#114]  * test mock_events tool definition description mentions test data generation (0.00ms) [L#114]
+  * test developer tool description quality destructive tools include safety warnings [L#310]  * test developer tool description quality destructive tools include safety warnings (0.00ms) [L#310]
+  * test developer tool description quality all tools have descriptions with 'When to use this tool' section [L#283]  * test developer tool description quality all tools have descriptions with 'When to use this tool' section (0.01ms) [L#283]
+  * test generate_client tool definition has style parameter with correct enum [L#75]  * test generate_client tool definition has style parameter with correct enum (0.00ms) [L#75]
+  * test list_tools/0 returns 64 tools total [L#23]  * test list_tools/0 returns 64 tools total (0.00ms) [L#23]
+  * test benchmark_query tool definition has description with agent guidance [L#229]  * test benchmark_query tool definition has description with agent guidance (0.01ms) [L#229]
+  * test benchmark_query tool definition has iterations parameter [L#253]  * test benchmark_query tool definition has iterations parameter (0.00ms) [L#253]
+  * test generate_client tool definition has correct name [L#40]  * test generate_client tool definition has correct name (0.00ms) [L#40]
+  * test generate_client tool definition has include_schemas parameter [L#81]  * test generate_client tool definition has include_schemas parameter (0.00ms) [L#81]
+  * test benchmark_query tool definition has correct name [L#225]  * test benchmark_query tool definition has correct name (0.00ms) [L#225]
+  * test debug_query tool definition has time range parameters [L#202]  * test debug_query tool definition has time range parameters (0.00ms) [L#202]
+  * test generate_client tool definition has description with agent guidance [L#44]  * test generate_client tool definition has description with agent guidance (0.00ms) [L#44]
+  * test benchmark_query tool definition has warmup parameter [L#259]  * test benchmark_query tool definition has warmup parameter (0.00ms) [L#259]
+  * test mock_events tool definition has entity_count parameter [L#130]  * test mock_events tool definition has entity_count parameter (0.00ms) [L#130]
+  * test mock_events tool definition has time_range parameter [L#148]  * test mock_events tool definition has time_range parameter (0.00ms) [L#148]
+  * test mock_events tool definition has template parameter [L#136]  * test mock_events tool definition has template parameter (0.00ms) [L#136]
+  * test mock_events tool definition has correct name [L#99]  * test mock_events tool definition has correct name (0.00ms) [L#99]
+  * test mock_events tool definition has description with agent guidance [L#103]  * test mock_events tool definition has description with agent guidance (0.01ms) [L#103]
+  * test developer tool description quality all tools have descriptions with 'Common patterns' section [L#292]  * test developer tool description quality all tools have descriptions with 'Common patterns' section (0.01ms) [L#292]
+  * test developer tool description quality all tools have descriptions with 'Performance tips' section [L#301]  * test developer tool description quality all tools have descriptions with 'Performance tips' section (0.01ms) [L#301]
+  * test mock_events tool definition has required event_type parameter [L#118]  * test mock_events tool definition has required event_type parameter (0.00ms) [L#118]
+  * test debug_query tool definition has entity_id parameter [L#190]  * test debug_query tool definition has entity_id parameter (0.00ms) [L#190]
+  * test debug_query tool definition has event_type parameter [L#196]  * test debug_query tool definition has event_type parameter (0.00ms) [L#196]
+  * test list_tools/0 includes all 4 developer experience tools [L#13]  * test list_tools/0 includes all 4 developer experience tools (0.00ms) [L#13]
+  * test generate_client tool definition has operations parameter [L#69]  * test generate_client tool definition has operations parameter (0.00ms) [L#69]
+
+McpServerElixir.Protocol.McpToolsAnalyticsTest [test/mcp_server_elixir/protocol/mcp_tools_analytics_test.exs]
+  * test segment_analysis tool definition has metric parameter with correct enum [L#213]  * test segment_analysis tool definition has metric parameter with correct enum (0.00ms) [L#213]
+  * test forecast_events tool definition has granularity parameter with correct enum [L#158]  * test forecast_events tool definition has granularity parameter with correct enum (0.00ms) [L#158]
+  * test forecast_events tool definition has description with agent guidance [L#148]  * test forecast_events tool definition has description with agent guidance (0.00ms) [L#148]
+  * test churn_prediction tool definition has required activity_event parameter [L#363]  * test churn_prediction tool definition has required activity_event parameter (0.00ms) [L#363]
+  * test path_analysis tool definition has honest description about limitations [L#252]  * test path_analysis tool definition has honest description about limitations (0.00ms) [L#252]
+  * test churn_prediction tool definition has risk_threshold parameter [L#375]  * test churn_prediction tool definition has risk_threshold parameter (0.00ms) [L#375]
+  * test cohort_analysis tool definition has required event_type parameter [L#58]  * test cohort_analysis tool definition has required event_type parameter (0.00ms) [L#58]
+  * test forecast_events tool definition has horizon parameter [L#164]  * test forecast_events tool definition has horizon parameter (0.00ms) [L#164]
+  * test path_analysis tool definition has description with agent guidance [L#247]  * test path_analysis tool definition has description with agent guidance (0.00ms) [L#247]
+  * test path_analysis tool definition has steps parameter as array [L#257]  * test path_analysis tool definition has steps parameter as array (0.00ms) [L#257]
+  * test ltv_calculation tool definition has description with agent guidance [L#403]  * test ltv_calculation tool definition has description with agent guidance (0.00ms) [L#403]
+  * test forecast_events tool definition has no required parameters [L#176]  * test forecast_events tool definition has no required parameters (0.00ms) [L#176]
+  * test correlation_analysis tool definition has description with agent guidance [L#104]  * test correlation_analysis tool definition has description with agent guidance (0.01ms) [L#104]
+  * test attribution_analysis tool definition has required target_event parameter [L#307]  * test attribution_analysis tool definition has required target_event parameter (0.00ms) [L#307]
+  * test segment_analysis tool definition has correct name [L#193]  * test segment_analysis tool definition has correct name (0.00ms) [L#193]
+  * test correlation_analysis tool definition has required event_type_b parameter [L#120]  * test correlation_analysis tool definition has required event_type_b parameter (0.00ms) [L#120]
+  * test churn_prediction tool definition has correct name [L#349]  * test churn_prediction tool definition has correct name (0.00ms) [L#349]
+  * test ltv_calculation tool definition has projection_months parameter [L#425]  * test ltv_calculation tool definition has projection_months parameter (0.00ms) [L#425]
+  * test forecast_events tool definition has history_periods parameter [L#170]  * test forecast_events tool definition has history_periods parameter (0.00ms) [L#170]
+  * test cohort_analysis tool definition has honest description about limitations [L#53]  * test cohort_analysis tool definition has honest description about limitations (0.00ms) [L#53]
+  * test ltv_calculation tool definition has required value_event parameter [L#413]  * test ltv_calculation tool definition has required value_event parameter (0.00ms) [L#413]
+  * test analytics tool description quality all tools have descriptions with 'When to use this tool' section [L#459]  * test analytics tool description quality all tools have descriptions with 'When to use this tool' section (0.01ms) [L#459]
+  * test correlation_analysis tool definition has honest description about methodology [L#109]  * test correlation_analysis tool definition has honest description about methodology (0.00ms) [L#109]
+  * test attribution_analysis tool definition has honest description about limitations [L#302]  * test attribution_analysis tool definition has honest description about limitations (0.00ms) [L#302]
+  * test churn_prediction tool definition has lookback parameter [L#369]  * test churn_prediction tool definition has lookback parameter (0.00ms) [L#369]
+  * test path_analysis tool definition has max_duration parameter [L#275]  * test path_analysis tool definition has max_duration parameter (0.00ms) [L#275]
+  * test cohort_analysis tool definition has periods parameter [L#70]  * test cohort_analysis tool definition has periods parameter (0.00ms) [L#70]
+  * test list_tools/0 returns 64 tools total [L#27]  * test list_tools/0 returns 64 tools total (0.00ms) [L#27]
+  * test ltv_calculation tool definition has group_by parameter [L#431]  * test ltv_calculation tool definition has group_by parameter (0.00ms) [L#431]
+  * test analytics tool description quality all analytics tools have tenant_id filter [L#478]  * test analytics tool description quality all analytics tools have tenant_id filter (0.01ms) [L#478]
+  * test path_analysis tool definition has correct name [L#243]  * test path_analysis tool definition has correct name (0.00ms) [L#243]
+  * test path_analysis tool definition has start_event parameter for open path discovery [L#263]  * test path_analysis tool definition has start_event parameter for open path discovery (0.00ms) [L#263]
+  * test cohort_analysis tool definition has correct name [L#44]  * test cohort_analysis tool definition has correct name (0.00ms) [L#44]
+  * test cohort_analysis tool definition has optional cohort_event_type parameter [L#76]  * test cohort_analysis tool definition has optional cohort_event_type parameter (0.00ms) [L#76]
+  * test segment_analysis tool definition has segments parameter [L#225]  * test segment_analysis tool definition has segments parameter (0.00ms) [L#225]
+  * test segment_analysis tool definition has required event_type parameter [L#207]  * test segment_analysis tool definition has required event_type parameter (0.00ms) [L#207]
+  * test cohort_analysis tool definition has description with agent guidance [L#48]  * test cohort_analysis tool definition has description with agent guidance (0.00ms) [L#48]
+  * test path_analysis tool definition has depth parameter [L#269]  * test path_analysis tool definition has depth parameter (0.00ms) [L#269]
+  * test correlation_analysis tool definition has optional time_window parameter [L#126]  * test correlation_analysis tool definition has optional time_window parameter (0.00ms) [L#126]
+  * test forecast_events tool definition has honest description about limitations [L#153]  * test forecast_events tool definition has honest description about limitations (0.00ms) [L#153]
+  * test forecast_events tool definition has correct name [L#144]  * test forecast_events tool definition has correct name (0.00ms) [L#144]
+  * test cohort_analysis tool definition has time range parameters [L#82]  * test cohort_analysis tool definition has time range parameters (0.00ms) [L#82]
+  * test correlation_analysis tool definition has correct name [L#100]  * test correlation_analysis tool definition has correct name (0.00ms) [L#100]
+  * test attribution_analysis tool definition has correct name [L#293]  * test attribution_analysis tool definition has correct name (0.00ms) [L#293]
+  * test churn_prediction tool definition has description with agent guidance [L#353]  * test churn_prediction tool definition has description with agent guidance (0.00ms) [L#353]
+  * test attribution_analysis tool definition has description with agent guidance [L#297]  * test attribution_analysis tool definition has description with agent guidance (0.00ms) [L#297]
+  * test churn_prediction tool definition has honest description about limitations [L#358]  * test churn_prediction tool definition has honest description about limitations (0.00ms) [L#358]
+  * test attribution_analysis tool definition has lookback parameter [L#331]  * test attribution_analysis tool definition has lookback parameter (0.00ms) [L#331]
+  * test churn_prediction tool definition has include_factors parameter [L#381]  * test churn_prediction tool definition has include_factors parameter (0.00ms) [L#381]
+  * test correlation_analysis tool definition has required event_type_a parameter [L#114]  * test correlation_analysis tool definition has required event_type_a parameter (0.00ms) [L#114]
+  * test segment_analysis tool definition has description with agent guidance [L#197]  * test segment_analysis tool definition has description with agent guidance (0.00ms) [L#197]
+  * test ltv_calculation tool definition has required value_field parameter [L#419]  * test ltv_calculation tool definition has required value_field parameter (0.00ms) [L#419]
+  * test attribution_analysis tool definition has touchpoint_types parameter [L#325]  * test attribution_analysis tool definition has touchpoint_types parameter (0.00ms) [L#325]
+  * test segment_analysis tool definition has honest description about limitations [L#202]  * test segment_analysis tool definition has honest description about limitations (0.00ms) [L#202]
+  * test list_tools/0 includes all 8 analytics tools [L#13]  * test list_tools/0 includes all 8 analytics tools (0.00ms) [L#13]
+  * test ltv_calculation tool definition has correct name [L#399]  * test ltv_calculation tool definition has correct name (0.00ms) [L#399]
+  * test ltv_calculation tool definition has honest description about limitations [L#408]  * test ltv_calculation tool definition has honest description about limitations (0.00ms) [L#408]
+  * test attribution_analysis tool definition has model parameter with correct enum [L#313]  * test attribution_analysis tool definition has model parameter with correct enum (0.00ms) [L#313]
+  * test analytics tool description quality all tools have honest descriptions about actual capabilities [L#468]  * test analytics tool description quality all tools have honest descriptions about actual capabilities (0.02ms) [L#468]
+  * test cohort_analysis tool definition has granularity parameter with correct enum [L#64]  * test cohort_analysis tool definition has granularity parameter with correct enum (0.00ms) [L#64]
+
+McpServerElixir.Protocol.McpToolsTenantTest [test/mcp_server_elixir/protocol/mcp_tools_tenant_test.exs]
+  * test tenant_usage tool definition has include_breakdown parameter [L#204]  * test tenant_usage tool definition has include_breakdown parameter (0.00ms) [L#204]
+  * test tenant_update tool definition has metadata parameter [L#149]  * test tenant_update tool definition has metadata parameter (0.00ms) [L#149]
+  * test tenant_update tool definition has optional plan parameter with correct enum [L#137]  * test tenant_update tool definition has optional plan parameter with correct enum (0.00ms) [L#137]
+  * test tenant_export tool definition description mentions GDPR and data portability [L#340]  * test tenant_export tool definition description mentions GDPR and data portability (0.00ms) [L#340]
+  * test tenant_quotas tool definition description mentions key quota types [L#236]  * test tenant_quotas tool definition description mentions key quota types (0.00ms) [L#236]
+  * test tenant_export tool definition has format parameter with correct enum [L#352]  * test tenant_export tool definition has format parameter with correct enum (0.00ms) [L#352]
+  * test tenant_create tool definition description mentions provisioning and onboarding [L#56]  * test tenant_create tool definition description mentions provisioning and onboarding (0.00ms) [L#56]
+  * test tenant_usage tool definition has correct name [L#167]  * test tenant_usage tool definition has correct name (0.00ms) [L#167]
+  * test tenant_quotas tool definition description requires admin role [L#232]  * test tenant_quotas tool definition description requires admin role (0.00ms) [L#232]
+  * test tenant_quotas tool definition has required tenant_id parameter [L#242]  * test tenant_quotas tool definition has required tenant_id parameter (0.00ms) [L#242]
+  * test tenant_export tool definition has include_metadata parameter [L#373]  * test tenant_export tool definition has include_metadata parameter (0.00ms) [L#373]
+  * test tenant_usage tool definition description requires admin role [L#177]  * test tenant_usage tool definition description requires admin role (0.00ms) [L#177]
+  * test tenant_create tool definition has metadata parameter [L#93]  * test tenant_create tool definition has metadata parameter (0.00ms) [L#93]
+  * test tenant_suspend tool definition has required tenant_id parameter [L#290]  * test tenant_suspend tool definition has required tenant_id parameter (0.00ms) [L#290]
+  * test tenant_usage tool definition description includes decision guide [L#181]  * test tenant_usage tool definition description includes decision guide (0.00ms) [L#181]
+  * test tenant_update tool definition description requires admin role [L#121]  * test tenant_update tool definition description requires admin role (0.00ms) [L#121]
+  * test tenant_export tool definition has description with usage guidance [L#326]  * test tenant_export tool definition has description with usage guidance (0.00ms) [L#326]
+  * test tenant_usage tool definition has description with usage guidance [L#171]  * test tenant_usage tool definition has description with usage guidance (0.00ms) [L#171]
+  * test tenant_create tool definition description requires admin role [L#52]  * test tenant_create tool definition description requires admin role (0.00ms) [L#52]
+  * test tenant_update tool definition has correct name [L#111]  * test tenant_update tool definition has correct name (0.00ms) [L#111]
+  * test tenant_suspend tool definition description mentions reactivation [L#286]  * test tenant_suspend tool definition description mentions reactivation (0.00ms) [L#286]
+  * test tenant_export tool definition has required tenant_id parameter [L#345]  * test tenant_export tool definition has required tenant_id parameter (0.00ms) [L#345]
+  * test tenant_suspend tool definition has description with usage guidance [L#271]  * test tenant_suspend tool definition has description with usage guidance (0.00ms) [L#271]
+  * test tenant_create tool definition has optional tenant_id parameter [L#68]  * test tenant_create tool definition has optional tenant_id parameter (0.00ms) [L#68]
+  * test list_tools/0 returns 64 tools total [L#25]  * test list_tools/0 returns 64 tools total (0.00ms) [L#25]
+  * test tenant_quotas tool definition has description with usage guidance [L#226]  * test tenant_quotas tool definition has description with usage guidance (0.00ms) [L#226]
+  * test tenant_quotas tool definition has include_usage parameter [L#249]  * test tenant_quotas tool definition has include_usage parameter (0.00ms) [L#249]
+  * test tenant_create tool definition has correct name [L#42]  * test tenant_create tool definition has correct name (0.00ms) [L#42]
+  * test tenant_create tool definition has plan parameter with correct enum [L#74]  * test tenant_create tool definition has plan parameter with correct enum (0.00ms) [L#74]
+  * test tenant_quotas tool definition has correct name [L#222]  * test tenant_quotas tool definition has correct name (0.00ms) [L#222]
+  * test tenant_usage tool definition has period parameter with correct enum [L#197]  * test tenant_usage tool definition has period parameter with correct enum (0.00ms) [L#197]
+  * test tenant_create tool definition has description with usage guidance [L#46]  * test tenant_create tool definition has description with usage guidance (0.00ms) [L#46]
+  * test tenant_suspend tool definition has correct name [L#267]  * test tenant_suspend tool definition has correct name (0.00ms) [L#267]
+  * test tenant_update tool definition description mentions upgrading and adjusting quotas [L#125]  * test tenant_update tool definition description mentions upgrading and adjusting quotas (0.00ms) [L#125]
+  * test tenant_update tool definition has optional name parameter [L#143]  * test tenant_update tool definition has optional name parameter (0.00ms) [L#143]
+  * test tenant_update tool definition has required tenant_id parameter [L#130]  * test tenant_update tool definition has required tenant_id parameter (0.00ms) [L#130]
+  * test tenant_create tool definition has max_events_per_day parameter [L#81]  * test tenant_create tool definition has max_events_per_day parameter (0.00ms) [L#81]
+  * test tenant_create tool definition has max_storage_bytes parameter [L#87]  * test tenant_create tool definition has max_storage_bytes parameter (0.00ms) [L#87]
+  * test tenant_suspend tool definition description requires admin role [L#277]  * test tenant_suspend tool definition description requires admin role (0.00ms) [L#277]
+  * test tenant_export tool definition description requires admin role [L#332]  * test tenant_export tool definition description requires admin role (0.00ms) [L#332]
+  * test tenant_suspend tool definition description includes safety warning [L#281]  * test tenant_suspend tool definition description includes safety warning (0.00ms) [L#281]
+  * test tenant_export tool definition description includes safety warning [L#336]  * test tenant_export tool definition description includes safety warning (0.00ms) [L#336]
+  * test tenant_export tool definition has correct name [L#322]  * test tenant_export tool definition has correct name (0.00ms) [L#322]
+  * test tenant_export tool definition has since and until parameters [L#359]  * test tenant_export tool definition has since and until parameters (0.00ms) [L#359]
+  * test tenant_update tool definition has description with usage guidance [L#115]  * test tenant_update tool definition has description with usage guidance (0.00ms) [L#115]
+  * test tenant_usage tool definition description mentions monitoring and billing [L#185]  * test tenant_usage tool definition description mentions monitoring and billing (0.00ms) [L#185]
+  * test tenant_suspend tool definition has optional notify parameter [L#304]  * test tenant_suspend tool definition has optional notify parameter (0.00ms) [L#304]
+  * test tenant_usage tool definition has required tenant_id parameter [L#190]  * test tenant_usage tool definition has required tenant_id parameter (0.00ms) [L#190]
+  * test list_tools/0 includes all 6 tenant management tools [L#13]  * test list_tools/0 includes all 6 tenant management tools (0.00ms) [L#13]
+  * test tenant_export tool definition has include_projections parameter [L#367]  * test tenant_export tool definition has include_projections parameter (0.00ms) [L#367]
+  * test tenant_suspend tool definition has required reason parameter [L#297]  * test tenant_suspend tool definition has required reason parameter (0.00ms) [L#297]
+  * test tenant_create tool definition has required name parameter [L#61]  * test tenant_create tool definition has required name parameter (0.00ms) [L#61]
+
+McpServerElixir.Protocol.McpToolsOperationalTest [test/mcp_server_elixir/protocol/mcp_tools_operational_test.exs]
+  * test backup_create tool definition description includes safety warning [L#228]  * test backup_create tool definition description includes safety warning (0.01ms) [L#228]
+  * test partition_info tool definition has optional partition_id parameter [L#162]  * test partition_info tool definition has optional partition_id parameter (0.00ms) [L#162]
+  * test partition_info tool definition has description with usage guidance [L#151]  * test partition_info tool definition has description with usage guidance (0.00ms) [L#151]
+  * test health_deep tool definition has description with usage guidance [L#366]  * test health_deep tool definition has description with usage guidance (0.00ms) [L#366]
+  * test backup_create tool definition has incremental parameter [L#249]  * test backup_create tool definition has incremental parameter (0.00ms) [L#249]
+  * test health_deep tool definition description includes decision guide [L#376]  * test health_deep tool definition description includes decision guide (0.00ms) [L#376]
+  * test compact_storage tool definition description mentions disk space and compaction [L#61]  * test compact_storage tool definition description mentions disk space and compaction (0.00ms) [L#61]
+  * test partition_info tool definition has include_replicas parameter [L#168]  * test partition_info tool definition has include_replicas parameter (0.00ms) [L#168]
+  * test backup_create tool definition has optional tenant_id parameter [L#243]  * test backup_create tool definition has optional tenant_id parameter (0.00ms) [L#243]
+  * test backup_restore tool definition has correct name [L#267]  * test backup_restore tool definition has correct name (0.00ms) [L#267]
+  * test performance_report tool definition has description with usage guidance [L#403]  * test performance_report tool definition has description with usage guidance (0.00ms) [L#403]
+  * test wal_status tool definition has description with usage guidance [L#190]  * test wal_status tool definition has description with usage guidance (0.00ms) [L#190]
+  * test storage_stats tool definition has description with usage guidance [L#105]  * test storage_stats tool definition has description with usage guidance (0.00ms) [L#105]
+  * test backup_restore tool definition has optional tenant_id parameter [L#306]  * test backup_restore tool definition has optional tenant_id parameter (0.00ms) [L#306]
+  * test wal_status tool definition description mentions WAL and replication lag [L#196]  * test wal_status tool definition description mentions WAL and replication lag (0.00ms) [L#196]
+  * test storage_stats tool definition has optional tenant_id parameter [L#123]  * test storage_stats tool definition has optional tenant_id parameter (0.00ms) [L#123]
+  * test backup_list tool definition has optional tenant_id parameter [L#338]  * test backup_list tool definition has optional tenant_id parameter (0.00ms) [L#338]
+  * test audit_log tool definition has correct name [L#440]  * test audit_log tool definition has correct name (0.00ms) [L#440]
+  * test operational tool description quality backup_restore requires confirmation [L#542]  * test operational tool description quality backup_restore requires confirmation (0.00ms) [L#542]
+  * test wal_status tool definition has correct name [L#186]  * test wal_status tool definition has correct name (0.01ms) [L#186]
+  * test compact_storage tool definition description includes safety warning [L#56]  * test compact_storage tool definition description includes safety warning (0.00ms) [L#56]
+  * test operational tool description quality all tools have descriptions with 'When to use this tool' section [L#513]  * test operational tool description quality all tools have descriptions with 'When to use this tool' section (0.01ms) [L#513]
+  * test audit_log tool definition has time range parameters [L#477]  * test audit_log tool definition has time range parameters (0.00ms) [L#477]
+  * test performance_report tool definition has period parameter with correct enum [L#415]  * test performance_report tool definition has period parameter with correct enum (0.00ms) [L#415]
+  * test audit_log tool definition description mentions compliance frameworks [L#450]  * test audit_log tool definition description mentions compliance frameworks (0.00ms) [L#450]
+  * test storage_stats tool definition description mentions capacity planning and cost allocation [L#111]  * test storage_stats tool definition description mentions capacity planning and cost allocation (0.00ms) [L#111]
+  * test backup_restore tool definition has dry_run parameter [L#300]  * test backup_restore tool definition has dry_run parameter (0.00ms) [L#300]
+  * test operational tool description quality all tools have descriptions with 'Common patterns' section [L#522]  * test operational tool description quality all tools have descriptions with 'Common patterns' section (0.02ms) [L#522]
+  * test health_deep tool definition description mentions comprehensive health check [L#371]  * test health_deep tool definition description mentions comprehensive health check (0.00ms) [L#371]
+  * test backup_restore tool definition description mentions data loss risk [L#282]  * test backup_restore tool definition description mentions data loss risk (0.00ms) [L#282]
+  * test compact_storage tool definition has optional partition_id parameter [L#72]  * test compact_storage tool definition has optional partition_id parameter (0.00ms) [L#72]
+  * test list_tools/0 returns 64 tools total [L#29]  * test list_tools/0 returns 64 tools total (0.00ms) [L#29]
+  * test audit_log tool definition has description with usage guidance [L#444]  * test audit_log tool definition has description with usage guidance (0.00ms) [L#444]
+  * test audit_log tool definition has action filter parameter [L#459]  * test audit_log tool definition has action filter parameter (0.00ms) [L#459]
+  * test backup_create tool definition has label parameter [L#237]  * test backup_create tool definition has label parameter (0.00ms) [L#237]
+  * test backup_restore tool definition has description with usage guidance [L#271]  * test backup_restore tool definition has description with usage guidance (0.00ms) [L#271]
+  * test compact_storage tool definition has correct name [L#46]  * test compact_storage tool definition has correct name (0.00ms) [L#46]
+  * test compact_storage tool definition has dry_run parameter [L#78]  * test compact_storage tool definition has dry_run parameter (0.00ms) [L#78]
+  * test backup_create tool definition description mentions disaster recovery [L#233]  * test backup_create tool definition description mentions disaster recovery (0.00ms) [L#233]
+  * test audit_log tool definition has entity_id filter parameter [L#471]  * test audit_log tool definition has entity_id filter parameter (0.00ms) [L#471]
+  * test backup_create tool definition has description with usage guidance [L#222]  * test backup_create tool definition has description with usage guidance (0.00ms) [L#222]
+  * test compact_storage tool definition has description with usage guidance [L#50]  * test compact_storage tool definition has description with usage guidance (0.00ms) [L#50]
+  * test backup_restore tool definition description includes destructive operation warning [L#277]  * test backup_restore tool definition description includes destructive operation warning (0.00ms) [L#277]
+  * test storage_stats tool definition has refresh parameter [L#129]  * test storage_stats tool definition has refresh parameter (0.00ms) [L#129]
+  * test partition_info tool definition description mentions partition health and distribution [L#157]  * test partition_info tool definition description mentions partition health and distribution (0.00ms) [L#157]
+  * test operational tool description quality destructive tools include safety warnings [L#531]  * test operational tool description quality destructive tools include safety warnings (0.00ms) [L#531]
+  * test partition_info tool definition has correct name [L#147]  * test partition_info tool definition has correct name (0.00ms) [L#147]
+  * test compact_storage tool definition has no required parameters [L#84]  * test compact_storage tool definition has no required parameters (0.00ms) [L#84]
+  * test storage_stats tool definition has correct name [L#101]  * test storage_stats tool definition has correct name (0.00ms) [L#101]
+  * test audit_log tool definition has actor filter parameter [L#465]  * test audit_log tool definition has actor filter parameter (0.00ms) [L#465]
+  * test backup_restore tool definition has required backup_id parameter [L#286]  * test backup_restore tool definition has required backup_id parameter (0.00ms) [L#286]
+  * test backup_list tool definition has limit parameter [L#344]  * test backup_list tool definition has limit parameter (0.00ms) [L#344]
+  * test backup_restore tool definition has required confirm parameter [L#293]  * test backup_restore tool definition has required confirm parameter (0.00ms) [L#293]
+  * test audit_log tool definition has limit parameter [L#483]  * test audit_log tool definition has limit parameter (0.00ms) [L#483]
+  * test health_deep tool definition has correct name [L#362]  * test health_deep tool definition has correct name (0.00ms) [L#362]
+  * test backup_list tool definition description mentions finding backups for restore [L#334]  * test backup_list tool definition description mentions finding backups for restore (0.00ms) [L#334]
+  * test health_deep tool definition has empty properties (no parameters needed) [L#382]  * test health_deep tool definition has empty properties (no parameters needed) (0.00ms) [L#382]
+  * test storage_stats tool definition has group_by parameter with correct enum [L#116]  * test storage_stats tool definition has group_by parameter with correct enum (0.00ms) [L#116]
+  * test wal_status tool definition has empty properties (no parameters needed) [L#201]  * test wal_status tool definition has empty properties (no parameters needed) (0.00ms) [L#201]
+  * test performance_report tool definition has optional tenant_id parameter [L#422]  * test performance_report tool definition has optional tenant_id parameter (0.00ms) [L#422]
+  * test backup_list tool definition has description with usage guidance [L#328]  * test backup_list tool definition has description with usage guidance (0.00ms) [L#328]
+  * test backup_create tool definition has correct name [L#218]  * test backup_create tool definition has correct name (0.00ms) [L#218]
+  * test list_tools/0 includes all 10 operational tools [L#13]  * test list_tools/0 includes all 10 operational tools (0.00ms) [L#13]
+  * test performance_report tool definition has correct name [L#399]  * test performance_report tool definition has correct name (0.00ms) [L#399]
+  * test performance_report tool definition description mentions key metrics [L#409]  * test performance_report tool definition description mentions key metrics (0.00ms) [L#409]
+  * test backup_list tool definition has correct name [L#324]  * test backup_list tool definition has correct name (0.00ms) [L#324]
+  * test audit_log tool definition description mentions forensic analysis [L#455]  * test audit_log tool definition description mentions forensic analysis (0.00ms) [L#455]
+  * test compact_storage tool definition has optional tenant_id parameter [L#66]  * test compact_storage tool definition has optional tenant_id parameter (0.00ms) [L#66]
+
+McpServerElixir.Protocol.McpToolsEventManagementTest [test/mcp_server_elixir/protocol/mcp_tools_event_management_test.exs]
+  * test export_events tool definition description mentions supported formats [L#228]  * test export_events tool definition description mentions supported formats (0.03ms) [L#228]
+  * test event management tools decision tree delete_events mentions restore_events for recovery [L#634]  * test event management tools decision tree delete_events mentions restore_events for recovery (0.01ms) [L#634]
+  * test restore_events tool definition has description with usage guidance [L#168]  * test restore_events tool definition has description with usage guidance (0.01ms) [L#168]
+  * test archive_events tool definition has dry_run parameter [L#146]  * test archive_events tool definition has dry_run parameter (0.01ms) [L#146]
+  * test clone_entity tool definition description explains cloning process [L#368]  * test clone_entity tool definition description explains cloning process (0.00ms) [L#368]
+  * test tool description quality tools with dry_run mention preview capability [L#605]  * test tool description quality tools with dry_run mention preview capability (0.02ms) [L#605]
+  * test export_events tool definition has limit parameter [L#256]  * test export_events tool definition has limit parameter (0.00ms) [L#256]
+  * test tool description quality lifecycle tools mention audit trail [L#594]  * test tool description quality lifecycle tools mention audit trail (0.00ms) [L#594]
+  * test clone_entity tool definition has optional new_entity_id parameter [L#382]  * test clone_entity tool definition has optional new_entity_id parameter (0.00ms) [L#382]
+  * test delete_events tool definition description explains soft delete behavior [L#61]  * test delete_events tool definition description explains soft delete behavior (0.00ms) [L#61]
+  * test restore_events tool definition description mentions recovering deleted and archived events [L#175]  * test restore_events tool definition description mentions recovering deleted and archived events (0.00ms) [L#175]
+  * test export_events tool definition has include_metadata parameter [L#250]  * test export_events tool definition has include_metadata parameter (0.00ms) [L#250]
+  * test export_events tool definition has no required parameters [L#262]  * test export_events tool definition has no required parameters (0.00ms) [L#262]
+  * test clone_entity tool definition has sanitize_pii parameter [L#402]  * test clone_entity tool definition has sanitize_pii parameter (0.00ms) [L#402]
+  * test restore_events tool definition has status parameter with correct enum values [L#186]  * test restore_events tool definition has status parameter with correct enum values (0.00ms) [L#186]
+  * test split_entity tool definition split item requires new_entity_id [L#532]  * test split_entity tool definition split item requires new_entity_id (0.00ms) [L#532]
+  * test archive_events tool definition has correct name [L#110]  * test archive_events tool definition has correct name (0.00ms) [L#110]
+  * test import_events tool definition has entity_id_prefix parameter [L#316]  * test import_events tool definition has entity_id_prefix parameter (0.00ms) [L#316]
+  * test restore_events tool definition has optional entity_id and event_ids parameters [L#193]  * test restore_events tool definition has optional entity_id and event_ids parameters (0.00ms) [L#193]
+  * test archive_events tool definition has required entity_id and reason parameters [L#127]  * test archive_events tool definition has required entity_id and reason parameters (0.00ms) [L#127]
+  * test clone_entity tool definition has correct name [L#352]  * test clone_entity tool definition has correct name (0.00ms) [L#352]
+  * test merge_entities tool definition description mentions duplicate merging [L#436]  * test merge_entities tool definition description mentions duplicate merging (0.00ms) [L#436]
+  * test event management tools decision tree clone_entity mentions PII considerations [L#653]  * test event management tools decision tree clone_entity mentions PII considerations (0.00ms) [L#653]
+  * test split_entity tool definition splits is an array of objects with proper structure [L#519]  * test split_entity tool definition splits is an array of objects with proper structure (0.00ms) [L#519]
+  * test restore_events tool definition has required reason parameter [L#181]  * test restore_events tool definition has required reason parameter (0.00ms) [L#181]
+  * test delete_events tool definition description mentions GDPR/CCPA compliance [L#56]  * test delete_events tool definition description mentions GDPR/CCPA compliance (0.00ms) [L#56]
+  * test split_entity tool definition description mentions partitioning and domain-specific entities [L#500]  * test split_entity tool definition description mentions partitioning and domain-specific entities (0.00ms) [L#500]
+  * test split_entity tool definition has correct name [L#489]  * test split_entity tool definition has correct name (0.00ms) [L#489]
+  * test tool description quality all tools have descriptions with 'When to use this tool' section [L#576]  * test tool description quality all tools have descriptions with 'When to use this tool' section (0.01ms) [L#576]
+  * test merge_entities tool definition has correct name [L#425]  * test merge_entities tool definition has correct name (0.00ms) [L#425]
+  * test merge_entities tool definition has required source_entity_ids, target_entity_id, and reason parameters [L#448]  * test merge_entities tool definition has required source_entity_ids, target_entity_id, and reason parameters (0.00ms) [L#448]
+  * test archive_events tool definition has description with usage guidance [L#114]  * test archive_events tool definition has description with usage guidance (0.00ms) [L#114]
+  * test import_events tool definition has format parameter with correct enum [L#310]  * test import_events tool definition has format parameter with correct enum (0.00ms) [L#310]
+  * test split_entity tool definition description explains split criteria [L#505]  * test split_entity tool definition description explains split criteria (0.00ms) [L#505]
+  * test clone_entity tool definition has required source_entity_id parameter [L#375]  * test clone_entity tool definition has required source_entity_id parameter (0.00ms) [L#375]
+  * test split_entity tool definition has delete_split_events parameter [L#543]  * test split_entity tool definition has delete_split_events parameter (0.00ms) [L#543]
+  * test import_events tool definition description mentions migration and bulk import [L#290]  * test import_events tool definition description mentions migration and bulk import (0.00ms) [L#290]
+  * test event management tools decision tree merge_entities mentions projection impact considerations [L#658]  * test event management tools decision tree merge_entities mentions projection impact considerations (0.00ms) [L#658]
+  * test delete_events tool definition has optional entity_id parameter [L#74]  * test delete_events tool definition has optional entity_id parameter (0.00ms) [L#74]
+  * test list_tools/0 returns 64 tools total [L#27]  * test list_tools/0 returns 64 tools total (0.00ms) [L#27]
+  * test merge_entities tool definition description explains merge behavior [L#441]  * test merge_entities tool definition description explains merge behavior (0.00ms) [L#441]
+  * test merge_entities tool definition has archive_sources parameter [L#460]  * test merge_entities tool definition has archive_sources parameter (0.00ms) [L#460]
+  * test export_events tool definition has compress parameter [L#244]  * test export_events tool definition has compress parameter (0.00ms) [L#244]
+  * test import_events tool definition has correct name [L#279]  * test import_events tool definition has correct name (0.00ms) [L#279]
+  * test delete_events tool definition has correct name [L#44]  * test delete_events tool definition has correct name (0.00ms) [L#44]
+  * test delete_events tool definition has optional event_ids array parameter [L#80]  * test delete_events tool definition has optional event_ids array parameter (0.00ms) [L#80]
+  * test export_events tool definition has format parameter with correct enum [L#237]  * test export_events tool definition has format parameter with correct enum (0.00ms) [L#237]
+  * test merge_entities tool definition has dry_run parameter [L#472]  * test merge_entities tool definition has dry_run parameter (0.00ms) [L#472]
+  * test export_events tool definition has description with usage guidance [L#220]  * test export_events tool definition has description with usage guidance (0.00ms) [L#220]
+  * test delete_events tool definition has description with usage guidance [L#48]  * test delete_events tool definition has description with usage guidance (0.00ms) [L#48]
+  * test import_events tool definition has description with usage guidance [L#283]  * test import_events tool definition has description with usage guidance (0.00ms) [L#283]
+  * test archive_events tool definition has optional older_than parameter [L#133]  * test archive_events tool definition has optional older_than parameter (0.00ms) [L#133]
+  * test restore_events tool definition has correct name [L#164]  * test restore_events tool definition has correct name (0.00ms) [L#164]
+  * test split_entity tool definition has required source_entity_id, splits, and reason parameters [L#512]  * test split_entity tool definition has required source_entity_id, splits, and reason parameters (0.00ms) [L#512]
+  * test split_entity tool definition has dry_run parameter [L#549]  * test split_entity tool definition has dry_run parameter (0.00ms) [L#549]
+  * test archive_events tool definition has retention_days parameter with default 365 [L#139]  * test archive_events tool definition has retention_days parameter with default 365 (0.00ms) [L#139]
+  * test event management tools decision tree archive_events mentions restore_events for recovery [L#639]  * test event management tools decision tree archive_events mentions restore_events for recovery (0.00ms) [L#639]
+  * test delete_events tool definition has optional time range parameters [L#86]  * test delete_events tool definition has optional time range parameters (0.00ms) [L#86]
+  * test delete_events tool definition has dry_run parameter [L#92]  * test delete_events tool definition has dry_run parameter (0.00ms) [L#92]
+  * test merge_entities tool definition has delete_sources parameter [L#466]  * test merge_entities tool definition has delete_sources parameter (0.00ms) [L#466]
+  * test import_events tool definition description shows event structure example [L#295]  * test import_events tool definition description shows event structure example (0.00ms) [L#295]
+  * test clone_entity tool definition has description with usage guidance [L#356]  * test clone_entity tool definition has description with usage guidance (0.00ms) [L#356]
+  * test import_events tool definition has required data parameter [L#303]  * test import_events tool definition has required data parameter (0.00ms) [L#303]
+  * test event management tools decision tree export_events mentions formats for different use cases [L#644]  * test event management tools decision tree export_events mentions formats for different use cases (0.00ms) [L#644]
+  * test split_entity tool definition has description with usage guidance [L#493]  * test split_entity tool definition has description with usage guidance (0.00ms) [L#493]
+  * test clone_entity tool definition description mentions test data and templates [L#363]  * test clone_entity tool definition description mentions test data and templates (0.00ms) [L#363]
+  * test import_events tool definition has batch_size parameter [L#334]  * test import_events tool definition has batch_size parameter (0.00ms) [L#334]
+  * test clone_entity tool definition has event_types array parameter [L#390]  * test clone_entity tool definition has event_types array parameter (0.00ms) [L#390]
+  * test archive_events tool definition description mentions cold storage and cost optimization [L#122]  * test archive_events tool definition description mentions cold storage and cost optimization (0.00ms) [L#122]
+  * test restore_events tool definition has dry_run parameter [L#199]  * test restore_events tool definition has dry_run parameter (0.00ms) [L#199]
+  * test tool description quality all tools have descriptions with 'Common patterns' section [L#585]  * test tool description quality all tools have descriptions with 'Common patterns' section (0.01ms) [L#585]
+  * test event management tools decision tree split_entity mentions projection impact considerations [L#663]  * test event management tools decision tree split_entity mentions projection impact considerations (0.00ms) [L#663]
+  * test merge_entities tool definition has description with usage guidance [L#429]  * test merge_entities tool definition has description with usage guidance (0.00ms) [L#429]
+  * test import_events tool definition has skip_duplicates parameter [L#328]  * test import_events tool definition has skip_duplicates parameter (0.00ms) [L#328]
+  * test export_events tool definition has correct name [L#216]  * test export_events tool definition has correct name (0.00ms) [L#216]
+  * test list_tools/0 includes all 8 event management tools [L#13]  * test list_tools/0 includes all 8 event management tools (0.00ms) [L#13]
+  * test clone_entity tool definition has reset_timestamps parameter [L#396]  * test clone_entity tool definition has reset_timestamps parameter (0.00ms) [L#396]
+  * test split_entity tool definition has archive_split_events parameter [L#537]  * test split_entity tool definition has archive_split_events parameter (0.00ms) [L#537]
+  * test clone_entity tool definition has dry_run parameter [L#408]  * test clone_entity tool definition has dry_run parameter (0.00ms) [L#408]
+  * test import_events tool definition has validate_only parameter [L#322]  * test import_events tool definition has validate_only parameter (0.00ms) [L#322]
+  * test merge_entities tool definition source_entity_ids is an array [L#455]  * test merge_entities tool definition source_entity_ids is an array (0.00ms) [L#455]
+  * test delete_events tool definition has required reason parameter [L#67]  * test delete_events tool definition has required reason parameter (0.00ms) [L#67]
+
+McpServerElixir.Infrastructure.CustomerConnectionFileTest [test/mcp_server_elixir/infrastructure/customer_connection_file_test.exs]
+  * test only declared local host and exact schema can load [L#50]  * test only declared local host and exact schema can load (220.3ms) [L#50]
+  * test refuses secret redirection, plaintext remote destinations and URL credentials [L#64]  * test refuses secret redirection, plaintext remote destinations and URL credentials (29.4ms) [L#64]
+  * test old configuration cannot bypass required private file [L#85]  * test old configuration cannot bypass required private file (6.4ms) [L#85]
+  * test reads private connection through actual packaged reader and checks every call [L#37]  * test reads private connection through actual packaged reader and checks every call (11.8ms) [L#37]
+
+McpServerElixir.Infrastructure.CoreClientDegradationTest [test/mcp_server_elixir/infrastructure/core_client_degradation_test.exs]
+  * test get_stats/0 must not mask credential problems 403 surfaces as an error rather than an approximation [L#157]  * test get_stats/0 must not mask credential problems 403 surfaces as an error rather than an approximation (26.4ms) [L#157]
+  * test get_stats/0 must not mask credential problems 401 surfaces as an error rather than an approximation [L#157]  * test get_stats/0 must not mask credential problems 401 surfaces as an error rather than an approximation (0.5ms) [L#157]
+  * test reconstruct_state/2 when the gateway does not route /entities/:id/state reports a missing entity rather than an empty state [L#182]  * test reconstruct_state/2 when the gateway does not route /entities/:id/state reports a missing entity rather than an empty state (0.6ms) [L#182]
+  * test get_stats/0 when the gateway does not route /api/v1/stats labels the result so a caller can tell it from Core's own numbers [L#129]  * test get_stats/0 when the gateway does not route /api/v1/stats labels the result so a caller can tell it from Core's own numbers (0.7ms) [L#129]
+  * test get_stats/0 when the gateway does not route /api/v1/stats also degrades on 405 [L#139]  * test get_stats/0 when the gateway does not route /api/v1/stats also degrades on 405 (0.5ms) [L#139]
+  * test storage_stats/1 inherits the stats fallback and marks compaction unavailable [L#191]  * test storage_stats/1 inherits the stats fallback and marks compaction unavailable (0.9ms) [L#191]
+  * test get_stats/0 when the gateway does not route /api/v1/stats carries both keys, so quick_stats reads a real entity count [L#144]  * test get_stats/0 when the gateway does not route /api/v1/stats carries both keys, so quick_stats reads a real entity count (0.7ms) [L#144]
+  * test exact path: gateway serves tenant-scoped stats (#230) returns Core's answer verbatim, with no fallback and no approximation [L#221]  * test exact path: gateway serves tenant-scoped stats (#230) returns Core's answer verbatim, with no fallback and no approximation (0.3ms) [L#221]
+  * test exact path: gateway serves tenant-scoped stats (#230) quick_stats renders the exact entity count from total_entities [L#235]  * test exact path: gateway serves tenant-scoped stats (#230) quick_stats renders the exact entity count from total_entities (0.3ms) [L#235]
+  * test get_stats/0 when the gateway does not route /api/v1/stats derives Core's stats shape from the tenant's events [L#116]  * test get_stats/0 when the gateway does not route /api/v1/stats derives Core's stats shape from the tenant's events (0.7ms) [L#116]
+  * test reconstruct_state/2 when the gateway does not route /entities/:id/state folds the entity's events, last write winning per key [L#168]  * test reconstruct_state/2 when the gateway does not route /entities/:id/state folds the entity's events, last write winning per key (0.6ms) [L#168]
+
+McpServerElixir.Protocol.CustomerEvidenceTest [test/mcp_server_elixir/protocol/customer_evidence_test.exs]
+  * test expired status has no evidence and pending result cannot claim a delivered outcome [L#80]  * test expired status has no evidence and pending result cannot claim a delivered outcome (13.5ms) [L#80]
+  * test strict preparation schema rejects extra authority, source kinds and malformed retry identities before network [L#36]  * test strict preparation schema rejects extra authority, source kinds and malformed retry identities before network (6.9ms) [L#36]
+  * test preparation has matching structured and text pending receipts [L#55]  * test preparation has matching structured and text pending receipts (1.8ms) [L#55]
+  * test upstream approval claims and unknown fields never pass as successful data [L#64]  * test upstream approval claims and unknown fields never pass as successful data (4.9ms) [L#64]
+  * test only gated evidence tools are discovered; metered operations disclose writes [L#16]  * test only gated evidence tools are discovered; metered operations disclose writes (0.05ms) [L#16]
+
+McpServerElixir.Infrastructure.CoreProducerTest [test/mcp_server_elixir/infrastructure/core_producer_test.exs]
+  * test GenStage producer behavior producer responds to demand [L#184]  * test GenStage producer behavior producer responds to demand (excluded) [L#184]
+  * test error handling continues polling after errors [L#231]  * test error handling continues polling after errors (509.6ms) [L#231]
+  * test get_cursor/1 returns cursor when set via start_link [L#55]  * test get_cursor/1 returns cursor when set via start_link (0.08ms) [L#55]
+  * test pause/1 and resume/1 resumes event production [L#122]  * test pause/1 and resume/1 resumes event production (0.04ms) [L#122]
+  * test cursor persistence cursor can be loaded from ETS table [L#162]  * test cursor persistence cursor can be loaded from ETS table (51.5ms) [L#162]
+  * test get_cursor/1 returns nil when no cursor is set [L#49]  * test get_cursor/1 returns nil when no cursor is set (0.1ms) [L#49]
+  * test pause/1 and resume/1 pause and resume cycle [L#134]  * test pause/1 and resume/1 pause and resume cycle (0.1ms) [L#134]
+  * test reset_cursor/2 resets cursor to nil (beginning) [L#70]  * test reset_cursor/2 resets cursor to nil (beginning) (0.04ms) [L#70]
+  * test start_link/1 starts producer with custom poll interval [L#29]  * test start_link/1 starts producer with custom poll interval (0.09ms) [L#29]
+  * test start_link/1 starts producer with custom batch size [L#35]  * test start_link/1 starts producer with custom batch size (3.3ms) [L#35]
+  * test stats/1 returns comprehensive statistics [L#79]  * test stats/1 returns comprehensive statistics (0.05ms) [L#79]
+  * test start_link/1 starts producer with initial cursor [L#41]  * test start_link/1 starts producer with initial cursor (0.05ms) [L#41]
+  * test acknowledger ack/3 returns :ok [L#250]  * test acknowledger ack/3 returns :ok (0.00ms) [L#250]
+  * test error handling handles Core unavailability gracefully [L#217]  * test error handling handles Core unavailability gracefully (100.4ms) [L#217]
+  * test stats/1 tracks poll count over time [L#96]  * test stats/1 tracks poll count over time (500.6ms) [L#96]
+  * test pause/1 and resume/1 pauses event production [L#111]  * test pause/1 and resume/1 pauses event production (0.1ms) [L#111]
+  * test cursor persistence cursor persists across reset calls [L#150]  * test cursor persistence cursor persists across reset calls (0.05ms) [L#150]
+  * test start_link/1 starts producer with default options [L#23]  * test start_link/1 starts producer with default options (0.03ms) [L#23]
+  * test reset_cursor/2 resets cursor to specific value [L#63]  * test reset_cursor/2 resets cursor to specific value (0.04ms) [L#63]
+
+McpServerElixir.Infrastructure.CoreClientAuthTest [test/mcp_server_elixir/infrastructure/core_client_auth_test.exs]
+  * test HTTP Authorization header (confirmed bug 1: no auth middleware) treats an empty key as unset [L#94]  * test HTTP Authorization header (confirmed bug 1: no auth middleware) treats an empty key as unset (0.03ms) [L#94]
+  * test HTTP Authorization header (confirmed bug 1: no auth middleware) sends no Authorization header when no key is configured [L#88]  * test HTTP Authorization header (confirmed bug 1: no auth middleware) sends no Authorization header when no key is configured (0.01ms) [L#88]
+  * test WebSocket Authorization header (confirmed bug 2: raw key, no scheme) sends the key with the Bearer scheme [L#110]  * test WebSocket Authorization header (confirmed bug 2: raw key, no scheme) sends the key with the Bearer scheme (0.01ms) [L#110]
+  * test core_url resolution (reported as build-time-frozen; pinned here) falls back to the localhost default when unconfigured [L#69]  * test core_url resolution (reported as build-time-frozen; pinned here) falls back to the localhost default when unconfigured (0.00ms) [L#69]
+  * test HTTP Authorization header (confirmed bug 1: no auth middleware) attaches the API key as a Bearer token [L#76]  * test HTTP Authorization header (confirmed bug 1: no auth middleware) attaches the API key as a Bearer token (0.01ms) [L#76]
+  * test WebSocket Authorization header (confirmed bug 2: raw key, no scheme) does not double-prefix an already-scheme'd key [L#118]  * test WebSocket Authorization header (confirmed bug 2: raw key, no scheme) does not double-prefix an already-scheme'd key (0.01ms) [L#118]
+  * test HTTP Authorization header (confirmed bug 1: no auth middleware) does not double-prefix a key that already carries the scheme [L#82]  * test HTTP Authorization header (confirmed bug 1: no auth middleware) does not double-prefix a key that already carries the scheme (0.00ms) [L#82]
+  * test WebSocket Authorization header (confirmed bug 2: raw key, no scheme) sends no header when the key is unset or empty [L#126]  * test WebSocket Authorization header (confirmed bug 2: raw key, no scheme) sends no header when the key is unset or empty (0.01ms) [L#126]
+  * test core_url resolution (reported as build-time-frozen; pinned here) base URL is read at call time, not frozen at compile time [L#59]  * test core_url resolution (reported as build-time-frozen; pinned here) base URL is read at call time, not frozen at compile time (0.04ms) [L#59]
+  * test HTTP Authorization header (confirmed bug 1: no auth middleware) the key is picked up at call time [L#100]  * test HTTP Authorization header (confirmed bug 1: no auth middleware) the key is picked up at call time (0.02ms) [L#100]
+
+McpServerElixir.CustomerHTTPTest [test/mcp_server_elixir/customer_http_test.exs]
+  * test bad JSON, batches, origin and unknown version fail with HTTP errors [L#87]  * test bad JSON, batches, origin and unknown version fail with HTTP errors (47.4ms) [L#87]
+  * test upstream outage and rate limiting do not become reauthorization loops [L#101]  * test upstream outage and rate limiting do not become reauthorization loops (5.1ms) [L#101]
+  * test HTTP errors preserve body-read state when authority is lost during tool call [L#69]  * test HTTP errors preserve body-read state when authority is lost during tool call (5.3ms) [L#69]
+
+McpServerElixir.CustomerReviewHTTPTest [test/mcp_server_elixir/customer_review_http_test.exs]
+  * test fixed status errors cannot echo bodies; client does not retry [L#85]  * test fixed status errors cannot echo bodies; client does not retry (180.1ms) [L#85]
+  * test total deadline and request cap terminate without a retry [L#104]  * test total deadline and request cap terminate without a retry (56.8ms) [L#104]
+  * test 48 KB evidence arrives intact; oversized, compressed, chunked and malformed replies stay private [L#65]  * test 48 KB evidence arrives intact; oversized, compressed, chunked and malformed replies stay private (112.9ms) [L#65]
+
+McpServerElixir.Infrastructure.EventPipelineTest [test/mcp_server_elixir/infrastructure/event_pipeline_test.exs]
+  * test Broadway message structure message contains event data [L#366]  * test Broadway message structure message contains event data (0.02ms) [L#366]
+  * test bulk save request format formats states correctly for bulk API [L#264]  * test bulk save request format formats states correctly for bulk API (0.01ms) [L#264]
+  * test event counter projection increments existing count [L#249]  * test event counter projection increments existing count (0.01ms) [L#249]
+  * test stats/1 returns stats when pipeline is running [L#91][warning] [CoreProducer] Core became unavailable: :econnrefused
+  * test stats/1 returns stats when pipeline is running (30024.7ms) [L#91]
+  * test bulk save request format JSON encodes bulk save request [L#281]  * test bulk save request format JSON encodes bulk save request (0.1ms) [L#281]
+  * test Broadway message structure message can be marked as failed [L#398]  * test Broadway message structure message can be marked as failed (0.00ms) [L#398]
+  * test telemetry events batch_processed event has expected measurements [L#309]  * test telemetry events batch_processed event has expected measurements (0.00ms) [L#309]
+  * test message processing logic handles event without payload [L#167]  * test message processing logic handles event without payload (0.01ms) [L#167]
+  * test telemetry events messages_failed event tracks count [L#320]  * test telemetry events messages_failed event tracks count (0.00ms) [L#320]
+  * test projection updates state can be merged with existing state [L#209]  * test projection updates state can be merged with existing state (4.0ms) [L#209]
+  * test telemetry events message_processed event has expected measurements [L#300]  * test telemetry events message_processed event has expected measurements (0.00ms) [L#300]
+  * test stats/1 returns error when pipeline not running [L#85]  * test stats/1 returns error when pipeline not running (0.01ms) [L#85]
+  * test message processing logic handles event with empty payload [L#172]  * test message processing logic handles event with empty payload (0.00ms) [L#172]
+  * test configuration batch_size has default value [L#125][warning] [CoreProducer] Core became unavailable: :econnrefused
+  * test configuration batch_size has default value (30004.1ms) [L#125]
+  * test start_link/1 starts pipeline with default options [L#36][warning] [CoreProducer] Core became unavailable: :econnrefused
+  * test start_link/1 starts pipeline with default options (30003.0ms) [L#36]
+  * test Broadway message structure message data can be updated [L#388]  * test Broadway message structure message data can be updated (0.01ms) [L#388]
+  * test start_link/1 starts pipeline with custom concurrency [L#51][warning] [CoreProducer] Core became unavailable: :econnrefused
+  * test start_link/1 starts pipeline with custom concurrency (28396.2ms) [L#51]
+  * test message processing logic builds entity snapshot correctly [L#141]  * test message processing logic builds entity snapshot correctly (0.02ms) [L#141]
+  * test Broadway message structure message can be updated with batcher [L#378]  * test Broadway message structure message can be updated with batcher (0.00ms) [L#378]
+  * test error handling handles malformed payload gracefully [L#351]  * test error handling handles malformed payload gracefully (0.02ms) [L#351]
+  * test start_link/1 starts pipeline with custom batch settings [L#64][warning] [CoreProducer] Core became unavailable: :econnrefused
+  * test start_link/1 starts pipeline with custom batch settings (30003.3ms) [L#64]
+  * test projection updates event metadata is added to snapshot [L#220]  * test projection updates event metadata is added to snapshot (0.08ms) [L#220]
+  * test event counter projection updates last_event_at timestamp [L#255]  * test event counter projection updates last_event_at timestamp (0.00ms) [L#255]
+  * test event counter projection initializes count to 0 for new event type [L#243]  * test event counter projection initializes count to 0 for new event type (0.00ms) [L#243]
+  * test message processing logic extracts entity_id from event [L#157]  * test message processing logic extracts entity_id from event (0.00ms) [L#157]
+  * test message processing logic extracts event_type from event [L#162]  * test message processing logic extracts event_type from event (0.00ms) [L#162]
+  * test projection updates updates can be grouped by projection name [L#192]  * test projection updates updates can be grouped by projection name (0.1ms) [L#192]
+  * test error handling handles nil entity_id in event [L#327]  * test error handling handles nil entity_id in event (0.00ms) [L#327]
+  * test error handling handles nil event_type in event [L#339]  * test error handling handles nil event_type in event (0.00ms) [L#339]
+  * test start_link/1 returns :ignore when disabled [L#32]  * test start_link/1 returns :ignore when disabled (0.2ms) [L#32]
+  * test configuration processor_concurrency defaults to schedulers * 2 [L#108][warning] [CoreProducer] Core became unavailable: :econnrefused
+  * test configuration processor_concurrency defaults to schedulers * 2 (30002.8ms) [L#108]
+
+McpServerElixir.Integration.EmbeddedModeTest [test/mcp_server_elixir/integration/embedded_mode_test.exs]
+  * test query_events returns ingested event [L#50]  * test query_events returns ingested event (excluded) [L#50]
+  * test get_stats returns event count > 0 [L#70]  * test get_stats returns event count > 0 (excluded) [L#70]
+  * test unsupported tool returns error [L#87]  * test unsupported tool returns error (excluded) [L#87]
+  * test ingest_event returns success [L#38]  * test ingest_event returns success (excluded) [L#38]
+
+McpServerElixir.Protocol.McpToolsContextTest [test/mcp_server_elixir/protocol/mcp_tools_context_test.exs]
+  * test handle_get_session_context/3 returns error for nonexistent session [L#259]  * test handle_get_session_context/3 returns error for nonexistent session (0.1ms) [L#259]
+  * test handle_refine_query/3 accumulates multiple refinements [L#211]  * test handle_refine_query/3 accumulates multiple refinements (0.1ms) [L#211]
+  * test start_session tool definition has optional context parameters [L#79]  * test start_session tool definition has optional context parameters (0.05ms) [L#79]
+  * test handle_get_session_context/3 includes query history when requested [L#265]  * test handle_get_session_context/3 includes query history when requested (0.1ms) [L#265]
+  * test get_session_context tool definition has include_history option [L#132]  * test get_session_context tool definition has include_history option (0.05ms) [L#132]
+  * test handle_start_session/3 shows empty context message for fresh session [L#168]  * test handle_start_session/3 shows empty context message for fresh session (0.05ms) [L#168]
+  * test multi-turn workflow integration complete workflow: start -> refine -> refine -> get context [L#286]  * test multi-turn workflow integration complete workflow: start -> refine -> refine -> get context (0.2ms) [L#286]
+  * test start_session tool definition has required session_id parameter [L#73]  * test start_session tool definition has required session_id parameter (0.04ms) [L#73]
+  * test handle_start_session/3 creates a new session [L#140]  * test handle_start_session/3 creates a new session (0.04ms) [L#140]
+  * test refine_query tool definition has description explaining merge behavior [L#101]  * test refine_query tool definition has description explaining merge behavior (0.04ms) [L#101]
+  * test list_tools/0 returns 64 tools total [L#47]  * test list_tools/0 returns 64 tools total (0.03ms) [L#47]
+  * test start_session tool definition has correct name [L#60]  * test start_session tool definition has correct name (0.03ms) [L#60]
+  * test refine_query tool definition has required session_id parameter [L#109]  * test refine_query tool definition has required session_id parameter (0.02ms) [L#109]
+  * test start_session tool definition has description with agent guidance [L#64]  * test start_session tool definition has description with agent guidance (0.03ms) [L#64]
+  * test handle_refine_query/3 refines an existing session [L#180]  * test handle_refine_query/3 refines an existing session (0.08ms) [L#180]
+  * test handle_get_session_context/3 returns session context [L#238]  * test handle_get_session_context/3 returns session context (0.07ms) [L#238]
+  * test handle_refine_query/3 returns error when no refinement provided [L#201]  * test handle_refine_query/3 returns error when no refinement provided (0.04ms) [L#201]
+  * test refine_query tool definition has replace_entity_ids option [L#114]  * test refine_query tool definition has replace_entity_ids option (0.02ms) [L#114]
+  * test get_session_context tool definition has correct name [L#128]  * test get_session_context tool definition has correct name (0.02ms) [L#128]
+  * test handle_start_session/3 initializes with provided context [L#151]  * test handle_start_session/3 initializes with provided context (0.05ms) [L#151]
+  * test list_tools/0 includes conversation context tools [L#38]  * test list_tools/0 includes conversation context tools (0.03ms) [L#38]
+  * test refine_query tool definition has correct name [L#97]  * test refine_query tool definition has correct name (0.02ms) [L#97]
+
+McpServerElixir.Infrastructure.ProjectionSyncTest [test/mcp_server_elixir/infrastructure/projection_sync_test.exs]
+  * test graceful degradation continues operating when Core unavailable [L#377][warning] [ProjectionSync] Sync errors starting: :econnrefused
+  * test graceful degradation continues operating when Core unavailable (74.1ms) [L#377]
+  * test stats/1 tracks dirty count correctly [L#253]  * test stats/1 tracks dirty count correctly (0.07ms) [L#253]
+  * test stats/1 returns correct statistics structure [L#230]  * test stats/1 returns correct statistics structure (0.02ms) [L#230]
+  * test state types handles map with string keys [L#452]  * test state types handles map with string keys (0.02ms) [L#452]
+  * test get_state/3 returns state after put_state [L#87]  * test get_state/3 returns state after put_state (0.03ms) [L#87]
+  * test healthy?/1 returns true when healthy [L#271]  * test healthy?/1 returns true when healthy (0.03ms) [L#271]
+  * test concurrent access handles concurrent reads and writes [L#422]  * test concurrent access handles concurrent reads and writes (0.5ms) [L#422]
+  * test state types handles map with atom keys [L#458]  * test state types handles map with atom keys (0.03ms) [L#458]
+  * test ETS performance handles many entities efficiently [L#303]  * test ETS performance handles many entities efficiently (1.5ms) [L#303]
+  * test put_state/4 handles complex nested state [L#147]  * test put_state/4 handles complex nested state (0.03ms) [L#147]
+  * test dirty flag tracking multiple puts to same key only count once as dirty [L#327]  * test dirty flag tracking multiple puts to same key only count once as dirty (0.03ms) [L#327]
+  * test delete_state/3 removes from dirty tracking [L#187]  * test delete_state/3 removes from dirty tracking (0.02ms) [L#187]
+  * test ETS performance read operations are fast (sub-ms) [L#284]  * test ETS performance read operations are fast (sub-ms) (2.1ms) [L#284]
+  * test get_state/3 returns nil for non-existent state [L#83]  * test get_state/3 returns nil for non-existent state (0.01ms) [L#83]
+  * test delete_state/3 deletes existing state [L#175]  * test delete_state/3 deletes existing state (0.02ms) [L#175]
+  * test state types handles mixed types [L#485]  * test state types handles mixed types (0.02ms) [L#485]
+  * test get_state/3 returns correct state for different projections [L#105]  * test get_state/3 returns correct state for different projections (0.01ms) [L#105]
+  * test start_link/1 starts successfully when enabled [L#41]  * test start_link/1 starts successfully when enabled (0.01ms) [L#41]
+  * test load_from_core/3 handles Core unavailability gracefully [L#406]  * test load_from_core/3 handles Core unavailability gracefully (0.5ms) [L#406]
+  * test state types handles nested maps [L#464]  * test state types handles nested maps (0.02ms) [L#464]
+  * test start_link/1 uses custom sync interval [L#48]  * test start_link/1 uses custom sync interval (0.02ms) [L#48]
+  * test put_state/4 stores state successfully [L#125]  * test put_state/4 stores state successfully (0.01ms) [L#125]
+  * test load_from_core/3 handles empty entity list [L#400]  * test load_from_core/3 handles empty entity list (0.3ms) [L#400]
+  * test configuration respects custom sync interval [L#358]  * test configuration respects custom sync interval (0.02ms) [L#358]
+  * test start_link/1 uses custom projections list [L#60]  * test start_link/1 uses custom projections list (0.01ms) [L#60]
+  * test state types handles lists in state [L#478]  * test state types handles lists in state (0.01ms) [L#478]
+  * test sync_now/1 returns ok with 0 when nothing dirty [L#208]  * test sync_now/1 returns ok with 0 when nothing dirty (0.01ms) [L#208]
+  * test stats/1 tracks state count correctly [L#242]  * test stats/1 tracks state count correctly (0.01ms) [L#242]
+  * test sync_now/1 attempts to sync dirty state [L#212][warning] [ProjectionSync] Sync errors starting: :econnrefused
+  * test sync_now/1 attempts to sync dirty state (0.3ms) [L#212]
+  * test put_state/4 updates existing state [L#130]  * test put_state/4 updates existing state (0.03ms) [L#130]
+  * test put_state/4 marks state as dirty [L#140]  * test put_state/4 marks state as dirty (0.02ms) [L#140]
+  * test delete_state/3 handles deleting non-existent state [L#183]  * test delete_state/3 handles deleting non-existent state (0.01ms) [L#183]
+  * test dirty flag tracking different keys are tracked separately [L#337]  * test dirty flag tracking different keys are tracked separately (0.01ms) [L#337]
+  * test configuration uses default sync interval when not configured [L#348]  * test configuration uses default sync interval when not configured (0.03ms) [L#348]
+  * test start_link/1 returns :ignore when disabled [L#37]  * test start_link/1 returns :ignore when disabled (0.00ms) [L#37]
+  * test get_state/3 returns correct state for different entities [L#94]  * test get_state/3 returns correct state for different entities (0.03ms) [L#94]
+
+McpServerElixir.Context.ConversationContextTest [test/mcp_server_elixir/context/conversation_context_test.exs]
+  * test record_result/3 returns error for nonexistent session [L#259]  * test record_result/3 returns error for nonexistent session (0.01ms) [L#259]
+  * test build_query/3 uses entity_id for single entity [L#232]  * test build_query/3 uses entity_id for single entity (0.02ms) [L#232]
+  * test update_session/3 updates session with entity_id [L#58]  * test update_session/3 updates session with entity_id (0.02ms) [L#58]
+  * test clear_session/2 removes session [L#266]  * test clear_session/2 removes session (0.01ms) [L#266]
+  * test get_stats/1 returns server statistics [L#298]  * test get_stats/1 returns server statistics (0.02ms) [L#298]
+  * test update_session/3 handles alias since/until/as_of [L#140]  * test update_session/3 handles alias since/until/as_of (0.02ms) [L#140]
+  * test multi-turn query workflow enables iterative query refinement [L#311]  * test multi-turn query workflow enables iterative query refinement (0.02ms) [L#311]
+  * test build_query/3 records query in history [L#190]  * test build_query/3 records query in history (0.01ms) [L#190]
+  * test list_sessions/1 lists all active sessions [L#275]  * test list_sessions/1 lists all active sessions (0.02ms) [L#275]
+  * test get_session/2 returns existing session [L#49]  * test get_session/2 returns existing session (0.02ms) [L#49]
+  * test build_query/3 builds query params from session context [L#157]  * test build_query/3 builds query params from session context (0.01ms) [L#157]
+  * test update_session/3 accumulates event_types [L#80]  * test update_session/3 accumulates event_types (0.02ms) [L#80]
+  * test get_or_create_session/2 returns existing session when called again [L#27]  * test get_or_create_session/2 returns existing session when called again (0.01ms) [L#27]
+  * test get_or_create_session/2 updates last_accessed on subsequent calls [L#35]  * test get_or_create_session/2 updates last_accessed on subsequent calls (11.2ms) [L#35]
+  * test update_session/3 merges filters [L#97]  * test update_session/3 merges filters (0.04ms) [L#97]
+  * test get_session/2 returns error when session doesn't exist [L#45]  * test get_session/2 returns error when session doesn't exist (0.01ms) [L#45]
+  * test build_query/3 limits history to 10 entries [L#200]  * test build_query/3 limits history to 10 entries (0.1ms) [L#200]
+  * test record_result/3 records result summary [L#248]  * test record_result/3 records result summary (0.02ms) [L#248]
+  * test build_query/3 handles multiple entity_ids in params [L#218]  * test build_query/3 handles multiple entity_ids in params (0.02ms) [L#218]
+  * test update_session/3 replaces time filters [L#111]  * test update_session/3 replaces time filters (0.02ms) [L#111]
+  * test update_session/3 replaces entity_ids when replace_entity_ids is true [L#123]  * test update_session/3 replaces entity_ids when replace_entity_ids is true (0.02ms) [L#123]
+  * test build_query/3 merges refinement with existing context [L#172]  * test build_query/3 merges refinement with existing context (0.02ms) [L#172]
+  * test multi-turn query workflow supports semantic search context [L#345]  * test multi-turn query workflow supports semantic search context (0.01ms) [L#345]
+  * test session timeout sessions survive within timeout [L#371]  * test session timeout sessions survive within timeout (100.4ms) [L#371]
+  * test get_or_create_session/2 creates a new session when none exists [L#16]  * test get_or_create_session/2 creates a new session when none exists (0.03ms) [L#16]
+  * test update_session/3 accumulates multiple entity_ids [L#67]  * test update_session/3 accumulates multiple entity_ids (0.03ms) [L#67]
+
+Finished in 181.0 seconds (0.4s async, 180.6s sync)
+654 tests, 0 failures (5 excluded)

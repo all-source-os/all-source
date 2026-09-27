@@ -1,49 +1,18 @@
 defmodule McpServerElixir.Infrastructure.CustomerReviewClient do
-  @moduledoc """
-  Customer review profile's sole network boundary. It never holds a Core admin
-  key, follows redirects, calls a general query endpoint or retries a request.
-  Credentials and bindings come from an OS-owner-checked file, not tool arguments.
-  """
+  @moduledoc "Customer grants and bindings come only from the OS-owner-checked connection file."
+  alias McpServerElixir.Infrastructure.CustomerConnectionFile
+  alias McpServerElixir.Infrastructure.CustomerReviewHTTP
 
-  @spec call(String.t(), map()) :: {:ok, map()} | {:error, atom()}
-  def call(operation, arguments) when operation in ["context", "validate"] do
+  def call(operation, arguments) when operation in ~w(context validate prepare review result) do
     with {:ok, %{"url" => url, "token" => token, "binding" => binding}} <-
-           McpServerElixir.Infrastructure.CustomerConnectionFile.load(),
-         body = Map.put(arguments, "binding", binding),
-         {:ok, encoded} <- Jason.encode(body),
+           CustomerConnectionFile.load(),
+         {:ok, encoded} <- Jason.encode(Map.put(arguments, "binding", binding)),
          true <- byte_size(encoded) <= 65_536 do
-      client =
-        Tesla.client(
-          [
-            {Tesla.Middleware.BaseUrl, String.trim_trailing(url, "/")},
-            {Tesla.Middleware.Headers,
-             [
-               {"authorization", "Bearer " <> token},
-               {"content-type", "application/json"},
-               {"accept", "application/json"}
-             ]},
-            {Tesla.Middleware.Timeout, timeout: 65_000}
-          ],
-          Tesla.Adapter.Hackney
-        )
-
-      case Tesla.post(client, "/api/customer-agent/" <> operation, encoded) do
-        {:ok, %{status: 200, body: response}}
-        when is_binary(response) and byte_size(response) <= 8_192 ->
-          decode(response)
-
-        {:ok, %{status: status}} when status in [401, 403] ->
-          {:error, :access_denied}
-
-        {:ok, %{status: 422}} ->
-          {:error, :invalid_proposal}
-
-        {:ok, %{status: 429}} ->
-          {:error, :rate_limited}
-
-        _ ->
-          {:error, :access_unavailable}
-      end
+      CustomerReviewHTTP.post(
+        String.trim_trailing(url, "/") <> "/api/customer-agent/" <> operation,
+        token,
+        encoded
+      )
     else
       _ -> {:error, :invalid_connection}
     end
@@ -52,15 +21,4 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewClient do
   end
 
   def call(_, _), do: {:error, :unknown_operation}
-
-  defp decode(response) do
-    case Jason.decode(response) do
-      {:ok, %{"data" => %{"state" => state} = data}}
-      when state in ["eligibility_verified", "valid_unresolved"] ->
-        {:ok, data}
-
-      _ ->
-        {:error, :access_unavailable}
-    end
-  end
 end

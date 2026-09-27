@@ -20,7 +20,7 @@ defmodule McpServerElixir.CustomerHTTPTest do
       |> put_resp_content_type("application/json")
       |> send_resp(
         status,
-        Jason.encode!(%{data: %{state: "eligibility_verified"}})
+        Jason.encode!(%{data: %{state: "connection_verified"}})
       )
     end
   end

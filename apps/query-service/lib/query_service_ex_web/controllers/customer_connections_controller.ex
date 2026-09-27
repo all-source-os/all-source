@@ -7,15 +7,20 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
   import Plug.Conn
 
   alias QueryServiceEx.Application.Services.CustomerConnections
+  alias QueryServiceEx.Application.Services.CustomerEvidenceSources
   alias QueryServiceEx.RateLimiter
   alias QueryServiceExWeb.CustomerHumanSession
 
   def index(conn, params), do: dispatch(conn, params, :list)
   def create(conn, params), do: dispatch(conn, params, :create)
   def revoke(conn, params), do: dispatch(conn, params, :revoke)
+  def share(conn, params), do: dispatch(conn, params, :share)
 
   defp dispatch(conn, params, operation) do
     with true <- Application.get_env(:query_service_ex, :customer_connections_enabled, false),
+         true <-
+           operation != :share or
+             Application.get_env(:query_service_ex, :customer_evidence_enabled, false),
          true <- conn.query_string == "",
          {:allow, _} <- RateLimiter.check_rate("customer-connections:admission", :free),
          {:ok, actor} <- CustomerHumanSession.actor(conn),
@@ -29,6 +34,26 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
 
       {:error, :storage_unavailable} ->
         error(conn, 503, "access_unavailable")
+
+      {:error, code}
+      when code in [:review_unavailable, :query_usage_unavailable, :clock_moved_backwards] ->
+        error(conn, 503, "access_unavailable")
+
+      {:error, code} when code in [:review_busy, :query_usage_busy, :query_operation_capacity] ->
+        error(conn, 429, "review_busy")
+
+      {:error, :query_quota_exceeded} ->
+        error(conn, 402, "query_quota_exceeded")
+
+      {:error, code}
+      when code in [:idempotency_conflict, :query_operation_conflict, :query_period_changed] ->
+        error(conn, 409, "review_conflict")
+
+      {:error, :query_operation_expired} ->
+        error(conn, 410, "review_expired")
+
+      {:error, :invalid_source_request} ->
+        error(conn, 422, "invalid_source")
 
       {:error, code} when code in [:invalid_request, :invalid_grant, :invalid_consent] ->
         error(conn, 400, "invalid_request")
@@ -51,6 +76,10 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
 
   defp perform(:revoke, actor, %{"id" => id} = params) when map_size(params) == 1,
     do: CustomerConnections.revoke(actor, id, System.system_time(:second))
+
+  defp perform(:share, actor, %{"connection_id" => id, "source" => input} = params)
+       when map_size(params) == 2,
+       do: CustomerEvidenceSources.share(actor, id, input, System.system_time(:second))
 
   defp perform(_, _, _), do: {:error, :invalid_request}
 

@@ -1,0 +1,497 @@
+    Finished `release` profile [optimized] target(s) in 0.01s
+Running ExUnit with seed: 596587, max_cases: 24
+Excluding tags: [:integration, :embedded]
+
+..................................................................................................................................................................................................................................................[error] Tool event_timeline raised: ** (BadMapError) expected a map, got:
+
+    "not a map"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("not a map", "events", [])
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2508: McpServerElixir.Protocol.McpTools.handle_event_timeline/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    test/mcp_server_elixir/stdio_stability_test.exs:94: McpServerElixir.StdioStabilityTest."test a raising tool handler is reported, not fatal call_tool survives a handler that raises mid-flight"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{}
+
+    (erts 16.1.1) :erlang.map_get("entity_id", %{})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2323: McpServerElixir.Protocol.McpTools.handle_reconstruct_state/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    test/mcp_server_elixir/stdio_stability_test.exs:84: McpServerElixir.StdioStabilityTest."test a raising tool handler is reported, not fatal call_tool returns an error when a required argument is missing"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "{\"entity_id\":\"e1\"}"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("{\"entity_id\":\"e1\"}", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:148: anonymous fn/2 in McpServerElixir.StdioStabilityTest.assert_survives/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:147: McpServerElixir.StdioStabilityTest.assert_survives/2
+    test/mcp_server_elixir/stdio_stability_test.exs:164: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees `arguments` sent as a JSON string answers -32603 instead of killing the session"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "reconstruct_state"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("reconstruct_state", "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:148: anonymous fn/2 in McpServerElixir.StdioStabilityTest.assert_survives/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:147: McpServerElixir.StdioStabilityTest.assert_survives/2
+    test/mcp_server_elixir/stdio_stability_test.exs:184: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees `params` sent as a string answers -32603 instead of killing the session"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Response for id 21 is not JSON-encodable: %Protocol.UndefinedError{protocol: Jason.Encoder, value: #PID<0.664.0>, description: "Jason.Encoder protocol must always be explicitly implemented"}
+.[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{}
+
+    (erts 16.1.1) :erlang.map_get("entity_id", %{})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2323: McpServerElixir.Protocol.McpTools.handle_reconstruct_state/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:114: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the server GenServer survives a raising tool call a tools/call with missing arguments answers -32603 instead of crashing"/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:113: McpServerElixir.StdioStabilityTest."test the server GenServer survives a raising tool call a tools/call with missing arguments answers -32603 instead of crashing"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    ["e1"]
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(["e1"], "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:148: anonymous fn/2 in McpServerElixir.StdioStabilityTest.assert_survives/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:147: McpServerElixir.StdioStabilityTest.assert_survives/2
+    test/mcp_server_elixir/stdio_stability_test.exs:171: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees `arguments` sent as a list answers -32603 instead of killing the session"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "oops"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("oops", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:400: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space no notification shape puts a single byte on the JSON-RPC stream"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:399: McpServerElixir.StdioStabilityTest."test the request-shape space no notification shape puts a single byte on the JSON-RPC stream"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+..[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "oops"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("oops", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:200: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees a notification whose handling raises is swallowed, not fatal"/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:199: McpServerElixir.StdioStabilityTest."test the seam survives client-shaped input the tool layer never sees a notification whose handling raises is swallowed, not fatal"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "e1"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("e1", "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    ["e1"]
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(["e1"], "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    5
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(5, "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    nil
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(nil, "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+...[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    true
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(true, "format", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:393: McpServerElixir.Protocol.McpTools.call_tool/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+...[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{
+      "a" => %{
+        "a" => %{
+          "a" => %{
+            "a" => %{
+              "a" => %{
+                "a" => %{
+                  "a" => %{
+                    "a" => %{
+                      "a" => %{
+                        "a" => %{
+                          "a" => %{
+                            "a" => %{
+                              "a" => %{
+                                "a" => %{
+                                  "a" => %{
+                                    "a" => %{
+                                      "a" => %{
+                                        "a" => %{
+                                          "a" => %{
+                                            "a" => %{
+                                              "a" => %{
+                                                "a" => %{
+                                                  "a" => %{
+                                                    "a" => %{
+                                                      "a" => %{
+                                                        "a" => %{
+                                                          "a" => %{
+                                                            "a" => %{
+                                                              "a" => %{
+                                                                "a" => %{
+                                                                  "a" => %{
+                                                                    "a" => %{
+                                                                      "a" => %{
+                                                                        "a" => %{
+                                                                          "a" => %{
+                                                                            "a" => %{
+                                                                              "a" => %{
+                                                                                "a" => %{
+                                                                                  "a" => %{
+                                                                                    "a" => %{
+                                                                                      "a" => %{
+                                                                                        "a" => %{
+                                                                                          "a" => %{
+                                                                                            "a" => %{
+                                                                                              "a" => %{
+                                                                                                "a" => %{
+                                                                                                  "a" => %{
+                                                                                                    "a" => %{
+                                                                                                      "a" => %{
+                                                                                                        "a" => %{
+                                                                                                          "a" => %{
+                                                                                                            "a" => %{
+                                                                                                              "a" => %{
+                                                                                                                "a" => %{
+                                                                                                                  "a" => %{
+                                                                                                                    "a" => %{
+                                                                                                                      "a" => %{
+                                                                                                                        "a" => %{
+                                                                                                                          "a" => %{
+                                                                                                                            "a" => %{
+                                                                                                                              "a" => %{
+                                                                                                                                "a" => %{
+                                                                                                                                  "a" => %{
+                                                                                                                                    "a" => %{
+                                                                                                                                      "a" => %{
+                                                                                                                                        "a" => %{
+                                                                                                                                          "a" => %{
+                                                                                                                                            "a" => %{
+                                                                                                                                              "a" => %{
+                                                                                                                                                "a" => %{
+                                                                                                                                                  "a" => %{
+                                                                                                                                                    "a" => %{
+                                                                                                                                                      "a" => %{
+                                                                                                                                                        "a" => %{
+                                                                                                                                                          "a" => %{
+                                                                                                                                                            "a" => %{
+                                                                                                                                                              "a" => %{
+                                                                                                                                                                "a" => %{
+                                                                                                                                                                  "a" => %{
+                                                                                                                                                                    "a" => %{
+                                                                                                                                                                      "a" => %{
+                                                                                                                                                                        "a" => %{
+                                                            (truncated)
+......[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    "reconstruct_state"
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get("reconstruct_state", "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+..[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    [1, 2]
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get([1, 2], "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+.[error] Request "tools/call" raised: ** (BadMapError) expected a map, got:
+
+    nil
+
+    (elixir 1.19.1) lib/map.ex:541: Map.get(nil, "name", nil)
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:260: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+....[error] Request "tools/call" raised: ** (Protocol.UndefinedError) protocol String.Chars not implemented for Map. This protocol is implemented for: Atom, BitString, Date, DateTime, Decimal, ExJsonSchema.Schema.Ref, ExJsonSchema.Validator.Error.AdditionalItems, ExJsonSchema.Validator.Error.AdditionalProperties, ExJsonSchema.Validator.Error.AllOf, ExJsonSchema.Validator.Error.AnyOf, ExJsonSchema.Validator.Error.Const, ExJsonSchema.Validator.Error.Contains, ExJsonSchema.Validator.Error.ContentEncoding, ExJsonSchema.Validator.Error.ContentMediaType, ExJsonSchema.Validator.Error.Dependencies, ExJsonSchema.Validator.Error.Enum, ExJsonSchema.Validator.Error.False, ExJsonSchema.Validator.Error.Format, ExJsonSchema.Validator.Error.IfThenElse, ExJsonSchema.Validator.Error.ItemsNotAllowed, ExJsonSchema.Validator.Error.MaxItems, ExJsonSchema.Validator.Error.MaxLength, ExJsonSchema.Validator.Error.MaxProperties, ExJsonSchema.Validator.Error.Maximum, ExJsonSchema.Validator.Error.MinItems, ExJsonSchema.Validator.Error.MinLength, ExJsonSchema.Validator.Error.MinProperties, ExJsonSchema.Validator.Error.Minimum, ExJsonSchema.Validator.Error.MultipleOf, ExJsonSchema.Validator.Error.Not, ExJsonSchema.Validator.Error.OneOf, ExJsonSchema.Validator.Error.Pattern, ExJsonSchema.Validator.Error.PropertyNames, ExJsonSchema.Validator.Error.Required, ExJsonSchema.Validator.Error.Type, ExJsonSchema.Validator.Error.UniqueItems, Float, Integer, List, NaiveDateTime, Time, URI, Version, Version.Requirement
+
+Got value:
+
+    %{"a" => 1}
+
+    (elixir 1.19.1) lib/string/chars.ex:7: String.Chars.impl_for!/1
+    (elixir 1.19.1) lib/string/chars.ex:26: String.Chars.to_string/1
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:479: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+........[error] Tool reconstruct_state raised: ** (KeyError) key "entity_id" not found in:
+
+    %{}
+
+    (erts 16.1.1) :erlang.map_get("entity_id", %{})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:2323: McpServerElixir.Protocol.McpTools.handle_reconstruct_state/3
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/protocol/mcp_tools.ex:475: McpServerElixir.Protocol.McpTools.safe_dispatch/4
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:263: McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+...................................................[error] Request 42 raised: ** (FunctionClauseError) no function clause matching in McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:221: McpServerElixir.Server.process_request(%{id: 18, params: %{}, method: 42}, %{read_only: false, control_plane_enabled: false, system_admin: false, backend: McpServerElixir.StdioStabilityTest.StubBackend})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request nil raised: ** (FunctionClauseError) no function clause matching in McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:221: McpServerElixir.Server.process_request(%{id: 19, params: %{}, method: nil}, %{read_only: false, control_plane_enabled: false, system_admin: false, backend: McpServerElixir.StdioStabilityTest.StubBackend})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[error] Request %{"a" => 1} raised: ** (FunctionClauseError) no function clause matching in McpServerElixir.Server.process_request/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:221: McpServerElixir.Server.process_request(%{id: 20, params: %{}, method: %{"a" => 1}}, %{read_only: false, control_plane_enabled: false, system_admin: false, backend: McpServerElixir.StdioStabilityTest.StubBackend})
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:187: McpServerElixir.Server.guarded_process/2
+    (mcp_server_elixir 0.25.1) lib/mcp_server_elixir/server.ex:104: McpServerElixir.Server.handle_info/2
+    test/mcp_server_elixir/stdio_stability_test.exs:359: anonymous fn/2 in McpServerElixir.StdioStabilityTest.drive/1
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:325: ExUnit.CaptureIO.do_capture_gl/2
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:283: ExUnit.CaptureIO.do_with_io/3
+    (ex_unit 1.19.1) lib/ex_unit/capture_io.ex:152: ExUnit.CaptureIO.capture_io/1
+    test/mcp_server_elixir/stdio_stability_test.exs:390: anonymous fn/2 in McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (elixir 1.19.1) lib/enum.ex:2520: Enum."-reduce/3-lists^foldl/2-0-"/3
+    test/mcp_server_elixir/stdio_stability_test.exs:389: McpServerElixir.StdioStabilityTest."test the request-shape space every request shape answers exactly one correlated JSON-RPC frame, and lives"/1
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+    (stdlib 7.1) timer.erl:599: :timer.tc/2
+    (ex_unit 1.19.1) lib/ex_unit/runner.ex:450: anonymous fn/6 in ExUnit.Runner.spawn_test_monitor/4
+
+[warning] Unknown method: frobnicate
+..........................[warning] Failed to parse JSON-RPC request: %Jason.DecodeError{position: 0, token: nil, data: "not json at all"}
+..[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+.[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+.[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+.[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+[warning] Failed to parse JSON-RPC request: "Missing 'method' field"
+.[warning] Failed to parse JSON-RPC request: "Invalid JSON-RPC version or format"
+.[warning] Failed to parse JSON-RPC request: %Jason.DecodeError{position: 33, token: nil, data: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":"}
+..[warning] Failed to parse JSON-RPC request: %Jason.DecodeError{position: 40, token: nil, data: "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"\\ud800\"}"}
+...........................................................................................................................................................................[warning] [CoreProducer] Core became unavailable: :econnrefused
+......[warning] [CoreProducer] Core became unavailable: :econnrefused
+.[warning] [CoreProducer] Core became unavailable: :econnrefused
+.[warning] [CoreProducer] Core became unavailable: :econnrefused
+........[warning] [CoreProducer] Core became unavailable: :econnrefused
+...........[warning] [CoreProducer] Core became unavailable: :econnrefused
+
+Finished in 179.4 seconds (0.4s async, 179.0s sync)
+564 tests, 0 failures (5 excluded)
+** (EXIT from #PID<0.94.0>) exited in: :gen_server.call(:elixir_config, {:serial, #Function<7.44820939/0 in System.untrap_signal/2>}, :infinity)
+    ** (EXIT) no process: the process is not alive or there's no process currently associated with the given name, possibly because its application isn't started
+
+{exit,{noproc,{gen_server,call,[elixir_config,{get_and_put,at_exit,[]},infinity]}},[{gen_server,call,3,[{file,"gen_server.erl"},{line,1301}]},{'Elixir.Kernel.CLI',at_exit,1,[{file,"lib/kernel/cli.ex"},{line,130}]},{'Elixir.Kernel.CLI',run,1,[{file,"lib/kernel/cli.ex"},{line,62}]},{init,start_it,1,[]},{init,start_em,1,[]},{init,do_boot,3,[]}]}

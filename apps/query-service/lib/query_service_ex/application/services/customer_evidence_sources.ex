@@ -1,5 +1,5 @@
 defmodule QueryServiceEx.Application.Services.CustomerEvidenceSources do
-  @moduledoc "Source selection by a verified product actor and resolution under a current scoped connection. No transport binding yet."
+  @moduledoc "Source selection by a verified product actor and resolution under a current scoped connection."
   alias QueryServiceEx.Application.Services.AgentRunEvidence
   alias QueryServiceEx.Application.Services.CustomerConnections
   alias QueryServiceEx.Application.Services.CustomerQueryAdmission, as: Admission

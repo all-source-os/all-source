@@ -1,11 +1,11 @@
 defmodule McpServerElixir.Protocol.CustomerReview do
   @moduledoc """
-  Exclusive customer profile on the existing stdio server. Only context and
-  syntax validation are currently wired. No fallback to general Core/admin tools,
-  no preparation claim, and no human approval tool. Errors never echo inputs.
+  Exclusive customer profile on the existing server. Evidence tools are separately
+  gated. No fallback to general Core/admin tools or human approval. Errors never echo inputs.
   """
 
   alias McpServerElixir.Infrastructure.CustomerReviewClient
+  alias McpServerElixir.Protocol.CustomerEvidenceSchema, as: Evidence
 
   @protocol "2025-06-18"
   @version Mix.Project.config()[:version]
@@ -54,7 +54,13 @@ defmodule McpServerElixir.Protocol.CustomerReview do
         outputSchema: validation_output(),
         annotations: @annotations
       }
-    ]
+    ] ++ evidence_tools()
+  end
+
+  defp evidence_tools do
+    if Application.get_env(:mcp_server_elixir, :customer_evidence_review, false),
+      do: Evidence.tools(),
+      else: []
   end
 
   # Notifications never produce a response, including unknown notifications.
@@ -74,7 +80,7 @@ defmodule McpServerElixir.Protocol.CustomerReview do
       capabilities: %{tools: %{}},
       serverInfo: %{name: "allsource-customer-review", version: @version},
       instructions:
-        "AllSource owns review and human approval. These bindings currently check eligibility and syntax only; source authority and preparation remain unavailable."
+        "AllSource owns review and human approval. Use only discovered tools. Evidence preparation requires explicit product-selected sources and evidence consent. No tool approves or executes an action."
     })
   end
 
@@ -83,35 +89,43 @@ defmodule McpServerElixir.Protocol.CustomerReview do
 
   defp dispatch(%{"method" => "tools/call", "id" => id, "params" => params}, caller)
        when is_map(params) do
-    case {params["name"], Map.get(params, "arguments", %{})} do
-      {"allsource_review_context", arguments} when is_map(arguments) and map_size(arguments) == 0 ->
-        call(id, "context", %{}, caller)
+    tool = Enum.find(tools(), &(&1.name == params["name"]))
+    arguments = Map.get(params, "arguments", %{})
 
-      {"allsource_validate_review_proposal", %{"proposal" => proposal} = arguments}
-      when is_map(proposal) and map_size(arguments) == 1 ->
-        call(id, "validate", arguments, caller)
-
-      _ ->
-        error(id, -32_602, "Unknown tool or invalid arguments")
+    if tool && Evidence.valid?(tool.inputSchema, arguments) do
+      call(id, tool, arguments, caller)
+    else
+      error(id, -32_602, "Unknown tool or invalid arguments")
     end
   end
 
   defp dispatch(%{"id" => id}, _caller),
     do: error(id, -32_601, "Method not available in customer review profile")
 
-  defp call(id, operation, arguments, caller) do
-    case caller.(operation, arguments) do
+  defp call(id, tool, arguments, caller) do
+    case caller.(operation(tool.name), arguments) do
       {:ok, data} ->
-        result(id, %{
-          content: [%{type: "text", text: Jason.encode!(data)}],
-          structuredContent: data,
-          isError: false
-        })
+        if Evidence.valid?(tool.outputSchema, data) do
+          result(id, %{
+            content: [%{type: "text", text: Jason.encode!(data)}],
+            structuredContent: data,
+            isError: false
+          })
+        else
+          result(id, %{
+            content: [%{type: "text", text: message(:access_unavailable)}],
+            isError: true
+          })
+        end
 
       {:error, reason} ->
         result(id, %{content: [%{type: "text", text: message(reason)}], isError: true})
     end
   end
+
+  defp operation("allsource_review_context"), do: "context"
+  defp operation("allsource_validate_review_proposal"), do: "validate"
+  defp operation(name), do: Evidence.operation(name)
 
   defp message(:access_denied),
     do:
@@ -122,9 +136,20 @@ defmodule McpServerElixir.Protocol.CustomerReview do
 
   defp message(:rate_limited), do: "Rate limited. Wait before retrying."
 
+  defp message(:query_quota_exceeded),
+    do:
+      "Query allowance exhausted. Existing exact retries retain their original key; a new operation requires available allowance."
+
+  defp message(:review_conflict),
+    do:
+      "Review conflict. Keep the original retry input unchanged; refresh sources in AllSource for new work."
+
+  defp message(:review_expired),
+    do: "Review or retry expired. Select current evidence in AllSource before starting new work."
+
   defp message(_),
     do:
-      "Connection unavailable. Check the AllSource connection configuration; no work was prepared or approved."
+      "Connection unavailable. Preparation may have persisted. Retry with the same key and exact input. This connection cannot approve or execute."
 
   defp result(id, payload), do: %{jsonrpc: "2.0", id: id, result: payload}
 
@@ -187,13 +212,15 @@ defmodule McpServerElixir.Protocol.CustomerReview do
         },
         operations: %{
           type: "array",
-          maxItems: 2,
+          maxItems: 5,
           uniqueItems: true,
-          items: %{enum: ["read_context", "validate_proposal"]}
+          items: %{
+            enum: ~w(read_context validate_proposal prepare_proposal read_review read_result)
+          }
         },
         source_access: %{const: "unresolved"},
         human_approval: %{const: "required_in_product"},
-        preparation_available: %{const: false}
+        preparation_available: %{type: "boolean"}
       }
     }
   end

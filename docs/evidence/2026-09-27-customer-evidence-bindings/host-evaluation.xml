@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Planned model-driven evaluation, NOT executed. Harness must supply fresh synthetic
+     fixture references and unused read keys per question. Native-host processing
+     approval remains outstanding. Fixed expected answers derive from domain and
+     transport fixtures; this file is not customer-host success evidence. -->
+<evaluation>
+  <qa_pair>
+    <question>In the metadata-only fixture, inspect discovery and permitted context. Can this connection prepare evidence without renewed product consent? Answer yes or no.</question>
+    <answer>no</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the prepared divergent two-run fixture, read the supplied review and its result status. Has preparation itself authorized execution? Answer with the execution field.</question>
+    <answer>none</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the prepared divergent two-run fixture, compare the pinned report and result status. Return the comparison state and result_available joined with a colon.</question>
+    <answer>divergent:false</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect evidence-tool schemas and context in the enabled fixture. Which discovered operation lets the agent grant human approval? Answer none if no such tool exists.</question>
+    <answer>none</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Read the supplied review in the source-revoked fixture. Does the current result disclose comparison evidence? Return its state and whether evidence exists, joined with a colon.</question>
+    <answer>unavailable:false</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect current context and the supplied review in the source-expired fixture. Return the review state and whether evidence exists, joined with a colon.</question>
+    <answer>expired:false</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the source-changed fixture, read the supplied review and compare its status with the pending-review contract. Is its old evidence still current? Return the status.</question>
+    <answer>superseded</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>After discovery in the revoked-grant fixture, attempt the supplied review read. Can a previously paid receipt bypass current grant checks? Answer yes or no.</question>
+    <answer>no</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>In the pending-result fixture, inspect the review and result receipts. Does either contain an authoritative approved outcome? Answer yes or no.</question>
+    <answer>no</answer>
+  </qa_pair>
+  <qa_pair>
+    <question>Inspect tool discovery and permitted context in the evidence-disabled fixture. How many tools are available, and is preparation available? Join the number and boolean with a colon.</question>
+    <answer>2:false</answer>
+  </qa_pair>
+</evaluation>
