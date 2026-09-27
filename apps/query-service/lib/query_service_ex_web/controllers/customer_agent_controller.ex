@@ -11,6 +11,7 @@ defmodule QueryServiceExWeb.CustomerAgentController do
   alias QueryServiceEx.Application.Services.CustomerAgentReview
   alias QueryServiceEx.Application.Services.CustomerEvidenceReview
   alias QueryServiceEx.Application.Services.CustomerRemoteAuthorization
+  alias QueryServiceEx.Application.Services.CustomerReplayReview
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionConsent
   alias QueryServiceEx.Domain.CustomerAgent.Proposal
   alias QueryServiceEx.RateLimiter
@@ -89,7 +90,9 @@ defmodule QueryServiceExWeb.CustomerAgentController do
              :idempotency_conflict,
              :query_operation_conflict,
              :query_period_changed,
-             :source_changed
+             :source_changed,
+             :review_conflict,
+             :projection_not_enabled
            ] ->
         error(conn, 409, "review_conflict")
 
@@ -116,10 +119,20 @@ defmodule QueryServiceExWeb.CustomerAgentController do
   defp shape(params, operation) when is_map(params) do
     expected =
       case operation do
-        op when op in ["read_context", "session"] -> ~w(binding)
-        "validate_proposal" -> ~w(binding proposal)
-        "prepare_proposal" -> ~w(binding expected_revision idempotency_key proposal)
-        _ -> ~w(binding id request_id version)
+        op when op in ["read_context", "session"] ->
+          ~w(binding)
+
+        "validate_proposal" ->
+          ~w(binding proposal)
+
+        "prepare_proposal" ->
+          ~w(binding expected_revision idempotency_key proposal)
+
+        _ ->
+          if(Map.has_key?(params, "digest"),
+            do: ~w(binding digest id request_id version),
+            else: ~w(binding id request_id version)
+          )
       end
 
     if Enum.sort(Map.keys(params)) == expected, do: :ok, else: {:error, :invalid_request}
@@ -158,9 +171,36 @@ defmodule QueryServiceExWeb.CustomerAgentController do
 
   defp perform("session", _, _, _, _), do: {:ok, %{state: "connection_verified"}}
 
+  defp perform(
+         "prepare_proposal",
+         %{"proposal" => %{"kind" => "replay_plan"}} = params,
+         _,
+         token,
+         now
+       ) do
+    if Application.get_env(:query_service_ex, :customer_replay_enabled, false),
+      do:
+        CustomerReplayReview.prepare(token, params["binding"], Map.delete(params, "binding"), now),
+      else: {:error, :access_denied}
+  end
+
   defp perform("prepare_proposal", params, _, token, now),
     do:
       CustomerEvidenceReview.prepare(token, params["binding"], Map.delete(params, "binding"), now)
+
+  defp perform(operation, %{"digest" => _} = params, _, token, now)
+       when operation in ~w(read_review read_result) do
+    if Application.get_env(:query_service_ex, :customer_replay_enabled, false),
+      do:
+        CustomerReplayReview.read(
+          token,
+          params["binding"],
+          Map.delete(params, "binding"),
+          now,
+          operation
+        ),
+      else: {:error, :access_denied}
+  end
 
   defp perform(operation, params, _, token, now) when operation in ~w(read_review read_result),
     do:
@@ -177,7 +217,7 @@ defmodule QueryServiceExWeb.CustomerAgentController do
   defp perform("read_context", _params, access, _, _) do
     evidence? =
       enabled?("prepare_proposal") and
-        access["consent_version"] == ConnectionConsent.evidence_version()
+        access["consent_version"] in ConnectionConsent.evidence_versions()
 
     operations =
       if evidence?,

@@ -175,7 +175,7 @@ defmodule QueryServiceEx.Application.Services.CustomerEvidenceReview do
 
   defp access(token, binding, operation, now) do
     with {:ok, owner} <- CustomerAgentAccess.verify_metered(token, binding, operation, now),
-         true <- owner["consent_version"] == ConnectionConsent.evidence_version() do
+         true <- owner["consent_version"] in ConnectionConsent.evidence_versions() do
       {:ok, owner}
     else
       false -> {:error, :access_denied}

@@ -12,6 +12,8 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionConsent do
   @evidence_version "review-evidence-v2"
   @evidence_fields @fields ++ ~w(selected_run_metadata comparison_evidence pending_review_status)
   @evidence_operations @operations ++ ~w(prepare_proposal read_review read_result)
+  @replay_version "review-replay-v3"
+  @replay_fields @evidence_fields ++ ~w(selected_replay_analysis rebuild_plan action_result)
 
   def version, do: @version
   def fields, do: @fields
@@ -20,6 +22,9 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionConsent do
   def evidence_version, do: @evidence_version
   def evidence_fields, do: @evidence_fields
   def evidence_operations, do: @evidence_operations
+  def replay_version, do: @replay_version
+  def replay_fields, do: @replay_fields
+  def evidence_versions, do: [@evidence_version, @replay_version]
 
   @spec receipt(term(), term(), term(), term()) :: {:ok, map()} | {:error, :invalid_consent}
   def receipt(client, operations, acceptance, now) do
@@ -66,6 +71,9 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ConnectionConsent do
 
   defp contract(%{"version" => @evidence_version}),
     do: %{version: @evidence_version, fields: @evidence_fields, operations: @evidence_operations}
+
+  defp contract(%{"version" => @replay_version}),
+    do: %{version: @replay_version, fields: @replay_fields, operations: @evidence_operations}
 
   defp contract(_), do: nil
 

@@ -8,7 +8,7 @@ export type IssuedConnection = {
   token: string;
   expires_at: number;
   binding: Record<string, string>;
-  consent_version?: "review-metadata-v1" | "review-evidence-v2";
+  consent_version?: "review-metadata-v1" | "review-evidence-v2" | "review-replay-v3";
 };
 
 const clipboardReaders = {
@@ -44,8 +44,11 @@ export function CustomerConnectionSetup({ issued }: { issued: IssuedConnection }
     args: ["start"],
     env: {
       ALLSOURCE_CUSTOMER_REVIEW: "true",
-      ...(issued.consent_version === "review-evidence-v2"
+      ...(["review-evidence-v2", "review-replay-v3"].includes(issued.consent_version ?? "")
         ? { ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW: "true" }
+        : {}),
+      ...(issued.consent_version === "review-replay-v3"
+        ? { ALLSOURCE_CUSTOMER_REPLAY_REVIEW: "true" }
         : {}),
       CUSTOMER_REVIEW_CONNECTION_FILE: path,
     },

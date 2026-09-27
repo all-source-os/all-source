@@ -66,6 +66,12 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewWorkspace do
     end
   end
 
+  defp same_request?(
+         %{"kind" => "replay_analysis"} = left,
+         %{"kind" => "replay_analysis"} = right
+       ),
+       do: Owner.matches?(left, right) and left["request_sha256"] == right["request_sha256"]
+
   defp same_request?(left, right),
     do:
       Owner.matches?(left, right) and

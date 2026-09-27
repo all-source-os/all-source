@@ -26,7 +26,10 @@ defmodule QueryServiceEx.TestSupport.CustomerHumanBrowser do
       max_age: 3600
     )
     |> put_resp_header("cache-control", "no-store")
-    |> put_resp_header("location", "http://127.0.0.1:4344/dashboard/tools/agent-reviews")
+    |> put_resp_header(
+      "location",
+      options[:target_url] || "http://127.0.0.1:4344/dashboard/tools/agent-reviews"
+    )
     |> send_resp(303, "")
   end
 

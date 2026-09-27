@@ -6,7 +6,7 @@ export type EvidenceConnection = {
   consent?: { version: string };
 };
 export type SourceReference = {
-  kind: "run_evidence";
+  kind: "run_evidence" | "replay_analysis";
   ref: string;
   revision: number;
   sha256: string;
@@ -14,6 +14,7 @@ export type SourceReference = {
 export type SavedSource = {
   source: SourceReference;
   run_id: string;
+  projection_name?: string;
   expires_at: number;
   status: string;
 };

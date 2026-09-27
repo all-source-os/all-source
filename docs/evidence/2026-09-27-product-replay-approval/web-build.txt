@@ -1,0 +1,150 @@
+▲ Next.js 16.3.4 (webpack)
+✓ Running next.config.mjs took 8ms
+
+  Creating an optimized production build ...
+(node:70845) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✓ Compiled successfully in 7.2s
+  Running TypeScript ...
+  Finished TypeScript in 1885ms ...
+  Collecting page data using 11 workers ...
+⚠ The Edge Runtime is deprecated. You can use the "nodejs" runtime instead. Learn more: https://nextjs.org/docs/messages/edge-runtime-deprecated
+⚠ Using edge runtime on a page currently disables static generation for that page
+  Generating static pages using 11 workers (0/118) ...
+  Generating static pages using 11 workers (29/118) 
+  Generating static pages using 11 workers (58/118) 
+  Generating static pages using 11 workers (88/118) 
+✓ Generating static pages using 11 workers (118/118) in 792ms
+`z-index` is currently not supported.
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)                                             Revalidate  Expire
+┌ ○ /                                                           5m      1y
+├ ○ /_not-found
+├ ƒ /.well-known/oauth-authorization-server
+├ ƒ /.well-known/oauth-protected-resource
+├ ○ /about
+├ ○ /agent-memory-restart-proof
+├ ƒ /api/[...path]
+├ ƒ /api/auth/callback
+├ ƒ /api/auth/session
+├ ƒ /api/auth/ws-token
+├ ƒ /api/billing/catalog
+├ ƒ /api/billing/change-plan
+├ ƒ /api/billing/checkout
+├ ƒ /api/customer-agent/connections/[operation]
+├ ƒ /api/customer-agent/oauth/[action]
+├ ƒ /api/customer-agent/replay/[operation]
+├ ƒ /api/design-partners/applications
+├ ƒ /api/feedback
+├ ƒ /api/geo/referral
+├ ƒ /api/geo/self-report
+├ ƒ /api/healthz
+├ ƒ /api/notices
+├ ƒ /api/notices/[id]/dismiss
+├ ƒ /api/status/incidents
+├ ƒ /api/status/services
+├ ƒ /api/team/[...path]
+├ ƒ /api/v1/[...path]
+├ ƒ /api/v1/auth/[...path]
+├ ƒ /api/v1/auth/oauth/[...path]
+├ ƒ /api/v1/config/benchmarks
+├ ƒ /api/v1/demo/seed
+├ ƒ /api/v1/demo/start
+├ ○ /architecture
+├ ƒ /blog
+├ ƒ /blog/[slug]
+├ ○ /changelog
+├ ○ /compare/agent-memory
+├ ○ /compare/eventstoredb
+├ ○ /connect
+├ ƒ /connect/claude
+├ ○ /dashboard
+├ ○ /dashboard/analytics
+├ ○ /dashboard/api-keys
+├ ○ /dashboard/billing
+├ ○ /dashboard/demo
+├ ○ /dashboard/demo/onboarding
+├ ○ /dashboard/events
+├ ○ /dashboard/memory
+├ ○ /dashboard/pipelines
+├ ○ /dashboard/settings
+├ ○ /dashboard/settings/audit-log
+├ ƒ /dashboard/settings/connections
+├ ○ /dashboard/team
+├ ƒ /dashboard/tools/agent-reviews
+├ ○ /dashboard/tools/replay
+├ ƒ /design-partners
+├ ○ /design-partners/opengraph-image-eb3b7w
+├ ○ /docs
+├ ○ /docs/api
+├ ○ /docs/chronis
+├ ○ /docs/mcp
+├ ○ /docs/prime
+├ ○ /docs/prime/concepts
+├ ○ /docs/prime/embedded
+├ ○ /docs/prime/http
+├ ○ /docs/prime/mcp
+├ ○ /docs/prime/quickstart
+├ ○ /docs/tenant-setup
+├ ○ /ecosystem
+├ ○ /event-replay-debugging
+├ ○ /event-replay-validation-checklist
+├ ○ /event-sourcing-for-ai-agents
+├ ○ /event-sourcing/patterns
+├   /event-sourcing/patterns/[slug]
+│ ├ ● /event-sourcing/patterns/aggregate-streams
+│ ├ ● /event-sourcing/patterns/optimistic-concurrency
+│ ├ ● /event-sourcing/patterns/projections-read-models
+│ └ ● [+7 more paths]
+├ ○ /examples
+├ ○ /forgot-password
+├ ○ /install
+├   /install/[slug]
+│ ├ ● /install/claude-code
+│ ├ ● /install/claude-desktop
+│ ├ ● /install/cursor
+│ └ ● [+5 more paths]
+├ ○ /login
+├ ƒ /mcp/customer-review
+├ ƒ /og
+├ ○ /onboarding
+├ ○ /platform/event-sourcing
+├ ○ /platform/prime
+├ ○ /platform/projections
+├ ○ /platform/query-service
+├ ○ /platform/stream-processing
+├ ƒ /pricing
+├ ○ /prime
+├ ○ /privacy
+├ ○ /reset-password
+├ ○ /sdks
+├ ○ /signup
+├ ○ /sitemap.xml
+├ ○ /solutions/agent-memory
+├ ○ /solutions/audit-compliance
+├ ○ /solutions/financial-services
+├ ○ /solutions/iot-telemetry
+├ ○ /solutions/multi-tenant-saas
+├ ○ /solutions/quant-intelligence
+├ ○ /solutions/real-time-analytics
+├ ○ /status
+├ ○ /terms
+├ ○ /ui-test
+├ ○ /use-cases
+├ ○ /verify-email
+├ ○ /vs/letta
+├ ○ /vs/mem0
+├ ○ /vs/stoolap
+├ ○ /vs/zep
+├ ○ /what-is-allsource
+└ ○ /what-is-an-event-store
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+

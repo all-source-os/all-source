@@ -19,8 +19,15 @@ defmodule QueryServiceEx.Projections.ReplayAnalysis do
       when is_binary(tenant_id) and is_binary(projection_name) do
     analyzed_at = now_iso8601()
 
-    with {:ok, template} <- Catalog.fetch(projection_name),
+    with {:ok, _template} <- Catalog.fetch(projection_name),
          {:ok, body} <- query_sample(tenant_id, analyzed_at) do
+      from_page(tenant_id, projection_name, body, analyzed_at)
+    end
+  end
+
+  @doc "Build the existing analysis from a caller-validated bounded Core page."
+  def from_page(tenant_id, projection_name, body, analyzed_at) do
+    with {:ok, template} <- Catalog.fetch(projection_name) do
       events = value(body, ["events", :events]) || []
       sampled_events = length(events)
       total_events = total_events(body, sampled_events)

@@ -67,7 +67,17 @@ export async function POST(
     const input = JSON.parse(body);
     if (!input || typeof input !== "object" || Array.isArray(input))
       return failure(400, "invalid_request");
-    if (operation === "create" && input.consent?.version === "review-evidence-v2" && !evidence)
+    if (
+      operation === "create" &&
+      ["review-evidence-v2", "review-replay-v3"].includes(input.consent?.version) &&
+      !evidence
+    )
+      return failure(404, "unavailable");
+    if (
+      operation === "create" &&
+      input.consent?.version === "review-replay-v3" &&
+      process.env.CUSTOMER_REPLAY_ENABLED !== "true"
+    )
       return failure(404, "unavailable");
   } catch {
     return failure(400, "invalid_request");

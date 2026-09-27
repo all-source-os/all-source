@@ -77,7 +77,7 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
          binding = binding(actor, record["client_id"]),
          true <- ConnectionGrant.matches_owner?(record, binding),
          true <- ConnectionConsent.valid?(record),
-         true <- record["consent"]["version"] == ConnectionConsent.evidence_version(),
+         true <- record["consent"]["version"] in ConnectionConsent.evidence_versions(),
          true <- operation in ~w(prepare_proposal read_review read_result),
          true <- ConnectionGrant.valid_for?(record, binding, operation, now),
          {:ok, eligibility} <- metered_eligibility(binding, now),
@@ -85,7 +85,7 @@ defmodule QueryServiceEx.Application.Services.CustomerConnections do
          [%{"status" => "active"}] <- Enum.filter(receipts, &(&1["id"] == id)) do
       {:ok,
        Map.merge(
-         eligibility,
+         Map.put(eligibility, "consent_version", record["consent"]["version"]),
          Map.merge(binding, %{"grant_id" => id, "grant_expires_at" => record["expires_at"]})
        )}
     else

@@ -1,0 +1,651 @@
+Compiling 1 file (.ex)
+Generated query_service_ex app
+[info] [ProjectionSync] ETS cache initialized
+[info] [Cluster] Clustering disabled (CLUSTER_STRATEGY=none)
+[info] [RateLimiter] Started with ETS table rate_limiter_buckets
+[info] [CircuitBreaker] Started with threshold=5, reset_timeout=30000ms
+[info] [ApiKeyStore] Started ETS cache :api_key_store (durable backing: Core)
+[info] [DemoReset] Disabled (set DEMO_RESET_ENABLED=true to enable)
+[info] [ConsistentHash] Started with 1 node(s)
+[info] Starting Horde.RegistryImpl with name QueryServiceEx.Cluster.DistributedRegistry
+[info] Starting Horde.DynamicSupervisorImpl with name QueryServiceEx.Cluster.DistributedSupervisor
+[info] [Membership] Started on node nonode@nohost
+[info] ProjectionServer[index] subscribed to events:type:index
+[info] ProjectionSupervisor started projection: indices
+[info] ProjectionServer[portfolio] subscribed to events:type:portfolio
+[info] ProjectionSupervisor started projection: portfolios
+[info] ProjectionServer[saga] subscribed to events:type:saga
+[info] ProjectionSupervisor started projection: sagas
+[info] ProjectionServer[trade] subscribed to events:type:trade
+[info] ProjectionSupervisor started projection: trades
+[info] [CoreWebSocketClient] Disabled, not connecting
+Running ExUnit with seed: 735589, max_cases: 24
+Excluding tags: [:integration]
+
+     warning: variable "created_event" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 340 │         {:ok, created_event} ->
+     │               ~
+     │
+     └─ test/infrastructure/adapters/rust_core_client_test.exs:340:15: QueryServiceEx.Infrastructure.Adapters.RustCoreClientTest."test integration: complete workflow creates event, queries it back, creates snapshot"/1
+
+...........    warning: unused import Phoenix.ConnTest
+    │
+ 12 │   import Phoenix.ConnTest, only: [json_response: 2]
+    │   ~
+    │
+    └─ test/query_service_ex_web/controllers/fallback_controller_test.exs:12:3
+
+...........................................................................................................................................    warning: unused alias SchemaController
+    │
+ 12 │   alias QueryServiceExWeb.SchemaController
+    │   ~
+    │
+    └─ test/query_service_ex_web/controllers/schema_controller_test.exs:12:3
+
+................................................................warning: variable "filter_op" is unused (if the variable is not meant to be used, prefix it with an underscore)
+└─ (for doctest at) lib/query_service_ex/domain/entities/pipeline.ex:82: QueryServiceEx.Domain.Entities.PipelineTest."doctest QueryServiceEx.Domain.Entities.Pipeline.filter_operator/2 (1)"/1
+
+warning: variable "transform_op" is unused (if the variable is not meant to be used, prefix it with an underscore)
+└─ (for doctest at) lib/query_service_ex/domain/entities/pipeline.ex:102: QueryServiceEx.Domain.Entities.PipelineTest."doctest QueryServiceEx.Domain.Entities.Pipeline.transform_operator/2 (2)"/1
+
+..............................................................................................    warning: unused import Plug.Conn
+    │
+  5 │   import Plug.Conn
+    │   ~
+    │
+    └─ test/query_service_ex_web/controllers/health_controller_test.exs:5:3
+
+...........................................................................warning: No operation spec defined for controller action QueryServiceExWeb.EventController.recent
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+.........warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.get_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.set_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+
+......    warning: variable "conn_with_partial" is unused (if the variable is not meant to be used, prefix it with an underscore)
+    │
+ 43 │       conn_with_partial = put_in(conn_after_first.assigns[:raw_body], part1)
+    │       ~~~~~~~~~~~~~~~~~
+    │
+    └─ test/query_service_ex_web/plugs/raw_body_reader_test.exs:43:7: QueryServiceExWeb.Plugs.RawBodyReaderTest."test read_body/2 accumulates body when reading in chunks"/1
+
+warning: No operation spec defined for controller action QueryServiceExWeb.HealthController.replay
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+...........warning: No operation spec defined for controller action QueryServiceExWeb.BillingController.status
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+.......warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:22: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes security schemes"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+..........................................................................     warning: variable "event" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 136 │           project_fn: fn state, event ->
+     │                                 ~
+     │
+     └─ test/domain/entities/projection_test.exs:136:33: QueryServiceEx.Domain.Entities.ProjectionTest."test valid_projection?/1 validates projection with complex state"/1
+
+...............................................................................................................................................................................warning: No operation spec defined for controller action QueryServiceExWeb.EventController.recent
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.get_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.set_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+
+warning: No operation spec defined for controller action QueryServiceExWeb.HealthController.replay
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.BillingController.status
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:33: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes all expected paths"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+.warning: No operation spec defined for controller action QueryServiceExWeb.EventController.recent
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.get_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.set_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+
+warning: No operation spec defined for controller action QueryServiceExWeb.HealthController.replay
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.BillingController.status
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:62: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi includes tags for grouping"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+.warning: No operation spec defined for controller action QueryServiceExWeb.EventController.recent
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.get_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.TenantController.set_schema_enforcement
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+
+warning: No operation spec defined for controller action QueryServiceExWeb.HealthController.replay
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.BillingController.status
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+warning: No operation spec defined for controller action QueryServiceExWeb.EventController.query_core_compat
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:78: anonymous fn/1 in OpenApiSpex.PathItem.from_valid_routes/1
+  (elixir 1.19.1) lib/enum.ex:1688: Enum."-map/2-lists^map/1-1-"/2
+  (open_api_spex 3.22.4) lib/open_api_spex/path_item.ex:77: OpenApiSpex.PathItem.from_valid_routes/1
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: anonymous fn/1 in OpenApiSpex.Paths.from_routes/1
+  (elixir 1.19.1) lib/enum.ex:1696: anonymous fn/3 in Enum.map/2
+  (stdlib 7.1) maps.erl:894: :maps.fold_1/4
+  (elixir 1.19.1) lib/enum.ex:2532: Enum.map/2
+  (open_api_spex 3.22.4) lib/open_api_spex/paths.ex:40: OpenApiSpex.Paths.from_routes/1
+  (query_service_ex 0.25.1) lib/query_service_ex_web/api_spec.ex:89: QueryServiceExWeb.ApiSpec.spec/0
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:32: QueryServiceExWeb.OpenApiController.spec/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.action/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/controllers/openapi_controller.ex:1: QueryServiceExWeb.OpenApiController.phoenix_controller_pipeline/2
+  (phoenix 1.8.14) lib/phoenix/router.ex:428: Phoenix.Router.__call__/5
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.plug_builder_call/2
+  (query_service_ex 0.25.1) lib/query_service_ex_web/endpoint.ex:1: QueryServiceExWeb.Endpoint.call/2
+  (phoenix 1.8.14) lib/phoenix/test/conn_test.ex:225: Phoenix.ConnTest.dispatch/5
+  test/query_service_ex_web/controllers/openapi_controller_test.exs:6: QueryServiceExWeb.OpenApiControllerTest."test GET /api/openapi returns OpenAPI specification in JSON format"/1
+  (ex_unit 1.19.1) lib/ex_unit/runner.ex:528: ExUnit.Runner.exec_test/2
+
+..........................*................................................*.............................................[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+...........................................[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.[info] ProjectionServer[index] subscribed to events:type:index
+.............................................................................................................................................................................................................................................................................[info] [UsageReporter] Flushing 2 pending increments on shutdown
+......[info] [UsageReporter] Flushing 1 pending increments on shutdown
+.[info] [UsageReporter] Flushing 2 pending increments on shutdown
+.........................
+Finished in 29.0 seconds (4.4s async, 24.5s sync)
+6 doctests, 1137 tests, 0 failures, 2 skipped (171 excluded)

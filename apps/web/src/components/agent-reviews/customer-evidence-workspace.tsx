@@ -14,12 +14,14 @@ import {
 } from "@/lib/customer-review-client";
 import { CustomerEvidenceReport } from "./customer-evidence-report";
 import { CustomerEvidenceSource } from "./customer-evidence-source";
+import { CustomerReplayWorkspace } from "./customer-replay-workspace";
 
-export function CustomerEvidenceWorkspace() {
+export function CustomerEvidenceWorkspace({ replayEnabled = false }: { replayEnabled?: boolean }) {
   const [connections, setConnections] = useState<EvidenceConnection[]>([]);
   const [selected, setSelected] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sourceRevision, setSourceRevision] = useState(0);
   const reload = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -28,7 +30,9 @@ export function CustomerEvidenceWorkspace() {
     try {
       const result = await customerRequest<{ connections: EvidenceConnection[] }>("list", {});
       setConnections(
-        result.connections.filter((item) => item.consent?.version === "review-evidence-v2")
+        result.connections.filter((item) =>
+          ["review-evidence-v2", "review-replay-v3"].includes(item.consent?.version ?? "")
+        )
       );
     } catch {
       setError("Connections could not be loaded. Retry below.");
@@ -99,12 +103,30 @@ export function CustomerEvidenceWorkspace() {
           </p>
         )}
       </section>
-      {connection && <ConnectionWork key={connection.id} connection={connection} />}
+      {connection && (
+        <ConnectionWork
+          key={connection.id}
+          connection={connection}
+          onRevoked={() => setSourceRevision((value) => value + 1)}
+        />
+      )}
+      {connection && replayEnabled && connection.consent?.version === "review-replay-v3" && (
+        <CustomerReplayWorkspace
+          key={`replay-${connection.id}-${sourceRevision}`}
+          connection={connection}
+        />
+      )}
     </div>
   );
 }
 
-function ConnectionWork({ connection }: { connection: EvidenceConnection }) {
+function ConnectionWork({
+  connection,
+  onRevoked,
+}: {
+  connection: EvidenceConnection;
+  onRevoked: () => void;
+}) {
   const [saved, setSaved] = useState<EvidenceWorkspace | null>(null);
   const [review, setReview] = useState<EvidenceReview | null>(null);
   const [baseline, setBaseline] = useState("");
@@ -221,7 +243,10 @@ function ConnectionWork({ connection }: { connection: EvidenceConnection }) {
   }
 
   const active = saved?.connection_status === "active" && connection.expires_at * 1000 > Date.now();
-  const available = saved?.sources.filter((item) => item.status === "saved") ?? [];
+  const available =
+    saved?.sources.filter(
+      (item) => item.status === "saved" && item.source.kind === "run_evidence"
+    ) ?? [];
 
   return (
     <div className="min-w-0 space-y-6" aria-busy={busy}>
@@ -270,7 +295,11 @@ function ConnectionWork({ connection }: { connection: EvidenceConnection }) {
           <ul className="space-y-4">
             {saved.sources.map((item) => (
               <li key={item.source.ref} className="min-w-0 space-y-2 border-t pt-4">
-                <p className="break-all font-mono">Run {item.run_id}</p>
+                <p className="break-all font-mono">
+                  {item.source.kind === "replay_analysis"
+                    ? `Replay analysis · ${item.projection_name}`
+                    : `Run ${item.run_id}`}
+                </p>
                 <p>
                   Revision {item.source.revision} · {item.status} · Expires{" "}
                   {expiryLabel(item.expires_at)}
@@ -291,6 +320,7 @@ function ConnectionWork({ connection }: { connection: EvidenceConnection }) {
                           connection_id: connection.id,
                           source_id: item.source.ref,
                         });
+                        onRevoked();
                         await refresh();
                         setNotice("Source revoked for this connection.");
                       })

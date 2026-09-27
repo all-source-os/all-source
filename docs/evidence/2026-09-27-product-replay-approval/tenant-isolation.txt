@@ -1,0 +1,12 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running `tooling/tenant-isolation-check/target/debug/tenant-isolation-check`
+tenant-isolation-check: 7 documented PubSub exception(s) (review periodically):
+  ~ apps/query-service/lib/query_service_ex/integrations/rabbitmq/consumer.ex:197  topic "events:ingested"  [ISOLATION_OK]
+  ~ apps/query-service/lib/query_service_ex/integrations/kafka/consumer.ex:191  topic "events:ingested"  [ISOLATION_OK]
+  ~ apps/query-service/lib/query_service_ex/application/services/projection_sync.ex:166  topic "events:#{entity_id}"  [ISOLATION_OK]
+  ~ apps/query-service/lib/query_service_ex/application/services/event_pipeline.ex:234  topic "events:#{entity_id}"  [ISOLATION_OK]
+  ~ apps/query-service/lib/query_service_ex/application/services/event_pipeline.ex:243  topic "events:type:#{event_type}"  [ISOLATION_OK]
+  ~ apps/query-service/lib/query_service_ex/infrastructure/adapters/core_websocket_client.ex:38  topic "events:all"  [ISOLATION_OK]
+  ~ apps/query-service/lib/query_service_ex/infrastructure/adapters/core_websocket_client.ex:39  topic "events:user-123"  [ISOLATION_OK]
+tenant-isolation-check: OK — no un-justified global event/projection topics in apps/query-service/lib
+tenant-isolation-check: OK — no per-tenant projection compute in apps/core/src

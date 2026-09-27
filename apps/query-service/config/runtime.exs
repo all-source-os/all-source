@@ -4,6 +4,7 @@ import Config
 config :query_service_ex,
   customer_review_enabled: System.get_env("CUSTOMER_REVIEW_ENABLED") == "true",
   customer_evidence_enabled: System.get_env("CUSTOMER_EVIDENCE_ENABLED") == "true",
+  customer_replay_enabled: System.get_env("CUSTOMER_REPLAY_ENABLED") == "true",
   customer_connections_enabled: System.get_env("CUSTOMER_CONNECTIONS_ENABLED") == "true",
   customer_remote_enabled: System.get_env("CUSTOMER_REMOTE_ENABLED") == "true",
   customer_oauth_issuer: System.get_env("CUSTOMER_OAUTH_ISSUER"),

@@ -27,7 +27,13 @@ async function request<T>(operation: string, body: unknown): Promise<T> {
   return result.data as T;
 }
 
-export function CustomerConnections({ evidenceEnabled = false }: { evidenceEnabled?: boolean }) {
+export function CustomerConnections({
+  evidenceEnabled = false,
+  replayEnabled = false,
+}: {
+  evidenceEnabled?: boolean;
+  replayEnabled?: boolean;
+}) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [accepted, setAccepted] = useState(false);
   const [scope, setScope] = useState("metadata");
@@ -55,7 +61,7 @@ export function CustomerConnections({ evidenceEnabled = false }: { evidenceEnabl
         const result = await request<IssuedConnection>("create", {
           client_id: "claude-code",
           operations:
-            scope === "evidence"
+            scope !== "metadata"
               ? [
                   "read_context",
                   "validate_proposal",
@@ -67,7 +73,12 @@ export function CustomerConnections({ evidenceEnabled = false }: { evidenceEnabl
           ttl: 3600,
           consent: {
             accepted,
-            version: scope === "evidence" ? "review-evidence-v2" : "review-metadata-v1",
+            version:
+              scope === "replay"
+                ? "review-replay-v3"
+                : scope === "evidence"
+                  ? "review-evidence-v2"
+                  : "review-metadata-v1",
           },
         });
         setIssued(result);
@@ -108,6 +119,9 @@ export function CustomerConnections({ evidenceEnabled = false }: { evidenceEnabl
             >
               <option value="metadata">Workspace metadata only</option>
               <option value="evidence">Metadata and selected run evidence</option>
+              {replayEnabled && (
+                <option value="replay">Selected run evidence and replay plans</option>
+              )}
             </select>
           </label>
         )}
@@ -116,12 +130,20 @@ export function CustomerConnections({ evidenceEnabled = false }: { evidenceEnabl
           entitlement, and validate review proposals you provide.
         </p>
         <p className="text-muted-foreground">
-          {scope === "evidence"
+          {scope !== "metadata"
             ? "After you explicitly share each run in Agent reviews, Claude Code can read its selected metadata and comparison evidence, prepare comparisons and read pending review status. These actions use your workspace query allowance. Unselected event content stays private."
             : "Event content stays private."}{" "}
           This connection cannot approve reviews or execute changes. Data returned to Claude may be
           processed by Anthropic under your Claude account settings.
         </p>
+        {scope === "replay" && (
+          <p>
+            After you share a replay analysis, Claude Code can read its bounded sample counts,
+            unknowns, plan and action results. Raw events stay private. Only your explicit decision
+            in AllSource can authorize one projection rebuild; connecting Claude grants no execution
+            authority.
+          </p>
+        )}
         <label className="flex items-start gap-3">
           <input
             type="checkbox"

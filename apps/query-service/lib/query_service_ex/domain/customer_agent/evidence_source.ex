@@ -1,6 +1,7 @@
 defmodule QueryServiceEx.Domain.CustomerAgent.EvidenceSource do
   @moduledoc "Expiring, owner/host/grant-bound references to a pinned typed run; no raw event payloads."
   alias QueryServiceEx.Domain.AgentRun.Event
+  alias QueryServiceEx.Domain.CustomerAgent.ReplaySource
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOperation, as: Operation
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
@@ -30,6 +31,9 @@ defmodule QueryServiceEx.Domain.CustomerAgent.EvidenceSource do
   end
 
   def new(_, _, _, _, _), do: {:error, :invalid_source}
+
+  def valid?(%{"kind" => "replay_analysis"} = source, tenant),
+    do: ReplaySource.valid?(source, tenant)
 
   def valid?(source, tenant) when is_map(source) do
     Enum.sort(Map.keys(source)) == Enum.sort(@keys) and source["schema_version"] === 1 and

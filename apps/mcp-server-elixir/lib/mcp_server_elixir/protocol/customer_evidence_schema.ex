@@ -1,5 +1,6 @@
 defmodule McpServerElixir.Protocol.CustomerEvidenceSchema do
   @moduledoc "Closed schemas for product-selected comparison evidence. No approval operation."
+  alias McpServerElixir.Protocol.CustomerReplaySchema, as: Replay
   @digest %{type: "string", pattern: "^[0-9a-f]{64}$"}
   @id %{type: "string", minLength: 16, maxLength: 128, pattern: "^[A-Za-z0-9_-]+$"}
   @integer %{type: "integer", minimum: 1, maximum: 9_007_199_254_740_991}
@@ -18,9 +19,9 @@ defmodule McpServerElixir.Protocol.CustomerEvidenceSchema do
       tool(
         "allsource_prepare_review",
         "prepare",
-        "Prepare a pending comparison of exactly two product-selected run pins. Costs two admitted queries; exact retries use the same key. Does not approve or execute.",
+        "Prepare a pending review from product-selected evidence. Comparisons cost two queries; a replay plan costs one when enabled. Reuse the exact key and input on retry. Never approves or executes.",
         object(%{
-          proposal: proposal(),
+          proposal: with_replay(proposal(), Replay.proposal()),
           expected_revision: %{enum: [0]},
           idempotency_key: @operation
         })
@@ -28,14 +29,14 @@ defmodule McpServerElixir.Protocol.CustomerEvidenceSchema do
       tool(
         "allsource_get_review",
         "review",
-        "Read a pending review and current pinned evidence. Costs two queries for each new request key; reuse the key on retry. Expired, changed or unavailable sources return status only.",
-        read_input()
+        "Read an exact review version. Comparisons cost two queries; pending replay freshness checks cost one. Replay reads require its digest. Reuse request keys on retry; inspect effective_state and unknowns.",
+        with_replay(read_input(), Replay.read_input(@operation))
       ),
       tool(
         "allsource_get_review_result",
         "result",
-        "Check result status for the exact review version. Currently returns pending with result_available=false; no human approval or execution is implemented. A new live check costs two queries.",
-        read_input()
+        "Read an exact review result. Comparisons remain pending. When enabled, replay results distinguish human approval from dispatch, running, completed, failed, cancelled or unknown. Reading never dispatches. Replay reads require the exact digest.",
+        with_replay(read_input(), Replay.read_input(@operation))
       )
     ]
   end
@@ -45,7 +46,7 @@ defmodule McpServerElixir.Protocol.CustomerEvidenceSchema do
       name: name,
       description: description,
       inputSchema: input,
-      outputSchema: output(operation),
+      outputSchema: with_replay(output(operation), Replay.output()),
       annotations: %{
         readOnlyHint: false,
         destructiveHint: false,
@@ -58,6 +59,12 @@ defmodule McpServerElixir.Protocol.CustomerEvidenceSchema do
   def operation("allsource_prepare_review"), do: "prepare"
   def operation("allsource_get_review"), do: "review"
   def operation("allsource_get_review_result"), do: "result"
+
+  defp with_replay(comparison, replay) do
+    if Application.get_env(:mcp_server_elixir, :customer_replay_review, false),
+      do: %{oneOf: [comparison, replay]},
+      else: comparison
+  end
 
   def valid?(schema, value) do
     # The installed validator supports Draft 4. Normalize constant constraints to enums.

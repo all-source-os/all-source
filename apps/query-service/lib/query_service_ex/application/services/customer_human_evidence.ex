@@ -81,7 +81,7 @@ defmodule QueryServiceEx.Application.Services.CustomerHumanEvidence do
     with true <- Owner.id?(connection),
          {:ok, %{connections: receipts}} <- Connections.list(actor, now),
          [receipt] <- Enum.filter(receipts, &(&1["id"] == connection)),
-         true <- receipt["consent"]["version"] == ConnectionConsent.evidence_version(),
+         true <- receipt["consent"]["version"] in ConnectionConsent.evidence_versions(),
          binding = Connections.binding(actor, receipt["client_id"]),
          true <- receipt["resource"] == binding["resource"],
          owner = Map.put(binding, "grant_id", connection),
@@ -124,6 +124,14 @@ defmodule QueryServiceEx.Application.Services.CustomerHumanEvidence do
       true -> "saved"
     end
   end
+
+  defp summary(%{"kind" => "replay_analysis"} = record, "sources", status),
+    do: %{
+      source: EvidenceSource.reference(record),
+      projection_name: record["locator"],
+      expires_at: record["expires_at"],
+      status: status
+    }
 
   defp summary(record, "sources", status),
     do: %{

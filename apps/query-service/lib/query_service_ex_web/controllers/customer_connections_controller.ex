@@ -25,6 +25,9 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
   defp dispatch(conn, params, operation) do
     with true <- Application.get_env(:query_service_ex, :customer_connections_enabled, false),
          true <-
+           get_in(params, ["consent", "version"]) != "review-replay-v3" or
+             Application.get_env(:query_service_ex, :customer_replay_enabled, false),
+         true <-
            not evidence_request?(operation, params) or
              Application.get_env(:query_service_ex, :customer_evidence_enabled, false),
          true <- conn.query_string == "",
@@ -124,7 +127,7 @@ defmodule QueryServiceExWeb.CustomerConnectionsController do
   defp perform(_, _, _), do: {:error, :invalid_request}
 
   defp evidence_request?(:create, params),
-    do: get_in(params, ["consent", "version"]) == "review-evidence-v2"
+    do: get_in(params, ["consent", "version"]) in ~w(review-evidence-v2 review-replay-v3)
 
   defp evidence_request?(operation, _),
     do: operation in [:share, :inspect_run, :workspace, :read_review, :revoke_source]

@@ -1,33 +1,45 @@
 # AllSource customer workflow
 
-Status: draft integration contract, not a live connector claim.
+Status: default-off local implementation under verification, not a production activation or customer-install claim.
 
 ## Restricted implementation currently under verification
 
 The existing Elixir MCP server has an opt-in customer review profile. Actual
-discovery depends on the separate evidence flag. Neither flag implies production
-availability, consent or a completed human decision surface.
+discovery depends on the evidence flag; replay schemas require a separate replay
+flag. These flags do not imply production availability or processing consent.
 
 | Discovered tool | Current result |
 |---|---|
 | `allsource_review_context` | Checks the opaque grant, current stored team membership and persisted MCP entitlement. Reports `eligibility_verified` and allowed operations. Preparation is available only with evidence consent, scope and server configuration. Source access remains unresolved until the specific pins are checked. |
 | `allsource_validate_review_proposal` | Runs the product's typed proposal and curated projection validation. Returns `valid_unresolved`, a request fingerprint, explicit unknowns, `persisted: false` and `approved: false`. |
-| `allsource_prepare_review` | Evidence flag only. Compares exactly two product-selected `run_evidence` references and saves a connection-owned pending review. Requires revision zero and a stable idempotency key; returns ID, version, digest, expiry and unknowns. Never approves or executes. |
-| `allsource_get_review` | Evidence flag only. Requires the exact review ID/version and a stable request key. Returns current pinned comparison evidence or an expired, superseded or unavailable status without evidence. |
-| `allsource_get_review_result` | Evidence flag only. Same identity requirements. A live review currently returns `pending`, `result_available: false`, `approved: false`, `execution: none`. No accepted outcome exists through this binding. |
+| `allsource_prepare_review` | Saves a pending comparison from two `run_evidence` pins. With replay discovery and v3 consent, also prepares one enabled curated projection from one product-selected `replay_analysis` pin. Requires revision zero and a stable idempotency key. Never approves or executes. |
+| `allsource_get_review` | Requires exact ID/version and a stable request key; replay reads also require the digest. Revalidates pending evidence. Inspect `effective_state` for replay freshness; stored `state` alone does not prove a current review. |
+| `allsource_get_review_result` | Comparisons remain pending with no accepted outcome. Replay results can contain a product decision and its one recorded execution identity. Approved, not_started, running, completed, failed, cancelled and unknown are different outcomes. Reads never dispatch. |
 
 Check actual discovery before using any name. A successful eligibility or syntax
 check is not a pending draft, source authorization or a human decision. Stop with
 an explicit incomplete state when the requested job requires an unavailable
 binding. No public endpoint, installation or processing consent follows from
-this local profile. Event timelines, restart/replay preparation, product display,
-editing and human decisions remain incomplete.
+this local profile. Event timelines and restart proof remain incomplete. Replay
+support is limited to the tested bounded-analysis and curated-rebuild contract.
 
-Selected evidence requires `review-evidence-v2` connection consent and explicit
-product-session sharing of each pinned run. Existing `review-metadata-v1` grants
-cannot prepare or read evidence. An agent cannot share sources or upgrade its
-own grant. Product source-selection UI and remote OAuth evidence-consent UI are
-not complete; do not construct grants, source IDs or human-session calls yourself.
+Selected run evidence requires `review-evidence-v2` or `review-replay-v3` connection
+consent and explicit product sharing of each source. Replay analysis additionally
+requires v3 consent. Metadata-only grants cannot read either. An agent cannot
+share sources, upgrade its grant, edit a product review or call human-session
+endpoints. Use the product-generated proposal unchanged and the configured
+authenticated Agent reviews route for handoff; never invent source IDs.
+
+Replay evidence contains at most 1,000 sampled events' counts and hashes, never
+their raw payloads. Total-count provenance, authoritative order, restart proof,
+run comparison and archive completeness remain unknown. The reviewed action reads
+retained history at dispatch with live catch-up; this is not a frozen full-history
+replay. Changed analysis or reducer revision requires renewed product review.
+Only the review-owning current workspace administrator can approve the exact
+version and digest. A meaningful edit increments the version. A decision receipt
+binds expiry and one replay operation; reconnecting or chat assent cannot replace
+it. The product can recover a committed approval whose dispatch has not started.
+An unknown dispatch is never automatically dispatched again. Report uncertainty.
 
 Evidence services admit canonical query usage before source reads and
 preserve the original metering request through uncertain replies and restart.
@@ -41,10 +53,12 @@ reads from every gateway use the existing leader's shared archive pool. A busy
 refusal starts no workflow and consumes no query units. Cancellation can follow
 an already committed usage receipt or pending draft, so preserve the original
 identity if the user retries; do not start parallel retry loops. An uncertain
-reply can hide a committed draft; never claim nothing was saved. A source share
-costs one query, preparation costs two, and each new live review/result request
-costs two. Exact retries do not charge again. Billing reset adoption, product and
-host delivery gates still block activation.
+reply can hide a committed draft; never claim nothing was saved. Each source
+inspection/share costs one query. Comparison preparation and live reads cost two.
+Replay preparation and pending freshness reads cost one; historical result reads
+do not re-run source analysis. Exact retries do not charge again. Billing reset
+adoption, production configuration and actual host delivery gates still block
+activation. Local synthetic verification does not prove a customer outcome.
 
 ## Intended request
 

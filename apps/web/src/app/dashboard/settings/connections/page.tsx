@@ -45,7 +45,10 @@ export default async function ConnectionsPage() {
               Open Agent reviews to share sources and inspect saved comparisons
             </Link>
           )}
-          <CustomerConnections evidenceEnabled={process.env.CUSTOMER_EVIDENCE_ENABLED === "true"} />
+          <CustomerConnections
+            evidenceEnabled={process.env.CUSTOMER_EVIDENCE_ENABLED === "true"}
+            replayEnabled={process.env.CUSTOMER_REPLAY_ENABLED === "true"}
+          />
         </>
       ) : (
         <p className="rounded-xl border p-6 text-base">Agent connections are not available yet.</p>

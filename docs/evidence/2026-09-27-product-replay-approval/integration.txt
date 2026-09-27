@@ -1,0 +1,35 @@
+[info] [ProjectionSync] ETS cache initialized
+[info] [Cluster] Clustering disabled (CLUSTER_STRATEGY=none)
+[info] [RateLimiter] Started with ETS table rate_limiter_buckets
+[info] [CircuitBreaker] Started with threshold=5, reset_timeout=30000ms
+[info] [ApiKeyStore] Started ETS cache :api_key_store (durable backing: Core)
+[info] [DemoReset] Disabled (set DEMO_RESET_ENABLED=true to enable)
+[info] [ConsistentHash] Started with 1 node(s)
+[info] Starting Horde.RegistryImpl with name QueryServiceEx.Cluster.DistributedRegistry
+[info] Starting Horde.DynamicSupervisorImpl with name QueryServiceEx.Cluster.DistributedSupervisor
+[info] [Membership] Started on node nonode@nohost
+[info] ProjectionServer[index] subscribed to events:type:index
+[info] ProjectionSupervisor started projection: indices
+[info] ProjectionServer[portfolio] subscribed to events:type:portfolio
+[info] ProjectionSupervisor started projection: portfolios
+[info] ProjectionServer[saga] subscribed to events:type:saga
+[info] ProjectionSupervisor started projection: sagas
+[info] ProjectionServer[trade] subscribed to events:type:trade
+[info] ProjectionSupervisor started projection: trades
+[info] [CoreWebSocketClient] Disabled, not connecting
+Running ExUnit with seed: 813594, max_cases: 24
+Including tags: [:integration]
+
+22:52:38.247 [info] 🌟 AllSource MCP Server (Elixir) starting...
+22:52:38.247 [info] 📡 Core API: http://localhost:3900
+22:52:38.247 [info] 🎛️  Control Plane: http://localhost:3901
+22:52:38.247 [info] 🔒 Read-only mode enabled
+22:52:38.247 [info] Customer review profile: restricted tools, no approval or execution
+.........22:52:41.076 [info] 🌟 AllSource MCP Server (Elixir) starting...
+22:52:41.076 [info] 📡 Core API: http://localhost:3900
+22:52:41.076 [info] 🎛️  Control Plane: http://localhost:3901
+22:52:41.076 [info] 🔒 Read-only mode enabled
+22:52:41.076 [info] Customer review profile: restricted tools, no approval or execution
+............
+Finished in 10.5 seconds (0.00s async, 10.5s sync)
+21 tests, 0 failures

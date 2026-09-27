@@ -19,7 +19,7 @@ export default async function AgentReviewsPage() {
       </header>
       {process.env.CUSTOMER_CONNECTIONS_ENABLED === "true" &&
       process.env.CUSTOMER_EVIDENCE_ENABLED === "true" ? (
-        <CustomerEvidenceWorkspace />
+        <CustomerEvidenceWorkspace replayEnabled={process.env.CUSTOMER_REPLAY_ENABLED === "true"} />
       ) : (
         <p className="rounded-xl border p-6 text-base">
           Agent evidence reviews are not available yet.
