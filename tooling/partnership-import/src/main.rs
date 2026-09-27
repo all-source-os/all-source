@@ -123,6 +123,7 @@ fn convert(evidence: &Value, judgments: &Value, ledger: &str) -> Result<Value> {
             json!({"model":string(reply,"model")?,"run_at":format!("{as_of}T00:00:00Z"),"fit":value("product_fit")?,"leverage":value("channel_leverage")?,"access":value("commercial_access")?,"paid_demand":value("paid_demand")?,"rationale":format!("Commercial-route evidence rubric v1. Original Jev expected ordinal scores from {as_of}, not conversion probabilities. Date-only run precision. Later contact-route discoveries have NOT overwritten the original scores. Heavybit's explicit discovery-introduction mechanism may have been underweighted; inspect packet before reranking.\nOriginal rubric: {}",serde_json::to_string(&judgment["questions"])?)})
         };
         let sent_section = section(ledger, name);
+        let previously_contacted = candidate["previously_contacted"].as_bool().unwrap_or(false);
         let messages = sent_section
             .map(|s| message(s, legacy_id, as_of))
             .transpose()?
@@ -141,7 +142,11 @@ fn convert(evidence: &Value, judgments: &Value, ledger: &str) -> Result<Value> {
                 string(candidate, "route")?
             )
         } else {
-            notes.push_str(" Previous contact is reported in the batch ledger, but exact message/provider proof is not present in this imported packet. Do NOT resend; reconcile the earlier channel history first.");
+            if previously_contacted {
+                notes.push_str(" Previous contact is explicitly reported in the evidence packet, but exact message/provider proof is absent. Do NOT resend; reconcile earlier channel history first.");
+            } else {
+                notes.push_str(" No sent interaction was found in this ledger. This is not proof that the organisation has never been contacted; check channel history before outreach.");
+            }
             string(candidate, "route")?.to_owned()
         };
         let kind = match legacy_id {
@@ -149,7 +154,12 @@ fn convert(evidence: &Value, judgments: &Value, ledger: &str) -> Result<Value> {
             "plugandplay" => "accelerator",
             _ => "vc",
         };
-        records.push(json!({"id":id,"organization":name,"kind":kind,"geography":string(candidate,"geography")?,"website":website,"status":"awaiting_reply","angle":string(evidence,"goal")?,"contact_route":route,"next_action":"Check existing channel for a reply; do not send a duplicate or automatic follow-up.","next_action_at":"","notes":notes,"limitations":strings(candidate,"limitations")?.join("\n"),"reply_checked_at":"","sources":sources,"score":score,"messages":messages}));
+        let status = if sent_section.is_some() || previously_contacted {
+            "awaiting_reply"
+        } else {
+            "research"
+        };
+        records.push(json!({"id":id,"organization":name,"kind":kind,"geography":string(candidate,"geography")?,"website":website,"status":status,"angle":string(evidence,"goal")?,"contact_route":route,"next_action":"Check existing channel history and current evidence before proposing a next action. No automatic sends.","next_action_at":"","notes":notes,"limitations":strings(candidate,"limitations")?.join("\n"),"reply_checked_at":"","sources":sources,"score":score,"messages":messages}));
     }
     Ok(json!({"records":records}))
 }
@@ -195,6 +205,17 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn missing_message_does_not_invent_a_previous_send() {
+        let mut evidence = json!({"as_of":"2026-09-26","goal":"Synthetic", "candidates":[{"id":"example","name":"Example","type":"VC","sources":["https://example.com"],"facts":["Synthetic"],"route":"Unverified","geography":"UK","limitations":["No demand verified"]}]});
+        let packet = convert(&evidence, &json!({}), "No sends").unwrap();
+        assert_eq!(packet["records"][0]["status"], "research");
+        assert_eq!(packet["records"][0]["messages"], json!([]));
+        evidence["candidates"][0]["previously_contacted"] = json!(true);
+        let packet = convert(&evidence, &json!({}), "No exact message").unwrap();
+        assert_eq!(packet["records"][0]["status"], "awaiting_reply");
+        assert_eq!(packet["records"][0]["messages"], json!([]));
+    }
     #[test]
     fn imports_exact_body_and_proof_without_sending() {
         let ledger = "- Destination: team@example.com\n- Status: sent; provider SENT verified\n- Sent at: 2026-09-26 12:34:56 UTC\n\nHello team,\n\nSynthetic message.\n";

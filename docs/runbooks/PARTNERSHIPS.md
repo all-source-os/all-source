@@ -46,7 +46,9 @@ cargo run --manifest-path tooling/partnership-import/Cargo.toml -- \
 The converter performs no network requests. It preserves exact messages, actual
 model scores, confirmation evidence and timestamp precision; missing legacy
 message proof stays in notes, not a fabricated sent record. Review generated
-records before importing. The optional use-case test validates them without
+records before importing. Set a candidate's `previously_contacted: true` only
+when separate evidence substantiates prior contact; otherwise a candidate with
+no message remains in Research, not Awaiting reply. The optional use-case test validates them without
 persisting them (`PARTNERSHIP_IMPORT_PATH=<absolute file>` with
 `go test ./internal/application/usecases -run TestPartnershipPrivateImportValidation -v`
 from `apps/control-plane`). Private staging is ignored by both Git and Docker.
