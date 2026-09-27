@@ -2,7 +2,7 @@ defmodule QueryServiceExWeb.CustomerOAuthController do
   @moduledoc "Opt-in hosted connection handshake. OAuth consent never approves a product action."
   use Phoenix.Controller, formats: [:json]
   import Plug.Conn
-  alias QueryServiceEx.Application.Services.CustomerRemoteAuthorization
+  alias QueryServiceEx.Application.Services.CustomerRemoteAuthorization, as: Remote
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionConsent
   alias QueryServiceEx.Domain.CustomerAgent.ConnectionGrant
   alias QueryServiceEx.Domain.CustomerAgent.RemoteAuthorization
@@ -64,7 +64,7 @@ defmodule QueryServiceExWeb.CustomerOAuthController do
   defp perform(:prepare, conn, params, config) do
     with [] <- get_req_header(conn, "authorization"),
          {:ok, request_token} <-
-           CustomerRemoteAuthorization.seal_request(params, config.resource, now()) do
+           Remote.seal_request(params, config.resource, now()) do
       {:ok, %{request_token: request_token}}
     else
       _ -> {:error, :invalid_request}
@@ -74,7 +74,7 @@ defmodule QueryServiceExWeb.CustomerOAuthController do
   defp perform(:inspect, conn, %{"request_token" => token} = params, config)
        when map_size(params) == 1 do
     with [] <- get_req_header(conn, "authorization"),
-         {:ok, request} <- CustomerRemoteAuthorization.open_request(token, config.resource, now()) do
+         {:ok, request} <- Remote.open_request(token, config.resource, now()) do
       {:ok,
        request
        |> Map.take(~w(client_id redirect_uri resource scope state))
@@ -95,9 +95,9 @@ defmodule QueryServiceExWeb.CustomerOAuthController do
          {:ok, actor} <- CustomerHumanSession.actor(conn),
          {:allow, _} <-
            RateLimiter.check_rate("customer-connections:" <> actor["tenant_id"], :free),
-         {:ok, request} <- CustomerRemoteAuthorization.open_request(token, config.resource, now()),
+         {:ok, request} <- Remote.open_request(token, config.resource, now()),
          true <- consent == %{"accepted" => true, "version" => ConnectionConsent.version()},
-         {:ok, issued} <- CustomerRemoteAuthorization.authorize(actor, request, consent, now()) do
+         {:ok, issued} <- Remote.authorize(actor, request, consent, now()) do
       {:ok, Map.put(issued, :issuer, config.issuer)}
     else
       false -> {:error, :access_denied}
@@ -107,9 +107,9 @@ defmodule QueryServiceExWeb.CustomerOAuthController do
 
   defp perform(:token, conn, params, _config) do
     with [] <- get_req_header(conn, "authorization"),
-         {:ok, issued} <- CustomerRemoteAuthorization.redeem(params, now()),
+         {:ok, issued} <- Remote.redeem(params, now()),
          stamp = now(),
-         {:ok, access_token} <- CustomerRemoteAuthorization.seal_access(issued, stamp) do
+         {:ok, access_token} <- Remote.seal_access(issued, stamp) do
       {:ok,
        %{
          access_token: access_token,

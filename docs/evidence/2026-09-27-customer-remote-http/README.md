@@ -132,3 +132,13 @@ References: [design](../../plans/2026-09-27-customer-remote-oauth-design.md),
 [rollout configuration](../../runbooks/CUSTOMER_REMOTE_CONNECTIONS.md),
 [MCP HTTP transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports),
 [Claude authentication](https://claude.com/docs/connectors/building/authentication).
+# CI formatter follow-up
+
+Query Service CI run `36310262921` failed its Elixir 1.18 formatter on two
+constructs accepted by local Elixir 1.19. The follow-up uses a shorter service
+alias and separates HTTP tuple matching from payload assertions, preserving
+the same assertions. Local format, strict Credo and actual Core/compiled MCP
+HTTP regression passed: 6 tests, 0 failures, 1 optional browser fixture skipped.
+The original manifests below describe the original implementation, not this
+formatter-only source delta. MCP CI for `d1ba62e0` passed; deployment and host
+verification remain gated as described below.

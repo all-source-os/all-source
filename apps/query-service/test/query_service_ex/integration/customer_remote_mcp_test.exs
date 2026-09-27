@@ -54,8 +54,7 @@ defmodule QueryServiceEx.Integration.CustomerRemoteMCPTest do
                  "allsource_validate_review_proposal"
                ]
 
-        assert {200,
-                %{"result" => %{"structuredContent" => %{"state" => "eligibility_verified"}}}, _} =
+        assert {200, %{"result" => context_result}, _} =
                  MCP.http(
                    url,
                    :post,
@@ -63,18 +62,11 @@ defmodule QueryServiceEx.Integration.CustomerRemoteMCPTest do
                    rpc("tools/call", %{name: "allsource_review_context", arguments: %{}})
                  )
 
+        assert %{"structuredContent" => %{"state" => "eligibility_verified"}} = context_result
+
         proposal = %{schema_version: 1, kind: "event_timeline", projection_name: nil, sources: []}
 
-        assert {200,
-                %{
-                  "result" => %{
-                    "structuredContent" => %{
-                      "state" => "valid_unresolved",
-                      "approved" => false,
-                      "persisted" => false
-                    }
-                  }
-                }, _} =
+        assert {200, %{"result" => validation_result}, _} =
                  MCP.http(
                    url,
                    :post,
@@ -84,6 +76,14 @@ defmodule QueryServiceEx.Integration.CustomerRemoteMCPTest do
                      arguments: %{proposal: proposal}
                    })
                  )
+
+        assert %{
+                 "structuredContent" => %{
+                   "state" => "valid_unresolved",
+                   "approved" => false,
+                   "persisted" => false
+                 }
+               } = validation_result
 
         for method <- ["resources/read", "approve_review", "ingest_event"] do
           assert {200, %{"error" => %{"code" => -32_601}}, _} =

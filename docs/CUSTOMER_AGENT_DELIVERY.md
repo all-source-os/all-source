@@ -24,12 +24,12 @@ Pending drafts use the current product persistence/privacy architecture. Any cha
 |---|---|---|
 | Product MCP/HITL contract | specified | This record and bundled references |
 | Customer Claude skill | draft | Local portable package; validation is separate from actual use |
-| MCP runtime and shared rules | partially verified locally | Compiled stdio profile → real HTTP → Core, two discovered tools, typed validation, matching text/structured results and revoked reconnect denial; no preparation/status/result binding |
+| MCP runtime and shared rules | partially verified locally | Compiled stdio and HTTP profiles → real Query Service → Core, two discovered tools, typed validation, matching text/structured results and revoked reconnect denial; no preparation/status/result binding |
 | Human gate and display | not-tested | Actual product interaction and agent-credential denial needed |
 | Claude Code skill + connector | not-tested | Install complete package, connect and complete product handoff |
 | claude.ai skill + connector | not-tested | Separate install/connector and real host test |
 | Host MCP App | not-tested | Actual host render, accessibility and plain-text fallback |
-| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, conditional consent/grant issuance, owner listing/revoke UI, bounded issuance, WAL recovery, OAuth/email ownership, verified-email joins and local OS-owner file checks; remote PKCE, legacy ownership migration, retention and deployed consistency remain open |
+| Identity, entitlement, privacy, recovery | partially verified locally | Current membership/billing, consent/grant issuance, owner listing/revoke UI, issuance limits, WAL recovery, verified-email joins, local OS-owner checks and remote S256/code/token/HTTP lifecycle; actual hosts, legacy ownership migration, retention and deployed consistency remain open |
 | Production discovery/distribution | not-tested | Verified endpoint, binding/config guide and release package |
 | Qualified customer outcome | unknown | Existing BET gate evidence remains authoritative |
 
@@ -60,7 +60,7 @@ revocation through actual Query Service/Core. Concurrent issuance and limits
 survive Core restart. The local form records versioned host/field consent, but
 does not prove an OS owner, install a host connector, prepare a review, or confer
 human action authority. Production issuance stays disabled. Unconsented v1
-credentials deliberately require reconnect; remote credentials await PKCE.
+credentials deliberately require reconnect. Remote PKCE and HTTP evidence follows below.
 
 [Local connection installation evidence](evidence/2026-09-27-local-customer-connection/README.md)
 adds actual UID/file/link/ACL enforcement and a bounded Rust utility packaged with
@@ -68,17 +68,27 @@ the existing Elixir server. The website supplies complete one-time configuration
 a private install command and a credential-free Claude Code registration command.
 Synthetic browser copy/paste, packaged installer, compiled MCP and Core checks
 passed locally. This is an OS-account boundary, not application attestation or
-isolation from other programs sharing that account. Linux CI/build, native host
-proof and release distribution remain required. Production issuance is not enabled.
-
-## Required acceptance
+isolation from other programs sharing that account. Linux MCP quality gates and
+all four Docker builds for `ba81761f` passed. Native host proof and release
+distribution remain required. Production issuance is not enabled.
 
 [Remote authorization service evidence](evidence/2026-09-27-remote-customer-authorization/README.md)
 adds exact hosted-client/redirect/resource S256 checks, encrypted expiring codes,
 pending-grant denial and single-use Core activation with replay revocation. Actual
-Core crash/restart and existing compiled local MCP regressions passed. Public
-OAuth endpoints, browser consent and remote MCP HTTP transport are still unwired;
-this internal service does not complete the remote connection or authorize release.
+Core crash/restart and existing compiled local MCP regressions passed.
+
+[Remote HTTP evidence](evidence/2026-09-27-customer-remote-http/README.md) adds
+default-off public OAuth discovery, encrypted request cookies, verified human
+consent, bounded token exchange and the existing MCP profile over HTTP. The
+actual local Next → Query Service → compiled MCP → Core fixture passed consent,
+CSRF, exchange, tool calls and replay revocation. Browser consent rendered, but
+browser-tool form navigation was blocked with `ERR_BLOCKED_BY_CLIENT`; interactive
+consent and real Claude host verification are still open. This is synthetic
+local proof, not a production connection, source disclosure or action approval.
+The shared-tree web build included an unrelated analytics edit; deployment needs
+a clean committed-tree build. See the [connection runbook](runbooks/CUSTOMER_REMOTE_CONNECTIONS.md).
+
+## Required acceptance
 
 1. Normal customer request produces only a pending proposal and the correct product review/display.
 2. Agent credential, forged approved flag and chat assent cannot execute the gated action.
