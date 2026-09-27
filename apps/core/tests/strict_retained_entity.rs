@@ -65,17 +65,40 @@ fn complete_archive_and_pending_tail_survive_flush_eviction_and_reopen() {
     let config = EventStoreConfig::with_persistence(directory.path());
     let store = EventStore::with_config(config.clone());
     for previous in 0..3 {
+        let mut input = event(TENANT, ENTITY, json!({"synthetic": true}));
+        // Deliberately reverse submicrosecond time within one persisted tick.
+        // Linux exposes this precision naturally; macOS must force it here.
+        input.timestamp = "2026-01-01T00:00:00.123456999Z".parse().unwrap();
+        input.timestamp -= chrono::TimeDelta::nanoseconds(previous as i64 * 100);
         store
-            .ingest_with_expected_version(
-                &event(TENANT, ENTITY, json!({"synthetic": true})),
-                Some(previous),
-            )
+            .ingest_with_expected_version(&input, Some(previous))
             .unwrap();
     }
     let (before, total) = store
         .query_retained_entity(TENANT, ENTITY, 1001, &ReadScope::unrestricted())
         .unwrap();
     assert_eq!(total, 3);
+    assert_eq!(
+        before.iter().map(|event| event.version).collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+    assert!(
+        before
+            .iter()
+            .all(|event| event.timestamp.timestamp_subsec_nanos() == 123_456_000)
+    );
+    let generic = store
+        .query(&QueryEventsRequest {
+            tenant_id: Some(TENANT.into()),
+            entity_id: Some(ENTITY.into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(
+        generic
+            .iter()
+            .all(|event| event.timestamp.timestamp_subsec_nanos() % 1000 != 0)
+    );
     store.flush_storage().unwrap();
     store.evict_tenant(TENANT);
     let (after, total) = store

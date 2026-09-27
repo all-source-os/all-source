@@ -1,0 +1,40 @@
+[info] [ProjectionSync] ETS cache initialized
+[info] [Cluster] Clustering disabled (CLUSTER_STRATEGY=none)
+[info] [RateLimiter] Started with ETS table rate_limiter_buckets
+[info] [CircuitBreaker] Started with threshold=5, reset_timeout=30000ms
+[info] [ApiKeyStore] Started ETS cache :api_key_store (durable backing: Core)
+[info] [DemoReset] Disabled (set DEMO_RESET_ENABLED=true to enable)
+[info] [ConsistentHash] Started with 1 node(s)
+[info] Starting Horde.RegistryImpl with name QueryServiceEx.Cluster.DistributedRegistry
+[info] Starting Horde.DynamicSupervisorImpl with name QueryServiceEx.Cluster.DistributedSupervisor
+[info] [Membership] Started on node nonode@nohost
+[info] ProjectionServer[index] subscribed to events:type:index
+[info] ProjectionSupervisor started projection: indices
+[info] ProjectionServer[portfolio] subscribed to events:type:portfolio
+[info] ProjectionSupervisor started projection: portfolios
+[info] ProjectionServer[saga] subscribed to events:type:saga
+[info] ProjectionSupervisor started projection: sagas
+[info] ProjectionServer[trade] subscribed to events:type:trade
+[info] ProjectionSupervisor started projection: trades
+[info] [CoreWebSocketClient] Disabled, not connecting
+Running ExUnit with seed: 342434, max_cases: 24
+Including tags: [:integration]
+
+[warning] ProjectionServer[saga] failed to hydrate from Core: :econnrefused. Will build state from events.
+[warning] ProjectionServer[trade] failed to hydrate from Core: :econnrefused. Will build state from events.
+[warning] ProjectionServer[index] failed to hydrate from Core: :econnrefused. Will build state from events.
+[warning] ProjectionServer[portfolio] failed to hydrate from Core: :econnrefused. Will build state from events.
+
+
+  1) test acknowledged event versions survive HTTP query and a hard restart (QueryServiceEx.Integration.AgentRunOrderingTest)
+     test/query_service_ex/integration/agent_run_ordering_test.exs:17
+     Owned Core process did not become ready within deadline. Child output:
+
+     code: with_core(context, fn ->
+     stacktrace:
+       (query_service_ex 0.25.1) test/support/customer_agent_core.ex:59: QueryServiceEx.TestSupport.CustomerAgentCore.with_core/2
+       test/query_service_ex/integration/agent_run_ordering_test.exs:19: (test)
+
+...............
+Finished in 20.6 seconds (0.00s async, 20.6s sync)
+16 tests, 1 failure

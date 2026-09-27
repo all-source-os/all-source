@@ -1,0 +1,16 @@
+   Compiling allsource-core v0.25.1 (/Users/decebaldobrica/Projects/founder-mode/all-source/apps/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 26.63s
+warning: the following packages contain code that will be rejected by a future version of Rust: nix v0.31.2, proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/strict_retained_entity.rs (target/debug/deps/strict_retained_entity-da73fc2c119493e0)
+
+running 6 tests
+test invalid_scope_and_limits_do_not_become_certified_empty_history ... ok
+test strict_reads_enforce_tenant_entity_and_authoritative_scope ... ok
+test complete_archive_and_pending_tail_survive_flush_eviction_and_reopen ... ok
+test strict_reads_refuse_partial_history_even_after_tolerant_queries ... ok
+test oversized_entities_are_refused_before_materializing_their_history ... ok
+test encoded_budget_refuses_large_payloads_and_metadata ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

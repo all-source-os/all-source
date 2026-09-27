@@ -185,6 +185,14 @@ attestation, verifies complete-page counts, and refuses histories above its
 1,000-event domain limit. An older Core silently ignoring the new parameter
 returns no attestation and is refused. There is no fallback or retry.
 
+Strict snapshots return timestamps truncated to the microsecond precision of
+the existing Parquet schema and sort by `(timestamp_micros, version)`. This
+canonicalization applies to bounded returned copies, not the resident events,
+WAL, ingest responses or generic queries. It prevents a nanosecond live timestamp
+from changing the review digest or event order after archive reload. Encoded
+admission still counts the original event, conservatively, before copying it.
+No storage schema migration is required.
+
 This establishes completeness of the verified retained cache/archive snapshot,
 not proof that retention or external file deletion never removed history. It
 does not establish durable high-water marks, indefinite operation deduplication,

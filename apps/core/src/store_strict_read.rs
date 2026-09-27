@@ -7,6 +7,7 @@ use crate::{
     error::{AllSourceError, Result},
     infrastructure::persistence::archive_budget::ArchiveReadBudget,
 };
+use chrono::SubsecRound;
 use std::{
     io,
     sync::{Arc, atomic::AtomicBool},
@@ -20,6 +21,8 @@ impl EventStore {
     /// Read one complete retained entity snapshot under an explicit read scope.
     /// Archive errors, oversized input and an evicted certification refuse the
     /// read; this is not evidence that retention never removed older history.
+    /// Timestamp precision and ordering match Parquet's microseconds so the
+    /// same retained evidence stays stable across cache eviction and restart.
     pub fn query_retained_entity(
         &self,
         tenant_id: &str,
@@ -98,11 +101,20 @@ impl EventStore {
         }
         selected.sort_by(|left, right| {
             left.timestamp
-                .cmp(&right.timestamp)
+                .timestamp_micros()
+                .cmp(&right.timestamp.timestamp_micros())
                 .then_with(|| left.version.cmp(&right.version))
         });
         let total = selected.len();
-        let result = selected.into_iter().take(limit).cloned().collect();
+        let result = selected
+            .into_iter()
+            .take(limit)
+            .cloned()
+            .map(|mut event| {
+                event.timestamp = event.timestamp.trunc_subsecs(6);
+                event
+            })
+            .collect();
         budget.check()?;
         self.tenant_loader.touch(tenant_id);
         Ok((result, total))

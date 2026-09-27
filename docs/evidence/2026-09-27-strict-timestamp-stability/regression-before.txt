@@ -1,0 +1,26 @@
+   Compiling allsource-core v0.25.1 (/Users/decebaldobrica/Projects/founder-mode/all-source/apps/core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.50s
+warning: the following packages contain code that will be rejected by a future version of Rust: nix v0.31.2, proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/strict_retained_entity.rs (target/debug/deps/strict_retained_entity-da73fc2c119493e0)
+
+running 1 test
+test complete_archive_and_pending_tail_survive_flush_eviction_and_reopen ... FAILED
+
+failures:
+
+---- complete_archive_and_pending_tail_survive_flush_eviction_and_reopen stdout ----
+
+thread 'complete_archive_and_pending_tail_survive_flush_eviction_and_reopen' (67118408) panicked at apps/core/tests/strict_retained_entity.rs:81:5:
+assertion `left == right` failed
+  left: [3, 2, 1]
+ right: [1, 2, 3]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    complete_archive_and_pending_tail_survive_flush_eviction_and_reopen
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p allsource-core --test strict_retained_entity`

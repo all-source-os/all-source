@@ -1,6 +1,7 @@
 defmodule QueryServiceEx.Integration.StrictRetainedReadTest do
   use ExUnit.Case, async: false
   alias QueryServiceEx.Domain.AgentRun.Event
+  alias QueryServiceEx.Domain.AgentRun.Timeline
   alias QueryServiceEx.Infrastructure.Adapters.AgentRunStore
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
   alias QueryServiceEx.TestSupport.AgentRunFixture, as: F
@@ -16,14 +17,20 @@ defmodule QueryServiceEx.Integration.StrictRetainedReadTest do
   end
 
   test "real HTTP binds strict empty and retained histories through restart", context do
-    with_core(context, fn ->
-      assert {:ok, []} = AgentRunStore.events(F.tenant(), F.uuid(1))
-      assert {:ok, %{status: 200}} = append()
-      assert_history()
-    end)
+    before =
+      with_core(context, fn ->
+        assert {:ok, []} = AgentRunStore.events(F.tenant(), F.uuid(1))
+        assert {:ok, %{status: 200}} = append()
+        event = assert_history()
+        assert {:ok, run} = Timeline.build(F.tenant(), F.uuid(1), [event])
+        run
+      end)
 
     with_core(context, fn ->
-      assert_history()
+      event = assert_history()
+      assert {:ok, run} = Timeline.build(F.tenant(), F.uuid(1), [event])
+      assert run.digest == before.digest
+      assert run.events == before.events
       assert {:ok, []} = AgentRunStore.events(F.tenant(), F.uuid(2))
       assert {:ok, %{"events" => [_event]} = legacy} = legacy_query()
       refute Map.has_key?(legacy, "archive_integrity")
@@ -73,6 +80,8 @@ defmodule QueryServiceEx.Integration.StrictRetainedReadTest do
     assert event["tenant_id"] == F.tenant()
     assert event["entity_id"] == Event.entity(F.tenant(), F.uuid(1))
     assert event["payload"] == F.payload("run.started", F.uuid(1), nil)
+    refute Regex.match?(~r/\.\d{7,}/, event["timestamp"])
+    event
   end
 
   defp append do
