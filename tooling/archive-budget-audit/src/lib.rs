@@ -38,7 +38,7 @@ impl Default for Limits {
     }
 }
 
-#[derive(Default, Serialize)]
+#[derive(Clone, Default, Serialize)]
 pub struct Totals {
     pub entries: u64,
     pub files: u64,
@@ -57,6 +57,7 @@ pub struct Group {
     pub largest_tenant_compressed_bytes: u64,
     pub largest_tenant_rows: u64,
     pub largest_tenant_uncompressed_bytes: u64,
+    pub largest_row_archive: Option<Totals>,
     pub tenants_over_file_cap: u64,
     pub tenants_over_entry_cap: u64,
     pub tenants_over_individual_file_cap: u64,
@@ -272,6 +273,13 @@ fn footer(mut file: File, cap: u64) -> Result<(u64, u64)> {
 }
 
 fn aggregate(group: &mut Group, total: Totals, limits: &Limits) -> Result<()> {
+    if group
+        .largest_row_archive
+        .as_ref()
+        .is_none_or(|current| total.rows > current.rows)
+    {
+        group.largest_row_archive = Some(total.clone());
+    }
     add(&mut group.tenants, 1)?;
     add(&mut group.totals.entries, total.entries)?;
     add(&mut group.totals.files, total.files)?;

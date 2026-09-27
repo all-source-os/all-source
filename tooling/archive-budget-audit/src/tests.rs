@@ -46,6 +46,8 @@ fn aggregate_rows_without_disclosing_tenant_names_or_mutating_files() {
     assert_eq!(report.other.tenants, 2);
     assert_eq!(report.other.totals.rows, 8);
     assert_eq!(report.other.largest_tenant_rows, 5);
+    assert_eq!(report.other.largest_row_archive.as_ref().unwrap().rows, 5);
+    assert_eq!(report.other.largest_row_archive.as_ref().unwrap().files, 1);
     assert!(report.other.totals.uncompressed_bytes > 0);
     assert_eq!(report.system.files, 1);
     let json = serde_json::to_value(report).unwrap();
