@@ -1,13 +1,14 @@
 import { Icons } from "@allsource/ui";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { FaDiscord, FaGithub, FaTwitter } from "react-icons/fa";
+import { FaDiscord, FaGithub, FaLinkedin, FaTwitter } from "react-icons/fa";
 import { siteConfig } from "@/lib/config";
 
 const socialIcons = {
   twitter: FaTwitter,
   github: FaGithub,
   discord: FaDiscord,
+  linkedin: FaLinkedin,
 } as const;
 
 export default function Footer() {

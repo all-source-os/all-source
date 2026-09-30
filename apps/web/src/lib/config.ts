@@ -111,6 +111,7 @@ export const siteConfig = {
     twitter: "https://x.com/ddonprogramming",
     discord: "https://github.com/all-source-os/all-source/discussions",
     github: "https://github.com/all-source-os/all-source",
+    linkedin: "https://www.linkedin.com/company/allsource-event-store/",
     instagram: "https://instagram.com/allsourcedev",
   },
   header: [
@@ -448,6 +449,11 @@ export const siteConfig = {
     {
       title: "Connect",
       links: [
+        {
+          href: "https://www.linkedin.com/company/allsource-event-store/",
+          text: "LinkedIn",
+          icon: "linkedin" as const,
+        },
         {
           href: "https://github.com/all-source-os/all-source",
           text: "GitHub",
