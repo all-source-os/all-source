@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [AllSource LinkedIn company page](./brand/LINKEDIN_COMPANY_PAGE.md)
+
 | | Link | Description |
 |---|------|-------------|
 | 🚀 | [Quick Start](./guides/QUICK_START.md) | Get up and running in minutes |
