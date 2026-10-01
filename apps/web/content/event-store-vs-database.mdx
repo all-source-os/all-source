@@ -1,213 +1,92 @@
 ---
-title: "Event Store vs Database: Choosing the Right Foundation"
+title: "Event Store vs Database: Choosing State and History"
 publishedAt: "2026-02-12"
-updatedAt: "2026-08-14"
-summary: Databases store state. Event stores store history. Here's how to decide which foundation your application actually needs.
+updatedAt: "2026-10-01"
+summary: "An event store is a database for ordered history. Compare it with current-state tables, PostgreSQL audit records and projections before choosing your design."
 author: "Decebal Dobrica"
-category: "use-cases"
+category: "engineering"
 image: "/assets/blog/event-store-vs-database.webp"
 ---
 
-Every few months, a new database launches claiming to be "the future of data." Edge databases, serverless SQL, multi-model stores—the options are endless.
+An **event store is a database** designed to retain a sequence of events. The useful choice is between storing current state as the authoritative record and storing the changes from which state can be reconstructed. A relational database can support either approach.
 
-But here's the question nobody asks often enough: **Do you need a database, or do you need an event store?**
+A subscription table might say that an account is on the Pro plan. An event stream might record when it subscribed, upgraded, cancelled and renewed. Those designs answer different questions. Neither makes an application correct without validation, access control and a recovery plan.
 
-They solve fundamentally different problems. Choosing wrong means either over-engineering simple applications or constantly fighting your data layer when complexity grows.
+This guide covers that storage decision. For implementation details, use the [event-sourcing patterns](/event-sourcing/patterns); for the product, see [AllSource's event store database](/platform/event-sourcing).
 
-## The Core Difference
+## Compare the records you need
 
-**Databases** answer: "What is the current state?"
+| Requirement | Current-state database | Event-sourced design |
+| --- | --- | --- |
+| Read today's subscription plan | Query the current row | Query a derived view or fold the stream |
+| Explain why the plan changed | Retain audit records or change history | Read recorded domain events and metadata |
+| Correct an earlier mistake | Update state and preserve an audit record if needed | Append a correction and update the projection |
+| Build a new historical view | Depends on the history retained | Replay retained events containing the required facts |
+| Delete sensitive information | Apply database deletion and backup policies | Design payload separation, retention and erasure before ingestion |
+| Recover after an outage | Restore backups and recover transactions | Recover the log and views; prove acknowledged events survive |
 
-```sql
-SELECT * FROM users WHERE id = 123;
--- Returns: {id: 123, email: "new@example.com", plan: "pro"}
-```
+An append-only record does not automatically provide regulatory compliance. You still need a policy for personal data, access, retention and backups. A timestamp alone does not establish business ordering across concurrent writers.
 
-**Event stores** answer: "What happened, and when?"
+## One renewal, two useful views
+
+Consider this illustrative domain sequence, rather than an AllSource API request:
 
 ```json
 [
-  {"type": "UserCreated", "data": {...}, "timestamp": "2026-01-01"},
-  {"type": "EmailChanged", "data": {...}, "timestamp": "2026-01-15"},
-  {"type": "PlanUpgraded", "data": {...}, "timestamp": "2026-02-01"}
+  {"sequence": 1, "type": "subscription.started", "plan": "basic"},
+  {"sequence": 2, "type": "subscription.upgraded", "plan": "pro"},
+  {"sequence": 3, "type": "subscription.cancelled"},
+  {"sequence": 4, "type": "subscription.renewed", "plan": "pro"}
 ]
 ```
 
-From events, you can always derive current state. From current state, you **cannot** recover history.
+A support view can show the current plan and status. A second view can count cancellations and subsequent renewals. The second view is only meaningful if events distinguish a renewal from a new subscription. Keeping arbitrary JSON forever does not compensate for an event model that omits the business fact you later need.
 
-This asymmetry matters more than most developers realize.
+Before adopting event sourcing, write down a question that current rows cannot answer reliably. Check whether your proposed payloads can answer it. That exercise is more useful than choosing storage from a throughput headline.
 
-## When You Need a Database
+## When current-state tables are enough
 
-Use a traditional database when:
+Keep a conventional CRUD model when the product needs current records and ordinary transaction semantics. A small catalogue or internal settings tool may gain little from a domain event stream. Audit tables can record who changed a row without changing the application's source of truth.
 
-### 1. Your data is simple CRUD
+A team can also separate read and write code while retaining those tables. That is one form of CQRS; it does not require event sourcing. The [CQRS and event sourcing guide](/blog/cqrs-vs-event-sourcing) separates these decisions with a worked example.
 
-Blog posts, user profiles, product catalogs—if your application is mostly "create, read, update, delete" with no complex business logic, a database is simpler.
+If your existing database already provides the history, concurrency checks and recovery behaviour you need, a second database introduces another operational responsibility. Keep it only if a measured requirement justifies it.
 
-### 2. You don't care about history
+## Can PostgreSQL be an event store?
 
-Some data is truly ephemeral. Cache entries, session data, temporary calculations—if you'd never ask "what was this value last week?", you don't need event sourcing.
+Yes. An application can use append-only PostgreSQL tables for domain events. The design must establish stream identity, ordering, concurrency checks and permissions that prevent accidental mutation. Consumers also need a reliable way to find new events and resume after failure.
 
-### 3. You need complex ad-hoc queries
+The choice is partly about ownership. With a custom event table, your team owns the stream API, consumer progress, replay tooling and compatibility rules. With a purpose-built event store, evaluate which responsibilities the product covers and which remain in your application.
 
-Databases excel at flexible querying. If you're building BI dashboards with complex JOINs and aggregations across arbitrary dimensions, a relational database is hard to beat.
+Do not compare a custom table's insert speed with a product's durable append path unless acknowledgement, indexing and persistence settings match. Compare recovery behaviour as well as successful writes.
 
-### 4. Your team knows SQL
+## When an event store earns its place
 
-There's value in familiarity. If your team thinks in SQL and your problem fits SQL, don't force event sourcing.
+An event-sourced system is a candidate when accepted business changes must remain explainable and multiple views need to be rebuilt from them. Order workflows, account ledgers and decision histories can have that requirement. A domain label alone is insufficient: an order dashboard might work well with current-state tables and an audit trail.
 
-## When You Need an Event Store
+For agent memory, ask whether a recalled fact must link back to the event that introduced or corrected it. If the requirement is only short-lived conversation context, durable history may add unnecessary work. AllSource's [agent-memory approach](/solutions/agent-memory) is a downstream use of event history, rather than the definition of an event store.
 
-Use an event store when:
+## What replay cannot promise
 
-### 1. You need audit trails
+Replay reconstructs only what retained events and projection logic can express. It cannot recover facts never recorded. If historical code called an external service without recording its response, replaying that call today may return a different answer.
 
-**Compliance isn't optional** in finance, healthcare, government, and increasingly everywhere else.
+Use a pure state-building path where possible. Separate it from payments, email and other side effects so rebuilding a view cannot repeat them. Track applied positions and handle duplicate delivery. See [event replay](/event-sourcing/patterns/event-replay) and [idempotent consumers](/event-sourcing/patterns/idempotent-consumers).
 
-"Show me every change to this record, who made it, and when" is trivial with event sourcing:
+Snapshots can shorten restoration for a compatible view, but cannot substitute for history needed to build a different view. Measure recovery with your event sizes, stream lengths and projection work. No generic latency number establishes your recovery limit.
 
-```bash
-GET /api/v1/entities/user-123/events
-```
+## A bounded evaluation before migration
 
-With a database, you're building audit logging as a secondary system, praying it stays in sync.
+Use one real workflow and an isolated test environment:
 
-### 2. You need to debug temporal issues
+1. Record accepted changes and their ordering contract.
+2. Build a current-state view and compare it with an independently calculated expected result.
+3. Stop the process after acknowledged writes, restart it and check which events remain.
+4. Rebuild into a separate destination without sending external side effects.
+5. Repeat with duplicate delivery, an incompatible event and concurrent updates.
+6. Record persistence settings, recovery duration, failed cases and operational work required.
 
-Production bug: "The user's subscription shows as expired, but they claim they renewed."
+AllSource provides an [event-replay validation checklist](/event-replay-validation-checklist) for recording that evidence. Use the [API documentation](/docs/api) for supported operations and payloads. If a hosted evaluation fits your workload, [compare plans](/pricing) before starting a trial.
 
-**With a database:** Check logs? Query audit tables? Hope timestamps are accurate?
+## Further reading
 
-**With an event store:**
-```bash
-GET /api/v1/entities/subscription-456/events?since=2026-02-01
-```
-
-See exactly what happened. Replay if needed. Debug with certainty.
-
-### 3. Your business logic is event-driven
-
-Some domains are inherently temporal:
-- Order processing (placed → paid → shipped → delivered)
-- Workflows (draft → review → approved → published)
-- Financial transactions (credits, debits, settlements)
-- IoT streams (sensor readings over time)
-
-Fighting an event-driven domain with a state-based database creates accidental complexity.
-
-### 4. You're building AI features
-
-This is the big one for 2026.
-
-AI agents need **context**. Not just current state, but what happened before. An agent analyzing customer behavior needs the sequence of events, not just today's snapshot.
-
-```
-AI: "This user's support tickets increased 3x after the
-     Feb 5th migration. Recommend proactive outreach."
-```
-
-That insight requires event history. No history, no insight.
-
-### 5. You need replay and recovery
-
-Event stores enable:
-- **Replay**: Rebuild any projection from raw events
-- **What-if analysis**: "What if we applied this new rule to historical data?"
-- **Recovery**: Corrupted state? Replay from events.
-- **Testing**: Run production event streams through new code paths
-
-These capabilities don't exist in traditional databases without significant custom infrastructure.
-
-## The Hybrid Reality
-
-In practice, most complex applications need both:
-
-```
-┌──────────────────────────────────────────┐
-│              Event Store                 │
-│  (Source of Truth - What Happened)       │
-└─────────────────┬────────────────────────┘
-                  │
-                  │ Projections
-                  ▼
-┌──────────────────────────────────────────┐
-│           Read Models / Views            │
-│  (Derived State - Current Snapshot)      │
-│  • PostgreSQL for queries                │
-│  • Elasticsearch for search              │
-│  • Redis for caching                     │
-└──────────────────────────────────────────┘
-```
-
-This is **CQRS** (Command Query Responsibility Segregation):
-- Commands (writes) → Event Store
-- Queries (reads) → Optimized read models
-
-The event store is the source of truth. Everything else is derived and rebuildable.
-
-## Performance Reality Check
-
-"Event sourcing sounds great, but is it practical at scale?"
-
-Let's address the common concerns:
-
-### "Replaying millions of events is slow"
-
-**Solution: Snapshots and projections**
-
-You don't replay from the beginning of time. Periodic snapshots capture state, and you only replay events since the last snapshot.
-
-At all.source:
-- Time-travel queries: **<100ms** for millions of events
-- Indexed reads: **11.9μs** p99 in the published Core reference benchmark
-- Batch ingestion: **469K events/second** in the published Core reference benchmark
-
-Event sourcing isn't slow anymore.
-
-### "Storage costs will explode"
-
-**Solution: Columnar compression**
-
-Events compress extremely well—60-80% compression ratios are common. A year of events for a typical application might be 10-50GB, which costs pennies in cloud storage.
-
-The value of complete history far outweighs storage costs.
-
-### "It's too complex"
-
-**Fair point.** Event sourcing adds concepts: events, projections, event handlers, eventual consistency.
-
-But complexity is relative. Compare:
-- Event sourcing complexity: Learn new patterns
-- Database + audit logging + CDC + sync pipelines complexity: Maintain multiple systems
-
-If you need the capabilities event sourcing provides, it's actually **less** complex than building them yourself.
-
-## Making the Decision
-
-Ask yourself:
-
-| Question | If Yes → Consider |
-|----------|-------------------|
-| Do I need complete audit history? | Event Store |
-| Will I debug issues by asking "what happened when"? | Event Store |
-| Is my domain inherently event-driven? | Event Store |
-| Am I building AI features that need context? | Event Store |
-| Is my data simple CRUD with no audit requirements? | Database |
-| Do I need complex ad-hoc SQL queries? | Database |
-
-## The Bottom Line
-
-Databases and event stores are **complementary**, not competing.
-
-Databases excel at current-state queries. Event stores excel at temporal queries and history.
-
-If your application needs both—and most non-trivial applications do—use both. Make the event store your source of truth, and project to databases for reads.
-
-Or, use an event store that's fast enough to serve as your primary data layer. That's what we're building at all.source.
-
----
-
-*Need durable history, replay, and point-in-time reconstruction?*
-
-[Start with all.source →](/signup)
+Microsoft's [Event Sourcing pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing) covers architectural trade-offs. Its [CQRS pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs) explains separating read and write models, including designs sharing a database.

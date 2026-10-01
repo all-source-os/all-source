@@ -114,6 +114,39 @@ export default function EventSourcingPage() {
         </motion.div>
       </Section>
 
+      <Section className="py-8">
+        <div className="mx-auto max-w-3xl rounded-xl border border-border bg-card p-6">
+          <h2 className="text-2xl font-semibold">
+            Evaluate an event sourcing database on recovery
+          </h2>
+          <p className="mt-3 leading-7 text-muted-foreground">
+            Start with one workflow. Append its accepted changes, rebuild a projection, restart the
+            process, and compare recovered state with the expected result. Record persistence
+            settings and failed cases alongside throughput.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm">
+            <Link
+              href="/event-replay-validation-checklist"
+              className="text-primary underline underline-offset-4"
+            >
+              Run the replay validation checklist
+            </Link>
+            <Link
+              href="/blog/event-store-vs-database"
+              className="text-primary underline underline-offset-4"
+            >
+              Compare event stores and current-state databases
+            </Link>
+            <Link
+              href="/blog/cqrs-vs-event-sourcing"
+              className="text-primary underline underline-offset-4"
+            >
+              Choose CQRS, event sourcing, or both
+            </Link>
+          </div>
+        </div>
+      </Section>
+
       {/* Key metrics */}
       <Section className="py-12">
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-8 sm:grid-cols-4 text-center">

@@ -115,7 +115,7 @@ export default async function Blog({ params }: { params: Promise<{ slug: string 
           />
         </div>
         <article
-          className="prose dark:prose-invert mx-auto max-w-full"
+          className="prose dark:prose-invert mx-auto max-w-full [&_table]:table-fixed [&_td]:break-words [&_th]:break-words"
           // biome-ignore lint/security/noDangerouslySetInnerHtml: Server-rendered markdown content is sanitized
           dangerouslySetInnerHTML={{ __html: post.source }}
         />
