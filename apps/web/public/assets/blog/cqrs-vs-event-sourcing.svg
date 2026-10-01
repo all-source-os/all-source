@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">CQRS and event sourcing: separate models, retained changes</title>
+  <desc id="desc">An upgrade command is validated, accepted as an event, then applied to a subscription read model. CQRS separates the write and read models. Event sourcing retains accepted changes.</desc>
+  <rect width="1200" height="630" fill="#073765"/>
+  <g font-family="system-ui, sans-serif" fill="#f4faff">
+    <text x="64" y="90" font-size="24" fill="#83d6f6">ALLSOURCE · ARCHITECTURE FIELD GUIDE</text>
+    <text x="64" y="165" font-size="52" font-weight="700">CQRS vs event sourcing</text>
+    <text x="64" y="218" font-size="28">Two decisions. One subscription example.</text>
+    <g fill="#0b497e" stroke="#83d6f6" stroke-width="2">
+      <rect x="64" y="286" width="312" height="174" rx="12"/>
+      <rect x="444" y="286" width="312" height="174" rx="12"/>
+      <rect x="824" y="286" width="312" height="174" rx="12"/>
+    </g>
+    <g font-size="26" font-weight="700">
+      <text x="88" y="330">Write model</text>
+      <text x="468" y="330">Accepted event</text>
+      <text x="848" y="330">Read model</text>
+    </g>
+    <g font-size="23">
+      <text x="88" y="377">Request an upgrade</text>
+      <text x="88" y="413" fill="#b4e7fb">Validate business rules</text>
+      <text x="468" y="377">Subscription upgraded</text>
+      <text x="468" y="413" fill="#b4e7fb">Retain the change</text>
+      <text x="848" y="377">Current plan: Pro</text>
+      <text x="848" y="413" fill="#b4e7fb">Derived from events</text>
+    </g>
+    <g stroke="#83d6f6" fill="none" stroke-width="4">
+      <path d="M388 372h42m-12-12 12 12-12 12"/>
+      <path d="M768 372h42m-12-12 12 12-12 12"/>
+    </g>
+    <text x="64" y="529" font-size="25">CQRS separates write and read models.</text>
+    <text x="64" y="571" font-size="25">Event sourcing preserves the accepted changes.</text>
+  </g>
+</svg>

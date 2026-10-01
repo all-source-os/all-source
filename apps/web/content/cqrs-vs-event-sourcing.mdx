@@ -1,0 +1,103 @@
+---
+title: "CQRS vs Event Sourcing: A Worked Subscription Example"
+publishedAt: "2026-10-01"
+summary: "CQRS separates read and write models. Event sourcing preserves changes as history. Use a subscription example to choose either, both, or ordinary CRUD."
+author: "Decebal Dobrica"
+category: "engineering"
+image: "/assets/blog/cqrs-vs-event-sourcing.png"
+---
+
+**CQRS separates the models used to change data from those used to read it. Event sourcing records accepted changes as events from which state is derived.** You can use either pattern alone, combine them, or keep ordinary CRUD. Separate services, a message broker and separate databases are not prerequisites for CQRS.
+
+Start with two questions. Does the write model differ enough from the read model to justify separating them? Does the business need retained domain history as the authoritative record? Treat these questions independently.
+
+## Four designs for the same subscription
+
+| Design | What a command writes | What a query reads | Main responsibility |
+| --- | --- | --- | --- |
+| CRUD | Current subscription row | The same model | Transactions and validation |
+| CQRS without event sourcing | Current state through a command model | A separately designed read model | Keeping representations consistent |
+| Event sourcing without a separate read model | Accepted subscription events | State folded from the stream | Event compatibility and replay cost |
+| CQRS with event sourcing | Accepted subscription events | A projection built from those events | History plus projection delivery and recovery |
+
+These are design choices, not maturity levels. Start with the least complex option that satisfies the workload. A separate read store is useful only when it solves a concrete query or operating requirement.
+
+## Walk through a command
+
+Suppose a customer requests an upgrade from Basic to Pro. The command is `UpgradeSubscription`, which can be rejected. The fact is `SubscriptionUpgraded`, which means the change was accepted. Avoid recording a request as a completed business fact before validation.
+
+Assume the payment decision has already been recorded, the plan is valid and the subscription can be upgraded. Payment coordination is a separate workflow. A production command handler also needs a concurrency rule so two requests cannot silently overwrite each other's decisions.
+
+An illustrative stream could contain:
+
+```json
+[
+  {"sequence": 1, "type": "Started", "plan": "basic"},
+  {"sequence": 2, "type": "Upgraded", "plan": "pro"},
+  {"sequence": 3, "type": "Cancelled"},
+  {"sequence": 4, "type": "Renewed", "plan": "pro"}
+]
+```
+
+This simplified domain model is not an SDK or wire-format example. Your event names and payloads must capture the facts your own domain needs.
+
+## Build a view with an explicit expected result
+
+Use a small, deterministic projection before connecting an external database. Here is pseudocode for a view containing `plan` and `active`:
+
+```text
+initial = { plan: none, active: false }
+
+apply(state, event):
+  Started(plan) -> { plan: plan, active: true }
+  Upgraded(plan) -> { ...state, plan: plan }
+  Cancelled -> { ...state, active: false }
+  Renewed(plan) -> { plan: plan, active: true }
+
+fold(events 1..4) = { plan: pro, active: true }
+fold(events 1..3) = { plan: pro, active: false }
+```
+
+These expected states give you a test independent of the UI. Rebuild into an empty view and compare the result. If they differ, inspect event order, compatibility logic and initial state before changing the frontend.
+
+A second projection could count completed renewals. That counter needs duplicate protection: applying event 4 twice would otherwise count two renewals. A checkpoint identifies progress; it does not make an update atomic by itself. Design recovery around the boundary between storing the view and storing its consumed position.
+
+AllSource's [projections and read models guide](/event-sourcing/patterns/projections-read-models) covers implementation choices. [Idempotent consumers](/event-sourcing/patterns/idempotent-consumers) covers duplicate handling.
+
+## What does the customer see after an upgrade?
+
+If the view updates asynchronously, a successful command can precede a visible read-model change. Decide what the interface should do during that interval. Options include showing a pending state or waiting for a known consumed position with a bounded timeout.
+
+Do not rely on a fixed sleep to establish correctness. Test a slow consumer and a stopped consumer. An interface saying “upgrade failed” after a successful write can encourage a duplicate request, even though storage behaved as designed.
+
+For sensitive reads, document which model is authoritative. A reporting view that tolerates lag should not silently become the authorization decision for a newly cancelled account.
+
+## A broker does not settle the storage decision
+
+Publishing a notification after updating a row does not turn that row into an event-sourced model. Having Kafka in an architecture does not establish whether retained records are the business source of truth. State the record's purpose, retention contract and recovery path explicitly.
+
+If a command updates a database and separately publishes a message, account for failure between those operations. The [transactional outbox pattern](https://microservices.io/patterns/data/transactional-outbox.html) is one approach. It still requires duplicate-safe consumers and delivery-failure tests.
+
+## Choose a pattern using a failed scenario
+
+**A slow dashboard with simple writes:** first inspect query design and indexes. If the dashboard needs a different representation, CQRS might help without replacing current-state storage.
+
+**Support cannot explain yesterday's state:** determine whether audit records are sufficient. If the business needs replayable domain changes, evaluate event sourcing and the [event store versus database decision](/blog/event-store-vs-database).
+
+**New views must be rebuilt from accepted history:** combining CQRS with event sourcing is a candidate. Check that retained events contain the inputs for those views. Today's snapshot cannot answer every historical question.
+
+**A small settings page with no historical requirement:** ordinary CRUD is a reasonable endpoint. Introducing projections and recovery machinery can create more failure cases than it resolves.
+
+## Evidence to collect in an AllSource evaluation
+
+Use an isolated stream and the [current API contract](/docs/api), not these pseudocode payloads. AllSource's [event store database](/platform/event-sourcing) is the persistence component to evaluate; application rules remain your responsibility.
+
+Record accepted event count, expected state and consumed position. Exercise a restart, duplicate delivery and a projection rebuild into a fresh destination. Keep external actions disabled during replay. Introduce a new event version and verify how older records are interpreted.
+
+The [replay validation checklist](/event-replay-validation-checklist) captures failures as well as successes. Once that proof works, use [pricing](/pricing) to evaluate hosted capacity against the measured workload.
+
+## Sources and next implementation steps
+
+Microsoft's [CQRS pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs) describes model separation and consistency trade-offs. Its [Event Sourcing pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing) covers retaining changes and rebuilding state.
+
+Next, choose [aggregate streams](/event-sourcing/patterns/aggregate-streams), [optimistic concurrency](/event-sourcing/patterns/optimistic-concurrency) or [schema evolution](/event-sourcing/patterns/event-schema-evolution) according to the failure your evaluation exposed.

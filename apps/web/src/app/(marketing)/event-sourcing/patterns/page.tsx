@@ -45,6 +45,16 @@ export default function EventSourcingPatternsPage() {
             Ten focused guides for designing immutable streams, safe writes, rebuildable views,
             historical queries, and recoverable consumers with AllSource Core.
           </p>
+          <p className="mt-4 leading-7 text-muted-foreground">
+            Choosing an architecture first? Read the{" "}
+            <Link
+              href="/blog/cqrs-vs-event-sourcing"
+              className="text-primary underline underline-offset-4"
+            >
+              CQRS vs event sourcing worked example
+            </Link>{" "}
+            to separate read-model design from history storage.
+          </p>
         </div>
         <div className="border-l-2 border-primary pl-5">
           <p className="font-mono text-xs uppercase tracking-[0.18em] text-primary">
