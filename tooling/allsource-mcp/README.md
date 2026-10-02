@@ -80,8 +80,21 @@ Or use the environment variable instead of `--data-dir`:
 | `explain_entity` | Human-readable lifecycle summary of an entity |
 | `reconstruct_state` | Deprecated, explicitly non-authoritative payload-fold preview |
 | `analyze_changes` | Paginated changes within a strict RFC 3339 window |
+| `list_stores` | Every configured store with its path, event count and last refresh |
+| `watch_events` | Long-poll for events newer than a checkpoint |
+| `fold_entity_lifecycle` | Latest state per entity for one event family |
+| `fold_steps` | Start/terminal pairs per payload key, with elapsed time |
+| `trace` | Follow one id across every store: events that reference it, then the ids they carry, up to `depth` hops |
 
 Every successful result includes JSON `structuredContent`, tenant/source provenance, freshness, and completeness. Existing pretty-JSON text content remains for older clients.
+
+## Freshness
+
+The server opens each store read-only and catches it up with the store's writer before a read: new Parquet files are loaded and the WAL is re-read when a segment changed. It never reopens the data dir and never writes to it. `--refresh-ms` (env `ALLSOURCE_MCP_REFRESH_MS`, default `1000`) is the minimum gap between two refreshes of one store; `0` refreshes before every read. Each result carries `context.store.refreshedAt` and `context.store.newEventsOnLastRefresh` (`context.stores.<name>` for `trace`), so an old `freshThrough` can be told apart from a reader that stopped catching up.
+
+## trace
+
+`trace` scans each requested store once (bounded by `max_scan` per store) and walks the id graph in memory, so a deeper trace does not re-read a store. An event joins at hop *n* when its entity id equals an id found at hop *n − 1*, or its payload, in the requested `payload_mode`, contains one. The ids an event carries are its entity id plus string values under `id_keys` (default `id`, `_id`, `Id`, `_ids`), read from that same view, so a redacted value is never matched or followed. Each item adds `store`, `hop`, `matched_by` and `carries`; `graph` lists the ids and the edges between them; `completeness.reason` is `max_scan_reached`, `frontier_truncated` (more than 50 new ids at one hop) or `limit_reached`. A hosted tenant reads only `default`.
 
 ## Example Session
 

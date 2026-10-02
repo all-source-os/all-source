@@ -1008,6 +1008,11 @@ impl ParquetStorage {
         find_parquet_files_recursive(&self.storage_dir)
     }
 
+    /// The tenant a Parquet file belongs to, read from its place in the tree.
+    pub fn tenant_id_for_file(&self, file_path: &Path) -> String {
+        tenant_id_from_path(&self.storage_dir, file_path)
+    }
+
     /// List Parquet files belonging to a single tenant — i.e. only files
     /// under `<storage_dir>/<tenant>/...`. Legacy flat-layout files at the
     /// root are intentionally excluded; the migration tool moves them under

@@ -18,7 +18,7 @@ use crate::{
             wal::WALConfig,
         },
     },
-    store::{EventStore, EventStoreConfig, StoreStats},
+    store::{EventStore, EventStoreConfig, RefreshReport, StoreStats},
 };
 
 use super::{
@@ -553,6 +553,19 @@ impl EmbeddedCore {
         let pm = self.store.projection_manager();
         let projection = pm.get_projection(projection_name)?;
         projection.get_state(entity_id)
+    }
+
+    /// Catch a read-only instance up with what its data dir's writer has made
+    /// durable since it opened. See [`EventStore::refresh_from_disk`].
+    ///
+    /// Returns an empty report on a writable or in-memory instance.
+    pub async fn refresh(&self) -> Result<RefreshReport> {
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || store.refresh_from_disk())
+            .await
+            .map_err(|e| {
+                crate::error::AllSourceError::InvalidInput(format!("spawn_blocking failed: {e}"))
+            })?
     }
 
     /// Get basic statistics about this store instance.

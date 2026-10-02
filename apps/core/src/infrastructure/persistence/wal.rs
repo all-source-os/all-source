@@ -11,7 +11,17 @@ use std::{
     io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::Arc,
+    time::SystemTime,
 };
+
+/// One WAL segment's identity as the filesystem reports it, so a reader can
+/// tell whether anything was appended, rotated or truncated without opening it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WalSegmentStamp {
+    pub path: PathBuf,
+    pub len: u64,
+    pub modified: Option<SystemTime>,
+}
 
 /// Subdirectory of the WAL dir that holds retired segments containing lines
 /// recovery could not read. Nothing lists, replays, or deletes it.
@@ -414,6 +424,24 @@ impl WriteAheadLog {
         }
 
         Ok(wal_files)
+    }
+
+    /// Stat every WAL segment, sorted by path. Reads no segment contents.
+    pub fn segment_stamps(&self) -> Result<Vec<WalSegmentStamp>> {
+        let mut stamps = Vec::new();
+        for path in self.list_wal_files()? {
+            // A segment unlinked between the listing and the stat is simply gone.
+            let Ok(metadata) = fs::metadata(&path) else {
+                continue;
+            };
+            stamps.push(WalSegmentStamp {
+                path,
+                len: metadata.len(),
+                modified: metadata.modified().ok(),
+            });
+        }
+        stamps.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(stamps)
     }
 
     /// Recover events from WAL files
