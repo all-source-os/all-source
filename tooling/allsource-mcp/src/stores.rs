@@ -7,10 +7,14 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use allsource_core::embedded::{Config, EmbeddedCore};
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use serde_json::{Value, json};
+use tokio::sync::Mutex;
 
 /// The name a request uses when it selects no store.
 pub const DEFAULT_STORE: &str = "default";
@@ -22,6 +26,64 @@ pub struct StoreRegistry {
 pub struct Store {
     pub path: PathBuf,
     pub core: EmbeddedCore,
+    refresh_every: Duration,
+    refresh: Mutex<RefreshStatus>,
+}
+
+#[derive(Default)]
+struct RefreshStatus {
+    last_attempt: Option<Instant>,
+    refreshed_at: Option<DateTime<Utc>>,
+    new_events_on_last_refresh: usize,
+    last_error: Option<String>,
+}
+
+impl Store {
+    pub fn new(path: PathBuf, core: EmbeddedCore, refresh_every: Duration) -> Self {
+        Self {
+            path,
+            core,
+            refresh_every,
+            refresh: Mutex::new(RefreshStatus::default()),
+        }
+    }
+
+    /// The core, caught up with its writer when the last refresh is older than
+    /// `refresh_every`. A failed refresh serves what is already in memory and is
+    /// reported by [`Store::refresh_context`].
+    pub async fn fresh_core(&self) -> &EmbeddedCore {
+        let mut status = self.refresh.lock().await;
+        let due = status
+            .last_attempt
+            .is_none_or(|at| at.elapsed() >= self.refresh_every);
+        if due {
+            status.last_attempt = Some(Instant::now());
+            match self.core.refresh().await {
+                Ok(report) => {
+                    status.refreshed_at = Some(Utc::now());
+                    status.new_events_on_last_refresh = report.new_events;
+                    status.last_error = None;
+                }
+                Err(error) => {
+                    tracing::warn!(path = %self.path.display(), error = %error, "store refresh failed");
+                    status.last_error = Some(error.to_string());
+                }
+            }
+        }
+        &self.core
+    }
+
+    /// When this store last caught up with its writer, so a stale `freshThrough`
+    /// can be told apart from a quiet writer.
+    pub async fn refresh_context(&self) -> Value {
+        let status = self.refresh.lock().await;
+        json!({
+            "refreshedAt": status.refreshed_at.map(|at| at.to_rfc3339()),
+            "newEventsOnLastRefresh": status.new_events_on_last_refresh,
+            "refreshIntervalMs": u64::try_from(self.refresh_every.as_millis()).unwrap_or(u64::MAX),
+            "lastRefreshError": status.last_error.is_some(),
+        })
+    }
 }
 
 impl StoreRegistry {
@@ -29,14 +91,19 @@ impl StoreRegistry {
     ///
     /// A store that cannot be opened fails startup rather than disappearing from
     /// the listing: a silently missing store reads as "this store holds nothing".
-    pub async fn open(default_dir: &Path, extra: &[(String, PathBuf)]) -> Result<Self> {
+    pub async fn open(
+        default_dir: &Path,
+        extra: &[(String, PathBuf)],
+        refresh_every: Duration,
+    ) -> Result<Self> {
         let mut stores = BTreeMap::new();
         stores.insert(
             DEFAULT_STORE.to_string(),
-            Store {
-                path: default_dir.to_path_buf(),
-                core: open_read_only(default_dir).await?,
-            },
+            Store::new(
+                default_dir.to_path_buf(),
+                open_read_only(default_dir).await?,
+                refresh_every,
+            ),
         );
 
         for (name, path) in extra {
@@ -48,10 +115,7 @@ impl StoreRegistry {
             }
             stores.insert(
                 name.clone(),
-                Store {
-                    path: path.clone(),
-                    core: open_read_only(path).await?,
-                },
+                Store::new(path.clone(), open_read_only(path).await?, refresh_every),
             );
         }
 
@@ -67,10 +131,11 @@ impl StoreRegistry {
                 .map(|(name, core)| {
                     (
                         name.to_string(),
-                        Store {
-                            path: PathBuf::from(format!("<in-memory:{name}>")),
+                        Store::new(
+                            PathBuf::from(format!("<in-memory:{name}>")),
                             core,
-                        },
+                            Duration::ZERO,
+                        ),
                     )
                 })
                 .collect(),

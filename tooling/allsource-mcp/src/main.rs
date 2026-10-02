@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 use tracing_subscriber::EnvFilter;
 
 mod diagnostics;
@@ -16,6 +16,7 @@ use transport::StdioTransport;
 #[derive(Parser)]
 #[command(
     name = "allsource-mcp",
+    version,
     about = "MCP server for local AllSource debugging (stdio transport)"
 )]
 struct Cli {
@@ -50,6 +51,11 @@ struct Cli {
         default_value = "allsource-local"
     )]
     source_id: String,
+
+    /// Minimum milliseconds between catching a store up with its writer before a
+    /// read. 0 refreshes before every read.
+    #[arg(long, env = "ALLSOURCE_MCP_REFRESH_MS", default_value_t = 1000)]
+    refresh_ms: u64,
 }
 
 /// Parse a `name=path` store argument.
@@ -77,7 +83,12 @@ async fn main() -> Result<()> {
 
     tracing::info!("Opening AllSource data at {:?}", cli.data_dir);
 
-    let registry = StoreRegistry::open(&cli.data_dir, &cli.stores).await?;
+    let registry = StoreRegistry::open(
+        &cli.data_dir,
+        &cli.stores,
+        Duration::from_millis(cli.refresh_ms),
+    )
+    .await?;
     for (name, store) in registry.iter() {
         tracing::info!(
             store = name.as_str(),

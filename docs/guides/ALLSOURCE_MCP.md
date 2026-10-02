@@ -29,9 +29,10 @@ Requires **Rust 1.92+**.
 
 ### Versioning — this binary lags the platform
 
-`allsource-mcp` versions independently of the AllSource platform, and is currently behind it:
-as of 2026-07-25 crates.io has **0.14.8** (published 2026-03-13), which embeds
-`allsource-core` **0.20.1**, while the platform is on **0.22.x**.
+`allsource-mcp` versions independently of the AllSource platform and is published by hand,
+so crates.io can lag the monorepo. **0.17.0** (store refresh and `trace`) needs an
+`allsource-core` that has `EmbeddedCore::refresh`, which first ships in the Core release
+after 0.25.1; until both are published, build it from source.
 
 ```bash
 allsource-mcp --version                  # what you have
@@ -39,7 +40,7 @@ cargo search allsource-mcp               # what is published
 cargo install allsource-mcp --force      # upgrade in place
 ```
 
-If you need a Core feature newer than 0.20.1, build from source against the monorepo
+If you need a Core feature newer than the published crate embeds, build from source against the monorepo
 (`cargo install --path .` above) or use the Docker connector
 (`ghcr.io/all-source-os/allsource-mcp-server`), which tracks platform releases. See
 [/docs/mcp](https://www.all-source.xyz/docs/mcp) for how the four MCP servers differ.
@@ -60,10 +61,10 @@ Claude Code / Claude Desktop
   (append)  (columnar)
 ```
 
-`allsource-mcp` opens the data directory with `EmbeddedCore::open()` — the same facade that powers [Chronis](../../apps/chronis/), [Longhand](https://github.com/technical-leaders/longhand), and any Rust application embedding AllSource. It exposes 8 read-only MCP tools over stdio, so LLMs can query your event store in natural language without a running server process.
+`allsource-mcp` opens the data directory with `EmbeddedCore::open()` — the same facade that powers [Chronis](../../apps/chronis/), [Longhand](https://github.com/technical-leaders/longhand), and any Rust application embedding AllSource. It exposes 13 read-only MCP tools over stdio, so LLMs can query your event store in natural language without a running server process.
 
 Because it reads directly from the durable storage layer (WAL + Parquet), it works on:
-- **Live data directories** while Core is running (read-only, no conflicts)
+- **Live data directories** while Core is running (read-only, no conflicts). Before a read the server catches each store up with its writer: Parquet files it has not read are loaded, and the WAL is re-read when a segment's size or mtime changed. It never reopens the directory and never writes to it. `--refresh-ms` (env `ALLSOURCE_MCP_REFRESH_MS`, default `1000`) is the minimum gap between refreshes of one store; `0` refreshes before every read. Results carry `context.store.refreshedAt` and `context.store.newEventsOnLastRefresh` so an old `freshThrough` can be told apart from a reader that stopped catching up.
 - **Backup copies** of data directories (cold analysis)
 - **Local dev data** from embedded apps like Chronis
 
@@ -127,7 +128,36 @@ Instead of `--data-dir`, you can set `ALLSOURCE_DATA_DIR`:
 
 ## Available Tools
 
-`allsource-mcp` exposes 8 read-only tools. LLMs call these automatically based on your natural language questions.
+`allsource-mcp` exposes 13 read-only tools. LLMs call these automatically based on your natural language questions.
+
+| Tool | What it reads |
+|---|---|
+| `query_events` | A paginated event window; `payload_contains` and `fields` filter and project payloads |
+| `sample_events` | Recent events, newest first |
+| `list_stores` | Every configured store with path, event count and last refresh |
+| `trace` | One id followed across every store, up to 3 hops, with the id graph |
+| `watch_events` | Events newer than a checkpoint, long-polling up to 55 s |
+| `fold_entity_lifecycle` | Latest state per entity for one event family |
+| `fold_steps` | Start/terminal pairs per payload key, with elapsed time |
+| `quick_stats` | Exact counts, freshness and durability |
+| `get_snapshot` | One named projection's state for an entity |
+| `event_timeline` | One entity's paginated timeline |
+| `explain_entity` | A bounded lifecycle summary of one entity |
+| `reconstruct_state` | Deprecated heuristic payload fold |
+| `analyze_changes` | One entity's changes inside a time window |
+
+### `trace`
+
+Follow one id through every readable store. Each store is scanned once (`max_scan` events per store, default 5,000) and the walk runs in memory, so a deeper trace does not re-read anything.
+
+- Hop 0 is every event whose entity id equals `id` or whose payload contains it. Hop *n* repeats that for the ids the hop *n − 1* events carry, up to `depth` (0–3, default 1).
+- An event carries its entity id plus the string values under `id_keys` (default `id`, `_id`, `Id`, `_ids`). An entry starting with `_` or an uppercase letter matches as a key suffix (`run_id`, `runId`); any other entry matches the whole key.
+- Matching and carried ids both read the payload as `payload_mode` renders it, so a redacted value is never matched or followed.
+- Each item adds `store`, `hop`, `matched_by` (`{ id, via: entity_id | payload }`) and `carries`, sorted by time across stores. `graph` lists the ids (hop, first store seen, event count) and the edges between them.
+- `completeness.reason` is `max_scan_reached`, `frontier_truncated` (more than 50 new ids at one hop) or `limit_reached`; `completeness.scanned` is per store.
+- `stores` narrows the read; a hosted tenant reads only `default`.
+
+**Ask:** "Trace run-42 across the profile and workspace stores"
 
 ### `query_events`
 

@@ -209,6 +209,8 @@ pub struct EventStore {
     /// batch, and exclusively while `checkpoint` seals the WAL. Without it an
     /// event can sit in a sealed segment yet miss the flush that retires it.
     durability_gate: RwLock<()>,
+
+    refresh_state: parking_lot::Mutex<refresh::RefreshState>,
 }
 
 /// A task queued for async webhook delivery
@@ -391,6 +393,7 @@ impl EventStore {
             checkpoint_interval_secs: config.checkpoint_interval_secs,
             read_only: config.read_only,
             durability_gate: RwLock::new(()),
+            refresh_state: parking_lot::Mutex::new(refresh::RefreshState::default()),
         };
 
         if config.read_only {
@@ -422,6 +425,11 @@ impl EventStore {
         // both WAL recovery and a subsequent ensure_tenant_loaded
         // pass on the same tenant.
         if let Some(ref wal) = store.wal {
+            if config.read_only
+                && let Ok(stamps) = wal.segment_stamps()
+            {
+                store.refresh_state.lock().set_wal_stamps(stamps);
+            }
             match wal.recover() {
                 Ok(recovered_events) if !recovered_events.is_empty() => {
                     let mut wal_new = 0usize;
@@ -1227,7 +1235,13 @@ impl EventStore {
         };
 
         let _resident = self.cache_residency_gate.read();
+        // Listed before the load, so a file that lands in between is read again
+        // by the first refresh and deduped, never skipped.
+        let files_before_load = storage.read().list_parquet_files()?;
         let events = storage.read().load_all_events()?;
+        self.refresh_state
+            .lock()
+            .mark_parquet_seen(files_before_load);
         let read_count = events.len();
         let tenants: Vec<String> = events
             .iter()
@@ -3141,6 +3155,10 @@ impl Default for EventStore {
 
 #[path = "store_strict_read.rs"]
 mod strict_read;
+
+#[path = "store_refresh.rs"]
+mod refresh;
+pub use refresh::RefreshReport;
 
 #[cfg(all(test, feature = "server"))]
 #[path = "store_archive_work_tests.rs"]

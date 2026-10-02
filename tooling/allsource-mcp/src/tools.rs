@@ -28,9 +28,12 @@ const MAX_SCAN: usize = 50_000;
 const MAX_WAIT_SECONDS: u64 = 55;
 const WATCH_POLL: Duration = Duration::from_millis(500);
 
+#[path = "trace.rs"]
+mod trace;
+
 /// Build a read-only tool descriptor with shared diagnostic input and annotations.
 fn read_tool(name: &str, title: &str, description: &str, mut input_schema: Value) -> ToolDef {
-    if name != "list_stores" {
+    if name != "list_stores" && name != "trace" {
         input_schema["properties"]["store"] = json!({
             "type": "string",
             "description": "Which configured store to read; list_stores names them. Defaults to 'default'.",
@@ -121,6 +124,12 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                 "type": "object",
                 "properties": {}
             }),
+        ),
+        read_tool(
+            "trace",
+            "Trace an id across stores",
+            "Follow one id through every readable store: the events that reference it, then the ids those events carry, up to depth hops. Returns the events in time order with the hop and id that matched each, plus the id graph.",
+            trace::input_schema(&payload_modes),
         ),
         read_tool(
             "watch_events",
@@ -306,14 +315,32 @@ async fn execute_tool_inner(
     name: &str,
     args: &Value,
 ) -> Result<Value> {
-    if name == "list_stores" {
-        return exec_list_stores(stores, policy);
+    match name {
+        "list_stores" => return exec_list_stores(stores, policy).await,
+        "trace" => return trace::exec_trace(stores, policy, args).await,
+        _ => {}
     }
 
-    let core = &selected_store(stores, policy, args)?.core;
+    let store = selected_store(stores, policy, args)?;
+    let core = store.fresh_core().await;
+    let mut result = dispatch_store_tool(store, core, policy, name, args).await?;
+    if let Some(context) = result.get_mut("context") {
+        context["store"] = store.refresh_context().await;
+    }
+    Ok(result)
+}
+
+/// Run a tool that reads exactly one store.
+async fn dispatch_store_tool(
+    store: &Store,
+    core: &EmbeddedCore,
+    policy: &DiagnosticPolicy,
+    name: &str,
+    args: &Value,
+) -> Result<Value> {
     match name {
         "query_events" => exec_query_events(core, policy, args).await,
-        "watch_events" => exec_watch_events(core, policy, args).await,
+        "watch_events" => exec_watch_events(store, policy, args).await,
         "fold_entity_lifecycle" => exec_fold_entity_lifecycle(core, policy, args).await,
         "fold_steps" => exec_fold_steps(core, policy, args).await,
         "sample_events" => exec_sample_events(core, policy, args).await,
@@ -343,21 +370,23 @@ fn selected_store<'a>(
     stores.get(requested)
 }
 
-/// List the stores this server may read.
-fn exec_list_stores(stores: &StoreRegistry, policy: &DiagnosticPolicy) -> Result<Value> {
+/// List the stores this server may read, each caught up with its writer first.
+async fn exec_list_stores(stores: &StoreRegistry, policy: &DiagnosticPolicy) -> Result<Value> {
     if policy.is_hosted_tenant() {
         anyhow::bail!("access denied: hosted tenant profiles read only their bound store");
     }
-    let items: Vec<Value> = stores
-        .iter()
-        .map(|(name, store)| {
-            json!({
-                "store": name,
-                "path": store.path.display().to_string(),
-                "events": store.core.event_count(),
-            })
-        })
-        .collect();
+    let mut items: Vec<Value> = Vec::new();
+    for (name, store) in stores.iter() {
+        let core = store.fresh_core().await;
+        let refresh = store.refresh_context().await;
+        items.push(json!({
+            "store": name,
+            "path": store.path.display().to_string(),
+            "events": core.event_count(),
+            "refreshedAt": refresh["refreshedAt"],
+            "newEventsOnLastRefresh": refresh["newEventsOnLastRefresh"],
+        }));
+    }
     Ok(json!({
         "context": policy.context(None),
         "items": items,
@@ -754,7 +783,7 @@ impl Checkpoint {
 /// never a stream. With no checkpoint it reports the newest event as the starting
 /// point and returns nothing, so a first call cannot replay the whole store.
 async fn exec_watch_events(
-    core: &EmbeddedCore,
+    store: &Store,
     policy: &DiagnosticPolicy,
     args: &Value,
 ) -> Result<Value> {
@@ -774,11 +803,14 @@ async fn exec_watch_events(
         .transpose()?;
 
     let Some(checkpoint) = checkpoint else {
-        return watch_start(core, policy, args).await;
+        return watch_start(store.fresh_core().await, policy, args).await;
     };
 
     let deadline = Instant::now() + Duration::from_secs(wait);
     loop {
+        // The events a watch waits for are written by another process, so each
+        // poll first catches the replica up with that writer.
+        let core = store.fresh_core().await;
         // The already-delivered count must be applied as a query OFFSET, never as
         // a skip over the returned page: the fetch is capped at MAX_LIMIT, so once
         // one instant holds that many events a skip consumes the whole window and
@@ -1625,12 +1657,12 @@ mod tests {
     use super::{
         EvidencePageOptions, evidence_page, exec_fold_entity_lifecycle, exec_fold_steps,
         exec_list_stores, exec_query_events, exec_reconstruct_state, exec_watch_events,
-        payload_contains_all, payload_mode, project_fields, query_signature, redact,
-        selected_store, tool_definitions,
+        execute_tool_inner, payload_contains_all, payload_mode, project_fields, query_signature,
+        redact, selected_store, tool_definitions,
     };
     use crate::{
         diagnostics::{AccessProfile, DiagnosticPolicy},
-        stores::StoreRegistry,
+        stores::{Store, StoreRegistry},
     };
 
     #[test]
@@ -1757,7 +1789,9 @@ mod tests {
             selected_store(&stores, &policy, &json!({})).is_ok(),
             "its own store stays readable"
         );
-        let error = exec_list_stores(&stores, &policy).expect_err("listing names other stores");
+        let error = exec_list_stores(&stores, &policy)
+            .await
+            .expect_err("listing names other stores");
         assert!(error.to_string().starts_with("access denied:"));
     }
 
@@ -1784,17 +1818,27 @@ mod tests {
         core
     }
 
+    fn in_memory_store(core: EmbeddedCore) -> Store {
+        Store::new(
+            std::path::PathBuf::from("<in-memory>"),
+            core,
+            std::time::Duration::ZERO,
+        )
+    }
+
     #[tokio::test]
     async fn a_first_watch_reports_where_to_start_without_replaying_history() {
-        let core = core_with(&[
-            ("run-1", "workflow_run.started", json!({})),
-            ("run-2", "workflow_run.started", json!({})),
-        ])
-        .await;
+        let store = in_memory_store(
+            core_with(&[
+                ("run-1", "workflow_run.started", json!({})),
+                ("run-2", "workflow_run.started", json!({})),
+            ])
+            .await,
+        );
         let policy =
             DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
 
-        let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
+        let first = exec_watch_events(&store, &policy, &json!({ "event_type": "workflow_run" }))
             .await
             .expect("watch");
 
@@ -1813,11 +1857,12 @@ mod tests {
 
     #[tokio::test]
     async fn a_watch_returns_only_events_after_its_checkpoint() {
-        let core = core_with(&[("run-1", "workflow_run.started", json!({}))]).await;
+        let store =
+            in_memory_store(core_with(&[("run-1", "workflow_run.started", json!({}))]).await);
         let policy =
             DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
 
-        let first = exec_watch_events(&core, &policy, &json!({ "event_type": "workflow_run" }))
+        let first = exec_watch_events(&store, &policy, &json!({ "event_type": "workflow_run" }))
             .await
             .expect("watch");
         let checkpoint = first["checkpoint"]
@@ -1826,7 +1871,7 @@ mod tests {
             .to_string();
 
         let idle = exec_watch_events(
-            &core,
+            &store,
             &policy,
             &json!({ "event_type": "workflow_run", "checkpoint": checkpoint.clone() }),
         )
@@ -1838,18 +1883,20 @@ mod tests {
             "the event at the checkpoint was already delivered"
         );
 
-        core.ingest(allsource_core::embedded::IngestEvent {
-            entity_id: "run-1",
-            event_type: "workflow_run.completed",
-            payload: json!({}),
-            metadata: None,
-            tenant_id: None,
-        })
-        .await
-        .expect("ingest");
+        store
+            .core
+            .ingest(allsource_core::embedded::IngestEvent {
+                entity_id: "run-1",
+                event_type: "workflow_run.completed",
+                payload: json!({}),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await
+            .expect("ingest");
 
         let after = exec_watch_events(
-            &core,
+            &store,
             &policy,
             &json!({ "event_type": "workflow_run", "checkpoint": checkpoint }),
         )
@@ -1862,11 +1909,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_watch_refuses_a_checkpoint_it_did_not_issue() {
-        let core = core_with(&[]).await;
+        let store = in_memory_store(core_with(&[]).await);
         let policy =
             DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
 
-        let error = exec_watch_events(&core, &policy, &json!({ "checkpoint": "yesterday" }))
+        let error = exec_watch_events(&store, &policy, &json!({ "checkpoint": "yesterday" }))
             .await
             .expect_err("a checkpoint must be one this server issued");
         assert!(error.to_string().starts_with("invalid argument:"));
@@ -1913,8 +1960,9 @@ mod tests {
                 .collect()
         };
 
+        let store = in_memory_store(core);
         let none_delivered = exec_watch_events(
-            &core,
+            &store,
             &policy,
             &json!({
                 "event_type": "workflow_run",
@@ -1931,7 +1979,7 @@ mod tests {
         );
 
         let one_delivered = exec_watch_events(
-            &core,
+            &store,
             &policy,
             &json!({
                 "event_type": "workflow_run",
@@ -2302,5 +2350,60 @@ mod tests {
 
         assert_eq!(result["completeness"]["complete"], false);
         assert_eq!(result["completeness"]["reason"], "sampled");
+    }
+
+    #[tokio::test]
+    async fn fresh_through_advances_when_the_writer_ingests_without_a_restart() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let writer = EmbeddedCore::open(
+            Config::builder()
+                .data_dir(dir.path())
+                .build()
+                .expect("valid config"),
+        )
+        .await
+        .expect("writer");
+        let ingest = |entity_id: &'static str| {
+            writer.ingest(allsource_core::embedded::IngestEvent {
+                entity_id,
+                event_type: "workflow_run.started",
+                payload: json!({}),
+                metadata: None,
+                tenant_id: None,
+            })
+        };
+        ingest("run-1").await.expect("ingest");
+
+        let stores = StoreRegistry::open(dir.path(), &[], std::time::Duration::ZERO)
+            .await
+            .expect("open read-only registry");
+        let policy =
+            DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy");
+
+        let before = execute_tool_inner(&stores, &policy, "quick_stats", &json!({}))
+            .await
+            .expect("quick_stats");
+        let fresh_before = before["context"]["freshThrough"]
+            .as_str()
+            .expect("freshThrough")
+            .to_string();
+        assert!(before["context"]["store"]["refreshedAt"].is_string());
+
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        ingest("run-2").await.expect("ingest");
+
+        let after = execute_tool_inner(&stores, &policy, "quick_stats", &json!({}))
+            .await
+            .expect("quick_stats");
+        let fresh_after = after["context"]["freshThrough"]
+            .as_str()
+            .expect("freshThrough");
+        let parse = |raw: &str| chrono::DateTime::parse_from_rfc3339(raw).expect("rfc3339");
+        assert!(
+            parse(fresh_after) > parse(&fresh_before),
+            "freshThrough must advance past {fresh_before}, got {fresh_after}"
+        );
+        assert_eq!(after["context"]["store"]["newEventsOnLastRefresh"], 1);
+        assert_eq!(after["statistics"]["total_events"], 2);
     }
 }
