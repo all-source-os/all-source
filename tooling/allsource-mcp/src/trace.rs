@@ -5,6 +5,8 @@
 //! joins the trace when its entity id equals a frontier id or a string value in
 //! its payload, as the caller is allowed to see it, equals one exactly. The ids an event carries are
 //! read from that same view, so a redacted value is never matched or followed.
+//! A string holding a JSON object or array is parsed before that view is
+//! taken, so ids inside it join and its credential keys are redacted too.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -29,7 +31,14 @@ const MAX_DEPTH: u64 = 3;
 /// reported as truncated rather than fanning out across the whole store.
 const FRONTIER_CAP: usize = 50;
 const MIN_ID_LEN: usize = 3;
-const DEFAULT_ID_KEYS: [&str; 4] = ["id", "_id", "Id", "_ids"];
+const DEFAULT_ID_KEYS: [&str; 6] = ["id", "_id", "Id", "_ids", "_ref", "Ref"];
+/// A carried id whose matching events span more distinct entities than this is
+/// a hub (a workspace or workflow id every run shares) and is reported instead
+/// of followed. Entities, not events: a scope id stays under any event count in
+/// a narrow window, while it still spans every run in it.
+const DEFAULT_HUB_THRESHOLD: usize = 20;
+/// JSON-in-a-string nested deeper than this is left as a string.
+const MAX_EMBEDDED_DEPTH: usize = 4;
 
 /// The JSON schema of the `trace` tool's input.
 pub(super) fn input_schema(payload_modes: &Value) -> Value {
@@ -45,7 +54,8 @@ pub(super) fn input_schema(payload_modes: &Value) -> Value {
             "fields": { "type": "array", "items": { "type": "string" }, "description": "Project rendered payloads to these dotted paths." },
             "since": { "type": "string", "format": "date-time" },
             "until": { "type": "string", "format": "date-time" },
-            "id_keys": { "type": "array", "items": { "type": "string" }, "description": "Payload keys whose string values count as ids to follow. An entry starting with '_' or an uppercase letter matches as a key suffix (run_id, runId); any other entry matches the whole key. Defaults to id, _id, Id, _ids." }
+            "id_keys": { "type": "array", "items": { "type": "string" }, "description": "Payload keys whose string values count as ids to follow. An entry starting with '_' or an uppercase letter matches as a key suffix (run_id, runId); any other entry matches the whole key. Defaults to id, _id, Id, _ids, _ref, Ref." },
+            "hub_threshold": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_HUB_THRESHOLD, "description": "A carried id whose matching events span more distinct entities than this is listed under graph.hubs and not followed. The traced id itself is always matched." }
         },
         "required": ["id"]
     })
@@ -58,6 +68,37 @@ struct Scanned {
     /// shows no values (`none`, `keys`), so a key name never matches an id.
     values: BTreeSet<String>,
     carries: BTreeSet<String>,
+}
+
+/// The payload with every string that holds a JSON object or array replaced by
+/// what it parses to, so the permitted view, and its redaction, reach inside it.
+fn expand_embedded(value: &Value, depth: usize) -> Value {
+    match value {
+        Value::String(text) if depth < MAX_EMBEDDED_DEPTH => {
+            let trimmed = text.trim_start();
+            if !(trimmed.starts_with('{') || trimmed.starts_with('[')) {
+                return value.clone();
+            }
+            match serde_json::from_str::<Value>(text) {
+                Ok(parsed @ (Value::Object(_) | Value::Array(_))) => {
+                    expand_embedded(&parsed, depth + 1)
+                }
+                _ => value.clone(),
+            }
+        }
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| expand_embedded(item, depth))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| (key.clone(), expand_embedded(value, depth)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
 }
 
 fn string_values(view: &Value, out: &mut BTreeSet<String>) {
@@ -104,6 +145,7 @@ pub(super) async fn exec_trace(
         })?;
     let limit = limit_arg(args, "limit", DEFAULT_TRACE_LIMIT, MAX_LIMIT)?;
     let max_scan = limit_arg(args, "max_scan", DEFAULT_MAX_SCAN, MAX_SCAN)?;
+    let hub_threshold = limit_arg(args, "hub_threshold", DEFAULT_HUB_THRESHOLD, MAX_SCAN)?;
     let mode = payload_mode(args, policy)?;
     let fields = string_list(args, "fields")?;
     let since = timestamp_arg(args, "since")?;
@@ -133,12 +175,16 @@ pub(super) async fn exec_trace(
         scanned_per_store.insert(name.clone(), json!(events.len()));
         store_refresh.insert(name.clone(), store.refresh_context().await);
         for event in events {
-            let view = event_payload(&event.payload, mode);
+            let view = event_payload(&expand_embedded(&event.payload, 0), mode);
             let mut carries = BTreeSet::new();
             carries.insert(event.entity_id.clone());
             collect_ids(&view, &id_keys, &mut carries);
             if let Some(metadata) = event.metadata.as_ref() {
-                collect_ids(&redact(metadata), &id_keys, &mut carries);
+                collect_ids(
+                    &redact(&expand_embedded(metadata, 0)),
+                    &id_keys,
+                    &mut carries,
+                );
             }
             let mut values = BTreeSet::new();
             if matches!(mode, PayloadMode::Redacted | PayloadMode::Full) {
@@ -158,6 +204,7 @@ pub(super) async fn exec_trace(
     let mut edges: Vec<Value> = Vec::new();
     let mut frontier: Vec<String> = vec![root.to_string()];
     let mut frontier_truncated = false;
+    let mut hubs: BTreeMap<String, (u64, usize)> = BTreeMap::new();
 
     for hop in 0..=depth {
         let mut next: BTreeSet<String> = BTreeSet::new();
@@ -199,6 +246,24 @@ pub(super) async fn exec_trace(
                 },
             );
         }
+        next.retain(|id| {
+            let entities = scanned_events
+                .iter()
+                .filter(|scanned| scanned.event.entity_id == *id || scanned.values.contains(id))
+                .map(|scanned| scanned.event.entity_id.as_str())
+                .collect::<BTreeSet<_>>()
+                .len();
+            if entities > hub_threshold {
+                hubs.entry(id.clone()).or_insert((hop + 1, entities));
+                return false;
+            }
+            true
+        });
+        edges.retain(|edge| {
+            edge["to_id"]
+                .as_str()
+                .is_none_or(|to| !hubs.contains_key(to))
+        });
         if hop == depth || next.is_empty() {
             break;
         }
@@ -279,6 +344,10 @@ pub(super) async fn exec_trace(
                 }))
                 .collect::<Vec<_>>(),
             "edges": edges,
+            "hubs": hubs
+                .iter()
+                .map(|(id, (hop, entities))| json!({ "id": id, "hop": hop, "entities": entities }))
+                .collect::<Vec<_>>(),
         },
         "page": {
             "requestedLimit": limit,
