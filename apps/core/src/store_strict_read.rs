@@ -166,6 +166,11 @@ mod tests {
             .unwrap();
             store.ingest_with_expected_version(&event, Some(0)).unwrap();
             store.flush_storage().unwrap();
+            // This test is about the residency lease, so the cache must be
+            // warm before the reader starts.
+            store
+                .ensure_tenant_loaded_with_integrity("synthetic", true)
+                .unwrap();
             let cancellation = Arc::new(AtomicBool::new(false));
             // Hold only the materialization lock: the reader can first acquire
             // its residency lease, then wait here with its original deadline.

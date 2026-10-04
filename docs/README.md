@@ -80,6 +80,7 @@ For understanding the system architecture and design decisions.
 | [Tenant Architecture](./current/TENANT_ARCHITECTURE.md) | Multi-tenancy and isolation | ✅ |
 | [Event Store Features](./current/EVENT_STORE_FEATURES.md) | Core event sourcing capabilities | ✅ |
 | [Architecture Optimization](./current/ARCHITECTURE_OPTIMIZATION.md) | System-level optimizations | ✅ |
+| [OCC version index](./research/2026-10-04-occ-version-index.md) | Why entity versions must be read, never counted; the eviction and memory defects that follow | ✅ |
 
 ---
 

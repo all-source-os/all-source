@@ -23,6 +23,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Position of `entity_id` in the event schema. All fields are flat
+/// primitives, so this is both the field index and the Parquet leaf index.
+const ENTITY_ID_COLUMN: usize = 2;
+
+/// Position of `version` in the event schema. See [`ENTITY_ID_COLUMN`].
+const VERSION_COLUMN: usize = 6;
+
 /// Default batch size for Parquet writes (10,000 events as per US-023)
 pub const DEFAULT_BATCH_SIZE: usize = 10_000;
 
@@ -162,7 +169,8 @@ impl ParquetStorage {
             AllSourceError::StorageError(format!("Failed to create storage directory: {e}"))
         })?;
 
-        // Define Arrow schema for events
+        // Define Arrow schema for events.
+        // ENTITY_ID_COLUMN / VERSION_COLUMN index into this field order.
         let schema = Arc::new(Schema::new(vec![
             Field::new("event_id", DataType::Utf8, false),
             Field::new("event_type", DataType::Utf8, false),
@@ -882,26 +890,49 @@ impl ParquetStorage {
             budget.compressed(metadata.len())?;
         }
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+        let mut charged_bytes: u64 = 0;
         if let Some(budget) = budget.as_deref_mut() {
             for group in builder.metadata().row_groups() {
                 budget.decoded_metadata(group.num_rows(), group.total_byte_size())?;
+                charged_bytes =
+                    charged_bytes.saturating_add(group.total_byte_size().max(0) as u64);
             }
             builder = builder.with_batch_size(256);
         }
         let reader = builder.build()?;
 
         let mut events = Vec::new();
+        let mut decoded_bytes: u64 = 0;
 
         for batch in reader {
             if let Some(budget) = budget.as_deref() {
                 budget.check()?;
             }
             let batch_events = self.record_batch_to_events(&batch?, tenant_id)?;
+            decoded_bytes = decoded_bytes.saturating_add(
+                batch_events
+                    .iter()
+                    .map(Event::estimated_size_bytes)
+                    .sum(),
+            );
             events.extend(batch_events);
         }
 
         if let Some(budget) = budget {
             budget.check()?;
+            // The budget charges Parquet's uncompressed size, but the memory
+            // actually held is the decoded `serde_json::Value` tree, which is
+            // several times larger. Report the ratio so the ceiling can be set
+            // against the quantity that runs out rather than a proxy for it.
+            if charged_bytes > 0 && decoded_bytes > charged_bytes.saturating_mul(2) {
+                tracing::warn!(
+                    file = %file_path.display(),
+                    charged_bytes,
+                    decoded_bytes,
+                    ratio = decoded_bytes as f64 / charged_bytes as f64,
+                    "archive read decoded more heap than the budget charged"
+                );
+            }
         }
 
         Ok(events)
@@ -1076,6 +1107,110 @@ impl ParquetStorage {
     pub fn load_events_for_tenant(&self, tenant_id: &str) -> Result<Vec<Event>> {
         self.load_events_for_tenant_with_integrity(tenant_id, None)
             .map(|(events, _complete)| events)
+    }
+
+    /// Highest persisted version per entity for `tenant_id`, read from the
+    /// archive without reconstructing any events.
+    ///
+    /// Every column is decoded, so a corrupt row group fails here exactly as
+    /// it would during a full load: a version read from an archive that cannot
+    /// be read through is not a version worth trusting. What this avoids is
+    /// the part that costs memory rather than CPU — no payload is parsed into
+    /// a `serde_json::Value` and no `Event` outlives its batch, so peak heap
+    /// is one batch, not the tenant's whole history.
+    ///
+    /// Errors if the tenant's archive cannot be enumerated completely: a
+    /// partial answer here would understate a version and let the next
+    /// conditional write reuse one already on disk.
+    pub(crate) fn load_entity_versions_for_tenant(
+        &self,
+        tenant_id: &str,
+        budget: &mut ArchiveReadBudget,
+    ) -> Result<HashMap<String, u64>> {
+        let files = self.list_complete_tenant_archive(tenant_id, budget)?;
+        let mut versions: HashMap<String, u64> = HashMap::new();
+        for path in files {
+            budget.file()?;
+            self.fold_entity_versions(&path, &mut versions, budget)?;
+        }
+        Ok(versions)
+    }
+
+    fn fold_entity_versions(
+        &self,
+        file_path: &Path,
+        versions: &mut HashMap<String, u64>,
+        budget: &mut ArchiveReadBudget,
+    ) -> Result<()> {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        budget.check()?;
+        let file = File::open(file_path).map_err(|e| {
+            AllSourceError::StorageError(format!("Failed to open parquet file: {e}"))
+        })?;
+        let file_len = file
+            .metadata()
+            .map_err(|error| {
+                AllSourceError::StorageError(format!("Failed to inspect archive file: {error}"))
+            })?
+            .len();
+        budget.compressed(file_len)?;
+
+        // A damaged archive must refuse a conditional write as a storage
+        // failure, not surface the decoder's own error type to the caller.
+        fn unreadable(path: &Path, error: impl std::fmt::Display) -> AllSourceError {
+            AllSourceError::StorageError(format!(
+                "Cannot verify conditional version from {}: {error}",
+                path.display()
+            ))
+        }
+
+        let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+            .map_err(|error| unreadable(file_path, error))?;
+
+        // Charge the columns this read keeps. Everything else is decoded to
+        // prove the file is readable and dropped with its batch.
+        for group in builder.metadata().row_groups() {
+            let retained: i64 = [ENTITY_ID_COLUMN, VERSION_COLUMN]
+                .iter()
+                .map(|&column| group.column(column).uncompressed_size())
+                .sum();
+            budget.decoded_metadata(group.num_rows(), retained)?;
+        }
+
+        let reader = builder
+            .with_batch_size(1024)
+            .build()
+            .map_err(|error| unreadable(file_path, error))?;
+
+        for batch in reader {
+            budget.check()?;
+            let batch = batch.map_err(|error| unreadable(file_path, error))?;
+            let entity_ids = batch
+                .column(ENTITY_ID_COLUMN)
+                .as_any()
+                .downcast_ref::<arrow::array::StringArray>()
+                .ok_or_else(|| {
+                    AllSourceError::StorageError("Invalid entity_id column".to_string())
+                })?;
+            let row_versions = batch
+                .column(VERSION_COLUMN)
+                .as_any()
+                .downcast_ref::<arrow::array::UInt64Array>()
+                .ok_or_else(|| {
+                    AllSourceError::StorageError("Invalid version column".to_string())
+                })?;
+
+            for i in 0..batch.num_rows() {
+                let version = row_versions.value(i);
+                versions
+                    .entry(entity_ids.value(i).to_string())
+                    .and_modify(|current| *current = (*current).max(version))
+                    .or_insert(version);
+            }
+        }
+
+        Ok(())
     }
 
     pub(crate) fn load_events_for_tenant_with_integrity(

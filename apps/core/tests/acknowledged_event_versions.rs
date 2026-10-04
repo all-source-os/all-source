@@ -164,7 +164,10 @@ fn unconditional_write_does_not_read_cold_archive_but_conditional_write_still_do
             current: 3
         })
     ));
-    assert!(store.is_tenant_loaded("synthetic-run-tenant"));
+    assert!(
+        !store.is_tenant_loaded("synthetic-run-tenant"),
+        "the conditional write read versions from the archive without hydrating it"
+    );
     assert!(subscriber.try_recv().is_err());
     assert_eq!(versions(&store, "archived"), vec![1, 2, 3]);
 }

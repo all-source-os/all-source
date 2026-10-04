@@ -23,8 +23,9 @@ fn eviction_cannot_erase_an_unflushed_conditional_predecessor() {
         .ingest_with_expected_version(&event(), Some(0))
         .unwrap();
     store.evict_tenant(TENANT);
-    assert!(
-        store.is_tenant_loaded(TENANT),
+    assert_eq!(
+        store.total_events(),
+        1,
         "pending history must remain resident"
     );
     assert!(
@@ -141,10 +142,82 @@ fn eviction_does_not_wait_for_in_flight_storage_work() {
     eviction.join().unwrap();
     assert!(finished_before_release.is_ok());
     assert_eq!(store.total_events(), 1);
-    assert!(store.is_tenant_loaded(TENANT));
     store.evict_tenant(TENANT);
     assert_eq!(store.total_events(), 0);
     assert!(!store.is_tenant_loaded(TENANT));
+}
+
+/// Eviction must not lower an entity's version: the archive still holds those
+/// events, and a version handed out twice is two different events claiming one
+/// place in the entity's history.
+#[test]
+fn eviction_does_not_lower_an_entity_version() {
+    let directory = TempDir::new().unwrap();
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    store
+        .ingest_with_expected_version(&event(), Some(0))
+        .unwrap();
+    store
+        .ingest_with_expected_version(&event(), Some(1))
+        .unwrap();
+    store.flush_storage().unwrap();
+    assert_eq!(store.get_entity_version("synthetic-entity"), 2);
+
+    store.evict_tenant(TENANT);
+    assert_eq!(store.total_events(), 0, "the cache should have been dropped");
+    assert_eq!(
+        store.get_entity_version("synthetic-entity"),
+        2,
+        "eviction lowered a version that is still on disk"
+    );
+
+    assert!(
+        store
+            .ingest_with_expected_version(&event(), Some(0))
+            .is_err(),
+        "a stale expected_version was accepted after eviction"
+    );
+    assert_eq!(
+        store
+            .ingest_with_expected_version(&event(), Some(2))
+            .unwrap(),
+        3
+    );
+}
+
+/// A cold store must learn an entity's version from the archive without
+/// hydrating the tenant's events.
+#[test]
+fn conditional_write_resolves_version_without_loading_the_tenant() {
+    let directory = TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        store
+            .ingest_with_expected_version(&event(), Some(0))
+            .unwrap();
+        store
+            .ingest_with_expected_version(&event(), Some(1))
+            .unwrap();
+        store.flush_storage().unwrap();
+    }
+
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    assert_eq!(store.total_events(), 0);
+    assert!(
+        store
+            .ingest_with_expected_version(&event(), Some(0))
+            .is_err()
+    );
+    assert_eq!(
+        store
+            .ingest_with_expected_version(&event(), Some(2))
+            .unwrap(),
+        3
+    );
+    assert!(
+        !store.is_tenant_loaded(TENANT),
+        "resolving a version must not hydrate the tenant"
+    );
 }
 
 #[test]
@@ -183,9 +256,9 @@ async fn eviction_between_hydration_and_version_check_cannot_authorize_a_stale_w
     let writer = tokio::task::spawn_blocking(move || {
         writer_store.ingest_with_expected_version(&event(), Some(0))
     });
-    // test-hang-allow: wait for the actual loader to finish, before releasing the checkpoint gate.
+    // test-hang-allow: wait for the version index to resolve, before releasing the checkpoint gate.
     tokio::time::timeout(Duration::from_secs(1), async {
-        while !store.tenant_loader.is_complete(TENANT) {
+        while !store.version_index_tenants.contains_key(TENANT) {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
     })

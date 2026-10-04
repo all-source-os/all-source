@@ -164,9 +164,15 @@ pub struct EventStore {
     /// Autonomous schema evolution manager (v2.0 feature)
     schema_evolution: Arc<SchemaEvolutionManager>,
 
-    /// Per-entity version counters for optimistic concurrency control (v0.14 feature)
-    /// Key: entity_id string, Value: monotonic version (number of events for that entity)
+    /// Per-entity version marks for optimistic concurrency control (v0.14 feature)
+    /// Key: entity_id string, Value: highest version persisted for that entity.
+    /// Monotonic, and never lowered by a cache eviction.
     entity_versions: Arc<DashMap<String, u64>>,
+
+    /// Tenants whose archived versions have been folded into `entity_versions`.
+    /// A conditional write needs the archive's high-water marks exactly once;
+    /// in-memory appends keep them current from then on.
+    version_index_tenants: Arc<DashMap<String, ()>>,
 
     /// Durable consumer registry for subscription cursor tracking (v0.14 feature)
     consumer_registry: Arc<ConsumerRegistry>,
@@ -371,6 +377,7 @@ impl EventStore {
             exactly_once: Arc::new(ExactlyOnceRegistry::new(ExactlyOnceConfig::default())),
             schema_evolution: Arc::new(SchemaEvolutionManager::new()),
             entity_versions: Arc::new(DashMap::new()),
+            version_index_tenants: Arc::new(DashMap::new()),
             consumer_registry: Arc::new(ConsumerRegistry::new()),
             event_broadcast_tx,
             tenant_loader: {
@@ -610,18 +617,14 @@ impl EventStore {
 
         // Validate event first (before any locking)
         self.validate_event(event)?;
-        // OCC needs durable history, but ordinary appends must keep lazy loading:
-        // hydrating a large archive here would stall unrelated HTTP writes.
+        // OCC needs the archive's versions, not its events. Reading only the
+        // versions keeps an ordinary append's lazy loading intact and keeps a
+        // large tenant from having to fit in memory to be written to.
         if expected_version.is_some() {
-            self.ensure_tenant_loaded_budgeted(event.tenant_id_str(), true, cancellation.cloned())?;
+            self.ensure_version_index_for_tenant(event.tenant_id_str(), cancellation)?;
         }
 
         let _resident = self.cache_residency_gate.read();
-        if expected_version.is_some() && !self.tenant_loader.is_complete(event.tenant_id_str()) {
-            return Err(AllSourceError::StorageError(
-                "Verified archive was evicted before the conditional write".into(),
-            ));
-        }
         let entity_id = event.entity_id_str().to_string();
         let _durable = self.durability_gate.read();
         check_cancelled(cancellation.map(Arc::as_ref))?;
@@ -798,7 +801,9 @@ impl EventStore {
             return Err(e);
         }
 
-        // Track per-entity version (unconditional increment, no version check)
+        // Assigns the number `get_entity_version` reports. It is a count, and
+        // it is NOT the version written to the event — see the version-index
+        // investigation under docs/research/.
         *self
             .entity_versions
             .entry(event.entity_id_str().to_string())
@@ -949,7 +954,6 @@ impl EventStore {
             self.schema_evolution
                 .analyze_event(event.event_type_str(), &event.payload);
 
-            // Track per-entity version
             *self
                 .entity_versions
                 .entry(event.entity_id_str().to_string())
@@ -1009,7 +1013,6 @@ impl EventStore {
             );
         }
 
-        // Track per-entity version
         *self
             .entity_versions
             .entry(event.entity_id_str().to_string())
@@ -1058,11 +1061,28 @@ impl EventStore {
         Ok(())
     }
 
-    /// Get the current version for an entity (number of events appended for it).
+    /// Get the current version for an entity, as persisted on its latest event.
     /// Returns 0 if the entity has no events.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn get_entity_version(&self, entity_id: &str) -> u64 {
         self.entity_versions.get(entity_id).map_or(0, |v| *v)
+    }
+
+    /// Raise an entity's version high-water mark to the version `event` carries.
+    ///
+    /// The version is READ from the event, never derived from how many events
+    /// are resident. Lazy loading and cache eviction both leave partial history
+    /// in memory, so a count over what is resident yields a number lower than
+    /// the one already on disk, and the next conditional write reuses it.
+    ///
+    /// Monotonic by construction: replaying a WAL tail over an already-loaded
+    /// archive, or loading the same event twice, cannot lower the mark.
+    fn observe_entity_version(&self, event: &Event) {
+        let version = u64::try_from(event.version).unwrap_or(0);
+        self.entity_versions
+            .entry(event.entity_id_str().to_string())
+            .and_modify(|current| *current = (*current).max(version))
+            .or_insert(version);
     }
 
     /// Get the consumer registry for durable subscriptions.
@@ -1592,6 +1612,47 @@ impl EventStore {
         self.ensure_tenant_loaded_budgeted(tenant_id, require_complete, None)
     }
 
+    /// Fold `tenant_id`'s archived versions into `entity_versions`, once.
+    ///
+    /// A conditional write must not assign a version that already exists on
+    /// disk, so the archive has to be consulted before the first OCC write
+    /// for a tenant. Only `entity_id` and `version` are read: the tenant's
+    /// events are not loaded and no payload is decoded.
+    ///
+    /// Concurrent callers for a cold tenant may both scan. Folding is a max,
+    /// so a duplicate scan costs time and changes nothing.
+    fn ensure_version_index_for_tenant(
+        &self,
+        tenant_id: &str,
+        cancellation: Option<&Arc<std::sync::atomic::AtomicBool>>,
+    ) -> Result<()> {
+        if self.version_index_tenants.contains_key(tenant_id) {
+            return Ok(());
+        }
+
+        let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
+            self.version_index_tenants.insert(tenant_id.to_string(), ());
+            return Ok(());
+        };
+
+        let mut budget = ArchiveReadBudget::new(self.strict_archive_limits.clone())
+            .with_cancellation(cancellation.cloned());
+
+        let archived = storage
+            .read()
+            .load_entity_versions_for_tenant(tenant_id, &mut budget)?;
+
+        for (entity_id, version) in archived {
+            self.entity_versions
+                .entry(entity_id)
+                .and_modify(|current| *current = (*current).max(version))
+                .or_insert(version);
+        }
+
+        self.version_index_tenants.insert(tenant_id.to_string(), ());
+        Ok(())
+    }
+
     fn ensure_tenant_loaded_budgeted(
         &self,
         tenant_id: &str,
@@ -1827,7 +1888,7 @@ impl EventStore {
     /// sustainable data strategy.
     ///
     /// Removes every event for this tenant from the events Vec,
-    /// rebuilds the index/entity_versions for the retained events
+    /// rebuilds the index for the retained events
     /// (Vec offsets shift on remove, so the index has to be
     /// rebuilt), and resets the tenant_loader bookkeeping so a
     /// subsequent query triggers a fresh `ensure_tenant_loaded`.
@@ -1897,10 +1958,12 @@ impl EventStore {
         }
 
         // Rebuild the index — Vec offsets shifted under retain().
-        // Rebuild entity_versions from scratch too, since the
-        // counter reflects "how many events of this entity remain".
+        //
+        // entity_versions is global and must NOT be rebuilt here: it is a
+        // high-water mark of persisted versions, not a census of resident
+        // events, and dropping one tenant's cache lowers no entity's version
+        // on disk.
         self.index.clear();
-        self.entity_versions.clear();
         for (offset, event) in events.iter().enumerate() {
             if let Err(e) = self.index.index_event(
                 event.id,
@@ -1915,10 +1978,6 @@ impl EventStore {
                     e
                 );
             }
-            *self
-                .entity_versions
-                .entry(event.entity_id_str().to_string())
-                .or_insert(0) += 1;
         }
         self.tenant_loader.mark_unloaded(tenant_id);
 
@@ -2007,10 +2066,7 @@ impl EventStore {
             tracing::error!("Failed to project loaded event {}: {}", event.id, e);
         }
 
-        *self
-            .entity_versions
-            .entry(event.entity_id_str().to_string())
-            .or_insert(0) += 1;
+        self.observe_entity_version(&event);
 
         events.push(event);
         // Account for the bytes AFTER the push so a panic in the

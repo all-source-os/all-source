@@ -140,10 +140,11 @@ async fn cancellation_is_checked_after_waiting_for_durability_gate() {
             Some(&worker_cancel),
         )
     });
-    // Loading happens after the entry cancellation check and before the held durability gate.
+    // The version index resolves after the entry cancellation check and before
+    // the held durability gate.
     // test-hang-allow: bounded observation of the real store reaching that boundary.
     tokio::time::timeout(Duration::from_secs(1), async {
-        while !store.is_tenant_loaded(TENANT) {
+        while !store.version_index_tenants.contains_key(TENANT) {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
     })
@@ -225,12 +226,10 @@ async fn http_health_and_ordinary_writes_survive_a_waiting_conditional_load() {
     assert_eq!(client.post(format!("{url}/events")).json(&serde_json::json!({
         "tenant_id": "synthetic-other", "entity_id": "ordinary", "event_type": "synthetic.updated", "payload": {}
     })).send().await.unwrap().status(), 200);
-    assert!(
-        !pending.is_finished(),
-        "conditional write must wait for its archive load lock"
-    );
-    release_tx.send(()).unwrap();
+    // A conditional write resolves its version straight from the archive and
+    // never takes the tenant load lock, so holding that lock cannot stall it.
     assert_eq!(pending.await.unwrap().status(), 200);
+    release_tx.send(()).unwrap();
     holder.join().unwrap().unwrap();
     server.abort();
     assert!(server.await.unwrap_err().is_cancelled());
