@@ -183,6 +183,29 @@ Six sites violated it. The three load paths now read; the three write paths stil
 count, and that is the remaining door. A change that only stops the memory
 exhaustion, or only caches the number, leaves the rest open.
 
+## The HTTP layer hydrated too, and that was the production path
+
+The store's conditional-write guard was not the only full load. `prepare_http_append`
+called `prepare_http_archive`, which runs
+`ensure_tenant_loaded_with_limits(tenant_id, require_complete = true, …)` whenever
+`http_archive_warmup_timeout` is set — and `store.rs:3145` sets it to 30s for any
+store with a `storage_dir`, so it is on in production.
+
+`archive_work::append` short-circuits unconditional writes, so this never affected
+an ordinary append. A **conditional** write over HTTP hydrated the tenant twice:
+once in the admission check, once in the store. Fixing only the store would have
+left the production path exactly as it was.
+
+The admission check no longer warms anything. It validates the event, confirms the
+store is writable, and takes its slot; the conditional write then reads the versions
+it needs. Rejections that the warmup used to produce — a corrupt archive, an
+over-budget one — now come from the read itself, which is what
+`http_append_rejects_corrupt_over_budget_or_read_only_archives` asserts.
+
+One behaviour changed deliberately. The warmup ignored caller cancellation so an
+abandoned request's work was not wasted. The version resolve honours cancellation
+instead: under memory pressure, abandoning the read is the point.
+
 ## What landed
 
 1. `observe_entity_version` raises an entity's mark to the version carried by the

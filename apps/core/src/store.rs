@@ -1667,6 +1667,12 @@ impl EventStore {
         )
     }
 
+    /// Reject a conditional append before it takes a work slot.
+    ///
+    /// This deliberately does NOT warm the tenant's archive. A conditional
+    /// write reads the versions it needs and nothing else; hydrating the whole
+    /// tenant to authorise one append is what exhausted memory on a large
+    /// archive, and the residency it bought was never required.
     #[cfg(feature = "server")]
     pub(crate) fn prepare_http_append(
         &self,
@@ -1675,7 +1681,7 @@ impl EventStore {
     ) -> Result<()> {
         self.ensure_writable()?;
         self.validate_event(event)?;
-        self.prepare_http_archive(event.tenant_id_str(), cancellation)
+        check_cancelled(Some(cancellation.as_ref()))
     }
 
     /// An admitted HTTP worker owns this bounded cache warmup even if its

@@ -80,7 +80,7 @@ fn cancelled_conditional_append_does_not_reach_wal_or_cache() {
 }
 
 #[test]
-fn http_warmup_keeps_input_caps_and_rejects_corrupt_or_read_only_appends() {
+fn http_append_rejects_corrupt_over_budget_or_read_only_archives() {
     for failure in ["file cap", "corrupt", "read only"] {
         let directory = TempDir::new().unwrap();
         let seed = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
@@ -105,8 +105,18 @@ fn http_warmup_keeps_input_caps_and_rejects_corrupt_or_read_only_appends() {
         let store = EventStore::with_config(config);
         let mut subscriber = store.subscribe_events();
         let cancellation = Arc::new(AtomicBool::new(false));
+        // Mirrors archive_work::append: the admission check no longer warms
+        // the archive, so a damaged or over-budget one is refused by the
+        // conditional write that reads it.
         let error = store
             .prepare_http_append(&event(), &cancellation)
+            .and_then(|()| {
+                store.ingest_with_expected_version_cancellable(
+                    &event(),
+                    Some(1),
+                    Some(&cancellation),
+                )
+            })
             .unwrap_err();
         if failure == "file cap" {
             assert!(error.to_string().contains("budget exceeded: files"));
@@ -237,7 +247,7 @@ async fn http_health_and_ordinary_writes_survive_a_waiting_conditional_load() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn timed_out_http_append_warms_history_without_appending_cancelled_command() {
+async fn timed_out_http_append_leaves_no_trace_of_the_cancelled_command() {
     let directory = TempDir::new().unwrap();
     let storage_dir = directory.path().join("storage");
     let seed = EventStore::with_config(EventStoreConfig::with_persistence(&storage_dir));
@@ -253,11 +263,13 @@ async fn timed_out_http_append_warms_history_without_appending_cancelled_command
     };
     let store = Arc::new(EventStore::with_config(config.clone()));
     let mut subscriber = store.subscribe_events();
-    let lock = store.tenant_loader.lock_for(TENANT);
+    // Hold the storage lock the version resolve needs, so the conditional
+    // append stalls on the archive read rather than on a cache load.
+    let lock_store = Arc::clone(&store);
     let (held_tx, held_rx) = tokio::sync::oneshot::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
     let holder = std::thread::spawn(move || {
-        let _guard = lock.lock();
+        let _guard = lock_store.storage.as_ref().unwrap().write();
         held_tx.send(()).unwrap();
         // test-hang-allow: controlled cold-load contention outlives the five-second response.
         release_rx.recv_timeout(Duration::from_secs(8))
@@ -306,16 +318,11 @@ async fn timed_out_http_append_warms_history_without_appending_cancelled_command
     );
     release_tx.send(()).unwrap();
     holder.join().unwrap().unwrap();
-    // test-hang-allow: cache verification continues independently, under its own deadline.
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !store.tenant_loader.is_complete(TENANT) {
-            tokio::time::sleep(Duration::from_millis(1)).await;
-        }
-    })
-    .await
-    .unwrap();
-    assert_eq!(store.total_events(), 1);
-    assert_eq!(store.get_entity_version("synthetic-entity"), 1);
+    // Cancellation reaches the archive read, so the abandoned command leaves
+    // nothing behind: no event, no broadcast, no half-built version index.
+    // Under memory pressure, abandoning the read is the point.
+    assert_eq!(store.total_events(), 0);
+    assert!(!store.version_index_tenants.contains_key(TENANT));
     assert!(subscriber.try_recv().is_err());
     let response = client
         .post(format!("{url}/events"))
