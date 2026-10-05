@@ -164,7 +164,11 @@ fn eviction_does_not_lower_an_entity_version() {
     assert_eq!(store.get_entity_version("synthetic-entity"), 2);
 
     store.evict_tenant(TENANT);
-    assert_eq!(store.total_events(), 0, "the cache should have been dropped");
+    assert_eq!(
+        store.total_events(),
+        0,
+        "the cache should have been dropped"
+    );
     assert_eq!(
         store.get_entity_version("synthetic-entity"),
         2,

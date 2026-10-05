@@ -894,8 +894,7 @@ impl ParquetStorage {
         if let Some(budget) = budget.as_deref_mut() {
             for group in builder.metadata().row_groups() {
                 budget.decoded_metadata(group.num_rows(), group.total_byte_size())?;
-                charged_bytes =
-                    charged_bytes.saturating_add(group.total_byte_size().max(0) as u64);
+                charged_bytes = charged_bytes.saturating_add(group.total_byte_size().max(0) as u64);
             }
             builder = builder.with_batch_size(256);
         }
@@ -909,12 +908,8 @@ impl ParquetStorage {
                 budget.check()?;
             }
             let batch_events = self.record_batch_to_events(&batch?, tenant_id)?;
-            decoded_bytes = decoded_bytes.saturating_add(
-                batch_events
-                    .iter()
-                    .map(Event::estimated_size_bytes)
-                    .sum(),
-            );
+            decoded_bytes = decoded_bytes
+                .saturating_add(batch_events.iter().map(Event::estimated_size_bytes).sum());
             events.extend(batch_events);
         }
 
