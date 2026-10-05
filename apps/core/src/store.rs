@@ -788,26 +788,38 @@ impl EventStore {
         let _resident = self.cache_residency_gate.read();
         let _durable = self.durability_gate.read();
 
-        // Write to WAL FIRST for durability (v0.2 feature)
-        // This ensures event is persisted before processing
-        if let Some(ref wal) = self.wal
-            && let Err(e) = wal.append(event.clone())
-        {
-            #[cfg(feature = "server")]
-            {
-                self.metrics.ingestion_errors_total.inc();
-                timer.observe_duration();
-            }
-            return Err(e);
-        }
+        // The version is stamped onto the event before anything durable sees
+        // it, so the number get_entity_version reports is the number on disk.
+        // The WAL append stays inside the entry lock: a version handed out but
+        // not persisted is one the next reader hands out again.
+        let stored_event = {
+            let mut version_entry = self
+                .entity_versions
+                .entry(event.entity_id_str().to_string())
+                .or_insert(0);
+            let next = version_entry.checked_add(1).ok_or_else(|| {
+                crate::error::AllSourceError::InvalidInput("Entity version exhausted".into())
+            })?;
+            let mut stored = event.clone();
+            stored.version = i64::try_from(next).map_err(|_| {
+                crate::error::AllSourceError::InvalidInput("Entity version exhausted".into())
+            })?;
 
-        // Assigns the number `get_entity_version` reports. It is a count, and
-        // it is NOT the version written to the event — see the version-index
-        // investigation under docs/research/.
-        *self
-            .entity_versions
-            .entry(event.entity_id_str().to_string())
-            .or_insert(0) += 1;
+            if let Some(ref wal) = self.wal
+                && let Err(e) = wal.append(stored.clone())
+            {
+                #[cfg(feature = "server")]
+                {
+                    self.metrics.ingestion_errors_total.inc();
+                    timer.observe_duration();
+                }
+                return Err(e);
+            }
+
+            *version_entry = next;
+            stored
+        };
+        let event = &stored_event;
 
         let mut events = self.events.write();
         let offset = events.len();
@@ -903,7 +915,7 @@ impl EventStore {
     /// to WAL, indexed, processed through projections, and pushed to the
     /// events vector under a single write lock.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
-    pub fn ingest_batch(&self, batch: Vec<Event>) -> Result<()> {
+    pub fn ingest_batch(&self, mut batch: Vec<Event>) -> Result<()> {
         if batch.is_empty() {
             return Ok(());
         }
@@ -920,7 +932,24 @@ impl EventStore {
         let _durable = self.durability_gate.read();
         let batch_count = batch.len();
 
-        // Phase 2: Write all events to WAL (before write lock, for durability)
+        // Phase 2: stamp each event with its version, then write to WAL.
+        // Several events for one entity take consecutive versions. A WAL
+        // failure after a bump leaves the mark above what is persisted, which
+        // only ever skips a version — the reverse would reissue one.
+        for event in &mut batch {
+            let mut version_entry = self
+                .entity_versions
+                .entry(event.entity_id_str().to_string())
+                .or_insert(0);
+            let next = version_entry.checked_add(1).ok_or_else(|| {
+                crate::error::AllSourceError::InvalidInput("Entity version exhausted".into())
+            })?;
+            event.version = i64::try_from(next).map_err(|_| {
+                crate::error::AllSourceError::InvalidInput("Entity version exhausted".into())
+            })?;
+            *version_entry = next;
+        }
+
         if let Some(ref wal) = self.wal {
             for event in &batch {
                 wal.append(event.clone())?;
@@ -953,11 +982,6 @@ impl EventStore {
             self.geo_index.index_event(&event);
             self.schema_evolution
                 .analyze_event(event.event_type_str(), &event.payload);
-
-            *self
-                .entity_versions
-                .entry(event.entity_id_str().to_string())
-                .or_insert(0) += 1;
 
             // Broadcast to in-process subscribers
             let _ = self.event_broadcast_tx.send(Arc::new(event.clone()));
@@ -1013,10 +1037,10 @@ impl EventStore {
             );
         }
 
-        *self
-            .entity_versions
-            .entry(event.entity_id_str().to_string())
-            .or_insert(0) += 1;
+        // A follower adopts the leader's version rather than assigning its
+        // own. Counting here would renumber the leader's history and the two
+        // would disagree about what version an entity is at.
+        self.observe_entity_version(event);
 
         if !self.read_only
             && let Some(storage) = &self.storage

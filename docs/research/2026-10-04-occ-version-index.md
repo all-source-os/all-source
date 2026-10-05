@@ -177,11 +177,12 @@ lever.
 
 ## The invariant
 
-**The version is read, never counted.**
+**A version is read where it exists and written where it is assigned. It is
+never inferred from how many events happen to be in memory.**
 
-Six sites violated it. The three load paths now read; the three write paths still
-count, and that is the remaining door. A change that only stops the memory
-exhaustion, or only caches the number, leaves the rest open.
+Six sites violated it. The three load paths now read. The two local write paths
+assign and persist, so what they report is what a later read finds. The
+follower adopts the leader's. No site counts.
 
 ## The HTTP layer hydrated too, and that was the production path
 
@@ -226,22 +227,41 @@ Tests: `eviction_does_not_lower_an_entity_version` and
 `conditional_write_resolves_version_without_loading_the_tenant`. The first fails
 with `left: 0, right: 2` against the old eviction behaviour.
 
-## What did not land, and why
+## The write side, resolved
 
-**The three write paths still count.** `ingest`, `ingest_batch` and the pipeline
-append each bump `entity_versions` by one and report that number, while
-persisting whatever `version` the caller put on the event. Memory and disk
-therefore disagree for any entity written unconditionally: after a restart, the
-mark reflects the persisted versions and not the count.
+The three write paths counted without persisting. `ingest`, `ingest_batch` and
+`ingest_replicated` each bumped `entity_versions` by one and reported that
+number, while writing whatever `version` the caller set — and
+`Event::from_strings` hardcodes `version: 1`. Three appends to one entity
+therefore stored `[1, 1, 1]` on disk while the store reported 3.
 
-Making them agree means having `ingest` assign and persist the version it
-reports. That is a write-semantics change on a path also used by
-`embedded/core.rs` peer replication, `prime/sync.rs` and `prime/import_export.rs`,
-where renumbering a caller-supplied version would be wrong. It needs an owner
-decision about which of those paths may renumber, so it is a separate task rather
-than part of this fix.
+The question of which paths may renumber turned out to be narrow. A grep for
+assignments to `event.version` finds only the OCC path and tests: **no
+production caller supplies a version**, so nothing depended on preservation.
+The HTTP route was already correct, because `archive_work::append` sends even
+unconditional writes through `ingest_with_expected_version(.., None)`, which
+stamps the version it assigns.
 
-The budget's ceiling is also unchanged. Re-deriving it needs the measurement that
+That leaves one genuine exception. `ingest_replicated` is a follower applying
+the leader's events; assigning there would renumber the leader's history and
+the two would disagree. It adopts the incoming version as a high-water mark.
+
+| Path | Version |
+|---|---|
+| `ingest`, `ingest_batch` | assigned under the entity's entry lock, stamped before the WAL write |
+| `ingest_with_expected_version` | unchanged — already assigned and persisted |
+| `ingest_replicated` | the leader's, recorded as a high-water mark |
+| archive hydration, eviction | read, never counted |
+
+`ingest_persists_the_version_it_reports` pins it, and reports `[1, 1, 1]`
+against `[1, 2, 3]` when the stamp is removed.
+
+A WAL failure in `ingest_batch` after a bump leaves the mark above what is
+persisted. That only ever skips a version; the reverse would reissue one.
+
+## What did not land
+
+The budget's ceiling is unchanged. Re-deriving it needs the measurement that
 item 5 above now produces; inventing a number would replace a mis-metered limit
 with a guessed one.
 

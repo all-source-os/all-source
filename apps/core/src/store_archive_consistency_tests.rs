@@ -189,6 +189,42 @@ fn eviction_does_not_lower_an_entity_version() {
     );
 }
 
+/// An unconditional append must persist the version it reports. A restart can
+/// only read what is on disk, so a reported number that was never written down
+/// is one the next write will issue again.
+#[test]
+fn ingest_persists_the_version_it_reports() {
+    let directory = TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for expected in 1..=3 {
+            store.ingest(&event()).unwrap();
+            assert_eq!(store.get_entity_version("synthetic-entity"), expected);
+        }
+        let stored = store
+            .query(&QueryEventsRequest {
+                tenant_id: Some(TENANT.into()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            stored.iter().map(|e| e.version).collect::<Vec<_>>(),
+            vec![1, 2, 3],
+            "the reported versions were never written onto the events"
+        );
+        store.flush_storage().unwrap();
+    }
+
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    assert_eq!(
+        store
+            .ingest_with_expected_version(&event(), Some(3))
+            .unwrap(),
+        4,
+        "a restart forgot versions that ingest had already persisted"
+    );
+}
+
 /// A cold store must learn an entity's version from the archive without
 /// hydrating the tenant's events.
 #[test]
