@@ -1,7 +1,7 @@
 # Optimistic concurrency without loading history
 
 **Date:** 2026-10-04
-**Status:** ✅ investigation complete; read-side and eviction fixes landed, write side open
+**Status:** ✅ shipped in v0.25.3, deployed to `allsource-core` 2026-10-05 11:11 UTC (machine version 47, health reports `0.25.3`). Write side still open — see "What did not land".
 **Surface:** `apps/core/src/store.rs`, `apps/core/src/infrastructure/persistence/storage.rs`
 
 ## Summary
