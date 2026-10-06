@@ -30,7 +30,14 @@ impl Default for ArchiveReadLimits {
             max_files: 50_000,
             max_file_bytes: 32 * 1024 * 1024,
             max_compressed_bytes: 256 * 1024 * 1024,
-            max_uncompressed_bytes: 256 * 1024 * 1024,
+            // Counted as decoded JSON text, which `decoded_payload` charges
+            // from the Arrow buffers. A decode holds 8.25x that in heap:
+            // 20,000 events of 5,035,725 text bytes peaked at 41,529,937
+            // under dhat (examples/archive_read_heap.rs, 2026-10-06). 128 MiB
+            // of text therefore implies roughly 1.06 GiB resident, inside the
+            // ~1.5 GiB left by the 4 GiB machine's 2.5 GiB reservation.
+            // Re-run that example before raising this.
+            max_uncompressed_bytes: 128 * 1024 * 1024,
             // The existing 566,486-row archive needs headroom. A 600,000-row
             // synthetic load fits the measured 4 GiB / single-worker envelope;
             // 750,000 rows OOM under the same 2.5 GiB background reservation.
@@ -116,6 +123,33 @@ impl ArchiveReadBudget {
         )
     }
 
+    /// Charge the row count alone, from row-group metadata, before decoding.
+    ///
+    /// Pair this with [`Self::decoded_payload`] on a path that can measure
+    /// what it actually materialised. Rows are admission control; bytes are
+    /// the resource.
+    pub(crate) fn rows(&mut self, rows: i64) -> Result<()> {
+        self.check()?;
+        let rows = u64::try_from(rows).map_err(|_| exceeded("invalid row count"))?;
+        charge(&mut self.rows, rows, self.limits.max_rows, "rows")
+    }
+
+    /// Charge the bytes a decode actually produced.
+    ///
+    /// Parquet's declared uncompressed size is a different quantity from the
+    /// heap a decode holds, and only the second one runs out. Callers that
+    /// can see the decoded bytes charge them here instead of guessing from
+    /// metadata.
+    pub(crate) fn decoded_payload(&mut self, bytes: u64) -> Result<()> {
+        self.check()?;
+        charge(
+            &mut self.uncompressed_bytes,
+            bytes,
+            self.limits.max_uncompressed_bytes,
+            "uncompressed bytes",
+        )
+    }
+
     pub(crate) fn decoded_metadata(&mut self, rows: i64, bytes: i64) -> Result<()> {
         self.check()?;
         let rows = u64::try_from(rows).map_err(|_| exceeded("invalid row count"))?;
@@ -169,6 +203,27 @@ mod tests {
         assert!(budget.decoded_metadata(1, 0).is_err());
         let mut total = u64::MAX;
         assert!(charge(&mut total, 1, u64::MAX, "test").is_err());
+    }
+
+    /// Rows admit the work, decoded bytes account for it. Charging rows must
+    /// not also consume the byte budget, or a read is billed twice for the
+    /// same batch — once from metadata and once from what it decoded.
+    #[test]
+    fn rows_admit_work_without_consuming_the_byte_budget() {
+        let mut budget = ArchiveReadBudget::new(ArchiveReadLimits {
+            max_rows: 4,
+            max_uncompressed_bytes: 8,
+            ..Default::default()
+        });
+
+        budget.rows(4).unwrap();
+        assert!(budget.rows(1).is_err(), "rows are still admission control");
+
+        budget.decoded_payload(8).unwrap();
+        assert!(
+            budget.decoded_payload(1).is_err(),
+            "the byte ceiling counts what was decoded, not what metadata declared"
+        );
     }
 
     #[test]

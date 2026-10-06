@@ -23,9 +23,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Bytes of JSON text a decoded batch holds, read from the Arrow string
+/// buffers rather than re-serialising each event.
+///
+/// This is what the archive budget charges. Parquet's declared uncompressed
+/// size is a different quantity, and the one that does not run out.
+fn decoded_text_bytes(batch: &RecordBatch) -> u64 {
+    [PAYLOAD_COLUMN, METADATA_COLUMN]
+        .iter()
+        .filter_map(|&column| {
+            batch
+                .column(column)
+                .as_any()
+                .downcast_ref::<arrow::array::StringArray>()
+        })
+        .map(|values| values.value_data().len() as u64)
+        .sum()
+}
+
 /// Position of `entity_id` in the event schema. All fields are flat
 /// primitives, so this is both the field index and the Parquet leaf index.
 const ENTITY_ID_COLUMN: usize = 2;
+
+/// Position of `payload` in the event schema. See [`ENTITY_ID_COLUMN`].
+const PAYLOAD_COLUMN: usize = 3;
+
+/// Position of `metadata` in the event schema. See [`ENTITY_ID_COLUMN`].
+const METADATA_COLUMN: usize = 5;
 
 /// Position of `version` in the event schema. See [`ENTITY_ID_COLUMN`].
 const VERSION_COLUMN: usize = 6;
@@ -890,44 +914,33 @@ impl ParquetStorage {
             budget.compressed(metadata.len())?;
         }
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-        let mut charged_bytes: u64 = 0;
         if let Some(budget) = budget.as_deref_mut() {
+            // Rows are charged up front from metadata, so an oversized file is
+            // refused before a single page is decoded. Bytes are charged per
+            // batch below, where the decoded size is known rather than guessed.
             for group in builder.metadata().row_groups() {
-                budget.decoded_metadata(group.num_rows(), group.total_byte_size())?;
-                charged_bytes = charged_bytes.saturating_add(group.total_byte_size().max(0) as u64);
+                budget.rows(group.num_rows())?;
             }
             builder = builder.with_batch_size(256);
         }
         let reader = builder.build()?;
 
         let mut events = Vec::new();
-        let mut decoded_bytes: u64 = 0;
 
         for batch in reader {
             if let Some(budget) = budget.as_deref() {
                 budget.check()?;
             }
-            let batch_events = self.record_batch_to_events(&batch?, tenant_id)?;
-            decoded_bytes = decoded_bytes
-                .saturating_add(batch_events.iter().map(Event::estimated_size_bytes).sum());
+            let batch = batch?;
+            if let Some(budget) = budget.as_deref_mut() {
+                budget.decoded_payload(decoded_text_bytes(&batch))?;
+            }
+            let batch_events = self.record_batch_to_events(&batch, tenant_id)?;
             events.extend(batch_events);
         }
 
         if let Some(budget) = budget {
             budget.check()?;
-            // The budget charges Parquet's uncompressed size, but the memory
-            // actually held is the decoded `serde_json::Value` tree, which is
-            // several times larger. Report the ratio so the ceiling can be set
-            // against the quantity that runs out rather than a proxy for it.
-            if charged_bytes > 0 && decoded_bytes > charged_bytes.saturating_mul(2) {
-                tracing::warn!(
-                    file = %file_path.display(),
-                    charged_bytes,
-                    decoded_bytes,
-                    ratio = decoded_bytes as f64 / charged_bytes as f64,
-                    "archive read decoded more heap than the budget charged"
-                );
-            }
         }
 
         Ok(events)

@@ -259,9 +259,42 @@ against `[1, 2, 3]` when the stamp is removed.
 A WAL failure in `ingest_batch` after a bump leaves the mark above what is
 persisted. That only ever skips a version; the reverse would reissue one.
 
+## The budget, re-metered against a measurement
+
+The budget compared its byte ceiling against Parquet's *declared uncompressed*
+size — a figure nothing allocates. It now charges the bytes a decode actually
+produced, read from the Arrow string buffers (`values.value_data().len()`), so
+it costs nothing: the decoded strings are already in hand. Rows stay charged up
+front from row-group metadata, so an oversized file is still refused before a
+page is decoded. Rows admit the work; bytes account for it.
+
+Charging text alone is more precise but more permissive, so the ceiling had to
+move with it, and that needed the expansion factor rather than a guess.
+`apps/core/examples/archive_read_heap.rs` measures it under dhat:
+
+| Quantity | Bytes |
+|---|---|
+| payload JSON text | 5,035,725 |
+| Parquet file | 1,538,600 |
+| peak heap | 41,529,937 |
+
+**A decode holds 8.25x the JSON text, and 27x the Parquet file.**
+
+`max_uncompressed_bytes` is therefore 128 MiB of text, implying about 1.06 GiB
+resident — inside the ~1.5 GiB the 4 GiB machine leaves after its 2.5 GiB
+reservation. The 566,486-row production archive is roughly 62 MB of text and
+still passes. Re-run the example before raising it.
+
+The `rows` and `decoded_payload` split is pinned by
+`rows_admit_work_without_consuming_the_byte_budget`, so a read cannot be billed
+twice for one batch.
+
 ## What did not land
 
-The budget's ceiling is unchanged. Re-deriving it needs the measurement that
+`tooling/archive-budget-audit` still reports Parquet's declared uncompressed
+bytes against 256 MiB. It reads footers and never decodes pages, so it cannot
+see decoded text; same field name, different quantity. Its README says so and
+it is tracked separately. Re-deriving it needs the measurement that
 item 5 above now produces; inventing a number would replace a mis-metered limit
 with a guessed one.
 

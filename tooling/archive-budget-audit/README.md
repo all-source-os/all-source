@@ -13,12 +13,19 @@ cargo run --manifest-path tooling/archive-budget-audit/Cargo.toml -- /path/to/st
 docker buildx build --platform linux/amd64 --output type=local,dest=/tmp/archive-audit-binary tooling/archive-budget-audit
 ```
 
-The standalone workspace has its own lockfile and no Core dependency. Its
-six input dimensions match Core `ArchiveReadLimits` at source `9a653099`:
-100,000 entries, 50,000 files, 32 MiB per file, 256 MiB compressed total,
-256 MiB declared uncompressed row-group bytes, 250,000 row-group rows. Counters
-use checked arithmetic; a tenant exceeding a policy cap appears in the report.
-Keep these defaults aligned when changing Core's policy.
+The standalone workspace has its own lockfile and no Core dependency. Five of
+its six input dimensions match Core `ArchiveReadLimits`: 100,000 entries,
+50,000 files, 32 MiB per file, 256 MiB compressed total, 250,000 row-group
+rows. Counters use checked arithmetic; a tenant exceeding a policy cap appears
+in the report. Keep these aligned when changing Core's policy.
+
+**The uncompressed-bytes dimension no longer corresponds to Core's.** This tool
+reads footers and reports Parquet's *declared* uncompressed row-group bytes
+against 256 MiB. Core's `max_uncompressed_bytes` is now 128 MiB of *decoded
+JSON text*, charged from the Arrow buffers, because a decode holds 8.25x the
+text in heap and the declared size is a quantity nothing allocates
+(`apps/core/examples/archive_read_heap.rs`). Reading footers cannot see decoded
+text, so this tool's verdict on that one dimension is not Core's verdict.
 
 The diagnostic itself refuses after 300,000 entries, depth eight, a 60-second
 cooperative deadline or a footer larger than 1 MiB. Malformed footers, negative
