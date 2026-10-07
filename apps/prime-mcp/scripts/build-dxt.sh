@@ -119,11 +119,11 @@ cat > "$stage/manifest.json" <<MANIFEST
       "args": [
         "--data-dir", "\${user_config.data_dir}",
         "--auto-inject",
-        "--sync-to", "\${user_config.sync_to}",
-        "--api-key", "\${user_config.api_key}"
+        "--sync-to", "\${user_config.sync_to}"
       ],
       "env": {
-        "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model"
+        "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model",
+        "PRIME_API_KEY": "\${user_config.api_key}"
       },
       "platform_overrides": {
         "linux": {
@@ -131,11 +131,11 @@ cat > "$stage/manifest.json" <<MANIFEST
           "args": [
             "--data-dir", "\${user_config.data_dir}",
             "--auto-inject",
-            "--sync-to", "\${user_config.sync_to}",
-            "--api-key", "\${user_config.api_key}"
+            "--sync-to", "\${user_config.sync_to}"
           ],
           "env": {
-            "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model"
+            "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model",
+            "PRIME_API_KEY": "\${user_config.api_key}"
           }
         }
       }
