@@ -1830,6 +1830,14 @@ impl EventStore {
                 if let Some(budget) = &budget {
                     budget.check()?;
                 }
+                if complete {
+                    if event.version < 0 {
+                        return Err(AllSourceError::StorageError(
+                            "Archived entity version cannot be represented".into(),
+                        ));
+                    }
+                    self.observe_entity_version(&event);
+                }
                 applied += usize::from(self.append_loaded_event(event));
             }
             if let Some(budget) = &budget {
@@ -1840,6 +1848,9 @@ impl EventStore {
         load_result?;
         self.tenant_loader
             .mark_loaded_with_integrity(tenant_id, complete);
+        if complete {
+            self.version_index_tenants.insert(tenant_id.to_string(), ());
+        }
         drop(resident);
 
         tracing::info!(
@@ -3253,6 +3264,10 @@ mod archive_work_tests;
 #[cfg(test)]
 #[path = "store_archive_consistency_tests.rs"]
 mod archive_consistency_tests;
+
+#[cfg(test)]
+#[path = "store_version_index_reuse_tests.rs"]
+mod version_index_reuse_tests;
 
 #[cfg(test)]
 mod tests {

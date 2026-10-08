@@ -328,25 +328,24 @@ impl HybridSearchEngine {
 
     /// Stub for when features are not enabled
     #[cfg(not(any(feature = "vector-search", feature = "keyword-search")))]
-    pub async fn index_event(
-        &self,
+    pub fn index_event<'a>(
+        &'a self,
         event_id: Uuid,
         _tenant_id: &str,
         event_type: &str,
         entity_id: Option<&str>,
         _payload: &serde_json::Value,
         timestamp: DateTime<Utc>,
-    ) -> Result<()> {
-        // Store metadata for filtering
-        self.store_metadata(
-            event_id,
-            EventMetadata {
-                event_type: Some(event_type.to_string()),
-                entity_id: entity_id.map(str::to_string),
-                timestamp: Some(timestamp),
-            },
-        );
-        Ok(())
+    ) -> impl std::future::Future<Output = Result<()>> + 'a {
+        let metadata = EventMetadata {
+            event_type: Some(event_type.to_string()),
+            entity_id: entity_id.map(str::to_string),
+            timestamp: Some(timestamp),
+        };
+        futures::future::lazy(move |_| {
+            self.store_metadata(event_id, metadata);
+            Ok(())
+        })
     }
 
     /// Commit changes to both engines
@@ -721,6 +720,9 @@ fn extract_source_text(payload: &serde_json::Value) -> Option<String> {
     // Fallback: convert entire payload to string
     Some(payload.to_string())
 }
+
+#[cfg(all(test, not(any(feature = "vector-search", feature = "keyword-search"))))]
+mod deferred_tests;
 
 #[cfg(test)]
 mod tests {
