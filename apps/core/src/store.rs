@@ -172,7 +172,15 @@ pub struct EventStore {
     /// Tenants whose archived versions have been folded into `entity_versions`.
     /// A conditional write needs the archive's high-water marks exactly once;
     /// in-memory appends keep them current from then on.
+    ///
+    /// Tenants are certified only by a complete strict hydration. A
+    /// conditional write certifies the one entity it targets, so a tenant too
+    /// large to hydrate strictly can still take conditional writes.
     version_index_tenants: Arc<DashMap<String, ()>>,
+
+    /// Entities whose archived version has been resolved. See
+    /// [`version_index_tenants`](Self::version_index_tenants).
+    version_index_entities: Arc<DashMap<String, ()>>,
 
     /// Durable consumer registry for subscription cursor tracking (v0.14 feature)
     consumer_registry: Arc<ConsumerRegistry>,
@@ -378,6 +386,7 @@ impl EventStore {
             schema_evolution: Arc::new(SchemaEvolutionManager::new()),
             entity_versions: Arc::new(DashMap::new()),
             version_index_tenants: Arc::new(DashMap::new()),
+            version_index_entities: Arc::new(DashMap::new()),
             consumer_registry: Arc::new(ConsumerRegistry::new()),
             event_broadcast_tx,
             tenant_loader: {
@@ -621,7 +630,11 @@ impl EventStore {
         // versions keeps an ordinary append's lazy loading intact and keeps a
         // large tenant from having to fit in memory to be written to.
         if expected_version.is_some() {
-            self.ensure_version_index_for_tenant(event.tenant_id_str(), cancellation)?;
+            self.ensure_version_for_entity(
+                event.tenant_id_str(),
+                event.entity_id_str(),
+                cancellation,
+            )?;
         }
 
         let _resident = self.cache_residency_gate.read();
@@ -1636,26 +1649,35 @@ impl EventStore {
         self.ensure_tenant_loaded_budgeted(tenant_id, require_complete, None)
     }
 
-    /// Fold `tenant_id`'s archived versions into `entity_versions`, once.
+    /// Fold one entity's archived version into `entity_versions`, once.
     ///
     /// A conditional write must not assign a version that already exists on
     /// disk, so the archive has to be consulted before the first OCC write
-    /// for a tenant. Only `entity_id` and `version` are read: the tenant's
-    /// events are not loaded and no payload is decoded.
+    /// for an entity. Only that entity's `version` is read: no events are
+    /// loaded and no payload is decoded.
     ///
-    /// Concurrent callers for a cold tenant may both scan. Folding is a max,
+    /// The unit is the entity, not the tenant. Resolving the whole tenant
+    /// made one append's cost scale with the tenant's history, so past the
+    /// strict budget every conditional write to a large tenant failed and
+    /// certified nothing, leaving each retry to pay the same cost and fail
+    /// the same way (gh#321).
+    ///
+    /// Concurrent callers for a cold entity may both scan. Folding is a max,
     /// so a duplicate scan costs time and changes nothing.
-    fn ensure_version_index_for_tenant(
+    fn ensure_version_for_entity(
         &self,
         tenant_id: &str,
+        entity_id: &str,
         cancellation: Option<&Arc<std::sync::atomic::AtomicBool>>,
     ) -> Result<()> {
-        if self.version_index_tenants.contains_key(tenant_id) {
+        if self.version_index_tenants.contains_key(tenant_id)
+            || self.version_index_entities.contains_key(entity_id)
+        {
             return Ok(());
         }
 
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
-            self.version_index_tenants.insert(tenant_id.to_string(), ());
+            self.version_index_entities.insert(entity_id.to_string(), ());
             return Ok(());
         };
 
@@ -1664,16 +1686,16 @@ impl EventStore {
 
         let archived = storage
             .read()
-            .load_entity_versions_for_tenant(tenant_id, &mut budget)?;
+            .load_entity_version(tenant_id, entity_id, &mut budget)?;
 
-        for (entity_id, version) in archived {
+        if let Some(version) = archived {
             self.entity_versions
-                .entry(entity_id)
+                .entry(entity_id.to_string())
                 .and_modify(|current| *current = (*current).max(version))
                 .or_insert(version);
         }
 
-        self.version_index_tenants.insert(tenant_id.to_string(), ());
+        self.version_index_entities.insert(entity_id.to_string(), ());
         Ok(())
     }
 

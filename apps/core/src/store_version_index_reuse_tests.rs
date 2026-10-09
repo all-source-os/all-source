@@ -183,6 +183,48 @@ fn cancelled_strict_hydration_does_not_certify_or_append() {
     assert!(subscriber.try_recv().is_err());
 }
 
+/// gh#321: a conditional append must not be priced by the tenant's history.
+///
+/// This archive holds more rows than the row budget admits, so a fold of every
+/// entity in the tenant cannot complete. The targeted entity's own row groups
+/// still fit, so the write must succeed — and must still refuse a stale
+/// expectation, which is the only reason to read the archive at all.
+#[test]
+fn conditional_write_succeeds_on_a_tenant_too_large_to_fold_whole() {
+    let directory = TempDir::new().unwrap();
+    let crowd: Vec<Event> = (0..400)
+        .map(|i| event(TENANT, &format!("crowd-entity-{i}"), i64::from(i % 7) + 1))
+        .collect();
+    let storage = ParquetStorage::new(directory.path()).unwrap();
+    storage
+        .write_atomic_parquet(TENANT, "events-crowd", &crowd)
+        .unwrap();
+    storage
+        .write_atomic_parquet(TENANT, "events-target", &[event(TENANT, ENTITY, 5)])
+        .unwrap();
+
+    let mut store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    store.strict_archive_limits.max_rows = 50;
+
+    assert!(matches!(
+        store.ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(4)),
+        Err(AllSourceError::VersionConflict {
+            expected: 4,
+            current: 5
+        })
+    ));
+    assert_eq!(
+        store
+            .ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(5))
+            .unwrap(),
+        6
+    );
+    assert!(
+        !store.version_index_tenants.contains_key(TENANT),
+        "resolving one entity must not certify the tenant"
+    );
+}
+
 #[test]
 fn verified_version_index_survives_event_cache_eviction() {
     let (_directory, mut store) = seeded();

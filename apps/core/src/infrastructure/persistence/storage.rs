@@ -1117,39 +1117,49 @@ impl ParquetStorage {
             .map(|(events, _complete)| events)
     }
 
-    /// Highest persisted version per entity for `tenant_id`, read from the
-    /// archive without reconstructing any events.
+    /// Highest persisted version of a single entity in `tenant_id`'s archive.
     ///
-    /// Every column is decoded, so a corrupt row group fails here exactly as
-    /// it would during a full load: a version read from an archive that cannot
-    /// be read through is not a version worth trusting. What this avoids is
-    /// the part that costs memory rather than CPU — no payload is parsed into
-    /// a `serde_json::Value` and no `Event` outlives its batch, so peak heap
-    /// is one batch, not the tenant's whole history.
+    /// A conditional write needs the version of the one entity it targets.
+    /// Folding every entity in the tenant to obtain it makes the cost of one
+    /// append scale with the tenant's entire history, which locks a tenant out
+    /// of conditional writes altogether once that fold no longer fits the
+    /// strict budget.
     ///
-    /// Errors if the tenant's archive cannot be enumerated completely: a
-    /// partial answer here would understate a version and let the next
-    /// conditional write reuse one already on disk.
-    pub(crate) fn load_entity_versions_for_tenant(
+    /// Every file in the tenant's archive is still opened and its footer
+    /// validated, so an unreadable archive refuses the write as before. Data
+    /// pages are decoded only for row groups whose `entity_id` statistics
+    /// admit `entity_id`; a row group with no usable statistics is decoded.
+    /// Pruning therefore trusts the footer's statistics to describe the pages
+    /// beneath them — a weaker claim than decoding everything, and the reason
+    /// a conditional write no longer pays for the whole tenant.
+    ///
+    /// Errors if the archive cannot be enumerated completely or if a row group
+    /// that might hold the entity cannot be read: a partial answer would
+    /// understate the version and let the next conditional write reuse one
+    /// already on disk.
+    pub(crate) fn load_entity_version(
         &self,
         tenant_id: &str,
+        entity_id: &str,
         budget: &mut ArchiveReadBudget,
-    ) -> Result<HashMap<String, u64>> {
+    ) -> Result<Option<u64>> {
         let files = self.list_complete_tenant_archive(tenant_id, budget)?;
-        let mut versions: HashMap<String, u64> = HashMap::new();
+        let mut highest: Option<u64> = None;
         for path in files {
             budget.file()?;
-            self.fold_entity_versions(&path, &mut versions, budget)?;
+            if let Some(version) = self.fold_one_entity_version(&path, entity_id, budget)? {
+                highest = Some(highest.map_or(version, |current: u64| current.max(version)));
+            }
         }
-        Ok(versions)
+        Ok(highest)
     }
 
-    fn fold_entity_versions(
+    fn fold_one_entity_version(
         &self,
         file_path: &Path,
-        versions: &mut HashMap<String, u64>,
+        entity_id: &str,
         budget: &mut ArchiveReadBudget,
-    ) -> Result<()> {
+    ) -> Result<Option<u64>> {
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
         budget.check()?;
@@ -1162,23 +1172,29 @@ impl ParquetStorage {
                 AllSourceError::StorageError(format!("Failed to inspect archive file: {error}"))
             })?
             .len();
-        budget.compressed(file_len)?;
-
-        // A damaged archive must refuse a conditional write as a storage
-        // failure, not surface the decoder's own error type to the caller.
-        fn unreadable(path: &Path, error: impl std::fmt::Display) -> AllSourceError {
-            AllSourceError::StorageError(format!(
-                "Cannot verify conditional version from {}: {error}",
-                path.display()
-            ))
-        }
+        budget.file_within_ceiling(file_len)?;
 
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| unreadable(file_path, error))?;
 
-        // Charge the columns this read keeps. Everything else is decoded to
-        // prove the file is readable and dropped with its batch.
-        for group in builder.metadata().row_groups() {
+        let needle = entity_id.as_bytes();
+        let groups: Vec<usize> = builder
+            .metadata()
+            .row_groups()
+            .iter()
+            .enumerate()
+            .filter(|(_, group)| row_group_may_hold_entity(group, needle))
+            .map(|(index, _)| index)
+            .collect();
+        if groups.is_empty() {
+            return Ok(None);
+        }
+
+        // Only entity_id and version outlive a batch; the rest of an admitted
+        // row group is decoded to prove it readable, then dropped.
+        for &index in &groups {
+            let group = builder.metadata().row_group(index);
+            budget.compressed_chunk(u64::try_from(group.compressed_size()).unwrap_or(u64::MAX))?;
             let retained: i64 = [ENTITY_ID_COLUMN, VERSION_COLUMN]
                 .iter()
                 .map(|&column| group.column(column).uncompressed_size())
@@ -1187,10 +1203,12 @@ impl ParquetStorage {
         }
 
         let reader = builder
+            .with_row_groups(groups)
             .with_batch_size(1024)
             .build()
             .map_err(|error| unreadable(file_path, error))?;
 
+        let mut highest: Option<u64> = None;
         for batch in reader {
             budget.check()?;
             let batch = batch.map_err(|error| unreadable(file_path, error))?;
@@ -1210,15 +1228,15 @@ impl ParquetStorage {
                 })?;
 
             for i in 0..batch.num_rows() {
+                if entity_ids.value(i) != entity_id {
+                    continue;
+                }
                 let version = row_versions.value(i);
-                versions
-                    .entry(entity_ids.value(i).to_string())
-                    .and_modify(|current| *current = (*current).max(version))
-                    .or_insert(version);
+                highest = Some(highest.map_or(version, |current: u64| current.max(version)));
             }
         }
 
-        Ok(())
+        Ok(highest)
     }
 
     pub(crate) fn load_events_for_tenant_with_integrity(
@@ -1471,6 +1489,34 @@ fn sanitize_tenant_id_for_path(tenant_id: &str) -> Result<&str> {
         }
     }
     Ok(tenant_id)
+}
+
+/// A damaged archive must refuse a conditional write as a storage failure,
+/// not surface the decoder's own error type to the caller.
+fn unreadable(path: &Path, error: impl std::fmt::Display) -> AllSourceError {
+    AllSourceError::StorageError(format!(
+        "Cannot verify conditional version from {}: {error}",
+        path.display()
+    ))
+}
+
+/// Whether a row group's `entity_id` statistics admit `needle`.
+///
+/// True whenever the group cannot be ruled out, including when statistics are
+/// absent or incomplete: skipping a group that might hold the entity would
+/// understate its version. Parquet orders `entity_id` by unsigned byte value,
+/// which is what comparing the UTF-8 slices gives.
+fn row_group_may_hold_entity(
+    group: &parquet::file::metadata::RowGroupMetaData,
+    needle: &[u8],
+) -> bool {
+    let Some(statistics) = group.column(ENTITY_ID_COLUMN).statistics() else {
+        return true;
+    };
+    let (Some(min), Some(max)) = (statistics.min_bytes_opt(), statistics.max_bytes_opt()) else {
+        return true;
+    };
+    min <= needle && needle <= max
 }
 
 /// Resolve the directory a flush should write into for `(tenant, when)`.

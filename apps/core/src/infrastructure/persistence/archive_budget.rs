@@ -112,9 +112,33 @@ impl ArchiveReadBudget {
 
     pub(crate) fn compressed(&mut self, bytes: u64) -> Result<()> {
         self.check()?;
+        self.file_within_ceiling(bytes)?;
+        charge(
+            &mut self.compressed_bytes,
+            bytes,
+            self.limits.max_compressed_bytes,
+            "compressed bytes",
+        )
+    }
+
+    /// Reject an archive file larger than the per-file ceiling without
+    /// charging its bytes.
+    ///
+    /// A read that prunes row groups opens a file's footer and may decode
+    /// none of its pages, so charging the whole file would bill work that
+    /// never happens. What such a read does decode it charges through
+    /// [`Self::compressed_chunk`].
+    pub(crate) fn file_within_ceiling(&self, bytes: u64) -> Result<()> {
+        self.check()?;
         if bytes > self.limits.max_file_bytes {
             return Err(exceeded("file bytes"));
         }
+        Ok(())
+    }
+
+    /// Charge the compressed bytes of one row group a read chose to decode.
+    pub(crate) fn compressed_chunk(&mut self, bytes: u64) -> Result<()> {
+        self.check()?;
         charge(
             &mut self.compressed_bytes,
             bytes,
