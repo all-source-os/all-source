@@ -73,6 +73,12 @@ linters:
 
     misspell:
       locale: US
+      # en-GB spellings this codebase uses deliberately. locale stays US so a
+      # genuine typo is still caught; these two words are a choice, not a
+      # mistake, and rewriting them is out of scope.
+      ignore-rules:
+        - organisation
+        - unauthorised
 
     revive:
       rules:

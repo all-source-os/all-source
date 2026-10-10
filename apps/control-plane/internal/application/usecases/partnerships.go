@@ -19,13 +19,21 @@ import (
 const partnershipTenant = "admin-partnerships"
 const partnershipEvent = "partnership.record_saved"
 
+// statusDoNotContact suppresses a prospect. Removing it is deliberately not
+// an edit a record save can make.
+const statusDoNotContact = "do_not_contact"
+
 var (
-	ErrPartnershipInvalid     = errors.New("partnership: invalid record")
-	ErrPartnershipConflict    = errors.New("partnership: record changed; reload before saving")
+	// ErrPartnershipInvalid reports a record that failed validation.
+	ErrPartnershipInvalid = errors.New("partnership: invalid record")
+	// ErrPartnershipConflict reports a stale expected revision.
+	ErrPartnershipConflict = errors.New("partnership: record changed; reload before saving")
+	// ErrPartnershipUnavailable reports that Core could not be reached.
 	ErrPartnershipUnavailable = errors.New("partnership: storage unavailable")
 	partnershipHost           = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,250}[a-z0-9]$`)
 )
 
+// PartnershipSource cites one piece of dated evidence behind a record.
 type PartnershipSource struct {
 	URL       string `json:"url"`
 	Title     string `json:"title"`
@@ -33,7 +41,8 @@ type PartnershipSource struct {
 	CheckedAt string `json:"checked_at"`
 }
 
-// Scores describe a dated evidence packet, never a likelihood of winning work.
+// PartnershipScore describes a dated evidence packet, never a likelihood of
+// winning work.
 type PartnershipScore struct {
 	Model      string  `json:"model"`
 	RunAt      string  `json:"run_at"`
@@ -44,6 +53,7 @@ type PartnershipScore struct {
 	Rationale  string  `json:"rationale"`
 }
 
+// PartnershipMessage records one outbound or inbound contact on a record.
 type PartnershipMessage struct {
 	ID           string `json:"id"`
 	Channel      string `json:"channel"`
@@ -57,6 +67,7 @@ type PartnershipMessage struct {
 	ApprovalNote string `json:"approval_note"`
 }
 
+// PartnershipRecord is the current state of one partnership prospect.
 type PartnershipRecord struct {
 	ID             string               `json:"id"`
 	Organization   string               `json:"organization"`
@@ -76,6 +87,8 @@ type PartnershipRecord struct {
 	Messages       []PartnershipMessage `json:"messages"`
 }
 
+// PartnershipRevision pairs a record snapshot with the revision that produced
+// it, so a caller can fence its next write.
 type PartnershipRevision struct {
 	Record   PartnershipRecord `json:"record"`
 	Revision uint64            `json:"revision"`
@@ -83,15 +96,19 @@ type PartnershipRevision struct {
 	Actor    string            `json:"actor"`
 }
 
+// SavePartnershipRequest carries a record plus the revision the caller expects
+// to be replacing. A nil ExpectedRevision means "create".
 type SavePartnershipRequest struct {
 	Record           PartnershipRecord `json:"record"`
 	ExpectedRevision *uint64           `json:"expected_revision"`
 }
 
+// PartnershipsUseCase reads and writes partnership records through Core.
 type PartnershipsUseCase struct {
 	core designPartnerCore
 }
 
+// NewPartnershipsUseCase builds a use case over the given Core client.
 func NewPartnershipsUseCase(core clients.CoreClient) *PartnershipsUseCase {
 	return &PartnershipsUseCase{core: core}
 }
@@ -140,25 +157,28 @@ func (uc *PartnershipsUseCase) read(ctx context.Context, id string) ([]Partnersh
 	return nil, ErrPartnershipUnavailable
 }
 
+// List returns the latest revision of every partnership record.
 func (uc *PartnershipsUseCase) List(ctx context.Context) ([]PartnershipRevision, error) {
 	revisions, err := uc.read(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 	latest := make(map[string]PartnershipRevision)
-	for _, rev := range revisions {
+	for i := range revisions {
+		rev := &revisions[i]
 		if rev.Revision > latest[rev.Record.ID].Revision {
-			latest[rev.Record.ID] = rev
+			latest[rev.Record.ID] = *rev
 		}
 	}
 	out := make([]PartnershipRevision, 0, len(latest))
-	for _, rev := range latest {
-		out = append(out, rev)
+	for id := range latest {
+		out = append(out, latest[id])
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Record.Organization < out[j].Record.Organization })
 	return out, nil
 }
 
+// History returns every revision of one record, oldest first.
 func (uc *PartnershipsUseCase) History(ctx context.Context, id string) ([]PartnershipRevision, error) {
 	if !partnershipHost.MatchString(id) {
 		return nil, ErrPartnershipInvalid
@@ -166,6 +186,8 @@ func (uc *PartnershipsUseCase) History(ctx context.Context, id string) ([]Partne
 	return uc.read(ctx, id)
 }
 
+// Save appends a revision, rejecting the write unless ExpectedRevision matches
+// the stored one.
 func (uc *PartnershipsUseCase) Save(ctx context.Context, req SavePartnershipRequest, actor string) (*PartnershipRevision, error) {
 	if req.ExpectedRevision == nil {
 		return nil, fmt.Errorf("%w: expected_revision is required", ErrPartnershipInvalid)
@@ -178,9 +200,9 @@ func (uc *PartnershipsUseCase) Save(ctx context.Context, req SavePartnershipRequ
 		return nil, err
 	}
 	var current PartnershipRevision
-	for _, rev := range history {
-		if rev.Revision > current.Revision {
-			current = rev
+	for i := range history {
+		if history[i].Revision > current.Revision {
+			current = history[i]
 		}
 	}
 	if current.Revision != *req.ExpectedRevision {
@@ -188,12 +210,14 @@ func (uc *PartnershipsUseCase) Save(ctx context.Context, req SavePartnershipRequ
 	}
 	if current.Revision > 0 {
 		// Evidence of an external interaction cannot disappear on a CRM edit.
-		for _, old := range current.Record.Messages {
+		for i := range current.Record.Messages {
+			old := &current.Record.Messages[i]
 			if old.Outcome == "draft" {
 				continue
 			}
 			found := false
-			for _, next := range req.Record.Messages {
+			for j := range req.Record.Messages {
+				next := &req.Record.Messages[j]
 				if old.ID == next.ID && reflect.DeepEqual(old, next) {
 					found = true
 					break
@@ -203,7 +227,7 @@ func (uc *PartnershipsUseCase) Save(ctx context.Context, req SavePartnershipRequ
 				return nil, fmt.Errorf("%w: recorded interactions are immutable; append a correction", ErrPartnershipInvalid)
 			}
 		}
-		if current.Record.Status == "do_not_contact" && req.Record.Status != "do_not_contact" {
+		if current.Record.Status == statusDoNotContact && req.Record.Status != statusDoNotContact {
 			return nil, fmt.Errorf("%w: suppression cannot be removed through a record edit", ErrPartnershipInvalid)
 		}
 		if reflect.DeepEqual(current.Record, req.Record) {
@@ -259,7 +283,12 @@ func validatePartnership(r *PartnershipRecord) error {
 	if !partnershipURL(r.Website) {
 		return invalid("valid organisation website required")
 	}
-	u, _ := url.Parse(r.Website)
+	// Unreachable while partnershipURL above guards it; checked so a nil u
+	// cannot reach Hostname() if that guard moves.
+	u, err := url.Parse(r.Website)
+	if err != nil {
+		return invalid("valid organisation website required")
+	}
 	id := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
 	if !partnershipHost.MatchString(id) || !strings.Contains(id, ".") || (r.ID != "" && r.ID != id) {
 		return invalid("id must match the canonical website hostname")
@@ -271,7 +300,7 @@ func validatePartnership(r *PartnershipRecord) error {
 	if !oneOf(r.Kind, "vc", "family_office", "accelerator", "corporate", "community", "other") {
 		return invalid("unsupported organisation type")
 	}
-	if !oneOf(r.Status, "research", "ready", "awaiting_reply", "engaged", "pilot", "won", "parked", "do_not_contact") {
+	if !oneOf(r.Status, "research", "ready", "awaiting_reply", "engaged", "pilot", "won", "parked", statusDoNotContact) {
 		return invalid("unsupported pipeline status")
 	}
 	if len(r.Geography) > 250 || len(r.ContactRoute) > 2000 || len(r.Angle) > 8000 || len(r.Notes) > 20000 || len(r.Limitations) > 8000 || len(r.NextAction) > 2000 {
@@ -289,7 +318,8 @@ func validatePartnership(r *PartnershipRecord) error {
 	if r.Messages == nil {
 		r.Messages = []PartnershipMessage{}
 	}
-	for _, s := range r.Sources {
+	for i := range r.Sources {
+		s := &r.Sources[i]
 		if !partnershipURL(s.URL) || s.Title == "" || s.Evidence == "" || len(s.Title) > 300 || len(s.Evidence) > 8000 || !partnershipDate(s.CheckedAt, false) {
 			return invalid("each source needs a URL, title, evidence and checked_at timestamp")
 		}
@@ -306,7 +336,8 @@ func validatePartnership(r *PartnershipRecord) error {
 		}
 	}
 	seen := make(map[string]bool)
-	for _, m := range r.Messages {
+	for i := range r.Messages {
+		m := &r.Messages[i]
 		if m.ID == "" || len(m.ID) > 160 || seen[m.ID] {
 			return invalid("message ids must be non-empty and unique")
 		}

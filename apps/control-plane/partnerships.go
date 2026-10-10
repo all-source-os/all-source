@@ -4,9 +4,10 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/allsource/control-plane/internal/application/usecases"
 	httphandlers "github.com/allsource/control-plane/internal/interfaces/http"
-	"github.com/gin-gonic/gin"
 )
 
 func (cp *ControlPlane) PartnershipsListHandler(c *gin.Context) {

@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
+	"github.com/gin-gonic/gin"
+
 	controlinternal "github.com/allsource/control-plane/internal"
 	"github.com/allsource/control-plane/internal/application/usecases"
 	"github.com/allsource/control-plane/internal/domain/entities"
 	"github.com/allsource/control-plane/internal/infrastructure/clients"
 	httphandlers "github.com/allsource/control-plane/internal/interfaces/http"
-	"github.com/dgrijalva/jwt-go"
-	"github.com/gin-gonic/gin"
 )
 
 type partnershipHandlerCore struct {
@@ -55,7 +56,7 @@ func TestPartnershipHandlersRequireAdminAndPersistActor(t *testing.T) {
 	body := []byte(`{"expected_revision":0,"actor":"spoofed","record":{"organization":"Example Partner","website":"https://example.com","kind":"vc","status":"research","messages":[],"sources":[]}}`)
 	request := func(method, path, auth string, data []byte) *httptest.ResponseRecorder {
 		t.Helper()
-		r := httptest.NewRequest(method, path, bytes.NewReader(data))
+		r := httptest.NewRequestWithContext(t.Context(), method, path, bytes.NewReader(data))
 		r.Header.Set("Content-Type", "application/json")
 		if auth != "" {
 			r.Header.Set("Authorization", "Bearer "+auth)
