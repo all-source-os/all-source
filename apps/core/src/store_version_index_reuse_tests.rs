@@ -116,7 +116,9 @@ fn tolerant_hydration_does_not_certify_the_version_index() {
 
 #[test]
 fn failed_strict_hydration_does_not_certify_the_version_index() {
-    for failure in ["corrupt", "row cap", "elapsed", "unrepresentable version"] {
+    // The resolve is bounded by compressed bytes, not rows: its peak memory is
+    // one batch, and a row ceiling would bar a large file from ever folding.
+    for failure in ["corrupt", "byte cap", "elapsed", "unrepresentable version"] {
         let (directory, mut store) = seeded();
         match failure {
             "corrupt" => std::fs::write(
@@ -124,7 +126,7 @@ fn failed_strict_hydration_does_not_certify_the_version_index() {
                 b"unreadable archived history",
             )
             .unwrap(),
-            "row cap" => store.strict_archive_limits.max_rows = 1,
+            "byte cap" => store.strict_archive_limits.max_compressed_bytes = 1,
             "elapsed" => store.strict_archive_limits.timeout = Duration::ZERO,
             "unrepresentable version" => {
                 archive(directory.path(), TENANT, &[event(TENANT, ENTITY, -1)]);
@@ -144,6 +146,15 @@ fn failed_strict_hydration_does_not_certify_the_version_index() {
                 .is_err(),
             "{failure}"
         );
+        // "unrepresentable version" is the one case where the resolve itself
+        // succeeds; the write is then refused by the version check, not by the
+        // index, so certifying the entity is correct there.
+        if failure != "unrepresentable version" {
+            assert!(
+                !store.version_index_entities.contains_key(ENTITY),
+                "a resolve that could not finish must not certify the entity: {failure}"
+            );
+        }
         assert!(subscriber.try_recv().is_err(), "{failure}");
     }
 }
@@ -185,44 +196,117 @@ fn cancelled_strict_hydration_does_not_certify_or_append() {
 
 /// gh#321: a conditional append must not be priced by the tenant's history.
 ///
-/// This archive holds more rows than the row budget admits, so a fold of every
-/// entity in the tenant cannot complete. The targeted entity's own row groups
-/// still fit, so the write must succeed — and must still refuse a stale
-/// expectation, which is the only reason to read the archive at all.
+/// A fold that runs out of time must leave the files it did fold recorded, so
+/// the attempt after it does strictly less work. Without that, a tenant whose
+/// archive cannot be folded inside one budget is refused conditional writes
+/// for good, which is what locked a production tenant out.
 #[test]
-fn conditional_write_succeeds_on_a_tenant_too_large_to_fold_whole() {
+fn an_exhausted_resolve_persists_progress_and_a_retry_completes() {
     let directory = TempDir::new().unwrap();
-    let crowd: Vec<Event> = (0..400)
-        .map(|i| event(TENANT, &format!("crowd-entity-{i}"), i64::from(i % 7) + 1))
-        .collect();
     let storage = ParquetStorage::new(directory.path()).unwrap();
-    storage
-        .write_atomic_parquet(TENANT, "events-crowd", &crowd)
-        .unwrap();
+    for i in 0..12 {
+        storage
+            .write_atomic_parquet(
+                TENANT,
+                &format!("events-crowd-{i}"),
+                &[event(TENANT, &format!("crowd-entity-{i}"), 2)],
+            )
+            .unwrap();
+    }
     storage
         .write_atomic_parquet(TENANT, "events-target", &[event(TENANT, ENTITY, 5)])
         .unwrap();
 
     let mut store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
-    store.strict_archive_limits.max_rows = 50;
+    // Room for at least one of these files per attempt, never all thirteen.
+    store.strict_archive_limits.max_compressed_bytes = 4096;
 
-    assert!(matches!(
-        store.ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(4)),
-        Err(AllSourceError::VersionConflict {
-            expected: 4,
-            current: 5
-        })
-    ));
+    let mut refusals = 0;
+    let mut resolved = None;
+    for _ in 0..400 {
+        match store.ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(5)) {
+            Err(AllSourceError::ArchiveIndexIncomplete { remaining }) => {
+                assert!(remaining > 0);
+                refusals += 1;
+            }
+            other => {
+                resolved = Some(other);
+                break;
+            }
+        }
+    }
+
+    assert!(refusals > 0, "the first attempts should have run out of time");
     assert_eq!(
-        store
-            .ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(5))
+        resolved.expect("a retry must eventually complete the fold").unwrap(),
+        6,
+        "after {refusals} resumed attempts"
+    );
+}
+
+/// A refusal while the manifest is incomplete is a retry, not a failure: the
+/// caller cannot tell "not ready yet" from "broken" otherwise, and the two
+/// want opposite responses.
+#[test]
+fn an_incomplete_resolve_is_reported_as_retryable() {
+    let (_directory, mut store) = seeded();
+    store.strict_archive_limits.timeout = Duration::ZERO;
+    let error = store
+        .ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(3))
+        .unwrap_err();
+    assert!(error.is_retryable(), "{error}");
+}
+
+/// A flush already knows the versions it wrote, so a conditional write that
+/// follows it must not read those files back.
+///
+/// Proven by making every archive file unreadable after the flush: a resolve
+/// that folds them would fail, so succeeding means the manifest answered. The
+/// directory is still enumerated — that is how a resolve learns whether any
+/// file is unaccounted for — so this pins which work the manifest removes.
+#[test]
+fn a_flushed_version_is_recorded_without_re_reading_the_archive() {
+    let directory = TempDir::new().unwrap();
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    store
+        .ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(0))
+        .unwrap();
+    store.flush_storage().unwrap();
+
+    let mut archived = 0;
+    for entry in walk_parquet(&directory.path().join(TENANT)) {
+        std::fs::write(&entry, b"unreadable archived history").unwrap();
+        archived += 1;
+    }
+    assert!(archived > 0, "the flush should have written an archive file");
+
+    let reopened = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    assert_eq!(
+        reopened
+            .ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(1))
             .unwrap(),
-        6
+        2,
+        "the manifest written at flush should answer without folding {archived} file(s)"
     );
-    assert!(
-        !store.version_index_tenants.contains_key(TENANT),
-        "resolving one entity must not certify the tenant"
-    );
+}
+
+fn walk_parquet(root: &Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "parquet") {
+                found.push(path);
+            }
+        }
+    }
+    found
 }
 
 #[test]

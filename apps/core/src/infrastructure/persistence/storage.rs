@@ -1,4 +1,7 @@
-use super::archive_budget::ArchiveReadBudget;
+use super::{
+    archive_budget::ArchiveReadBudget,
+    version_manifest::{ResolvedVersion, VersionManifest},
+};
 use crate::{
     domain::entities::Event,
     error::{AllSourceError, Result},
@@ -428,6 +431,19 @@ impl ParquetStorage {
         };
 
         let duration = start.elapsed();
+
+        // Only after the events are durable. A manifest naming a file whose
+        // write failed would authorise a version nothing on disk supports;
+        // one that misses a written file is healed by the next resolve, which
+        // folds any file the manifest does not name.
+        if let Err(error) = self.record_flushed_versions(tenant_id, &file_path, &events_to_write) {
+            tracing::warn!(
+                tenant_id = tenant_id,
+                %error,
+                "could not update the tenant version manifest; conditional writes will re-read \
+                 this file"
+            );
+        }
 
         self.batches_written.fetch_add(1, Ordering::Relaxed);
         self.events_written
@@ -1117,49 +1133,106 @@ impl ParquetStorage {
             .map(|(events, _complete)| events)
     }
 
-    /// Highest persisted version of a single entity in `tenant_id`'s archive.
+    /// Highest persisted version of one entity in `tenant_id`'s archive,
+    /// answered from the tenant's version manifest.
     ///
-    /// A conditional write needs the version of the one entity it targets.
-    /// Folding every entity in the tenant to obtain it makes the cost of one
-    /// append scale with the tenant's entire history, which locks a tenant out
-    /// of conditional writes altogether once that fold no longer fits the
-    /// strict budget.
+    /// The manifest holds a version per entity and names the files it was
+    /// folded from, so only files it does not name have to be read. In steady
+    /// state that is the handful flushed since the last resolve; for a tenant
+    /// with no manifest yet it is every file, which is the one-time cost of
+    /// building it.
     ///
-    /// Every file in the tenant's archive is still opened and its footer
-    /// validated, so an unreadable archive refuses the write as before. Data
-    /// pages are decoded only for row groups whose `entity_id` statistics
-    /// admit `entity_id`; a row group with no usable statistics is decoded.
-    /// Pruning therefore trusts the footer's statistics to describe the pages
-    /// beneath them — a weaker claim than decoding everything, and the reason
-    /// a conditional write no longer pays for the whole tenant.
-    ///
-    /// Errors if the archive cannot be enumerated completely or if a row group
-    /// that might hold the entity cannot be read: a partial answer would
-    /// understate the version and let the next conditional write reuse one
-    /// already on disk.
-    pub(crate) fn load_entity_version(
+    /// Returns [`ResolvedVersion::Incomplete`] rather than a version when the
+    /// budget runs out with files still unaccounted for. The files folded
+    /// before that point are persisted, so the next attempt resumes instead of
+    /// restarting: the manifest is its own cursor. A partial answer is never
+    /// returned as a version, because understating one would let the next
+    /// conditional write reuse a version already on disk.
+    pub(crate) fn resolve_entity_version(
         &self,
         tenant_id: &str,
         entity_id: &str,
         budget: &mut ArchiveReadBudget,
-    ) -> Result<Option<u64>> {
+    ) -> Result<ResolvedVersion> {
         let files = self.list_complete_tenant_archive(tenant_id, budget)?;
-        let mut highest: Option<u64> = None;
-        for path in files {
-            budget.file()?;
-            if let Some(version) = self.fold_one_entity_version(&path, entity_id, budget)? {
-                highest = Some(highest.map_or(version, |current: u64| current.max(version)));
-            }
+        let tenant_dir = self.storage_dir.join(sanitize_tenant_id_for_path(tenant_id)?);
+        let mut manifest = VersionManifest::load(&tenant_dir).unwrap_or_default();
+
+        let outstanding: Vec<PathBuf> = files
+            .into_iter()
+            .filter(|path| {
+                manifest_key(&tenant_dir, path).is_none_or(|key| !manifest.covered.contains(&key))
+            })
+            .collect();
+
+        if outstanding.is_empty() {
+            return Ok(ResolvedVersion::Complete(manifest.version_of(entity_id)));
         }
-        Ok(highest)
+
+        let mut folded = 0usize;
+        let mut exhausted = None;
+        for path in &outstanding {
+            // Enumeration already charged each file against `max_files`.
+            if let Err(error) = self.fold_entity_versions(path, &mut manifest.entities, budget) {
+                exhausted = Some(error);
+                break;
+            }
+            if let Some(key) = manifest_key(&tenant_dir, path) {
+                manifest.covered.insert(key);
+            }
+            folded += 1;
+        }
+
+        // Resumability depends on this outliving the attempt that earned it.
+        if folded > 0 {
+            manifest.store(&tenant_dir)?;
+        }
+
+        if let Some(error) = exhausted {
+            let remaining = outstanding.len() - folded;
+            // A budget that expired is a capacity limit and the caller may
+            // retry; anything else (a corrupt file, an unreadable column) is
+            // not going to resolve itself and has to surface.
+            if is_budget_exhaustion(&error) {
+                return Ok(ResolvedVersion::Incomplete { remaining });
+            }
+            return Err(error);
+        }
+
+        Ok(ResolvedVersion::Complete(manifest.version_of(entity_id)))
     }
 
-    fn fold_one_entity_version(
+    /// Record the versions of events just flushed to `file`, so a later
+    /// conditional write does not have to read them back.
+    pub(crate) fn record_flushed_versions(
+        &self,
+        tenant_id: &str,
+        file: &Path,
+        events: &[Event],
+    ) -> Result<()> {
+        let tenant_dir = self.storage_dir.join(sanitize_tenant_id_for_path(tenant_id)?);
+        let Some(key) = manifest_key(&tenant_dir, file) else {
+            return Ok(());
+        };
+        let mut manifest = VersionManifest::load(&tenant_dir).unwrap_or_default();
+        manifest.observe_file(&key, events);
+        manifest.store(&tenant_dir)
+    }
+
+    /// Fold every entity's highest version out of one archive file.
+    ///
+    /// Every column is decoded, so a corrupt row group fails here exactly as
+    /// it would during a full load: a version read from an archive that cannot
+    /// be read through is not a version worth trusting. What this avoids is
+    /// the part that costs memory rather than CPU — no payload is parsed into
+    /// a `serde_json::Value` and no `Event` outlives its batch, so peak heap
+    /// is one batch, not the file's whole contents.
+    fn fold_entity_versions(
         &self,
         file_path: &Path,
-        entity_id: &str,
+        versions: &mut HashMap<String, u64>,
         budget: &mut ArchiveReadBudget,
-    ) -> Result<Option<u64>> {
+    ) -> Result<()> {
         use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
         budget.check()?;
@@ -1172,29 +1245,14 @@ impl ParquetStorage {
                 AllSourceError::StorageError(format!("Failed to inspect archive file: {error}"))
             })?
             .len();
-        budget.file_within_ceiling(file_len)?;
+        budget.compressed(file_len)?;
 
         let builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .map_err(|error| unreadable(file_path, error))?;
 
-        let needle = entity_id.as_bytes();
-        let groups: Vec<usize> = builder
-            .metadata()
-            .row_groups()
-            .iter()
-            .enumerate()
-            .filter(|(_, group)| row_group_may_hold_entity(group, needle))
-            .map(|(index, _)| index)
-            .collect();
-        if groups.is_empty() {
-            return Ok(None);
-        }
-
-        // Only entity_id and version outlive a batch; the rest of an admitted
-        // row group is decoded to prove it readable, then dropped.
-        for &index in &groups {
-            let group = builder.metadata().row_group(index);
-            budget.compressed_chunk(u64::try_from(group.compressed_size()).unwrap_or(u64::MAX))?;
+        // Only entity_id and version outlive a batch; the rest is decoded to
+        // prove the file readable, then dropped.
+        for group in builder.metadata().row_groups() {
             let retained: i64 = [ENTITY_ID_COLUMN, VERSION_COLUMN]
                 .iter()
                 .map(|&column| group.column(column).uncompressed_size())
@@ -1203,12 +1261,10 @@ impl ParquetStorage {
         }
 
         let reader = builder
-            .with_row_groups(groups)
             .with_batch_size(1024)
             .build()
             .map_err(|error| unreadable(file_path, error))?;
 
-        let mut highest: Option<u64> = None;
         for batch in reader {
             budget.check()?;
             let batch = batch.map_err(|error| unreadable(file_path, error))?;
@@ -1228,15 +1284,15 @@ impl ParquetStorage {
                 })?;
 
             for i in 0..batch.num_rows() {
-                if entity_ids.value(i) != entity_id {
-                    continue;
-                }
                 let version = row_versions.value(i);
-                highest = Some(highest.map_or(version, |current: u64| current.max(version)));
+                versions
+                    .entry(entity_ids.value(i).to_string())
+                    .and_modify(|current| *current = (*current).max(version))
+                    .or_insert(version);
             }
         }
 
-        Ok(highest)
+        Ok(())
     }
 
     pub(crate) fn load_events_for_tenant_with_integrity(
@@ -1500,23 +1556,25 @@ fn unreadable(path: &Path, error: impl std::fmt::Display) -> AllSourceError {
     ))
 }
 
-/// Whether a row group's `entity_id` statistics admit `needle`.
+/// How an archive file is named inside its tenant's manifest.
 ///
-/// True whenever the group cannot be ruled out, including when statistics are
-/// absent or incomplete: skipping a group that might hold the entity would
-/// understate its version. Parquet orders `entity_id` by unsigned byte value,
-/// which is what comparing the UTF-8 slices gives.
-fn row_group_may_hold_entity(
-    group: &parquet::file::metadata::RowGroupMetaData,
-    needle: &[u8],
-) -> bool {
-    let Some(statistics) = group.column(ENTITY_ID_COLUMN).statistics() else {
-        return true;
-    };
-    let (Some(min), Some(max)) = (statistics.min_bytes_opt(), statistics.max_bytes_opt()) else {
-        return true;
-    };
-    min <= needle && needle <= max
+/// Relative to the tenant directory, so the manifest survives the data
+/// directory being moved or mounted at a different path. `None` for a path
+/// outside the tenant directory, which is then simply never marked covered.
+fn manifest_key(tenant_dir: &Path, file: &Path) -> Option<String> {
+    Some(
+        file.strip_prefix(tenant_dir)
+            .ok()?
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+/// Whether an error is the budget refusing more work rather than the archive
+/// being unreadable. Only the former is worth retrying.
+fn is_budget_exhaustion(error: &AllSourceError) -> bool {
+    matches!(error, AllSourceError::StorageError(message)
+        if message.contains("Strict archive read budget exceeded"))
 }
 
 /// Resolve the directory a flush should write into for `(tenant, when)`.

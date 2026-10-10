@@ -27,6 +27,7 @@ use crate::{
             snapshot::{SnapshotConfig, SnapshotManager, SnapshotType},
             storage::ParquetStorage,
             tenant_loader::TenantLoader,
+            version_manifest::ResolvedVersion,
             wal::{WALConfig, WriteAheadLog},
         },
         query::geospatial::GeoIndex,
@@ -1649,18 +1650,40 @@ impl EventStore {
         self.ensure_tenant_loaded_budgeted(tenant_id, require_complete, None)
     }
 
+    /// Limits for folding the version manifest.
+    ///
+    /// A fold streams one batch at a time and keeps two columns, so its peak
+    /// memory is a batch however many files it reads. The cumulative row and
+    /// decoded-byte ceilings therefore measure nothing it can exhaust, and
+    /// leaving them in place would bar a file holding more than `max_rows`
+    /// from ever being folded — a permanent refusal, not a budget.
+    ///
+    /// Compressed bytes stay: that one bounds the I/O a single resolve does,
+    /// and a resolve stopping there resumes from the manifest.
+    fn version_index_limits(&self) -> ArchiveReadLimits {
+        ArchiveReadLimits {
+            max_rows: u64::MAX,
+            max_uncompressed_bytes: u64::MAX,
+            ..self.strict_archive_limits.clone()
+        }
+    }
+
     /// Fold one entity's archived version into `entity_versions`, once.
     ///
     /// A conditional write must not assign a version that already exists on
     /// disk, so the archive has to be consulted before the first OCC write
-    /// for an entity. Only that entity's `version` is read: no events are
-    /// loaded and no payload is decoded.
+    /// for an entity. The tenant's version manifest answers that in one file
+    /// read; only files the manifest does not yet cover are read.
     ///
     /// The unit is the entity, not the tenant. Resolving the whole tenant
     /// made one append's cost scale with the tenant's history, so past the
     /// strict budget every conditional write to a large tenant failed and
     /// certified nothing, leaving each retry to pay the same cost and fail
     /// the same way (gh#321).
+    ///
+    /// An incomplete resolve refuses the write and says so as a retry, not a
+    /// failure: the manifest kept the files it did fold, so the next attempt
+    /// carries on from there.
     ///
     /// Concurrent callers for a cold entity may both scan. Folding is a max,
     /// so a duplicate scan costs time and changes nothing.
@@ -1681,22 +1704,27 @@ impl EventStore {
             return Ok(());
         };
 
-        let mut budget = ArchiveReadBudget::new(self.strict_archive_limits.clone())
+        let mut budget = ArchiveReadBudget::new(self.version_index_limits())
             .with_cancellation(cancellation.cloned());
 
-        let archived = storage
+        match storage
             .read()
-            .load_entity_version(tenant_id, entity_id, &mut budget)?;
-
-        if let Some(version) = archived {
-            self.entity_versions
-                .entry(entity_id.to_string())
-                .and_modify(|current| *current = (*current).max(version))
-                .or_insert(version);
+            .resolve_entity_version(tenant_id, entity_id, &mut budget)?
+        {
+            ResolvedVersion::Complete(archived) => {
+                if let Some(version) = archived {
+                    self.entity_versions
+                        .entry(entity_id.to_string())
+                        .and_modify(|current| *current = (*current).max(version))
+                        .or_insert(version);
+                }
+                self.version_index_entities.insert(entity_id.to_string(), ());
+                Ok(())
+            }
+            ResolvedVersion::Incomplete { remaining } => {
+                Err(crate::error::AllSourceError::ArchiveIndexIncomplete { remaining })
+            }
         }
-
-        self.version_index_entities.insert(entity_id.to_string(), ());
-        Ok(())
     }
 
     fn ensure_tenant_loaded_budgeted(

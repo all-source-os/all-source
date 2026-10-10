@@ -20,6 +20,7 @@ pub mod storage_integrity;
 pub mod system_bootstrap;
 pub mod system_store;
 pub mod tenant_loader;
+pub mod version_manifest;
 pub mod wal;
 
 // Re-exports for convenience

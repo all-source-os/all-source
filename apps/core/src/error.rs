@@ -52,6 +52,16 @@ pub enum AllSourceError {
     #[error("Store is read-only: {0}")]
     ReadOnly(String),
 
+    /// A conditional write could not be authorised yet because the tenant's
+    /// version manifest does not account for every archive file. The scan
+    /// persisted what it folded, so retrying resolves strictly fewer files
+    /// than this attempt did and the condition clears on its own.
+    #[error(
+        "Archive version index incomplete: {remaining} archive file(s) not yet folded; retry to \
+         resume"
+    )]
+    ArchiveIndexIncomplete { remaining: usize },
+
     #[error("Internal error: {0}")]
     InternalError(String),
 
@@ -78,6 +88,7 @@ impl AllSourceError {
                 | AllSourceError::ConcurrencyError(_)
                 | AllSourceError::VersionConflict { .. }
                 | AllSourceError::QueueFull(_)
+                | AllSourceError::ArchiveIndexIncomplete { .. }
         )
     }
 }
@@ -145,6 +156,20 @@ mod axum_impl {
                 }
                 AllSourceError::TenantAlreadyExists(_) | AllSourceError::ConcurrencyError(_) => {
                     (StatusCode::CONFLICT, self.to_string())
+                }
+                AllSourceError::ArchiveIndexIncomplete { remaining } => {
+                    // Retry-After 1s, not a back-off: each attempt folds more
+                    // files, so waiting longer does not make it likelier.
+                    let body = serde_json::json!({
+                        "error": "archive_index_incomplete",
+                        "remaining_files": remaining,
+                    });
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        [(axum::http::header::RETRY_AFTER, "1")],
+                        axum::Json(body),
+                    )
+                        .into_response();
                 }
                 AllSourceError::QueueFull(_) => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
                 AllSourceError::ReadOnly(_) => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
