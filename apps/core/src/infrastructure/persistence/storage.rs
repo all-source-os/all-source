@@ -1155,7 +1155,9 @@ impl ParquetStorage {
         budget: &mut ArchiveReadBudget,
     ) -> Result<ResolvedVersion> {
         let files = self.list_complete_tenant_archive(tenant_id, budget)?;
-        let tenant_dir = self.storage_dir.join(sanitize_tenant_id_for_path(tenant_id)?);
+        let tenant_dir = self
+            .storage_dir
+            .join(sanitize_tenant_id_for_path(tenant_id)?);
         let mut manifest = VersionManifest::load(&tenant_dir).unwrap_or_default();
 
         let outstanding: Vec<PathBuf> = files
@@ -1210,7 +1212,9 @@ impl ParquetStorage {
         file: &Path,
         events: &[Event],
     ) -> Result<()> {
-        let tenant_dir = self.storage_dir.join(sanitize_tenant_id_for_path(tenant_id)?);
+        let tenant_dir = self
+            .storage_dir
+            .join(sanitize_tenant_id_for_path(tenant_id)?);
         let Some(key) = manifest_key(&tenant_dir, file) else {
             return Ok(());
         };

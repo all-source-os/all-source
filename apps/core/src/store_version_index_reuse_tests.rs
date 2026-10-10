@@ -236,9 +236,14 @@ fn an_exhausted_resolve_persists_progress_and_a_retry_completes() {
         }
     }
 
-    assert!(refusals > 0, "the first attempts should have run out of time");
+    assert!(
+        refusals > 0,
+        "the first attempts should have run out of time"
+    );
     assert_eq!(
-        resolved.expect("a retry must eventually complete the fold").unwrap(),
+        resolved
+            .expect("a retry must eventually complete the fold")
+            .unwrap(),
         6,
         "after {refusals} resumed attempts"
     );
@@ -278,7 +283,10 @@ fn a_flushed_version_is_recorded_without_re_reading_the_archive() {
         std::fs::write(&entry, b"unreadable archived history").unwrap();
         archived += 1;
     }
-    assert!(archived > 0, "the flush should have written an archive file");
+    assert!(
+        archived > 0,
+        "the flush should have written an archive file"
+    );
 
     let reopened = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
     assert_eq!(

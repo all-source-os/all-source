@@ -154,7 +154,10 @@ async fn cancellation_is_checked_after_waiting_for_durability_gate() {
     // the held durability gate.
     // test-hang-allow: bounded observation of the real store reaching that boundary.
     tokio::time::timeout(Duration::from_secs(1), async {
-        while !store.version_index_entities.contains_key("synthetic-entity") {
+        while !store
+            .version_index_entities
+            .contains_key("synthetic-entity")
+        {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
     })
@@ -322,7 +325,11 @@ async fn timed_out_http_append_leaves_no_trace_of_the_cancelled_command() {
     // nothing behind: no event, no broadcast, no half-built version index.
     // Under memory pressure, abandoning the read is the point.
     assert_eq!(store.total_events(), 0);
-    assert!(!store.version_index_entities.contains_key("synthetic-entity"));
+    assert!(
+        !store
+            .version_index_entities
+            .contains_key("synthetic-entity")
+    );
     assert!(subscriber.try_recv().is_err());
     let response = client
         .post(format!("{url}/events"))

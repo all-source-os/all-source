@@ -1700,7 +1700,8 @@ impl EventStore {
         }
 
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
-            self.version_index_entities.insert(entity_id.to_string(), ());
+            self.version_index_entities
+                .insert(entity_id.to_string(), ());
             return Ok(());
         };
 
@@ -1718,7 +1719,8 @@ impl EventStore {
                         .and_modify(|current| *current = (*current).max(version))
                         .or_insert(version);
                 }
-                self.version_index_entities.insert(entity_id.to_string(), ());
+                self.version_index_entities
+                    .insert(entity_id.to_string(), ());
                 Ok(())
             }
             ResolvedVersion::Incomplete { remaining } => {

@@ -298,7 +298,10 @@ async fn eviction_between_hydration_and_version_check_cannot_authorize_a_stale_w
     });
     // test-hang-allow: wait for the version index to resolve, before releasing the checkpoint gate.
     tokio::time::timeout(Duration::from_secs(1), async {
-        while !store.version_index_entities.contains_key("synthetic-entity") {
+        while !store
+            .version_index_entities
+            .contains_key("synthetic-entity")
+        {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
     })
