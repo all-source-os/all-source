@@ -1723,8 +1723,8 @@ impl EventStore {
                     .insert(entity_id.to_string(), ());
                 Ok(())
             }
-            ResolvedVersion::Incomplete { remaining } => {
-                Err(crate::error::AllSourceError::ArchiveIndexIncomplete { remaining })
+            ResolvedVersion::Incomplete { remaining, reason } => {
+                Err(crate::error::AllSourceError::ArchiveIndexIncomplete { remaining, reason })
             }
         }
     }

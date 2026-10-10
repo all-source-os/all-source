@@ -56,11 +56,15 @@ pub enum AllSourceError {
     /// version manifest does not account for every archive file. The scan
     /// persisted what it folded, so retrying resolves strictly fewer files
     /// than this attempt did and the condition clears on its own.
+    ///
+    /// `reason` carries the limit that stopped the fold. Without it an
+    /// operator cannot tell which budget dimension a stuck tenant is hitting,
+    /// and that is the first thing worth knowing.
     #[error(
-        "Archive version index incomplete: {remaining} archive file(s) not yet folded; retry to \
-         resume"
+        "Archive version index incomplete: {remaining} archive file(s) not yet folded, stopped by \
+         {reason}; retry to resume"
     )]
-    ArchiveIndexIncomplete { remaining: usize },
+    ArchiveIndexIncomplete { remaining: usize, reason: String },
 
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -157,12 +161,16 @@ mod axum_impl {
                 AllSourceError::TenantAlreadyExists(_) | AllSourceError::ConcurrencyError(_) => {
                     (StatusCode::CONFLICT, self.to_string())
                 }
-                AllSourceError::ArchiveIndexIncomplete { remaining } => {
+                AllSourceError::ArchiveIndexIncomplete {
+                    remaining,
+                    ref reason,
+                } => {
                     // Retry-After 1s, not a back-off: each attempt folds more
                     // files, so waiting longer does not make it likelier.
                     let body = serde_json::json!({
                         "error": "archive_index_incomplete",
                         "remaining_files": remaining,
+                        "stopped_by": reason,
                     });
                     return (
                         StatusCode::SERVICE_UNAVAILABLE,

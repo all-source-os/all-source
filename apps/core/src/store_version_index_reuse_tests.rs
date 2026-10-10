@@ -225,8 +225,12 @@ fn an_exhausted_resolve_persists_progress_and_a_retry_completes() {
     let mut resolved = None;
     for _ in 0..400 {
         match store.ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(5)) {
-            Err(AllSourceError::ArchiveIndexIncomplete { remaining }) => {
+            Err(AllSourceError::ArchiveIndexIncomplete { remaining, reason }) => {
                 assert!(remaining > 0);
+                assert!(
+                    reason.contains("compressed bytes"),
+                    "the refusal must name the limit that stopped the fold: {reason}"
+                );
                 refusals += 1;
             }
             other => {

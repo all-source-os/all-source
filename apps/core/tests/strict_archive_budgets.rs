@@ -109,9 +109,37 @@ fn compressed_byte_budget_refuses_conditional_writes() {
     );
 }
 
+/// Rows and decoded bytes bound a hydration, not a version resolve.
+///
+/// A resolve folds one batch at a time and keeps two columns, so its peak heap
+/// is a batch however many files it reads. Charging it a cumulative row or
+/// decoded-byte ceiling measured nothing it could exhaust, and it barred a file
+/// holding more than `max_rows` from ever being folded — a permanent refusal of
+/// every conditional write to that tenant rather than a budget (gh#321).
+fn assert_resolves_regardless(limits: ArchiveReadLimits, dimension: &str) {
+    let (_directory, store) = seeded(limits);
+    assert_eq!(
+        store
+            .ingest_with_expected_version(&event(0), Some(2))
+            .unwrap(),
+        3,
+        "{dimension} must not gate a version resolve"
+    );
+    assert!(
+        matches!(
+            store.ingest_with_expected_version(&event(0), Some(2)),
+            Err(allsource_core::error::AllSourceError::VersionConflict {
+                expected: 2,
+                current: 3
+            })
+        ),
+        "the resolved version must still fence a stale expectation"
+    );
+}
+
 #[test]
-fn decoded_byte_budget_refuses_conditional_writes() {
-    assert_refused(
+fn decoded_byte_budget_does_not_gate_a_version_resolve() {
+    assert_resolves_regardless(
         ArchiveReadLimits {
             max_uncompressed_bytes: 1,
             ..Default::default()
@@ -121,8 +149,8 @@ fn decoded_byte_budget_refuses_conditional_writes() {
 }
 
 #[test]
-fn decoded_row_budget_refuses_conditional_writes() {
-    assert_refused(
+fn decoded_row_budget_does_not_gate_a_version_resolve() {
+    assert_resolves_regardless(
         ArchiveReadLimits {
             max_rows: 1,
             ..Default::default()

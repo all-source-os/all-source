@@ -103,7 +103,8 @@ pub(crate) enum ResolvedVersion {
     Complete(Option<u64>),
     /// Files remain unaccounted for, so no version can be trusted yet.
     /// Progress was persisted, so a retry resumes rather than restarts.
-    Incomplete { remaining: usize },
+    /// `reason` is the limit that stopped the fold.
+    Incomplete { remaining: usize, reason: String },
 }
 
 #[cfg(test)]

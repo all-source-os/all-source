@@ -1196,7 +1196,10 @@ impl ParquetStorage {
             // retry; anything else (a corrupt file, an unreadable column) is
             // not going to resolve itself and has to surface.
             if is_budget_exhaustion(&error) {
-                return Ok(ResolvedVersion::Incomplete { remaining });
+                return Ok(ResolvedVersion::Incomplete {
+                    remaining,
+                    reason: error.to_string(),
+                });
             }
             return Err(error);
         }
