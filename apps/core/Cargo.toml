@@ -1,6 +1,6 @@
 [package]
 name = "allsource-core"
-version = "0.25.4"
+version = "0.26.0"
 edition = "2024"
 rust-version = "1.92"
 authors = ["AllSource Team"]
