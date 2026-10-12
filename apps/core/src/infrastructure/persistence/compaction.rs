@@ -1,6 +1,14 @@
 use crate::{
     error::{AllSourceError, Result},
-    infrastructure::persistence::{cold_tier::ArchiveTarget, storage::ParquetStorage},
+    infrastructure::persistence::{
+        archive_budget::ArchiveReadLimits,
+        archive_repack::{
+            archive_directory_guard, archive_mutation_guard, read_repack_receipt,
+            repack_archive_file_in_sweep,
+        },
+        cold_tier::ArchiveTarget,
+        storage::ParquetStorage,
+    },
 };
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
@@ -583,7 +591,7 @@ impl CompactionManager {
         *self.last_compaction.write() = Some(Utc::now());
 
         tracing::info!(
-            "✅ Compaction sweep complete: {} files → 1 snapshot per tenant, \
+            "✅ Compaction sweep complete: {} files → bounded snapshots, \
              {:.2} MB → {:.2} MB, {} events, {} tenants in {}ms",
             aggregate.files_compacted,
             aggregate.bytes_before as f64 / (1024.0 * 1024.0),
@@ -643,13 +651,94 @@ impl CompactionManager {
         deadline: Option<std::time::Instant>,
     ) -> Result<(CompactionResult, bool)> {
         let start_time = std::time::Instant::now();
-
-        let storage = ParquetStorage::new(&self.storage_dir)?;
+        let deadline =
+            Some(deadline.unwrap_or_else(|| start_time + std::time::Duration::from_secs(240)));
+        if deadline.is_some_and(|end| start_time >= end) {
+            return Ok((CompactionResult::default(), false));
+        }
+        let Some(_mutation) = archive_mutation_guard(deadline) else {
+            return Ok((CompactionResult::default(), false));
+        };
+        let storage = ParquetStorage::open_existing(&self.storage_dir)?;
         let all_files = storage.list_parquet_files_for_tenant(tenant_id)?;
+        let mut aggregate = CompactionResult::default();
+        let mut first_error = None;
+        let mut failed_repairs = std::collections::HashSet::new();
+        for path in &all_files {
+            let bytes = fs::metadata(path)
+                .map_err(|error| AllSourceError::StorageError(error.to_string()))?
+                .len();
+            if bytes <= ArchiveReadLimits::default().max_file_bytes {
+                continue;
+            }
+            if deadline.is_some_and(|end| std::time::Instant::now() >= end) {
+                if let Some(error) = first_error {
+                    return Err(error);
+                }
+                aggregate.duration_ms = start_time.elapsed().as_millis() as u64;
+                return Ok((aggregate, false));
+            }
+            let repaired = repack_archive_file_in_sweep(path, deadline).and_then(|receipt_path| {
+                read_repack_receipt(&receipt_path).map(|receipt| (receipt_path, receipt))
+            });
+            let (receipt_path, receipt) = match repaired {
+                Ok(repaired) => repaired,
+                Err(error) => {
+                    tracing::error!(tenant_id, file = %path.display(), "oversized archive repair failed: {error}");
+                    failed_repairs.insert(path.clone());
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
+                    continue;
+                }
+            };
+            aggregate.files_compacted += 1;
+            aggregate.bytes_before += receipt.original_bytes;
+            aggregate.bytes_after += receipt.output_bytes;
+            aggregate.events_compacted += usize::try_from(receipt.rows)
+                .map_err(|_| AllSourceError::StorageError("Archive row count overflow".into()))?;
+            tracing::info!(tenant_id, receipt = %receipt_path.display(), "oversized archive repacked; original retained");
+        }
+        let all_files = storage.list_parquet_files_for_tenant(tenant_id)?;
+        let mut age_indexes = std::collections::HashMap::new();
+        let mut repair_ages = std::collections::HashMap::new();
+        for path in &all_files {
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if !name.starts_with("events.repacked.") {
+                continue;
+            }
+            let Some(directory) = path.parent() else {
+                continue;
+            };
+            let index = age_indexes
+                .entry(directory.to_path_buf())
+                .or_insert_with(|| {
+                    let (index, error) = repair_age_index(directory, deadline);
+                    if first_error.is_none() {
+                        first_error = error;
+                    }
+                    index
+                });
+            if let Some(created) = index.get(name) {
+                repair_ages.insert(path.clone(), *created);
+            } else {
+                failed_repairs.insert(path.clone());
+                if first_error.is_none() {
+                    first_error = Some(AllSourceError::StorageError(
+                        "Repaired archive receipt missing".into(),
+                    ));
+                }
+            }
+        }
         let threshold = self.config.small_file_threshold as u64;
         let raw_files: Vec<FileInfo> = all_files
             .into_iter()
             .filter_map(|p| {
+                if failed_repairs.contains(&p) {
+                    return None;
+                }
                 let metadata = fs::metadata(&p).ok()?;
                 let size = metadata.len();
                 let is_snapshot = p
@@ -662,9 +751,11 @@ impl CompactionManager {
                 if is_snapshot && size >= threshold {
                     return None;
                 }
-                let created = metadata
-                    .created()
-                    .ok()
+                let created = repair_ages
+                    .get(&p)
+                    .copied()
+                    .flatten()
+                    .or_else(|| metadata.created().ok())
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                     .and_then(|d| DateTime::from_timestamp(d.as_secs() as i64, 0))
                     .unwrap_or_else(Utc::now);
@@ -678,12 +769,16 @@ impl CompactionManager {
 
         let mut candidates = self.select_files_for_compaction(&raw_files);
         if candidates.is_empty() {
+            if let Some(error) = first_error {
+                return Err(error);
+            }
             tracing::debug!(
                 tenant_id = tenant_id,
                 strategy = ?self.config.strategy,
                 "no files meet compaction criteria"
             );
-            return Ok((CompactionResult::default(), true));
+            aggregate.duration_ms = start_time.elapsed().as_millis() as u64;
+            return Ok((aggregate, true));
         }
         // Oldest first, so each group covers a contiguous time range and the
         // snapshots a pass writes do not interleave.
@@ -699,14 +794,12 @@ impl CompactionManager {
         );
 
         let total_groups = groups.len();
-        let mut aggregate = CompactionResult::default();
         let mut done = 0usize;
         // A group that fails does not stop the others. One unreadable file
         // otherwise blocks its whole tenant from ever compacting, and the
         // groups that have nothing wrong with them are what reduce the file
         // count. The failure is still returned, so a caller cannot read a
         // partial sweep as a clean one.
-        let mut first_error = None;
         let mut complete = true;
         for group in groups {
             if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
@@ -781,6 +874,16 @@ impl CompactionManager {
     ) -> Result<CompactionResult> {
         let start_time = std::time::Instant::now();
         let bytes_before: u64 = candidates.iter().map(|f| f.size).sum();
+        let mut directories = candidates
+            .iter()
+            .filter_map(|file| file.path.parent())
+            .collect::<Vec<_>>();
+        directories.sort();
+        directories.dedup();
+        let _directories = directories
+            .into_iter()
+            .map(archive_directory_guard)
+            .collect::<Result<Vec<_>>>()?;
 
         // Each file is read individually rather than through
         // load_events_for_tenant so only the candidate set is picked up —
@@ -934,14 +1037,23 @@ impl CompactionManager {
             format_iso_basic(from),
             format_iso_basic(to)
         );
-        let snapshot_path = storage.write_atomic_parquet(tenant_id, &file_stem, &events)?;
-        let bytes_after = fs::metadata(&snapshot_path).map_or(0, |m| m.len());
+        let snapshot_paths = storage.write_atomic_parquet_parts(tenant_id, &file_stem, &events)?;
+        let bytes_after = snapshot_paths.iter().try_fold(0u64, |sum, path| {
+            let bytes = fs::metadata(path)
+                .map_err(|error| {
+                    AllSourceError::StorageError(format!("Cannot inspect archive output: {error}"))
+                })?
+                .len();
+            sum.checked_add(bytes).ok_or_else(|| {
+                AllSourceError::StorageError("Archive output byte count overflow".into())
+            })
+        })?;
 
         // Delete inputs AFTER the snapshot is durably renamed. AC #6: a
         // snapshot-write failure short-circuits via the `?` above, so inputs
         // stay on disk and events remain queryable until the next pass.
         for fi in candidates {
-            if fi.path == snapshot_path {
+            if snapshot_paths.contains(&fi.path) {
                 continue;
             }
             if let Err(e) = fs::remove_file(&fi.path) {
@@ -1038,6 +1150,61 @@ impl CompactionManager {
     }
 }
 
+fn repair_age_index(
+    directory: &std::path::Path,
+    deadline: Option<std::time::Instant>,
+) -> (
+    std::collections::HashMap<String, Option<std::time::SystemTime>>,
+    Option<AllSourceError>,
+) {
+    let mut index = std::collections::HashMap::new();
+    let mut first_error = None;
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) => return (index, Some(AllSourceError::StorageError(error.to_string()))),
+    };
+    for entry in entries {
+        if deadline.is_some_and(|end| std::time::Instant::now() >= end) {
+            return (
+                index,
+                Some(AllSourceError::StorageError(
+                    "Archive age lookup deadline exceeded".into(),
+                )),
+            );
+        }
+        let receipt_path = match entry {
+            Ok(entry) => entry.path(),
+            Err(error) => {
+                if first_error.is_none() {
+                    first_error = Some(AllSourceError::StorageError(error.to_string()));
+                }
+                continue;
+            }
+        };
+        if receipt_path.extension() != Some(std::ffi::OsStr::new("json"))
+            || !receipt_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(".parquet.repair."))
+        {
+            continue;
+        }
+        match read_repack_receipt(&receipt_path) {
+            Ok(receipt) => {
+                for output in receipt.outputs {
+                    index.insert(output, receipt.original_created_at);
+                }
+            }
+            Err(error) => {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+    }
+    (index, first_error)
+}
+
 /// Result of a compaction operation
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct CompactionResult {
@@ -1089,7 +1256,7 @@ impl CompactionTask {
                             tracing::info!(
                                 "Auto-compaction succeeded: {} files, {:.2} MB saved",
                                 result.files_compacted,
-                                (result.bytes_before - result.bytes_after) as f64
+                                result.bytes_before.saturating_sub(result.bytes_after) as f64
                                     / (1024.0 * 1024.0)
                             );
                         }
