@@ -29,6 +29,12 @@ not running** — which was true in production for the life of the feature,
 because the config, the strategy and this endpoint all shipped without a
 scheduler to call them.
 
+**These stats are in-memory and reset on restart**, so `0` on a
+freshly-started process means nothing either way. Check uptime first
+(`ps -o etime`), and read the file counts below for the durable evidence — a
+tenant sitting at a handful of `snapshot.*` files has been compacted whatever
+the counter says.
+
 The loop lives in `apps/core/src/main.rs` and logs on start:
 
 ```
