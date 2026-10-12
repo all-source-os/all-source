@@ -1780,6 +1780,56 @@ impl EventStore {
         check_cancelled(Some(cancellation.as_ref()))
     }
 
+    /// Refuse a cold load the process has no room for, before it allocates.
+    ///
+    /// The archive's size on disk is read rather than its decoded size,
+    /// because the decoded size is only knowable by decoding it — which is
+    /// the thing being decided. The ratio between them is measured, not
+    /// derived, so it is an env knob
+    /// (`hydration_admission::DEFAULT_RESIDENT_BYTES_PER_ARCHIVE_BYTE`).
+    ///
+    /// No eviction happens here. Trading warm tenants for a load that may
+    /// still not fit is a worse outcome than refusing one request, and
+    /// freeing Rust allocations does not reliably return pages to the
+    /// kernel, so the eviction might not even move the number this checks.
+    /// Headroom-driven eviction belongs after a load that succeeded —
+    /// `enforce_cache_budget`.
+    fn admit_hydration(
+        &self,
+        tenant_id: &str,
+        storage: &Arc<RwLock<ParquetStorage>>,
+    ) -> Result<()> {
+        use crate::infrastructure::{
+            observability::memory, persistence::hydration_admission as admission,
+        };
+
+        let available = memory::available_bytes();
+        if available.is_none() {
+            return Ok(());
+        }
+        let (archive_bytes, file_count) = storage.read().tenant_archive_bytes(tenant_id)?;
+        let reserve = admission::reserve_from_env();
+        let ratio = admission::ratio_from_env();
+        match admission::admit(archive_bytes, available, reserve, ratio) {
+            Ok(()) => Ok(()),
+            Err(refusal) => {
+                tracing::warn!(
+                    tenant_id = tenant_id,
+                    archive_bytes = archive_bytes,
+                    file_count = file_count,
+                    needed_bytes = refusal.needed_bytes,
+                    available_bytes = refusal.available_bytes,
+                    resident_estimate_bytes = self.tenant_loader.total_bytes(),
+                    "refusing to hydrate tenant: no room for its archive"
+                );
+                Err(AllSourceError::ArchiveHydrationRefused {
+                    needed_bytes: refusal.needed_bytes,
+                    available_bytes: refusal.available_bytes,
+                })
+            }
+        }
+    }
+
     fn ensure_tenant_loaded_with_limits(
         &self,
         tenant_id: &str,
@@ -1827,6 +1877,8 @@ impl EventStore {
         if is_loaded() {
             return Ok(());
         }
+
+        self.admit_hydration(tenant_id, &storage)?;
 
         let generation = {
             let _resident = if let Some(budget) = &budget {
@@ -1942,8 +1994,15 @@ impl EventStore {
     /// most queries take the early-return fast path. Eviction is
     /// the cold path; with a well-sized budget this only fires
     /// during warm-up of new tenants past the working-set size.
+    ///
+    /// Measured headroom triggers it as well as the estimate. The estimate
+    /// read 554 MB against a 2 GiB budget while the process held 3.3 GB, so
+    /// on the estimate alone eviction never fired and the cache grew until
+    /// the kernel intervened (gh#321). The estimate stays because it is
+    /// per-tenant and so can order the victims; the kernel's figure says
+    /// whether to start.
     fn enforce_cache_budget(&self, recently_touched: &str) {
-        if !self.tenant_loader.over_budget() {
+        if !self.tenant_loader.over_budget() && self.has_memory_headroom() {
             return;
         }
         loop {
@@ -1951,6 +2010,8 @@ impl EventStore {
                 tracing::warn!(
                     cache_bytes = self.tenant_loader.total_bytes(),
                     budget = self.tenant_loader.byte_budget(),
+                    available_bytes =
+                        crate::infrastructure::observability::memory::available_bytes(),
                     recently_touched = recently_touched,
                     "cache over budget but no other tenant available to evict — \
                      a single tenant exceeds the budget; consider raising it"
@@ -1964,10 +2025,18 @@ impl EventStore {
                 );
                 return;
             }
-            if !self.tenant_loader.over_budget() {
+            if !self.tenant_loader.over_budget() && self.has_memory_headroom() {
                 return;
             }
         }
+    }
+
+    /// True when the kernel still reports the configured reserve free, and
+    /// when the platform reports nothing.
+    fn has_memory_headroom(&self) -> bool {
+        crate::infrastructure::observability::memory::has_headroom(
+            crate::infrastructure::persistence::hydration_admission::reserve_from_env(),
+        )
     }
 
     /// True iff this tenant is resident: `ensure_tenant_loaded` succeeded
@@ -2404,11 +2473,24 @@ impl EventStore {
         // is admin-only and gets degraded results until a future
         // commit adds an explicit "load all tenants" admin path.
         if let Some(ref tenant_id) = request.tenant_id {
-            self.ensure_tenant_loaded(tenant_id)?;
-            // LRU touch — the most-recently-queried tenant moves
-            // to the back of the eviction queue. Cheap (single
-            // DashMap insert), called on every per-tenant query.
-            self.tenant_loader.touch(tenant_id);
+            match self.ensure_tenant_loaded(tenant_id) {
+                Ok(()) => {
+                    // LRU touch — the most-recently-queried tenant moves
+                    // to the back of the eviction queue. Cheap (single
+                    // DashMap insert), called on every per-tenant query.
+                    self.tenant_loader.touch(tenant_id);
+                }
+                // A tenant too large to be resident can still answer a
+                // question about one entity, and that is the question the
+                // publish path asks. Reading the entity out of the archive
+                // costs the entity's events, not the tenant's history.
+                Err(AllSourceError::ArchiveHydrationRefused { .. })
+                    if request.entity_id.is_some() =>
+                {
+                    return self.query_window_from_archive(request, offset, descending, scope);
+                }
+                Err(error) => return Err(error),
+            }
         }
 
         // Determine query type for metrics (v0.6 feature)
@@ -2518,6 +2600,80 @@ impl EventStore {
             timer.observe_duration();
         }
 
+        Ok((results, total))
+    }
+
+    /// Answer an entity-scoped query out of the archive, for a tenant that
+    /// cannot be made resident.
+    ///
+    /// Filters, ordering and windowing are the resident path's: the predicate
+    /// is `apply_filters` itself and the comparator is the same
+    /// `(timestamp, version, scan position)`, so the two paths cannot disagree
+    /// about what matches or in what order. For a single entity `version` is
+    /// already unique, so the scan position never decides anything here.
+    ///
+    /// Unreadable files are skipped and logged, which is the tolerant query
+    /// policy the resident path also applies — a corrupt file must not brick
+    /// every read for the tenant. A skipped file means the answer may be
+    /// short, and nothing in the response can distinguish that from the
+    /// entity having no more events, so it is logged at `warn`.
+    fn query_window_from_archive(
+        &self,
+        request: &QueryEventsRequest,
+        offset: usize,
+        descending: bool,
+        scope: &ReadScope,
+    ) -> Result<(Vec<Event>, usize)> {
+        let (Some(tenant_id), Some(entity_id)) =
+            (request.tenant_id.as_deref(), request.entity_id.as_deref())
+        else {
+            return Ok((Vec::new(), 0));
+        };
+        if !scope.permits(entity_id) {
+            return Ok((Vec::new(), 0));
+        }
+        let Some(storage) = self.storage.as_ref() else {
+            return Ok((Vec::new(), 0));
+        };
+
+        let (events, skipped) = storage
+            .read()
+            .load_entity_events_for_tenant(tenant_id, entity_id)?;
+        if skipped > 0 {
+            tracing::warn!(
+                tenant_id = tenant_id,
+                entity_id = entity_id,
+                skipped_files = skipped,
+                "entity-scoped archive read skipped unreadable files; result may be short"
+            );
+        }
+
+        let mut matches: Vec<(usize, Event)> = events
+            .into_iter()
+            .filter(|event| self.apply_filters(event, request))
+            .enumerate()
+            .collect();
+        let total = matches.len();
+
+        let order = |a: &(usize, Event), b: &(usize, Event)| {
+            let ascending =
+                a.1.timestamp
+                    .cmp(&b.1.timestamp)
+                    .then_with(|| a.1.version.cmp(&b.1.version))
+                    .then_with(|| a.0.cmp(&b.0));
+            if descending {
+                ascending.reverse()
+            } else {
+                ascending
+            }
+        };
+        select_window(&mut matches, offset, request.limit, order);
+
+        let results: Vec<Event> = matches
+            .into_iter()
+            .skip(offset)
+            .map(|(_, event)| event)
+            .collect();
         Ok((results, total))
     }
 

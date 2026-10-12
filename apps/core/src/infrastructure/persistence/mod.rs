@@ -9,6 +9,7 @@ pub mod cold_tier;
 #[cfg(feature = "cold-tier-s3")]
 pub mod cold_tier_s3;
 pub mod compaction;
+pub mod hydration_admission;
 pub mod index;
 pub mod lock_free;
 pub mod performance;

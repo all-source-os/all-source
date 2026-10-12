@@ -21,7 +21,7 @@
 //! tracker.emit_tool_error("wf-1", "web_search", "timeout").await?;
 //!
 //! // Automatic tracking with timing
-//! let result = tracker.track("wf-1", "read_file", async {
+//! let result = tracker.track("wf-1", "read_file", || async {
 //!     Ok(json!({"content": "hello"}))
 //! }).await?;
 //! # Ok(())

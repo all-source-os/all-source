@@ -60,6 +60,13 @@ use tower_http::{
 
 type SharedStore = Arc<EventStore>;
 
+/// Events one `/api/v1/events/query` response may carry.
+///
+/// The page is cloned out of the store and serialized to JSON, so this is
+/// the ceiling on what one request can make the process allocate. A caller
+/// wanting more pages through it: `has_more` and `offset` already say so.
+const MAX_QUERY_PAGE: usize = 10_000;
+
 /// Wait for follower ACK(s) in semi-sync/sync replication modes.
 ///
 /// In async mode (default), returns immediately. In semi-sync mode, waits for
@@ -636,10 +643,23 @@ pub async fn query_events(
     // `?entity_id=X&limit=1&order=desc` cost as much as fetching everything
     // (issue #251). Offset is applied before limit so `offset=N&limit=N` walks
     // pages instead of returning page one forever (issue #250).
+    // The window is what gets cloned and serialized, so an uncapped `limit`
+    // lets a caller choose an allocation large enough to end the process.
+    // `has_more` already tells a paginator to come back, so the clamp costs
+    // one extra round trip and nothing else.
+    let requested_limit = req.limit;
     let scoped_req = QueryEventsRequest {
         tenant_id: enforced_tenant,
+        limit: Some(req.limit.unwrap_or(MAX_QUERY_PAGE).min(MAX_QUERY_PAGE)),
         ..req
     };
+    if requested_limit.is_some_and(|limit| limit > MAX_QUERY_PAGE) {
+        tracing::debug!(
+            requested = requested_limit,
+            served = MAX_QUERY_PAGE,
+            "query limit clamped to the maximum page size"
+        );
+    }
     let (limited_events, total_count) = store.query_window(&scoped_req, offset, descending)?;
 
     let count = limited_events.len();

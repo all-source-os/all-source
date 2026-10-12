@@ -66,6 +66,23 @@ pub enum AllSourceError {
     )]
     ArchiveIndexIncomplete { remaining: usize, reason: String },
 
+    /// A tenant's archive could not be made resident because the process has
+    /// no room for it.
+    ///
+    /// Reported instead of attempting the load, because the alternative is
+    /// not a slower load: the kernel kills the process, every other tenant's
+    /// requests fail with it, and the next attempt starts from the same
+    /// place. Refusing one tenant's request is strictly less damage
+    /// (gh#321).
+    #[error(
+        "Archive hydration refused: tenant needs ~{needed_bytes} resident byte(s), {available_bytes} \
+         available; retry once memory frees or the tenant is compacted"
+    )]
+    ArchiveHydrationRefused {
+        needed_bytes: u64,
+        available_bytes: u64,
+    },
+
     #[error("Internal error: {0}")]
     InternalError(String),
 
@@ -93,6 +110,7 @@ impl AllSourceError {
                 | AllSourceError::VersionConflict { .. }
                 | AllSourceError::QueueFull(_)
                 | AllSourceError::ArchiveIndexIncomplete { .. }
+                | AllSourceError::ArchiveHydrationRefused { .. }
         )
     }
 }
@@ -175,6 +193,26 @@ mod axum_impl {
                     return (
                         StatusCode::SERVICE_UNAVAILABLE,
                         [(axum::http::header::RETRY_AFTER, "1")],
+                        axum::Json(body),
+                    )
+                        .into_response();
+                }
+                AllSourceError::ArchiveHydrationRefused {
+                    needed_bytes,
+                    available_bytes,
+                } => {
+                    // Retry-After 30s: unlike an incomplete index, this
+                    // attempt made no progress of its own. It clears when
+                    // another tenant is evicted or compaction shrinks this
+                    // one, neither of which a tight retry brings closer.
+                    let body = serde_json::json!({
+                        "error": "archive_hydration_refused",
+                        "needed_bytes": needed_bytes,
+                        "available_bytes": available_bytes,
+                    });
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        [(axum::http::header::RETRY_AFTER, "30")],
                         axum::Json(body),
                     )
                         .into_response();

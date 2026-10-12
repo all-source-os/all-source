@@ -165,6 +165,59 @@ async fn main() -> Result<()> {
         );
     }
 
+    // Step 4: the only thing that drives the per-tenant compaction sweep,
+    // and so the only thing that applies retention — a tenant's TTL is
+    // enforced inside the sweep, not on its own cadence (gh#321).
+    if let Some(manager) = store.compaction_manager() {
+        let interval = std::time::Duration::from_secs(
+            manager
+                .config()
+                .compaction_interval_seconds
+                .clamp(60, 86_400),
+        );
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(interval);
+            // Skip the immediate tick: a boot-time sweep would contend with
+            // WAL recovery for the same disk.
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                let manager = Arc::clone(&manager);
+                // One sweep at a time. `spawn_blocking` is awaited before the
+                // next tick is read, and `tokio::time::interval` drops missed
+                // ticks rather than queueing them, so a sweep that outlives
+                // its interval cannot overlap the next.
+                let result = tokio::task::spawn_blocking(move || {
+                    if !manager.should_compact() {
+                        return None;
+                    }
+                    Some(manager.compact())
+                })
+                .await;
+                match result {
+                    Ok(None) => {}
+                    Ok(Some(Ok(r))) if r.files_compacted > 0 => tracing::info!(
+                        files_compacted = r.files_compacted,
+                        events_compacted = r.events_compacted,
+                        bytes_before = r.bytes_before,
+                        bytes_after = r.bytes_after,
+                        duration_ms = r.duration_ms,
+                        "✅ Background compaction sweep complete"
+                    ),
+                    Ok(Some(Ok(_))) => {
+                        tracing::debug!("Background compaction sweep found nothing to compact");
+                    }
+                    Ok(Some(Err(e))) => tracing::warn!("Background compaction failed: {e}"),
+                    Err(e) => tracing::warn!("Background compaction task panicked: {e}"),
+                }
+            }
+        });
+        tracing::info!(
+            "✅ Background compaction loop started (interval: {:?})",
+            interval
+        );
+    }
+
     // Now that store is in Arc, attach it to the shipper and spawn
     #[cfg(feature = "replication")]
     let wal_shipper = if let Some(mut shipper) = wal_shipper_raw {

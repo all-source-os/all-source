@@ -542,6 +542,12 @@ impl ParquetStorage {
 
             let props = WriterProperties::builder()
                 .set_compression(self.config.compression)
+                // Entity-scoped archive reads skip a row group whose
+                // entity_id statistics exclude the target, so those bounds
+                // have to be exact. Truncated bounds are not: a shortened
+                // max can sort below an entity_id the group really holds,
+                // and the read would report a present event as missing.
+                .set_statistics_truncate_length(None)
                 .build();
 
             let mut writer = ArrowWriter::try_new(file, self.schema.clone(), Some(props))?;
@@ -962,6 +968,101 @@ impl ParquetStorage {
         Ok(events)
     }
 
+    /// Every event for one entity, read straight out of `tenant_id`'s
+    /// archive without making the tenant resident.
+    ///
+    /// Peak memory is this entity's own events plus one batch. That is the
+    /// difference that matters: hydrating the tenant to answer a question
+    /// about one entity costs the tenant's whole history, and the largest
+    /// production tenant does not fit in the machine (gh#321).
+    ///
+    /// Row groups whose `entity_id` statistics exclude the target are not
+    /// decoded. A row group with no usable statistics is decoded, so an
+    /// archive written without them still answers correctly; the bounds that
+    /// are present are exact, which `write_atomic_parquet` pins.
+    ///
+    /// Unreadable files are skipped, matching the tolerant query policy: a
+    /// corrupt file must not brick every read for the tenant. The count of
+    /// skipped files is returned so a caller can say the answer is partial.
+    pub fn load_entity_events_for_tenant(
+        &self,
+        tenant_id: &str,
+        entity_id: &str,
+    ) -> Result<(Vec<Event>, usize)> {
+        let files = self.list_parquet_files_for_tenant(tenant_id)?;
+        let mut events = Vec::new();
+        let mut skipped = 0usize;
+        for file_path in &files {
+            match self.load_entity_events_from_file(file_path, tenant_id, entity_id) {
+                Ok(matches) => events.extend(matches),
+                Err(error) => {
+                    tracing::error!(
+                        tenant_id = tenant_id,
+                        file = %file_path.display(),
+                        error = %error,
+                        "Unreadable parquet file in entity-scoped archive read"
+                    );
+                    skipped += 1;
+                }
+            }
+        }
+        tracing::info!(
+            tenant_id = tenant_id,
+            entity_id = entity_id,
+            file_count = files.len(),
+            matched = events.len(),
+            skipped_files = skipped,
+            "entity-scoped archive read complete"
+        );
+        Ok((events, skipped))
+    }
+
+    /// One entity's events from one archive file, decoding only the row
+    /// groups whose statistics admit it.
+    fn load_entity_events_from_file(
+        &self,
+        file_path: &Path,
+        tenant_id: &str,
+        entity_id: &str,
+    ) -> Result<Vec<Event>> {
+        use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+        let file = File::open(file_path).map_err(|error| unreadable(file_path, error))?;
+        let builder =
+            ParquetRecordBatchReaderBuilder::try_new(file).map_err(|e| unreadable(file_path, e))?;
+        let needle = entity_id.as_bytes();
+        let groups: Vec<usize> = builder
+            .metadata()
+            .row_groups()
+            .iter()
+            .enumerate()
+            .filter(|(_, group)| row_group_may_hold_entity(group, needle))
+            .map(|(index, _)| index)
+            .collect();
+        if groups.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let reader = builder
+            .with_row_groups(groups)
+            .with_batch_size(256)
+            .build()
+            .map_err(|error| unreadable(file_path, error))?;
+
+        let mut events = Vec::new();
+        for batch in reader {
+            let batch = batch.map_err(|error| unreadable(file_path, error))?;
+            // An admitted row group holds rows for other entities too —
+            // statistics bound a group, they do not select rows.
+            for event in self.record_batch_to_events(&batch, tenant_id)? {
+                if event.entity_id_str() == entity_id {
+                    events.push(event);
+                }
+            }
+        }
+        Ok(events)
+    }
+
     /// Public wrapper around the internal single-file loader. Used
     /// by the per-tenant compaction (Step 4) which needs to read a
     /// specific candidate set rather than the whole tenant subtree.
@@ -1087,6 +1188,25 @@ impl ParquetStorage {
             return Ok(Vec::new());
         }
         find_parquet_files_recursive(&tenant_root)
+    }
+
+    /// Compressed bytes `tenant_id`'s archive occupies on disk, and the
+    /// number of files holding them.
+    ///
+    /// Read before a cold load to decide whether the tenant can be made
+    /// resident at all. Unreadable entries are skipped rather than failing
+    /// the call: an under-count makes the decision more permissive, and this
+    /// figure only ever gates work that the headroom check re-verifies as it
+    /// proceeds.
+    pub fn tenant_archive_bytes(&self, tenant_id: &str) -> Result<(u64, usize)> {
+        let files = self.list_parquet_files_for_tenant(tenant_id)?;
+        let count = files.len();
+        let bytes = files
+            .iter()
+            .filter_map(|path| std::fs::metadata(path).ok())
+            .map(|metadata| metadata.len())
+            .sum();
+        Ok((bytes, count))
     }
 
     fn list_complete_tenant_archive(
@@ -1305,8 +1425,33 @@ impl ParquetStorage {
     pub(crate) fn load_events_for_tenant_with_integrity(
         &self,
         tenant_id: &str,
-        mut budget: Option<&mut ArchiveReadBudget>,
+        budget: Option<&mut ArchiveReadBudget>,
     ) -> Result<(Vec<Event>, bool)> {
+        let mut events = Vec::new();
+        let complete = self.for_each_tenant_file_events(tenant_id, budget, |batch| {
+            events.extend(batch);
+            Ok(())
+        })?;
+        Ok((events, complete))
+    }
+
+    /// Visit `tenant_id`'s archive one file at a time, handing each file's
+    /// events to `visit`.
+    ///
+    /// Peak memory is one file's events rather than the tenant's history,
+    /// which is what separates this from collecting the lot: a caller that
+    /// splices events into a longer-lived structure would otherwise hold the
+    /// whole archive twice at once, and the largest production tenant does
+    /// not fit in the machine even once (gh#321).
+    ///
+    /// `visit` returning `Err` aborts the walk. Returns whether the archive
+    /// was read completely, which only strict enumeration can certify.
+    pub(crate) fn for_each_tenant_file_events(
+        &self,
+        tenant_id: &str,
+        mut budget: Option<&mut ArchiveReadBudget>,
+        mut visit: impl FnMut(Vec<Event>) -> Result<()>,
+    ) -> Result<bool> {
         let require_complete = budget.is_some();
         let parquet_files = if let Some(budget) = budget.as_deref_mut() {
             self.list_complete_tenant_archive(tenant_id, budget)?
@@ -1319,7 +1464,7 @@ impl ParquetStorage {
             "load_events_for_tenant: walking tenant subtree only"
         );
 
-        let mut events = Vec::new();
+        let mut visited = 0usize;
         let mut skipped = 0usize;
         for file_path in parquet_files {
             tracing::debug!(
@@ -1336,7 +1481,10 @@ impl ParquetStorage {
                 tenant_id,
                 budget.as_deref_mut(),
             ) {
-                Ok(file_events) => events.extend(file_events),
+                Ok(file_events) => {
+                    visited += file_events.len();
+                    visit(file_events)?;
+                }
                 Err(e) => {
                     tracing::error!(
                         tenant_id = tenant_id,
@@ -1360,13 +1508,13 @@ impl ParquetStorage {
 
         tracing::info!(
             tenant_id = tenant_id,
-            event_count = events.len(),
+            event_count = visited,
             skipped_files = skipped,
             "load_events_for_tenant: complete"
         );
         // Tolerant enumeration may omit unreadable directories or entries.
         // Only strict enumeration can certify the retained archive for OCC.
-        Ok((events, require_complete && skipped == 0))
+        Ok(require_complete && skipped == 0)
     }
 
     /// Get the storage directory path.
@@ -1561,6 +1709,29 @@ fn unreadable(path: &Path, error: impl std::fmt::Display) -> AllSourceError {
         "Cannot verify conditional version from {}: {error}",
         path.display()
     ))
+}
+
+/// Whether a row group's `entity_id` statistics permit `needle`.
+///
+/// Absent statistics, or present ones with no usable bounds, read as "maybe"
+/// and the group is decoded. The failure to avoid is the other direction: a
+/// group wrongly excluded makes a present event look missing, and nothing
+/// downstream can tell that apart from the entity genuinely having no such
+/// event.
+///
+/// Byte-wise comparison matches Parquet's own ordering for a UTF-8 column,
+/// so these bounds are compared the way the writer established them.
+fn row_group_may_hold_entity(
+    group: &parquet::file::metadata::RowGroupMetaData,
+    needle: &[u8],
+) -> bool {
+    let Some(statistics) = group.column(ENTITY_ID_COLUMN).statistics() else {
+        return true;
+    };
+    let (Some(min), Some(max)) = (statistics.min_bytes_opt(), statistics.max_bytes_opt()) else {
+        return true;
+    };
+    min <= needle && needle <= max
 }
 
 /// How an archive file is named inside its tenant's manifest.

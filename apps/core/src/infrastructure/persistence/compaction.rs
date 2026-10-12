@@ -28,12 +28,24 @@ pub struct CompactionManager {
 
     /// Last compaction time
     last_compaction: Arc<RwLock<Option<DateTime<Utc>>>>,
+
+    /// Tenant the previous sweep stopped after.
+    ///
+    /// A sweep has a time budget and visits tenants in a stable order, so
+    /// without a cursor the tenants sorting last never get reached while
+    /// there is a backlog — and the worst offender is not usually the one
+    /// that sorts first. Each sweep resumes after this one.
+    sweep_cursor: Arc<RwLock<Option<String>>>,
 }
 
 /// Filename prefix that marks a file as already-compacted output.
-/// Excluded from the input set when picking compaction candidates
-/// (we don't re-compact a snapshot until the snapshot itself
-/// triggers the strategy criteria from a future commit).
+///
+/// A snapshot is a candidate again while it is still smaller than
+/// `small_file_threshold`, so a pass that can only reach part of a tenant
+/// merges its own earlier output upward instead of leaving a snapshot per
+/// pass behind. Excluding them unconditionally traded one fragmentation
+/// rate for a slower one: the tenant in gh#321 takes ~7 new files an hour,
+/// which is a snapshot an hour, forever.
 const SNAPSHOT_PREFIX: &str = "snapshot.";
 
 #[derive(Debug, Clone)]
@@ -49,6 +61,27 @@ pub struct CompactionConfig {
 
     /// Minimum file size to consider for compaction (small files)
     pub small_file_threshold: usize,
+
+    /// Compressed input bytes one snapshot may be built from.
+    ///
+    /// A group's events are all resident at once, and decoding this archive
+    /// shape costs roughly 16× its on-disk size, so this is the term that
+    /// bounds a compaction pass's peak memory. A tenant whose candidates
+    /// exceed it is compacted into several snapshots instead of one.
+    pub max_input_bytes_per_snapshot: u64,
+
+    /// Input files one snapshot may be built from, bounding footer opens and
+    /// path bookkeeping independently of how small the files are.
+    pub max_input_files_per_snapshot: usize,
+
+    /// Wall-clock budget for one compaction sweep. Checked between groups,
+    /// so a sweep overruns by at most one group.
+    ///
+    /// A backlog is resumed on the next tick rather than drained in one
+    /// pass: the first sweep over an uncompacted tenant has as many groups
+    /// as the tenant has, and an unbounded sweep would hold CPU and disk
+    /// for as long as that takes.
+    pub max_pass_seconds: u64,
 
     /// Time interval between automatic compactions (in seconds)
     pub compaction_interval_seconds: u64,
@@ -140,7 +173,10 @@ impl Default for CompactionConfig {
             target_file_size: 128 * 1024 * 1024,    // 128 MB
             max_file_size: 256 * 1024 * 1024,       // 256 MB
             small_file_threshold: 10 * 1024 * 1024, // 10 MB
-            compaction_interval_seconds: 3600,      // 1 hour
+            max_input_bytes_per_snapshot: 32 * 1024 * 1024, // 32 MiB ≈ 512 MiB resident
+            max_input_files_per_snapshot: 2000,
+            max_pass_seconds: 240,
+            compaction_interval_seconds: 3600, // 1 hour
             auto_compact: true,
             strategy: CompactionStrategy::SizeBased,
             retention: RetentionConfig::default(),
@@ -155,6 +191,8 @@ impl CompactionConfig {
     ///   (default 3600).
     /// - `ALLSOURCE_RETENTION_SYSTEM_DAYS`: TTL for the `system`
     ///   tenant in days (default 30).
+    /// - `ALLSOURCE_COMPACTION_INPUT_BYTES`: compressed input bytes per
+    ///   snapshot, which bounds a pass's peak memory (default 32 MiB).
     ///
     /// Unparseable values log a warning and fall back to defaults
     /// — boot doesn't fail.
@@ -162,8 +200,29 @@ impl CompactionConfig {
         let config = Self::from_env_vars(
             std::env::var("ALLSOURCE_SNAPSHOT_INTERVAL_SECONDS").ok(),
             std::env::var("ALLSOURCE_RETENTION_SYSTEM_DAYS").ok(),
-        );
+        )
+        .with_input_bytes(std::env::var("ALLSOURCE_COMPACTION_INPUT_BYTES").ok());
         config.with_cold_storage_url(std::env::var("ALLSOURCE_COLD_STORAGE_URL").ok())
+    }
+
+    /// Override `max_input_bytes_per_snapshot`. Zero is rejected: it would
+    /// make every file its own group and rewrite the tenant file-for-file.
+    pub fn with_input_bytes(mut self, bytes_var: Option<String>) -> Self {
+        if let Some(s) = bytes_var.filter(|s| !s.trim().is_empty()) {
+            match s.trim().parse::<u64>() {
+                Ok(v) if v > 0 => self.max_input_bytes_per_snapshot = v,
+                Ok(_) => tracing::warn!(
+                    "ALLSOURCE_COMPACTION_INPUT_BYTES=0 is not a usable bound; keeping {}",
+                    self.max_input_bytes_per_snapshot
+                ),
+                Err(e) => tracing::warn!(
+                    "ALLSOURCE_COMPACTION_INPUT_BYTES={s:?} could not be parsed as u64: {e}; \
+                     keeping {}",
+                    self.max_input_bytes_per_snapshot
+                ),
+            }
+        }
+        self
     }
 
     /// Attach a cold-tier archive from `ALLSOURCE_COLD_STORAGE_URL`
@@ -227,6 +286,19 @@ impl CompactionConfig {
         }
         if let Some(s) = system_retention_days_var.filter(|s| !s.is_empty()) {
             match s.parse::<u64>() {
+                // Zero days means keep forever, not "expire everything now".
+                // The literal reading would have this variable delete the
+                // tenant's entire history, which is not what an operator
+                // reaching for a smaller number is asking for, and there is
+                // no other way to express "no TTL" through the environment:
+                // leaving the variable unset falls back to the 30-day
+                // default rather than disabling it.
+                Ok(0) => {
+                    tracing::info!(
+                        "ALLSOURCE_RETENTION_SYSTEM_DAYS=0: retention disabled for tenant=system"
+                    );
+                    config.retention.set("system", None);
+                }
                 Ok(days) => {
                     config
                         .retention
@@ -295,6 +367,7 @@ impl CompactionManager {
             config,
             stats: Arc::new(RwLock::new(CompactionStats::default())),
             last_compaction: Arc::new(RwLock::new(None)),
+            sweep_cursor: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -415,25 +488,66 @@ impl CompactionManager {
     /// Errors compacting one tenant are logged but don't abort the
     /// pass — other tenants still get compacted. The aggregate
     /// result reflects what actually completed.
+    ///
+    /// The sweep stops starting work once `max_pass_seconds` is spent and
+    /// resumes on the next tick. Tenants are visited in a stable order, so a
+    /// sweep that runs out of budget always leaves the same tail — the
+    /// per-pass bound is on time, and progress comes from the files each
+    /// group removes.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn compact(&self) -> Result<CompactionResult> {
+        self.compact_until(None)
+    }
+
+    /// Where the next sweep will start, or `None` before the first one.
+    ///
+    /// Diagnostic: a cursor that never moves off one tenant means that
+    /// tenant's backlog is larger than a single pass's budget.
+    pub fn sweep_cursor(&self) -> Option<String> {
+        self.sweep_cursor.read().clone()
+    }
+
+    /// [`Self::compact`] with an explicit deadline in place of the one
+    /// `max_pass_seconds` derives.
+    pub fn compact_until(&self, deadline: Option<std::time::Instant>) -> Result<CompactionResult> {
         let start_time = std::time::Instant::now();
         tracing::info!("🔄 Starting per-tenant compaction sweep...");
 
         let tenants = self.discover_tenants()?;
         if tenants.is_empty() {
             tracing::debug!("No tenants found under {}", self.storage_dir.display());
+            // Still a sweep that happened. Leaving `last_compaction` unset
+            // would have `should_compact` answer yes on every tick, so an
+            // empty store would be swept continuously.
+            *self.last_compaction.write() = Some(Utc::now());
             return Ok(CompactionResult::default());
         }
 
+        let tenants = self.rotate_to_cursor(tenants);
+        let deadline = deadline.unwrap_or_else(|| {
+            start_time + Duration::from_secs(self.config.max_pass_seconds.max(1))
+        });
         let mut aggregate = CompactionResult::default();
+        let mut unvisited = 0usize;
+        // The first tenant this sweep did not finish. The next sweep starts
+        // there, so a tenant paused half way is resumed rather than waiting
+        // a full rotation, and a tenant never reached is reached next.
+        let mut resume_at: Option<&String> = None;
         for tenant in &tenants {
-            match self.compact_tenant(tenant) {
-                Ok(r) => {
+            if std::time::Instant::now() >= deadline {
+                unvisited += 1;
+                resume_at = resume_at.or(Some(tenant));
+                continue;
+            }
+            match self.sweep_tenant(tenant, Some(deadline)) {
+                Ok((r, complete)) => {
                     aggregate.files_compacted += r.files_compacted;
                     aggregate.bytes_before += r.bytes_before;
                     aggregate.bytes_after += r.bytes_after;
                     aggregate.events_compacted += r.events_compacted;
+                    if !complete {
+                        resume_at = resume_at.or(Some(tenant));
+                    }
                 }
                 Err(e) => {
                     tracing::error!(
@@ -442,6 +556,17 @@ impl CompactionManager {
                     );
                 }
             }
+        }
+        // Everything finished: start the next sweep where this one did, so a
+        // steady state keeps visiting tenants in one stable order.
+        *self.sweep_cursor.write() = resume_at.or(tenants.first()).cloned();
+        if unvisited > 0 {
+            tracing::info!(
+                unvisited_tenants = unvisited,
+                resume_at = ?resume_at,
+                budget_secs = self.config.max_pass_seconds,
+                "compaction sweep hit its time budget; resuming next tick"
+            );
         }
         aggregate.duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -471,39 +596,72 @@ impl CompactionManager {
         Ok(aggregate)
     }
 
-    /// Compact one tenant's raw event files into a single snapshot
-    /// file under that tenant's partition.
+    /// Compact one tenant's event files into snapshot files under that
+    /// tenant's partition.
     ///
     /// Per-tenant pipeline:
-    /// 1. List `<storage>/<tenant>/...*.parquet` excluding existing
-    ///    `snapshot.*` files.
+    /// 1. List `<storage>/<tenant>/...*.parquet`, keeping an existing
+    ///    `snapshot.*` only while it is still under
+    ///    `small_file_threshold` so partial passes merge upward.
     /// 2. Apply the configured strategy (size / time / full) to
-    ///    pick candidate raw files.
-    /// 3. If enough candidates: read events, sort by timestamp,
-    ///    atomically write `snapshot.<tenant>.<from>-<to>.parquet`
-    ///    via `ParquetStorage::write_atomic_parquet`.
-    /// 4. After the snapshot rename succeeds, delete the
-    ///    constituent raw files. Crash between snapshot and delete
-    ///    leaves both on disk; the dedupe in `append_loaded_event`
-    ///    keeps memory consistent on next load. A future commit can
-    ///    record the constituent file list in the snapshot's
-    ///    metadata and let a cleanup pass finish the deletion.
+    ///    pick candidates.
+    /// 3. Split the candidates into groups bounded by
+    ///    `max_input_bytes_per_snapshot` and
+    ///    `max_input_files_per_snapshot`, and compact each group on its
+    ///    own. One group's events are resident at a time, so a tenant's
+    ///    size sets how many snapshots a pass writes, never how much
+    ///    memory it needs.
+    ///
+    /// Each group is independently crash-safe: its snapshot is renamed
+    /// into place before any of its own inputs is deleted, and a crash
+    /// between groups leaves the earlier groups compacted and the later
+    /// ones untouched.
     pub fn compact_tenant(&self, tenant_id: &str) -> Result<CompactionResult> {
+        self.compact_tenant_until(tenant_id, None)
+    }
+
+    /// `compact_tenant` with a sweep deadline. Checked between groups, so the
+    /// tenant's remaining groups are left for the next tick rather than
+    /// abandoned mid-group — a group either publishes its snapshot and
+    /// deletes its inputs or does neither.
+    pub fn compact_tenant_until(
+        &self,
+        tenant_id: &str,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<CompactionResult> {
+        self.sweep_tenant(tenant_id, deadline)
+            .map(|(result, _complete)| result)
+    }
+
+    /// `compact_tenant_until`, also reporting whether every group ran.
+    ///
+    /// The sweep needs that answer to place its cursor: a tenant paused on
+    /// the budget has to be the next sweep's first call.
+    fn sweep_tenant(
+        &self,
+        tenant_id: &str,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<(CompactionResult, bool)> {
         let start_time = std::time::Instant::now();
 
-        // 1. List raw files for this tenant.
         let storage = ParquetStorage::new(&self.storage_dir)?;
         let all_files = storage.list_parquet_files_for_tenant(tenant_id)?;
+        let threshold = self.config.small_file_threshold as u64;
         let raw_files: Vec<FileInfo> = all_files
             .into_iter()
-            .filter(|p| {
-                p.file_name()
-                    .and_then(|n| n.to_str())
-                    .is_none_or(|n| !n.starts_with(SNAPSHOT_PREFIX))
-            })
             .filter_map(|p| {
                 let metadata = fs::metadata(&p).ok()?;
                 let size = metadata.len();
+                let is_snapshot = p
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(SNAPSHOT_PREFIX));
+                // A snapshot that already reached the threshold is finished
+                // output: re-reading it would rewrite the whole tenant every
+                // pass for no reduction in file count.
+                if is_snapshot && size >= threshold {
+                    return None;
+                }
                 let created = metadata
                     .created()
                     .ok()
@@ -518,32 +676,118 @@ impl CompactionManager {
             })
             .collect();
 
-        // 2. Strategy filter.
-        let candidates = self.select_files_for_compaction(&raw_files);
+        let mut candidates = self.select_files_for_compaction(&raw_files);
         if candidates.is_empty() {
             tracing::debug!(
                 tenant_id = tenant_id,
                 strategy = ?self.config.strategy,
                 "no files meet compaction criteria"
             );
-            return Ok(CompactionResult::default());
+            return Ok((CompactionResult::default(), true));
         }
+        // Oldest first, so each group covers a contiguous time range and the
+        // snapshots a pass writes do not interleave.
+        candidates.sort_by_key(|f| f.created);
 
-        let bytes_before: u64 = candidates.iter().map(|f| f.size).sum();
+        let total_bytes: u64 = candidates.iter().map(|f| f.size).sum();
+        let groups = self.split_into_bounded_groups(candidates);
         tracing::info!(
             tenant_id = tenant_id,
-            files = candidates.len(),
-            mib = bytes_before as f64 / (1024.0 * 1024.0),
+            groups = groups.len(),
+            mib = total_bytes as f64 / (1024.0 * 1024.0),
             "compacting tenant"
         );
 
-        // 3. Read events from candidates. We deliberately read each
-        // file individually (not via load_events_for_tenant) so we
-        // only pick up the candidate set — concurrent writes that
-        // produced new files since step 1 are skipped, deferred to
-        // the next interval (AC #6).
+        let total_groups = groups.len();
+        let mut aggregate = CompactionResult::default();
+        let mut done = 0usize;
+        // A group that fails does not stop the others. One unreadable file
+        // otherwise blocks its whole tenant from ever compacting, and the
+        // groups that have nothing wrong with them are what reduce the file
+        // count. The failure is still returned, so a caller cannot read a
+        // partial sweep as a clean one.
+        let mut first_error = None;
+        let mut complete = true;
+        for group in groups {
+            if deadline.is_some_and(|d| std::time::Instant::now() >= d) {
+                tracing::info!(
+                    tenant_id = tenant_id,
+                    groups_done = done,
+                    groups_total = total_groups,
+                    "tenant compaction paused on the sweep budget"
+                );
+                complete = false;
+                break;
+            }
+            match self.compact_group(tenant_id, &storage, &group) {
+                Ok(result) => {
+                    aggregate.files_compacted += result.files_compacted;
+                    aggregate.bytes_before += result.bytes_before;
+                    aggregate.bytes_after += result.bytes_after;
+                    aggregate.events_compacted += result.events_compacted;
+                    done += 1;
+                }
+                Err(error) => {
+                    tracing::error!(
+                        tenant_id = tenant_id,
+                        files = group.len(),
+                        "compaction group failed: {error}"
+                    );
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    }
+                }
+            }
+        }
+        if let Some(error) = first_error {
+            return Err(error);
+        }
+        aggregate.duration_ms = start_time.elapsed().as_millis() as u64;
+        Ok((aggregate, complete))
+    }
+
+    /// Split candidates into groups no larger than the configured input
+    /// bounds. A single file over the byte bound is its own group — refusing
+    /// it would leave it uncompactable forever.
+    fn split_into_bounded_groups(&self, candidates: Vec<FileInfo>) -> Vec<Vec<FileInfo>> {
+        let max_bytes = self.config.max_input_bytes_per_snapshot.max(1);
+        let max_files = self.config.max_input_files_per_snapshot.max(1);
+        let mut groups: Vec<Vec<FileInfo>> = Vec::new();
+        let mut current: Vec<FileInfo> = Vec::new();
+        let mut current_bytes = 0u64;
+        for file in candidates {
+            let would_exceed = !current.is_empty()
+                && (current_bytes + file.size > max_bytes || current.len() >= max_files);
+            if would_exceed {
+                groups.push(std::mem::take(&mut current));
+                current_bytes = 0;
+            }
+            current_bytes += file.size;
+            current.push(file);
+        }
+        if !current.is_empty() {
+            groups.push(current);
+        }
+        groups
+    }
+
+    /// Compact one bounded group of this tenant's files into a single
+    /// snapshot. Only this group's events are resident.
+    fn compact_group(
+        &self,
+        tenant_id: &str,
+        storage: &ParquetStorage,
+        candidates: &[FileInfo],
+    ) -> Result<CompactionResult> {
+        let start_time = std::time::Instant::now();
+        let bytes_before: u64 = candidates.iter().map(|f| f.size).sum();
+
+        // Each file is read individually rather than through
+        // load_events_for_tenant so only the candidate set is picked up —
+        // concurrent writes that produced new files since enumeration are
+        // deferred to the next interval (AC #6).
         let mut events = Vec::new();
-        for fi in &candidates {
+        for fi in candidates {
             // Recover tenant from path so loaded events keep
             // their identity (Step 1's path-as-tenant-source).
             let event_tenant = match fi.path.strip_prefix(&self.storage_dir).ok() {
@@ -658,7 +902,7 @@ impl CompactionManager {
                 events_dropped = dropped_by_retention,
                 "retention: every event aged out — deleting originals without snapshot"
             );
-            for fi in &candidates {
+            for fi in candidates {
                 if let Err(e) = fs::remove_file(&fi.path) {
                     tracing::error!(
                         file = %fi.path.display(),
@@ -679,21 +923,27 @@ impl CompactionManager {
         let from = events.first().expect("non-empty checked above").timestamp;
         let to = events.last().expect("non-empty checked above").timestamp;
 
-        // Filename: snapshot.<tenant>.<from>-<to> with filesystem-safe
-        // ISO-basic timestamps (no colons).
+        // Filename: snapshot.<tenant>.<from>-<to>.<nanos> with
+        // filesystem-safe ISO-basic timestamps (no colons). The nanosecond
+        // discriminator keeps two snapshots covering the same range from
+        // sharing a path: a snapshot can itself be an input, so a colliding
+        // stem would have the write land on a file the delete below removes.
+        let unique = Utc::now().timestamp_nanos_opt().unwrap_or_default();
         let file_stem = format!(
-            "snapshot.{tenant_id}.{}-{}",
+            "snapshot.{tenant_id}.{}-{}.{unique}",
             format_iso_basic(from),
             format_iso_basic(to)
         );
         let snapshot_path = storage.write_atomic_parquet(tenant_id, &file_stem, &events)?;
         let bytes_after = fs::metadata(&snapshot_path).map_or(0, |m| m.len());
 
-        // 4. Delete originals AFTER snapshot is durably renamed.
-        // AC #6: a snapshot-write failure short-circuits via the
-        // `?` above, so originals stay on disk and events remain
-        // queryable until the next successful pass.
-        for fi in &candidates {
+        // Delete inputs AFTER the snapshot is durably renamed. AC #6: a
+        // snapshot-write failure short-circuits via the `?` above, so inputs
+        // stay on disk and events remain queryable until the next pass.
+        for fi in candidates {
+            if fi.path == snapshot_path {
+                continue;
+            }
             if let Err(e) = fs::remove_file(&fi.path) {
                 tracing::error!(
                     file = %fi.path.display(),
@@ -711,7 +961,7 @@ impl CompactionManager {
             mib_before = bytes_before as f64 / (1024.0 * 1024.0),
             mib_after = bytes_after as f64 / (1024.0 * 1024.0),
             duration_ms = duration_ms,
-            "tenant compaction complete"
+            "tenant compaction group complete"
         );
 
         Ok(CompactionResult {
@@ -721,6 +971,25 @@ impl CompactionManager {
             events_compacted: events.len(),
             duration_ms,
         })
+    }
+
+    /// Reorder `tenants` so the sweep begins at the cursor, wrapping around.
+    ///
+    /// The cursor names the tenant to start at, not the one last finished: a
+    /// tenant paused on the time budget has to be the next sweep's first
+    /// call, or its remaining groups wait a full rotation. A cursor naming a
+    /// tenant that no longer exists falls back to the start.
+    fn rotate_to_cursor(&self, tenants: Vec<String>) -> Vec<String> {
+        let cursor = self.sweep_cursor.read().clone();
+        let Some(cursor) = cursor else {
+            return tenants;
+        };
+        let Some(position) = tenants.iter().position(|tenant| *tenant == cursor) else {
+            return tenants;
+        };
+        let mut rotated = tenants;
+        rotated.rotate_left(position);
+        rotated
     }
 
     /// Discover tenant ids by scanning `<storage_dir>/<X>/` for

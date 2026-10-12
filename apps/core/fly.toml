@@ -21,7 +21,7 @@ primary_region = "iad"  # US East (Virginia) - change to your preferred region
   # headroom for indices, the runtime and archive staging; this soft
   # cache limit alone cannot prevent OOM during a cold load.
   ALLSOURCE_CACHE_BYTES = "2147483648"
-  # Admit one strict cold loader at a time on this 4 GiB machine. The
+  # Admit one strict cold loader at a time on this 8 GiB machine. The
   # worker retains its slot after an HTTP timeout until warming actually ends.
   ALLSOURCE_ARCHIVE_WORKERS = "1"
   # Step 6: checkpoint cadence (Parquet flush + WAL truncate). Bounds
@@ -31,9 +31,22 @@ primary_region = "iad"  # US East (Virginia) - change to your preferred region
   # Step 4: per-tenant compaction cadence (default 3600s / hourly is
   # also set by code; explicit here so ops can grep fly.toml).
   ALLSOURCE_SNAPSHOT_INTERVAL_SECONDS = "3600"
-  # Step 5: 30-day retention for the heartbeat-churning system tenant.
-  # Other tenants keep events forever by default.
-  ALLSOURCE_RETENTION_SYSTEM_DAYS = "30"
+  # Step 5: retention for the `system` tenant ONLY — Core's own CP heartbeat
+  # stream. It reaches no customer tenant: RetentionConfig's default_ttl is
+  # None and `system` is the single override. Plan-tier retention
+  # (subscription.go: 7/14/90/365/-1 days) is a Control Plane concept that
+  # nothing currently enforces.
+  #
+  # 0 = keep forever. Unsetting this does NOT disable it — the code default
+  # is 30 days.
+  #
+  # Deliberately off while compaction runs for the first time. The sweep
+  # never ran before 2026-10-12, so this TTL never ran either, and enabling
+  # both at once would have the first pass delete ~1.9 GB of heartbeats that
+  # have never been subject to it. Compaction alone fixes the fragmentation
+  # behind gh#321. Set this to 30 as a separate, deliberate change — no
+  # cold-tier archive is configured, so the events are deleted outright.
+  ALLSOURCE_RETENTION_SYSTEM_DAYS = "0"
 
   # One-shot flat→tenant Parquet migration (Step 1 / commit bdd3cd8).
   # The migrator is idempotent: once the storage tree has no flat files
@@ -71,15 +84,16 @@ min_machines_running = 1
   type = "http"
 
 [[vm]]
-  # shared-cpu-2x to unlock 4 GiB (shared-cpu-1x caps at 2 GiB).
+  # shared-cpu-4x to unlock 8 GiB; shared-cpu-2x caps at 4 GiB, which is
+  # the ceiling a cold load of the largest tenant exceeded (gh#321).
   cpu_kind = "shared"
-  cpus = 2
-  # 4 GiB host with a 2 GiB estimated cache target and one strict
+  cpus = 4
+  # 8 GiB host with a 2 GiB estimated cache target and one strict
   # archive worker. Constrained Linux evidence supports 600,000 rows
   # for the measured synthetic shape, not arbitrary concurrent load.
   # See docs/evidence/2026-09-27-isolated-archive-capacity/. Do not
   # downsize or widen row/worker limits without new headroom evidence.
-  memory_mb = 4096
+  memory_mb = 8192
 
 [mounts]
   source = "allsource_data"
