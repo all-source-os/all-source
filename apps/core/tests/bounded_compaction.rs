@@ -227,7 +227,7 @@ fn an_unset_retention_variable_still_applies_the_thirty_day_default() {
     let config = CompactionConfig::from_env_vars(None, None);
     assert_eq!(
         config.retention.ttl_for("system"),
-        Some(Duration::from_secs(30 * 24 * 3600))
+        Some(Duration::from_hours(30 * 24))
     );
 }
 
