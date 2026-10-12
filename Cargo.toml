@@ -37,7 +37,7 @@ exclude = [
 [workspace.dependencies]
 
 # Security & Crypto
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 
 # AllFrame web framework
 allframe = "0.1"
