@@ -76,7 +76,11 @@ jobs:
 
       - name: Install act
         run: |
-          curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash -s -- -b /usr/local/bin latest
+          # Pinned, not 'latest': resolving 'latest' is an unauthenticated
+          # GitHub API lookup that fails closed ("unable to find 'latest'"),
+          # and this job gates every quality gate behind it — a failed
+          # install skips the Rust, Go and Elixir suites entirely.
+          curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash -s -- -b /usr/local/bin v0.2.89
 
       - name: Validate workflow structure
         run: |
