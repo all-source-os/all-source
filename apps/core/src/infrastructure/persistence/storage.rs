@@ -1,5 +1,8 @@
 use super::{
-    archive_budget::ArchiveReadBudget,
+    archive_budget::{ArchiveReadBudget, ArchiveReadLimits},
+    archive_output::{
+        ArchiveOutput, PublishedPart, pending_marker, pending_part, recover_pending_outputs,
+    },
     version_manifest::{ResolvedVersion, VersionManifest},
 };
 use crate::{
@@ -14,7 +17,6 @@ use arrow::{
     datatypes::{DataType, Field, Schema, TimeUnit},
     record_batch::RecordBatch,
 };
-use parquet::{arrow::ArrowWriter, file::properties::WriterProperties};
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -31,10 +33,11 @@ use std::{
 ///
 /// This is what the archive budget charges. Parquet's declared uncompressed
 /// size is a different quantity, and the one that does not run out.
-fn decoded_text_bytes(batch: &RecordBatch) -> u64 {
-    [PAYLOAD_COLUMN, METADATA_COLUMN]
+pub(super) fn decoded_text_bytes(batch: &RecordBatch) -> u64 {
+    ["payload", "metadata"]
         .iter()
-        .filter_map(|&column| {
+        .filter_map(|name| {
+            let column = batch.schema().index_of(name).ok()?;
             batch
                 .column(column)
                 .as_any()
@@ -189,6 +192,18 @@ impl ParquetStorage {
         storage_dir: impl AsRef<Path>,
         config: ParquetStorageConfig,
     ) -> Result<Self> {
+        Self::open(storage_dir, config, true)
+    }
+
+    pub(crate) fn open_existing(storage_dir: impl AsRef<Path>) -> Result<Self> {
+        Self::open(storage_dir, ParquetStorageConfig::default(), false)
+    }
+
+    fn open(
+        storage_dir: impl AsRef<Path>,
+        config: ParquetStorageConfig,
+        recover: bool,
+    ) -> Result<Self> {
         let storage_dir = storage_dir.as_ref().to_path_buf();
 
         // Create storage directory if it doesn't exist
@@ -230,13 +245,15 @@ impl ParquetStorage {
         // crashed atomic writes (snapshot/compaction or, post-#166-fix,
         // checkpoint flushes) and quarantine any 0-byte *.parquet files
         // left over from pre-fix checkpoint crashes (issue #166).
-        match storage.cleanup_partial_writes() {
-            Ok(0) => {}
-            Ok(n) => tracing::warn!(
-                "cleanup_partial_writes acted on {n} crash-detritus file(s) on boot — \
+        if recover {
+            match storage.cleanup_partial_writes() {
+                Ok(0) => {}
+                Ok(n) => tracing::warn!(
+                    "cleanup_partial_writes acted on {n} crash-detritus file(s) on boot — \
                  see preceding logs for per-file detail"
-            ),
-            Err(e) => tracing::error!("cleanup_partial_writes failed on boot: {e}"),
+                ),
+                Err(e) => tracing::error!("cleanup_partial_writes failed on boot: {e}"),
+            }
         }
 
         Ok(storage)
@@ -417,7 +434,7 @@ impl ParquetStorage {
         let start = Instant::now();
 
         let written = self.write_tenant_events(tenant_id, &events_to_write);
-        let (file_path, file_metadata) = match written {
+        let parts = match written {
             Ok(written) => written,
             Err(e) => {
                 // The WAL may be retired by the next successful checkpoint, so
@@ -436,25 +453,29 @@ impl ParquetStorage {
         // write failed would authorise a version nothing on disk supports;
         // one that misses a written file is healed by the next resolve, which
         // folds any file the manifest does not name.
-        if let Err(error) = self.record_flushed_versions(tenant_id, &file_path, &events_to_write) {
-            tracing::warn!(
-                tenant_id = tenant_id,
-                %error,
-                "could not update the tenant version manifest; conditional writes will re-read \
-                 this file"
-            );
+        let mut offset = 0;
+        for part in &parts {
+            let rows = usize::try_from(part.metadata.file_metadata().num_rows())
+                .map_err(|_| AllSourceError::StorageError("Invalid archive output rows".into()))?;
+            if let Err(error) = self.record_flushed_versions(
+                tenant_id,
+                &part.path,
+                &events_to_write[offset..offset + rows],
+            ) {
+                tracing::warn!(tenant_id, %error, "could not update tenant version manifest");
+            }
+            offset += rows;
         }
 
         self.batches_written.fetch_add(1, Ordering::Relaxed);
         self.events_written
             .fetch_add(batch_count as u64, Ordering::Relaxed);
-        if let Some(size) = file_metadata
-            .row_groups()
-            .first()
-            .map(parquet::file::metadata::RowGroupMetaData::total_byte_size)
-        {
-            self.bytes_written.fetch_add(size as u64, Ordering::Relaxed);
-        }
+        let bytes = parts
+            .iter()
+            .flat_map(|part| part.metadata.row_groups())
+            .map(|group| group.total_byte_size() as u64)
+            .sum();
+        self.bytes_written.fetch_add(bytes, Ordering::Relaxed);
         self.total_write_time_ns
             .fetch_add(duration.as_nanos() as u64, Ordering::Relaxed);
 
@@ -464,21 +485,17 @@ impl ParquetStorage {
         }
 
         tracing::info!(
-            "Wrote {} events for tenant={} to {} in {:?}",
+            "Wrote {} events for tenant={} to {} files in {:?}",
             batch_count,
             tenant_id,
-            file_path.display(),
+            parts.len(),
             duration
         );
 
         Ok(())
     }
 
-    fn write_tenant_events(
-        &self,
-        tenant_id: &str,
-        events: &[Event],
-    ) -> Result<(PathBuf, parquet::file::metadata::ParquetMetaData)> {
+    fn write_tenant_events(&self, tenant_id: &str, events: &[Event]) -> Result<Vec<PublishedPart>> {
         let record_batch = self.events_to_record_batch(events)?;
 
         let now = chrono::Utc::now();
@@ -503,7 +520,15 @@ impl ParquetStorage {
             file_stem
         );
 
-        self.write_record_batch_atomic(&partition_dir, &file_stem, &record_batch)
+        let mut output = ArchiveOutput::new(
+            &partition_dir,
+            &file_stem,
+            self.config.compression,
+            ArchiveReadLimits::default().max_file_bytes,
+            true,
+        )?;
+        output.stage(&record_batch)?;
+        output.publish()
     }
 
     /// Write a single record batch atomically to
@@ -528,64 +553,19 @@ impl ParquetStorage {
         file_stem: &str,
         record_batch: &RecordBatch,
     ) -> Result<(PathBuf, parquet::file::metadata::ParquetMetaData)> {
-        let final_path = partition_dir.join(format!("{file_stem}.parquet"));
-        let tmp_path = partition_dir.join(format!("{file_stem}.parquet.tmp"));
-
-        // 1. Write to .tmp.
-        let metadata = {
-            let file = File::create(&tmp_path).map_err(|e| {
-                AllSourceError::StorageError(format!(
-                    "Failed to create parquet tmp file {}: {e}",
-                    tmp_path.display()
-                ))
-            })?;
-
-            let props = WriterProperties::builder()
-                .set_compression(self.config.compression)
-                // Entity-scoped archive reads skip a row group whose
-                // entity_id statistics exclude the target, so those bounds
-                // have to be exact. Truncated bounds are not: a shortened
-                // max can sort below an entity_id the group really holds,
-                // and the read would report a present event as missing.
-                .set_statistics_truncate_length(None)
-                .build();
-
-            let mut writer = ArrowWriter::try_new(file, self.schema.clone(), Some(props))?;
-            writer.write(record_batch)?;
-            // close() consumes writer and returns the file metadata; the
-            // underlying File is flushed and closed here.
-            writer.close()?
-        };
-
-        // 2. fsync the .tmp file.
-        let tmp_file = File::open(&tmp_path).map_err(|e| {
-            AllSourceError::StorageError(format!(
-                "Failed to reopen parquet tmp for fsync {}: {e}",
-                tmp_path.display()
-            ))
-        })?;
-        tmp_file.sync_all().map_err(|e| {
-            AllSourceError::StorageError(format!("fsync on parquet tmp failed: {e}"))
-        })?;
-        drop(tmp_file);
-
-        // 3. Atomic rename.
-        fs::rename(&tmp_path, &final_path).map_err(|e| {
-            AllSourceError::StorageError(format!(
-                "Failed to rename {} → {}: {e}",
-                tmp_path.display(),
-                final_path.display()
-            ))
-        })?;
-
-        // 4. fsync the parent directory so the rename survives crash.
-        // Linux fsync-on-dir is the canonical way to make a rename
-        // durable; macOS no-ops the dir fsync but doesn't error.
-        if let Ok(dir) = File::open(partition_dir) {
-            let _ = dir.sync_all();
-        }
-
-        Ok((final_path, metadata))
+        let mut output = ArchiveOutput::new(
+            partition_dir,
+            file_stem,
+            self.config.compression,
+            ArchiveReadLimits::default().max_file_bytes,
+            false,
+        )?;
+        output.stage(record_batch)?;
+        let part = output
+            .publish()?
+            .pop()
+            .ok_or_else(|| AllSourceError::StorageError("Archive output missing".into()))?;
+        Ok((part.path, part.metadata))
     }
 
     /// Atomically write `events` to a Parquet file under the tenant's
@@ -653,6 +633,42 @@ impl ParquetStorage {
         Ok(final_path)
     }
 
+    pub(crate) fn write_atomic_parquet_parts(
+        &self,
+        tenant_id: &str,
+        file_stem: &str,
+        events: &[Event],
+    ) -> Result<Vec<PathBuf>> {
+        if events.is_empty() {
+            return Err(AllSourceError::StorageError(
+                "Cannot archive empty events".into(),
+            ));
+        }
+        let anchor = events
+            .iter()
+            .map(|event| event.timestamp)
+            .min()
+            .ok_or_else(|| AllSourceError::StorageError("Cannot archive empty events".into()))?;
+        let directory = partition_path_for_tenant(&self.storage_dir, tenant_id, anchor)?;
+        fs::create_dir_all(&directory).map_err(|error| {
+            AllSourceError::StorageError(format!("Failed to create archive partition: {error}"))
+        })?;
+        let batch = self.events_to_record_batch(events)?;
+        let mut output = ArchiveOutput::new(
+            &directory,
+            file_stem,
+            self.config.compression,
+            ArchiveReadLimits::default().max_file_bytes,
+            true,
+        )?;
+        output.stage(&batch)?;
+        Ok(output
+            .publish()?
+            .into_iter()
+            .map(|part| part.path)
+            .collect())
+    }
+
     /// Sweep the storage tree for crash detritus and heal it on boot.
     /// Called on boot from `ParquetStorage::new` so every cold start
     /// starts clean. Two kinds of leftovers are handled:
@@ -679,6 +695,7 @@ impl ParquetStorage {
         let mut acted = 0usize;
         let mut stack: Vec<PathBuf> = vec![self.storage_dir.clone()];
         while let Some(dir) = stack.pop() {
+            acted += recover_pending_outputs(&dir)?;
             let Ok(entries) = fs::read_dir(&dir) else {
                 continue;
             };
@@ -1602,21 +1619,16 @@ impl ParquetStorage {
                         chrono::Utc::now().format("%Y%m%d-%H%M%S%3f"),
                         uuid::Uuid::new_v4().as_simple()
                     );
-                    let target_path = target_dir.join(&filename);
                     let record_batch = self.events_to_record_batch(&group_events)?;
-                    let file = File::create(&target_path).map_err(|e| {
-                        AllSourceError::StorageError(format!(
-                            "Failed to create migration target {}: {e}",
-                            target_path.display()
-                        ))
-                    })?;
-                    let props = WriterProperties::builder()
-                        .set_compression(self.config.compression)
-                        .build();
-                    let mut writer = ArrowWriter::try_new(file, self.schema.clone(), Some(props))?;
-                    writer.write(&record_batch)?;
-                    writer.close()?;
-                    report.partitions_written += 1;
+                    let mut output = ArchiveOutput::new(
+                        &target_dir,
+                        filename.trim_end_matches(".parquet"),
+                        self.config.compression,
+                        ArchiveReadLimits::default().max_file_bytes,
+                        true,
+                    )?;
+                    output.stage(&record_batch)?;
+                    report.partitions_written += output.publish()?.len();
                 }
                 report.events_migrated += count;
             }
@@ -1875,6 +1887,11 @@ fn find_parquet_files_recursive_with_integrity(
                 Err(_) => continue,
             };
             let path = entry.path();
+            if pending_marker(&path) && require_complete {
+                return Err(AllSourceError::StorageError(
+                    "Archive output publication incomplete".into(),
+                ));
+            }
             // Use file_type() rather than metadata() so symlinks don't get
             // followed by accident (metadata() resolves symlinks, file_type()
             // doesn't).
@@ -1889,6 +1906,12 @@ fn find_parquet_files_recursive_with_integrity(
             };
             if ft.is_dir() {
                 stack.push(path);
+            } else if ft.is_file() && pending_part(&path) {
+                if require_complete {
+                    return Err(AllSourceError::StorageError(
+                        "Archive output publication incomplete".into(),
+                    ));
+                }
             } else if ft.is_file()
                 && path
                     .extension()

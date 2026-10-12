@@ -2,6 +2,8 @@
 // Contains storage implementations, WAL, snapshots, compaction, and indexing
 
 pub mod archive_budget;
+mod archive_output;
+pub mod archive_repack;
 pub mod arena_pool;
 pub mod backup;
 pub mod batch_processor;

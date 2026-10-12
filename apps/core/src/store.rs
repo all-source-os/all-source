@@ -285,10 +285,12 @@ impl EventStore {
         projections.register(Arc::new(EventCounterProjection::new("event_counters")));
 
         // Initialize persistent storage if configured
-        let storage = config
-            .storage_dir
-            .as_ref()
-            .and_then(|dir| match ParquetStorage::new(dir) {
+        let storage = config.storage_dir.as_ref().and_then(|dir| {
+            match if config.read_only {
+                ParquetStorage::open_existing(dir)
+            } else {
+                ParquetStorage::new(dir)
+            } {
                 Ok(storage) => {
                     tracing::info!("✅ Parquet persistence enabled at: {}", dir.display());
                     Some(Arc::new(RwLock::new(storage)))
@@ -297,7 +299,8 @@ impl EventStore {
                     tracing::error!("❌ Failed to initialize Parquet storage: {}", e);
                     None
                 }
-            });
+            }
+        });
 
         // Initialize WAL if configured (v0.2 feature)
         let wal = config.wal_dir.as_ref().and_then(|dir| {

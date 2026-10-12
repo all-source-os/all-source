@@ -258,7 +258,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "apps/core -> target"
+          workspaces: ". -> target"
           cache-on-failure: true
 
       - name: Install cargo-sort

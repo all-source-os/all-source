@@ -134,9 +134,10 @@ impl ArchiveTarget for LocalFsArchive {
         // Filename mirrors the live snapshot convention so an operator
         // pulling from cold storage can correlate easily.
         let file_stem = format!(
-            "archive.{tenant_id}.{}-{}",
+            "archive.{tenant_id}.{}-{}.{}",
             super::compaction::format_iso_basic(from),
-            super::compaction::format_iso_basic(to)
+            super::compaction::format_iso_basic(to),
+            uuid::Uuid::new_v4().as_simple()
         );
         let path = self
             .storage

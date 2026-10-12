@@ -119,18 +119,18 @@ RUN mkdir -p apps/core/benches apps/core/tests/stress_tests && \
 # =============================================================================
 FROM builder-base AS builder-community
 RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
-        --bin allsource-core --bin allsource-migrate-storage \
+        --bin allsource-core --bin allsource-migrate-storage --bin allsource-repack-archive \
         --features community,analytics && \
-    strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage
+    strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
 # Stage 3b: Builder Enterprise - Enterprise edition (BSL 1.1)
 # =============================================================================
 FROM builder-base AS builder-enterprise
 RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
-        --bin allsource-core --bin allsource-migrate-storage \
+        --bin allsource-core --bin allsource-migrate-storage --bin allsource-repack-archive \
         --features enterprise,analytics && \
-    strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage
+    strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
 # Stage 4a: Runtime Community - Distroless (Apache 2.0, open source)
@@ -154,6 +154,7 @@ LABEL org.opencontainers.image.title="AllSource Core (Community)" \
 WORKDIR /app
 COPY --from=builder-community /app/target/release/allsource-core ./allsource-core
 COPY --from=builder-community /app/target/release/allsource-migrate-storage ./allsource-migrate-storage
+COPY --from=builder-community /app/target/release/allsource-repack-archive ./allsource-repack-archive
 EXPOSE 3900
 
 ENV RUST_LOG=allsource_core=info,tower_http=info \
@@ -187,6 +188,7 @@ LABEL org.opencontainers.image.title="AllSource Core (Enterprise)" \
 WORKDIR /app
 COPY --from=builder-enterprise /app/target/release/allsource-core ./allsource-core
 COPY --from=builder-enterprise /app/target/release/allsource-migrate-storage ./allsource-migrate-storage
+COPY --from=builder-enterprise /app/target/release/allsource-repack-archive ./allsource-repack-archive
 EXPOSE 3900
 
 ENV RUST_LOG=allsource_core=info,tower_http=info \
@@ -226,6 +228,7 @@ RUN apk add --no-cache curl ca-certificates && \
 WORKDIR /app
 COPY --from=builder-community --chown=allsource:allsource /app/target/release/allsource-core ./allsource-core
 COPY --from=builder-community --chown=allsource:allsource /app/target/release/allsource-migrate-storage ./allsource-migrate-storage
+COPY --from=builder-community --chown=allsource:allsource /app/target/release/allsource-repack-archive ./allsource-repack-archive
 COPY --chown=allsource:allsource apps/core/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 USER allsource
@@ -273,6 +276,7 @@ RUN apk add --no-cache curl ca-certificates && \
 WORKDIR /app
 COPY --from=builder-enterprise --chown=allsource:allsource /app/target/release/allsource-core ./allsource-core
 COPY --from=builder-enterprise --chown=allsource:allsource /app/target/release/allsource-migrate-storage ./allsource-migrate-storage
+COPY --from=builder-enterprise --chown=allsource:allsource /app/target/release/allsource-repack-archive ./allsource-repack-archive
 COPY --chown=allsource:allsource apps/core/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 USER allsource

@@ -40,6 +40,10 @@ required-features = ["server"]
 name = "allsource-migrate-storage"
 path = "src/bin/allsource-migrate-storage.rs"
 
+[[bin]]
+name = "allsource-repack-archive"
+path = "src/bin/allsource-repack-archive.rs"
+
 [features]
 default = ["server", "community"]
 # Edition features: community is the open-source edition, enterprise adds replication + multi-tenant

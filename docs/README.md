@@ -125,6 +125,7 @@ For DevOps and platform engineers.
 | [Alerts](./operations/ALERTS.md) | Repo-defined alarms, their thresholds and escalation | ✅ |
 | [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
 | [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |
+| [Bounded archive repack](./runbooks/BOUNDED_ARCHIVE_REPACK.md) | Finalized output bounds, preserved originals, crash recovery and rollback commands | ✅ |
 | [Revoking legacy Core keys](./runbooks/REVOKE_LEGACY_CORE_KEYS.md) | Classifying, rotating and purging old API keys | ✅ |
 | [Prime multi-tenant ingest](./runbooks/PRIME_MULTI_TENANT_INGEST.md) | One writer, many readers; spotting an accidental second writer | ✅ |
 | [Docker Deployment](./deployment/DOCKER.md) | Container images and configuration | ✅ |
