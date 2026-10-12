@@ -73,9 +73,11 @@ A tag is immutable. Once pushed, a broken release means burning another version 
 
 **Pre-fix common issues BEFORE the first CI attempt** to minimize iterations:
 ```bash
-# Always run these first:
-cargo +nightly fmt --all
-cargo +nightly sort --workspace
+# Always run these first. Plain `cargo`, never `cargo +nightly`: the `+`
+# form overrides rust-toolchain.toml and formats/lints with a different
+# compiler than CI uses.
+cargo fmt --all
+cargo sort --workspace
 cd apps/mcp-server-elixir && mix format && cd ../query-service && mix format && cd ../..
 ```
 
@@ -200,7 +202,7 @@ Checklist before tagging:
 - [ ] All planned fixes are implemented and tested
 - [ ] ALL three CI gates pass (not just the ones related to your changes)
 - [ ] `mix format` has been run on ALL Elixir apps (not just the one you edited)
-- [ ] `cargo +nightly fmt --all` has been run
+- [ ] `cargo fmt --all` has been run
 - [ ] No unrelated dirty files will be swept into the commit (`git status`)
 - [ ] Dockerfiles have been verified against current workspace members
 
@@ -211,8 +213,8 @@ Checklist before tagging:
 | cargo clippy | collapsible_if | Use let-chain syntax: `if cond1 && cond2 { }` |
 | cargo clippy | new_without_default | Add `impl Default for T { fn default() -> Self { Self::new() } }` |
 | cargo clippy | redundant_closure | `.map(Foo::bar)` instead of `.map(\|x\| Foo::bar(x))` |
-| cargo sort | unsorted deps | `cargo +nightly sort` |
-| cargo fmt | formatting | `cargo +nightly fmt` |
+| cargo sort | unsorted deps | `cargo sort` |
+| cargo fmt | formatting | `cargo fmt` |
 | rustdoc | broken_intra_doc_links | Wrap brackets in backticks |
 | golangci-lint | goconst | Extract repeated strings to constants |
 | golangci-lint | gocritic ifElseChain | Convert to switch statement |

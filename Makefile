@@ -158,24 +158,33 @@ ci: check-versions quality-rust quality-go quality-elixir-full
 	@echo "   Safe to push - this matches GitHub Actions"
 	@echo "=============================================="
 
+# No `cargo +nightly` here. `+nightly` overrides rust-toolchain.toml and
+# resolves to whatever nightly this machine last installed, so these gates
+# then lint against a different compiler than CI does — in both directions. A
+# local clippy run missed `duration_suboptimal_units` that CI rejected, and
+# `rustup update nightly` then reported 47 errors in code CI is happy with.
+# Plain `cargo` takes the pinned toolchain, which is the whole point of
+# pinning it.
 quality-rust:
 	@echo ""
 	@echo "🦀 Running Rust quality gates..."
 	@echo "================================"
+	@echo "→ Toolchain (must match rust-toolchain.toml)..."
+	cd apps/core && cargo --version && rustc --version
 	@echo "→ Checking formatting..."
-	cd apps/core && cargo +nightly fmt --check
+	cd apps/core && cargo fmt --check
 	@echo "→ Checking Cargo.toml sorting..."
-	cargo +nightly sort --workspace --check
+	cargo sort --workspace --check
 	@echo "→ Running Clippy..."
-	cd apps/core && cargo +nightly clippy --locked --all-targets --all-features -- -D warnings
+	cd apps/core && cargo clippy --locked --all-targets --all-features -- -D warnings
 	@echo "→ Running tests (enterprise — all features)..."
-	cd apps/core && cargo +nightly test --locked --lib --all-features
+	cd apps/core && cargo test --locked --lib --all-features
 	@echo "→ Running tests (community edition)..."
-	cd apps/core && cargo +nightly test --locked --lib --features community
+	cd apps/core && cargo test --locked --lib --features community
 	@echo "→ Building release..."
-	cd apps/core && cargo +nightly build --locked --lib --release
+	cd apps/core && cargo build --locked --lib --release
 	@echo "→ Checking documentation..."
-	cd apps/core && RUSTDOCFLAGS="-D warnings" cargo +nightly doc --no-deps --document-private-items
+	cd apps/core && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
 	@echo "✅ Rust quality gates passed!"
 
 quality-go:

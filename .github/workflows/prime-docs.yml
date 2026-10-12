@@ -28,6 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The effective toolchain is rust-toolchain.toml's, not this one: the
+      # action provides rustup, and rustup then honours the pin. Keep the
+      # build below on plain `cargo` so that stays true.
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
 
@@ -43,7 +46,7 @@ jobs:
       - name: Build docs
         run: |
           cd apps/core
-          RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo +nightly doc \
+          RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc \
             --no-deps \
             --features prime-recall,prime-vectors \
             --document-private-items

@@ -139,10 +139,14 @@ This ensures that every tag is a reliable, permanent reference point. Docker ima
 
 | Gate | Tool | Fails On |
 |------|------|----------|
-| Rust format | `cargo +nightly fmt --check` | Any unformatted Rust code |
-| Rust sort | `cargo +nightly sort --check` | Unsorted Cargo.toml deps |
-| Rust lint | `cargo +nightly clippy -D warnings` | Any clippy warning |
-| Rust tests | `cargo +nightly test --lib` | Test failures |
+| Rust format | `cargo fmt --check` | Any unformatted Rust code |
+| Rust sort | `cargo sort --check` | Unsorted Cargo.toml deps |
+| Rust lint | `cargo clippy -D warnings` | Any clippy warning |
+| Rust tests | `cargo test --lib` | Test failures |
+
+The toolchain comes from `rust-toolchain.toml`. Do not write
+`cargo +nightly`: it overrides the pin, so the gate lints against whichever
+nightly the machine last installed rather than the one CI uses.
 | Rust docs | `RUSTDOCFLAGS="-D warnings" cargo doc` | Broken doc links |
 | Rust build | `cargo build --release` | Compilation errors |
 | Go format | `gofmt -l` | Any unformatted Go code |

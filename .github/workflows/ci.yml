@@ -241,6 +241,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # `@nightly` is NOT the toolchain these steps run on. The repo root's
+      # rust-toolchain.toml pins one, and rustup honours it for every plain
+      # `cargo` call below — the runner log says so outright: "currently in
+      # use (overridden by .../rust-toolchain.toml)". The pin covers the
+      # standalone workspaces too, since rustup walks up from the directory.
+      #
+      # Never add `+nightly` to a cargo step. It overrides the pin and builds
+      # against whatever nightly the runner happens to hold, so the gate can
+      # go red without the code changing.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:

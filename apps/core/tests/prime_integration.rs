@@ -4,8 +4,8 @@
 //! Each test phase builds on the primitives, combining multiple features
 //! to verify they work together. Run with:
 //!
-//!   cargo +nightly test --test prime_integration --features prime
-//!   cargo +nightly test --test prime_integration --features prime-full  # includes vectors
+//!   cargo test --test prime_integration --features prime
+//!   cargo test --test prime_integration --features prime-full  # includes vectors
 
 #![cfg(feature = "prime")]
 
