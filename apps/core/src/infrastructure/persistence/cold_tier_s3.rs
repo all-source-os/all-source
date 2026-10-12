@@ -1,6 +1,6 @@
 //! Cold-tier archive to an S3-compatible object store.
 //!
-//! The [`ArchiveTarget`](super::cold_tier::ArchiveTarget) impl for AWS S3,
+//! The [`super::cold_tier::ArchiveTarget`] impl for AWS S3,
 //! Cloudflare R2, MinIO, or anything else speaking the S3 protocol. Which one
 //! is an operator config call, not a code one: the endpoint is part of the URL.
 //!

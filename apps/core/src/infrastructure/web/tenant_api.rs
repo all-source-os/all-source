@@ -438,7 +438,8 @@ pub async fn update_quotas_handler(
 /// explicit `count: 0` (a no-op increment is a client bug, not a write).
 ///
 /// Atomicity is the repository's job — see
-/// [`TenantRepository::increment_usage`]; concurrent batched increments for
+/// [`crate::domain::repositories::TenantRepository::increment_usage`];
+/// concurrent batched increments for
 /// the same tenant are serialized so no counts are lost.
 pub async fn increment_usage_handler(
     State(state): State<AppState>,

@@ -1396,7 +1396,7 @@ impl Prime {
     /// ## Tenant scoping (security)
     ///
     /// `query.tenant` filters on `properties.tenant_id` exactly as
-    /// [`Self::full_graph`] does, through the same [`Self::node_in_tenant`]
+    /// [`Self::full_graph`] does, through the same private `node_in_tenant`
     /// predicate. It applies to vector seeds, lexical and type-scan seeds, and
     /// graph expansion alike — see the note in the body for why expansion
     /// cannot be left out. `None` searches the whole store and is correct only

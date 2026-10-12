@@ -184,7 +184,10 @@ quality-rust:
 	@echo "→ Building release..."
 	cd apps/core && cargo build --locked --lib --release
 	@echo "→ Checking documentation..."
-	cd apps/core && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+# Flags must stay a superset of prime-docs.yml's, which documents
+# prime-recall,prime-vectors under `--cfg docsrs`. Defaults alone left that
+# workflow red for three weeks with nothing local able to reproduce it.
+	cd apps/core && RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --no-deps --all-features --document-private-items
 	@echo "✅ Rust quality gates passed!"
 
 quality-go:

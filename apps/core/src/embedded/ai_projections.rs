@@ -146,7 +146,7 @@ const MAX_DURATION_SAMPLES: usize = 1000;
 /// Tracks MCP tool call success rates and latency per entity.
 ///
 /// Folds `mcp.tool.result` and `mcp.tool.error` events into per-tool stats.
-/// Duration samples are capped at [`MAX_DURATION_SAMPLES`] per tool to bound
+/// Duration samples are capped at `MAX_DURATION_SAMPLES` per tool to bound
 /// memory usage and keep percentile computation O(1) amortized.
 pub struct ToolCallAuditProjection {
     states: DashMap<String, Value>,
