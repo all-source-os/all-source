@@ -80,6 +80,25 @@ fn cancelled_conditional_append_does_not_reach_wal_or_cache() {
 }
 
 #[test]
+fn only_the_first_conditional_append_to_an_entity_takes_an_archive_slot() {
+    let directory = TempDir::new().unwrap();
+    let seed = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    seed.ingest_with_expected_version(&event(), Some(0))
+        .unwrap();
+    seed.flush_storage().unwrap();
+    drop(seed);
+
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    assert!(store.conditional_append_reads_archive(TENANT, "synthetic-entity"));
+    store
+        .ingest_with_expected_version(&event(), Some(1))
+        .unwrap();
+    assert!(!store.conditional_append_reads_archive(TENANT, "synthetic-entity"));
+
+    assert!(!EventStore::new().conditional_append_reads_archive(TENANT, "synthetic-entity"));
+}
+
+#[test]
 fn http_append_rejects_corrupt_over_budget_or_read_only_archives() {
     for failure in ["file cap", "corrupt", "read only"] {
         let directory = TempDir::new().unwrap();

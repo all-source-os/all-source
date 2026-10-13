@@ -175,11 +175,18 @@ async fn main() -> Result<()> {
                 .compaction_interval_seconds
                 .clamp(60, 86_400),
         );
+        // Derived from the last sweep's recorded time, not from boot. Re-arming
+        // the full interval on every start meant a process restarting more
+        // often than the interval never reached its first tick (gh#321).
+        let first_delay = manager.delay_until_next_sweep(std::time::Duration::from_secs(120));
+        tracing::info!(
+            last_compaction = ?manager.last_compaction(),
+            first_sweep_in_secs = first_delay.as_secs(),
+            "Compaction sweep scheduled"
+        );
         tokio::spawn(async move {
+            tokio::time::sleep(first_delay).await;
             let mut ticker = tokio::time::interval(interval);
-            // Skip the immediate tick: a boot-time sweep would contend with
-            // WAL recovery for the same disk.
-            ticker.tick().await;
             loop {
                 ticker.tick().await;
                 let manager = Arc::clone(&manager);

@@ -22,7 +22,6 @@ static SLOTS: LazyLock<Arc<WorkPool>> = LazyLock::new(|| {
     ))
 });
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(5);
-const ADMISSION_TIMEOUT: Duration = Duration::from_millis(100);
 
 fn configured_workers(value: std::result::Result<String, std::env::VarError>) -> usize {
     match value {
@@ -57,7 +56,11 @@ pub(super) async fn append(
     event: Event,
     expected: Option<u64>,
 ) -> Result<u64> {
-    if expected.is_none() {
+    // The pool bounds archive I/O. An append that reads no archive belongs
+    // outside it, or every publish in the process queues behind one slot.
+    if expected.is_none()
+        || !store.conditional_append_reads_archive(event.tenant_id_str(), event.entity_id_str())
+    {
         return store.ingest_with_expected_version(&event, expected);
     }
     run(Arc::clone(&SLOTS), RESPONSE_TIMEOUT, move |cancellation| {
@@ -110,13 +113,17 @@ where
             .map_err(|_| {
                 AllSourceError::QueueFull("Conditional archive admission capacity exhausted".into())
             })?;
-        tokio::time::timeout_at(
-            deadline.min(tokio::time::Instant::now() + ADMISSION_TIMEOUT),
-            Arc::clone(&slots.active).acquire_owned(),
-        )
-        .await
-        .map_err(|_| AllSourceError::QueueFull("Conditional archive admission timed out".into()))?
-        .map_err(|_| AllSourceError::QueueFull("Conditional archive workers unavailable".into()))?
+        // Queue depth bounds the pile-up; the response deadline bounds the
+        // wait. A shorter admission window would only refuse callers the
+        // slot frees in time.
+        tokio::time::timeout_at(deadline, Arc::clone(&slots.active).acquire_owned())
+            .await
+            .map_err(|_| {
+                AllSourceError::QueueFull("Conditional archive admission timed out".into())
+            })?
+            .map_err(|_| {
+                AllSourceError::QueueFull("Conditional archive workers unavailable".into())
+            })?
     };
     let cancellation = Arc::new(AtomicBool::new(false));
     let _cancel = CancelOnDrop(Arc::clone(&cancellation));
@@ -183,6 +190,42 @@ mod tests {
                 .contains("admission timed out")
         );
         assert_eq!(slots.waiting.available_permits(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_waiter_outlasts_a_slot_held_longer_than_a_tenth_of_a_second() {
+        let slots = Arc::new(WorkPool::new(1, 1));
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        // Deadlines are generous on purpose. The assertion is that the waiter
+        // is not refused while a slot is merely busy, so a loaded machine must
+        // lengthen the wait without changing the outcome.
+        let holder = tokio::spawn(run(
+            Arc::clone(&slots),
+            Duration::from_secs(30),
+            move |_| {
+                started_tx.send(()).unwrap();
+                // test-hang-allow: bounded stand-in for a manifest fold.
+                release_rx.recv_timeout(Duration::from_secs(30)).unwrap();
+                Ok(())
+            },
+        ));
+        started_rx.await.unwrap();
+        let waiter = tokio::spawn(run(Arc::clone(&slots), Duration::from_secs(30), |_| {
+            Ok(42u64)
+        }));
+        // test-hang-allow: bounded observation of the waiter queueing.
+        tokio::time::timeout(Duration::from_secs(30), async {
+            while slots.waiting.available_permits() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        release_tx.send(()).unwrap();
+        holder.await.unwrap().unwrap();
+        assert_eq!(waiter.await.unwrap().unwrap(), 42);
     }
 
     #[tokio::test(flavor = "current_thread")]

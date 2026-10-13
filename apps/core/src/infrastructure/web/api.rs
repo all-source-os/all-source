@@ -1249,9 +1249,18 @@ pub async fn compaction_stats(State(store): State<SharedStore>) -> Result<Json<s
 
     let stats = compaction_manager.stats();
     let config = compaction_manager.config();
+    // `total_compactions` counts this process only, so it cannot distinguish
+    // "never ran" from "ran, then restarted". Staleness survives a restart and
+    // is what an alarm can read (gh#321).
+    let last_compaction = compaction_manager.last_compaction();
+    let seconds_since_last_compaction =
+        last_compaction.map(|at| (chrono::Utc::now() - at).num_seconds().max(0));
 
     Ok(Json(serde_json::json!({
         "stats": stats,
+        "last_compaction_at": last_compaction,
+        "seconds_since_last_compaction": seconds_since_last_compaction,
+        "sweep_cursor": compaction_manager.sweep_cursor(),
         "config": {
             "min_files_to_compact": config.min_files_to_compact,
             "target_file_size": config.target_file_size,

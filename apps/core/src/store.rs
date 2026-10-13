@@ -1690,6 +1690,24 @@ impl EventStore {
     ///
     /// Concurrent callers for a cold entity may both scan. Folding is a max,
     /// so a duplicate scan costs time and changes nothing.
+    /// Whether a conditional append to this entity would read the archive.
+    ///
+    /// A resolved entity's high-water mark is already in `entity_versions`, so
+    /// the append is a pure in-memory write. One archive work slot is shared
+    /// by every tenant in the process, so queueing such an append behind it
+    /// serialises unrelated publishes and fails them on admission rather than
+    /// on anything they needed (gh#321).
+    #[cfg(feature = "server")]
+    pub(crate) fn conditional_append_reads_archive(
+        &self,
+        tenant_id: &str,
+        entity_id: &str,
+    ) -> bool {
+        self.storage.is_some()
+            && !self.version_index_tenants.contains_key(tenant_id)
+            && !self.version_index_entities.contains_key(entity_id)
+    }
+
     fn ensure_version_for_entity(
         &self,
         tenant_id: &str,
