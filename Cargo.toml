@@ -37,7 +37,7 @@ exclude = [
 [workspace.dependencies]
 
 # Security & Crypto
-aes-gcm = "0.11"
+aes-gcm = "0.10"
 
 # AllFrame web framework
 allframe = "0.1"
@@ -97,7 +97,7 @@ rocksdb = { version = "0.24" }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 = "0.11"
+sha2 = "0.10"
 simd-json = "0.18"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "json", "chrono", "uuid"] }
 tabled = "0.17"
