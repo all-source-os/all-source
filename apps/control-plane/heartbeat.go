@@ -7,10 +7,11 @@ package main
 // to Core, and (c) its own uptime is a superset of the status page's
 // usefulness — if CP is down, nothing else can report anyway.
 //
-// Every heartbeat probes a backend, emits a `service.heartbeat` event into
-// Core under tenant=system, and is recorded permanently. The status endpoint
-// then folds those events into a current-view projection. Time-travel,
-// uptime history, and "who was down when?" all come for free.
+// Every tick probes every backend and updates the in-memory gauge. A
+// `service.heartbeat` event reaches Core under tenant=system only when a
+// service's status changes, when the process starts, or when a service has
+// gone heartbeatKeepaliveInterval without a write. The status endpoint folds
+// those events into a current-view projection.
 
 import (
 	"bytes"
@@ -28,15 +29,19 @@ import (
 	"github.com/allsource/control-plane/internal/infrastructure/clients"
 )
 
-// heartbeatInterval is how often we probe each service. Chosen to be tight
-// enough that the status page feels live but loose enough that we don't
-// flood Core with low-value writes. At 10s × 8 services = 48 events/min.
+// heartbeatInterval is how often we probe each service. It sets the
+// in-memory gauge's resolution, not the write rate to Core.
 const heartbeatInterval = 10 * time.Second
 
 // heartbeatTTL is how long a single heartbeat counts as "fresh" when the
 // status endpoint aggregates. Slightly larger than 2× the interval so one
 // dropped probe doesn't flip a service red.
 const heartbeatTTL = 25 * time.Second
+
+// heartbeatKeepaliveInterval bounds how long an unchanged service may go
+// without a written event, so "nothing changed" stays distinguishable from
+// "nothing reported". Ticks in between write nothing.
+const heartbeatKeepaliveInterval = time.Hour
 
 // heartbeatTenant is where service heartbeats live. Not user data; a
 // dedicated system tenant keeps it out of per-user queries and lets us
@@ -117,8 +122,16 @@ type heartbeatEmitter struct {
 	coreClient clients.CoreClient
 	httpClient *http.Client
 
-	mu     sync.RWMutex
-	latest map[string]heartbeatSample // keyed by service name
+	mu          sync.RWMutex
+	latest      map[string]heartbeatSample // keyed by service name
+	lastWritten map[string]writtenBeat     // keyed by service name
+}
+
+// writtenBeat is the last heartbeat that actually reached Core for a service.
+// It gates writes; the gauge in `latest` is updated on every probe regardless.
+type writtenBeat struct {
+	status string
+	at     time.Time
 }
 
 // heartbeatSample is the live, in-process record of one probe outcome.
@@ -136,11 +149,34 @@ func newHeartbeatEmitter(coreClient clients.CoreClient, httpClient *http.Client,
 		httpClient = &http.Client{Timeout: 4 * time.Second}
 	}
 	return &heartbeatEmitter{
-		probes:     probes,
-		coreClient: coreClient,
-		httpClient: httpClient,
-		latest:     make(map[string]heartbeatSample, len(probes)),
+		probes:      probes,
+		coreClient:  coreClient,
+		httpClient:  httpClient,
+		latest:      make(map[string]heartbeatSample, len(probes)),
+		lastWritten: make(map[string]writtenBeat, len(probes)),
 	}
+}
+
+// shouldWriteBeat reports whether this probe result needs to reach Core. A
+// status change is the event; an unchanged status is re-stated only once per
+// heartbeatKeepaliveInterval.
+func (h *heartbeatEmitter) shouldWriteBeat(name, status string, now time.Time) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	prev, ok := h.lastWritten[name]
+	if !ok {
+		return true
+	}
+	return prev.status != status || now.Sub(prev.at) >= heartbeatKeepaliveInterval
+}
+
+// markBeatWritten records a successful write. A failed write leaves the
+// previous mark alone so the next tick retries, rather than the service going
+// silent until its next transition.
+func (h *heartbeatEmitter) markBeatWritten(name, status string, at time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.lastWritten[name] = writtenBeat{status: status, at: at}
 }
 
 // snapshot returns the current in-memory probe state as serviceStatus
@@ -211,8 +247,8 @@ func (h *heartbeatEmitter) emitAll(ctx context.Context) {
 
 // probeAndEmit runs one HTTP probe, records the result in the in-process
 // cache (always — that's what powers the status page during Core outages),
-// then best-effort writes it to Core for history. A heartbeat is recorded
-// in both healthy and unhealthy cases so consumers can distinguish
+// then best-effort writes it to Core when shouldWriteBeat allows. Both
+// healthy and unhealthy results are written, so consumers can distinguish
 // "last seen healthy" from "probe never ran".
 func (h *heartbeatEmitter) probeAndEmit(ctx context.Context, p probe) {
 	started := time.Now()
@@ -226,6 +262,10 @@ func (h *heartbeatEmitter) probeAndEmit(ctx context.Context, p probe) {
 		errMsg:    errMsg,
 		at:        started,
 	})
+
+	if !h.shouldWriteBeat(p.name, status, started) {
+		return
+	}
 
 	payload := map[string]any{
 		"service":    p.name,
@@ -246,7 +286,9 @@ func (h *heartbeatEmitter) probeAndEmit(ctx context.Context, p probe) {
 		Payload:   payload,
 	}); err != nil {
 		log.Printf("heartbeat: ingest failed for %s: %v", p.name, err)
+		return
 	}
+	h.markBeatWritten(p.name, status, started)
 }
 
 func (h *heartbeatEmitter) probeOnce(ctx context.Context, p probe) (status, errMsg string) {
@@ -376,7 +418,11 @@ func (cp *ControlPlane) currentServiceStatus() []serviceStatus {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	since := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+	// The window must exceed heartbeatKeepaliveInterval, or a steady service
+	// that has not changed status since its last keepalive falls outside it
+	// and the page renders blank. projectStatus still ages these to "stale",
+	// which is the honest reading of a beat this old.
+	since := time.Now().Add(-2 * heartbeatKeepaliveInterval).UTC().Format(time.RFC3339)
 	resp, err := cp.coreClient.QueryEvents(ctx, clients.QueryEventsRequest{
 		EventType: heartbeatEventType,
 		TenantID:  heartbeatTenant,

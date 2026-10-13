@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -198,5 +200,118 @@ func TestEmitterSnapshot_FlipsToStaleAfterTTL(t *testing.T) {
 	out := h.snapshot(now)
 	if len(out) != 1 || out[0].Status != "stale" {
 		t.Errorf("want stale entry for auth, got %+v", out)
+	}
+}
+
+func TestShouldWriteBeat_FirstBeatForAServiceIsAlwaysWritten(t *testing.T) {
+	h := newHeartbeatEmitter(nil, nil, nil)
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+
+	if !h.shouldWriteBeat("core", statusHealthy, now) {
+		t.Error("a service with no recorded write must be written, or a cold projectStatus has nothing inside its TTL")
+	}
+}
+
+func TestShouldWriteBeat_UnchangedStatusIsNotRewrittenEveryTick(t *testing.T) {
+	h := newHeartbeatEmitter(nil, nil, nil)
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	h.markBeatWritten("core", statusHealthy, now)
+
+	for _, tick := range []time.Duration{heartbeatInterval, 5 * time.Minute, 59 * time.Minute} {
+		if h.shouldWriteBeat("core", statusHealthy, now.Add(tick)) {
+			t.Errorf("steady status rewritten after %s", tick)
+		}
+	}
+}
+
+func TestShouldWriteBeat_StatusChangeIsWrittenImmediately(t *testing.T) {
+	h := newHeartbeatEmitter(nil, nil, nil)
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	h.markBeatWritten("core", statusHealthy, now)
+
+	if !h.shouldWriteBeat("core", statusUnhealthy, now.Add(heartbeatInterval)) {
+		t.Error("a transition is the event; it must not wait for the keepalive")
+	}
+}
+
+func TestShouldWriteBeat_KeepaliveReWritesAnUnchangedStatus(t *testing.T) {
+	h := newHeartbeatEmitter(nil, nil, nil)
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	h.markBeatWritten("core", statusHealthy, now)
+
+	if !h.shouldWriteBeat("core", statusHealthy, now.Add(heartbeatKeepaliveInterval)) {
+		t.Error("without a keepalive, 'nothing changed' is indistinguishable from 'nothing reported'")
+	}
+}
+
+func TestShouldWriteBeat_EachServiceIsGatedIndependently(t *testing.T) {
+	h := newHeartbeatEmitter(nil, nil, nil)
+	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	h.markBeatWritten("core", statusHealthy, now)
+
+	if !h.shouldWriteBeat("auth", statusHealthy, now) {
+		t.Error("one service's write must not suppress another's first beat")
+	}
+}
+
+// countingCore records IngestEvent calls and can be made to fail, so write
+// gating can be exercised through probeAndEmit rather than only through
+// shouldWriteBeat.
+type countingCore struct {
+	clients.CoreClient
+	mu     sync.Mutex
+	calls  int
+	failed bool
+}
+
+func (c *countingCore) IngestEvent(_ context.Context, _ clients.IngestEventRequest) (*clients.IngestEventResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if c.failed {
+		return nil, errors.New("core unavailable")
+	}
+	return &clients.IngestEventResponse{}, nil
+}
+
+func (c *countingCore) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+func TestProbeAndEmit_SteadyStatusWritesOnceAcrossManyProbes(t *testing.T) {
+	srv := newTestServer(200, `{"status":"healthy"}`)
+	defer srv.Close()
+
+	core := &countingCore{}
+	h := newHeartbeatEmitter(core, nil, nil)
+	p := probe{name: "core", url: srv.URL}
+
+	for i := 0; i < 5; i++ {
+		h.probeAndEmit(testContext(), p)
+	}
+
+	if got := core.callCount(); got != 1 {
+		t.Errorf("ingest calls: got %d, want 1 — a steady service must not write once per probe", got)
+	}
+	if len(h.snapshot(time.Now())) != 1 {
+		t.Error("the in-memory gauge must still be updated on every probe")
+	}
+}
+
+func TestProbeAndEmit_FailedWriteIsRetriedOnTheNextProbe(t *testing.T) {
+	srv := newTestServer(200, `{"status":"healthy"}`)
+	defer srv.Close()
+
+	core := &countingCore{failed: true}
+	h := newHeartbeatEmitter(core, nil, nil)
+	p := probe{name: "core", url: srv.URL}
+
+	h.probeAndEmit(testContext(), p)
+	h.probeAndEmit(testContext(), p)
+
+	if got := core.callCount(); got != 2 {
+		t.Errorf("ingest calls: got %d, want 2 — a failed write must not be recorded as written", got)
 	}
 }
