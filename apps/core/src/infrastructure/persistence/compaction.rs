@@ -31,6 +31,8 @@ const SWEEP_STATE_FILE: &str = "_compaction_state.json";
 #[derive(Serialize, Deserialize)]
 struct SweepState {
     last_compaction: DateTime<Utc>,
+    #[serde(default)]
+    paused: bool,
 }
 
 /// Manages Parquet file compaction for optimal storage and query performance.
@@ -62,6 +64,13 @@ pub struct CompactionManager {
     /// there is a backlog — and the worst offender is not usually the one
     /// that sorts first. Each sweep resumes after this one.
     sweep_cursor: Arc<RwLock<Option<String>>>,
+
+    /// Whether the last sweep stopped with tenants still unvisited.
+    ///
+    /// A paused sweep has a backlog waiting on it, so the next one is
+    /// scheduled at the settle delay rather than a full interval. Draining a
+    /// backlog one pass per interval is how fragmentation outruns compaction.
+    last_sweep_paused: Arc<RwLock<bool>>,
 }
 
 /// Filename prefix that marks a file as already-compacted output.
@@ -388,14 +397,15 @@ impl CompactionManager {
             storage_dir.display()
         );
 
-        let last_compaction = Self::load_sweep_state(&storage_dir);
+        let state = Self::load_sweep_state(&storage_dir);
 
         Self {
             storage_dir,
             config,
             stats: Arc::new(RwLock::new(CompactionStats::default())),
-            last_compaction: Arc::new(RwLock::new(last_compaction)),
+            last_compaction: Arc::new(RwLock::new(state.as_ref().map(|s| s.last_compaction))),
             sweep_cursor: Arc::new(RwLock::new(None)),
+            last_sweep_paused: Arc::new(RwLock::new(state.as_ref().is_some_and(|s| s.paused))),
         }
     }
 
@@ -403,10 +413,10 @@ impl CompactionManager {
         storage_dir.join(SWEEP_STATE_FILE)
     }
 
-    fn load_sweep_state(storage_dir: &Path) -> Option<DateTime<Utc>> {
+    fn load_sweep_state(storage_dir: &Path) -> Option<SweepState> {
         let raw = fs::read_to_string(Self::sweep_state_path(storage_dir)).ok()?;
         match serde_json::from_str::<SweepState>(&raw) {
-            Ok(state) => Some(state.last_compaction),
+            Ok(state) => Some(state),
             Err(e) => {
                 // Treating this as "never swept" schedules one promptly, which
                 // is the safe direction: the cost is a redundant pass.
@@ -421,6 +431,11 @@ impl CompactionManager {
         *self.last_compaction.read()
     }
 
+    /// Whether the last sweep left tenants unvisited, across restarts.
+    pub fn last_sweep_paused(&self) -> bool {
+        *self.last_sweep_paused.read()
+    }
+
     /// How long to wait before the next sweep.
     ///
     /// An overdue or never-run sweep is scheduled after `settle` rather than
@@ -428,6 +443,9 @@ impl CompactionManager {
     /// interval still compacts. `settle` keeps a boot-time sweep off WAL
     /// recovery's disk.
     pub fn delay_until_next_sweep(&self, settle: Duration) -> Duration {
+        if *self.last_sweep_paused.read() {
+            return settle;
+        }
         let interval =
             Duration::from_secs(self.config.compaction_interval_seconds.clamp(60, 86_400));
         match self.last_compaction() {
@@ -443,11 +461,13 @@ impl CompactionManager {
     ///
     /// A failed write must not fail the sweep: the pass did happen, and the
     /// next boot re-running one costs a redundant pass, not correctness.
-    fn record_sweep(&self, at: DateTime<Utc>) {
+    fn record_sweep(&self, at: DateTime<Utc>, paused: bool) {
         *self.last_compaction.write() = Some(at);
+        *self.last_sweep_paused.write() = paused;
         let path = Self::sweep_state_path(&self.storage_dir);
         let written = serde_json::to_vec(&SweepState {
             last_compaction: at,
+            paused,
         })
         .map_err(|e| e.to_string())
         .and_then(|bytes| fs::write(&path, bytes).map_err(|e| e.to_string()));
@@ -604,7 +624,7 @@ impl CompactionManager {
             // Still a sweep that happened. Leaving `last_compaction` unset
             // would have `should_compact` answer yes on every tick, so an
             // empty store would be swept continuously.
-            self.record_sweep(Utc::now());
+            self.record_sweep(Utc::now(), false);
             return Ok(CompactionResult::default());
         }
 
@@ -665,7 +685,7 @@ impl CompactionManager {
             stats.last_compaction_duration_ms = aggregate.duration_ms;
             stats.space_saved_bytes += aggregate.bytes_before.saturating_sub(aggregate.bytes_after);
         }
-        self.record_sweep(Utc::now());
+        self.record_sweep(Utc::now(), unvisited > 0);
 
         tracing::info!(
             "✅ Compaction sweep complete: {} files → bounded snapshots, \
@@ -1406,6 +1426,30 @@ mod tests {
 
         *never_swept.last_compaction.write() = Some(Utc::now() - chrono::Duration::seconds(7200));
         assert_eq!(never_swept.delay_until_next_sweep(settle), settle);
+    }
+
+    #[test]
+    fn a_paused_sweep_resumes_at_the_settle_delay_even_after_a_restart() {
+        let temp_dir = TempDir::new().unwrap();
+        let settle = Duration::from_secs(120);
+        let config = CompactionConfig {
+            auto_compact: true,
+            compaction_interval_seconds: 3600,
+            ..Default::default()
+        };
+
+        let manager = CompactionManager::new(temp_dir.path(), config.clone());
+        manager.record_sweep(Utc::now(), true);
+        assert_eq!(manager.delay_until_next_sweep(settle), settle);
+
+        let restarted = CompactionManager::new(temp_dir.path(), config.clone());
+        assert!(restarted.last_sweep_paused());
+        assert_eq!(restarted.delay_until_next_sweep(settle), settle);
+
+        restarted.record_sweep(Utc::now(), false);
+        let finished = CompactionManager::new(temp_dir.path(), config);
+        assert!(!finished.last_sweep_paused());
+        assert!(finished.delay_until_next_sweep(settle) > settle);
     }
 
     #[test]

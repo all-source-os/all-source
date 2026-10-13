@@ -1261,6 +1261,7 @@ pub async fn compaction_stats(State(store): State<SharedStore>) -> Result<Json<s
         "last_compaction_at": last_compaction,
         "seconds_since_last_compaction": seconds_since_last_compaction,
         "sweep_cursor": compaction_manager.sweep_cursor(),
+        "last_sweep_paused": compaction_manager.last_sweep_paused(),
         "config": {
             "min_files_to_compact": config.min_files_to_compact,
             "target_file_size": config.target_file_size,
