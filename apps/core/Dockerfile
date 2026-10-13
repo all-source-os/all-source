@@ -118,18 +118,29 @@ RUN mkdir -p apps/core/benches apps/core/tests/stress_tests && \
 # Stage 3a: Builder Community - Community edition (Apache 2.0)
 # =============================================================================
 FROM builder-base AS builder-community
+# One binary per invocation. Three `--bin` flags in one cargo call link them
+# concurrently, and each LTO link at codegen-units=1 over datafusion/arrow
+# needs several GiB — together they exceed the remote builder and the step
+# dies on SIGKILL, which reads as `could not compile` rather than as OOM.
 RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
-        --bin allsource-core --bin allsource-migrate-storage --bin allsource-repack-archive \
-        --features community,analytics && \
+        --bin allsource-core --features community,analytics
+RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+        --bin allsource-migrate-storage --features community,analytics
+RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+        --bin allsource-repack-archive --features community,analytics && \
     strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
 # Stage 3b: Builder Enterprise - Enterprise edition (BSL 1.1)
 # =============================================================================
 FROM builder-base AS builder-enterprise
+# One binary per invocation — see the community stage for why.
 RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
-        --bin allsource-core --bin allsource-migrate-storage --bin allsource-repack-archive \
-        --features enterprise,analytics && \
+        --bin allsource-core --features enterprise,analytics
+RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+        --bin allsource-migrate-storage --features enterprise,analytics
+RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+        --bin allsource-repack-archive --features enterprise,analytics && \
     strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
