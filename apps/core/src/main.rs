@@ -179,6 +179,10 @@ async fn main() -> Result<()> {
         // the full interval on every start meant a process restarting more
         // often than the interval never reached its first tick (gh#321).
         let first_delay = manager.delay_until_next_sweep(std::time::Duration::from_secs(120));
+        // `allsource_compaction_*` were registered but never incremented outside
+        // their own unit test, so an alarm on them read zero however many sweeps
+        // had run (gh#321).
+        let sweep_metrics = store.metrics();
         tracing::info!(
             last_compaction = ?manager.last_compaction(),
             first_sweep_in_secs = first_delay.as_secs(),
@@ -203,16 +207,24 @@ async fn main() -> Result<()> {
                 .await;
                 match result {
                     Ok(None) => {}
-                    Ok(Some(Ok(r))) if r.files_compacted > 0 => tracing::info!(
-                        files_compacted = r.files_compacted,
-                        events_compacted = r.events_compacted,
-                        bytes_before = r.bytes_before,
-                        bytes_after = r.bytes_after,
-                        duration_ms = r.duration_ms,
-                        "✅ Background compaction sweep complete"
-                    ),
-                    Ok(Some(Ok(_))) => {
-                        tracing::debug!("Background compaction sweep found nothing to compact");
+                    Ok(Some(Ok(r))) => {
+                        sweep_metrics.record_compaction_sweep(
+                            r.files_compacted as u64,
+                            r.bytes_before,
+                            r.bytes_after,
+                        );
+                        if r.files_compacted > 0 {
+                            tracing::info!(
+                                files_compacted = r.files_compacted,
+                                events_compacted = r.events_compacted,
+                                bytes_before = r.bytes_before,
+                                bytes_after = r.bytes_after,
+                                duration_ms = r.duration_ms,
+                                "✅ Background compaction sweep complete"
+                            );
+                        } else {
+                            tracing::debug!("Background compaction sweep found nothing to compact");
+                        }
                     }
                     Ok(Some(Err(e))) => tracing::warn!("Background compaction failed: {e}"),
                     Err(e) => tracing::warn!("Background compaction task panicked: {e}"),

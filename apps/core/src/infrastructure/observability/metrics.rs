@@ -788,6 +788,21 @@ impl MetricsRegistry {
         &self.registry
     }
 
+    /// Record one completed compaction sweep.
+    ///
+    /// Takes scalars rather than a `CompactionResult` so observability keeps
+    /// no dependency on the persistence layer.
+    pub fn record_compaction_sweep(
+        &self,
+        files_compacted: u64,
+        bytes_before: u64,
+        bytes_after: u64,
+    ) {
+        self.compaction_files_merged.inc_by(files_compacted);
+        self.compaction_bytes_saved
+            .inc_by(bytes_before.saturating_sub(bytes_after));
+    }
+
     /// Encode metrics in Prometheus text format
     pub fn encode(&self) -> Result<String, Box<dyn std::error::Error>> {
         use prometheus::Encoder;
@@ -1046,6 +1061,43 @@ mod tests {
 
         // Bytes saved
         metrics.compaction_bytes_saved.inc_by(1024 * 1024);
+    }
+
+    #[test]
+    fn a_recorded_sweep_moves_both_compaction_counters() {
+        let metrics = MetricsRegistry::new();
+
+        metrics.record_compaction_sweep(92, 18_517_874, 18_222_899);
+
+        assert_eq!(metrics.compaction_files_merged.get(), 92);
+        assert_eq!(metrics.compaction_bytes_saved.get(), 294_975);
+    }
+
+    #[test]
+    fn a_sweep_that_grew_the_archive_saves_no_bytes_rather_than_underflowing() {
+        let metrics = MetricsRegistry::new();
+
+        metrics.record_compaction_sweep(3, 1_000, 1_500);
+
+        assert_eq!(metrics.compaction_files_merged.get(), 3);
+        assert_eq!(metrics.compaction_bytes_saved.get(), 0);
+    }
+
+    #[test]
+    fn compaction_counters_are_exported_under_their_documented_names() {
+        let metrics = MetricsRegistry::new();
+
+        metrics.record_compaction_sweep(7, 500, 100);
+        let exported = metrics.encode().expect("encode metrics");
+
+        assert!(
+            exported.contains("allsource_compaction_files_merged 7"),
+            "files_merged missing from /metrics output:\n{exported}"
+        );
+        assert!(
+            exported.contains("allsource_compaction_bytes_saved 400"),
+            "bytes_saved missing from /metrics output:\n{exported}"
+        );
     }
 
     #[test]
