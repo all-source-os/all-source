@@ -97,6 +97,20 @@ export function constructMetadata({
   };
 }
 
+/**
+ * Clamps a meta description to `limit` characters on a word boundary.
+ *
+ * 160 is where Google truncates a desktop snippet. The text stays indexed
+ * either way, so this protects the snippet, not the ranking.
+ */
+export function clampDescription(text: string, limit = 160): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= limit) return collapsed;
+  const cut = collapsed.slice(0, limit - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:—-]+$/, "")}…`;
+}
+
 export function formatDate(date: string) {
   const currentDate = Date.now();
   const normalizedDate = date.includes("T") ? date : `${date}T00:00:00`;

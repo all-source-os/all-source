@@ -1,0 +1,52 @@
+[package]
+name = "seo-evidence"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.92"
+version = "0.1.0"
+description = "Collects SEO and AI-search evidence from credentialed sources into a state-tagged ledger"
+
+# Standalone workspace with its own Cargo.lock, excluded from the root
+# workspace. This tool only ever talks to third-party measurement APIs over
+# HTTPS; keeping it out of the root workspace guarantees a plain `cargo build`
+# at the repo root never compiles it, and that it can never grow a dependency
+# on apps/core.
+[workspace]
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.6", features = ["derive"] }
+# RS256 only: the Google service-account flow signs its own assertion. No
+# default features, so none of the EC/EdDSA code is compiled.
+jsonwebtoken = { version = "9.3", default-features = false, features = ["use_pem"] }
+# rustls only: this tool must not need a system OpenSSL to reach an HTTPS API.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.52", features = ["macros", "process", "rt-multi-thread", "time"] }
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+doc_markdown = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+too_many_lines = "allow"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true

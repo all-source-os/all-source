@@ -7,7 +7,7 @@ import CtaSection from "@/components/sections/cta";
 import { BLOG_CATEGORIES, getPost } from "@/lib/blog";
 import { siteConfig } from "@/lib/config";
 import { blogPostingSchema, breadcrumbSchema } from "@/lib/structured-data";
-import { constructMetadata, formatDate } from "@/lib/utils";
+import { clampDescription, constructMetadata, formatDate } from "@/lib/utils";
 
 function categoryLabel(category?: string) {
   return BLOG_CATEGORIES.find((c) => c.value === category)?.label || category;
@@ -28,7 +28,10 @@ export async function generateMetadata({
 
   return constructMetadata({
     title,
-    description: summary,
+    // Clamped for the snippet only. blogPostingSchema below keeps the full
+    // summary, which has no length limit and reads better as an extractable
+    // passage for an answer engine.
+    description: clampDescription(summary),
     image: imageUrl,
     imageAlt: title,
     canonical: `/blog/${post.slug}`,

@@ -103,6 +103,45 @@ export function breadcrumbSchema(items: BreadcrumbItem[]) {
   };
 }
 
+export type CollectionItem = { name: string; description: string; url: string };
+
+/**
+ * CollectionPage builder for hub pages that list other pages.
+ *
+ * A hub inherits only the site-wide Organization/WebSite blocks from the root
+ * layout, so without this it emits no schema describing itself and an answer
+ * engine has nothing to tell it apart from the homepage.
+ */
+export function collectionPageSchema({
+  name,
+  description,
+  path,
+  items,
+}: {
+  name: string;
+  description: string;
+  path: string;
+  items: readonly CollectionItem[];
+}) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": `${siteConfig.url}${path}#collection`,
+    name,
+    description,
+    url: `${siteConfig.url}${path}`,
+    inLanguage: "en",
+    isPartOf: { "@id": WEBSITE_ID },
+    publisher: { "@id": ORG_ID },
+    hasPart: items.map((item) => ({
+      "@type": "WebPage",
+      name: item.name,
+      description: item.description,
+      url: item.url.startsWith("http") ? item.url : `${siteConfig.url}${item.url}`,
+    })),
+  };
+}
+
 export type FaqItem = { question: string; answer: string };
 
 /**

@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { siteConfig } from "@/lib/config";
+import { breadcrumbSchema, collectionPageSchema } from "@/lib/structured-data";
 import { constructMetadata } from "@/lib/utils";
 
+const DOCS_TITLE = `${siteConfig.name} documentation — event store, MCP and Prime agent memory`;
+const DOCS_DESCRIPTION = `Guides and API reference for ${siteConfig.name} event storage, stream processing, MCP access, and Prime agent memory.`;
+
 export const metadata = constructMetadata({
-  title: "Documentation",
-  description: `Documentation for ${siteConfig.name} event storage, stream processing, MCP access, and Prime agent memory.`,
+  title: DOCS_TITLE,
+  description: DOCS_DESCRIPTION,
   canonical: "/docs",
 });
 
@@ -72,6 +76,36 @@ const cards = [
 export default function DocsPage() {
   return (
     <div className="mx-auto w-full max-w-screen-md px-4 lg:px-8 py-24">
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD structured data requires dangerouslySetInnerHTML
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            collectionPageSchema({
+              name: DOCS_TITLE,
+              description: DOCS_DESCRIPTION,
+              path: "/docs",
+              items: cards.map((card) => ({
+                name: card.title,
+                description: card.description,
+                url: card.href,
+              })),
+            })
+          ),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: JSON-LD structured data requires dangerouslySetInnerHTML
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            breadcrumbSchema([
+              { name: "Home", path: "/" },
+              { name: "Documentation", path: "/docs" },
+            ])
+          ),
+        }}
+      />
       <h1 className="text-3xl font-bold text-foreground sm:text-4xl mb-2">
         AllSource documentation
       </h1>

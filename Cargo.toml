@@ -32,6 +32,11 @@ exclude = [
     # Cargo.lock, zero deps) so a plain `cargo build` at the root never picks up
     # a tool that only ever runs against apps/web/.next.
     "tooling/route-weight",
+    # SEO and AI-search evidence collector. Own workspace + Cargo.lock: it only
+    # ever talks to third-party measurement APIs over HTTPS, so it must never
+    # pull apps/core into a tooling build — see
+    # docs/runbooks/SEO_EVIDENCE_SETUP.md.
+    "tooling/seo-evidence",
 ]
 
 [workspace.dependencies]

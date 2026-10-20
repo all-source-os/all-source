@@ -82,6 +82,7 @@ For understanding the system architecture and design decisions.
 | [Architecture Optimization](./current/ARCHITECTURE_OPTIMIZATION.md) | System-level optimizations | ✅ |
 | [OCC version index](./research/2026-10-04-occ-version-index.md) | Why entity versions must be read, never counted; the eviction and memory defects that follow | ✅ |
 | [Strict hydration and version-index reuse](./research/2026-10-08-strict-hydration-version-index.md) | Reuse complete archive validation before conditional writes; failure and eviction checks | ✅ |
+| [SEO evidence baseline](./reports/2026-10-20-seo-evidence-baseline.md) | Pages score 100/100 and take 2 organic clicks a month: DA 2, 3 referring domains, 12 ranked keywords | ✅ |
 
 ---
 
@@ -129,6 +130,7 @@ For DevOps and platform engineers.
 | [Bounded archive repack](./runbooks/BOUNDED_ARCHIVE_REPACK.md) | Finalized output bounds, preserved originals, crash recovery and rollback commands | ✅ |
 | [Revoking legacy Core keys](./runbooks/REVOKE_LEGACY_CORE_KEYS.md) | Classifying, rotating and purging old API keys | ✅ |
 | [Prime multi-tenant ingest](./runbooks/PRIME_MULTI_TENANT_INGEST.md) | One writer, many readers; spotting an accidental second writer | ✅ |
+| [SEO evidence setup](./runbooks/SEO_EVIDENCE_SETUP.md) | Every measurement source behind `tooling/seo-evidence`, and the exact condition that unblocks each | ⚠️ |
 | [Docker Deployment](./deployment/DOCKER.md) | Container images and configuration | ✅ |
 | [Quality Gates](./current/QUALITY_GATES.md) | CI/CD enforcement standards | ✅ |
 | [Performance Guide](./current/PERFORMANCE.md) | Optimization and tuning | ✅ |
