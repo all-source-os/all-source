@@ -1,0 +1,94 @@
+name: SEO Evidence
+
+# Collects the measurements a static HTML audit cannot reach and compares each
+# run against the committed baseline. Versioned here rather than run by hand so
+# the series is comparable and a source that stops answering shows up as a
+# failure instead of a thinner report.
+#
+# docs/runbooks/SEO_EVIDENCE_SETUP.md carries the per-source setup and the exact
+# condition that unblocks each one.
+
+on:
+  schedule:
+    # Weekly. Search Console has a ~2-day reporting lag and the collector ends
+    # its window 3 days back, so a daily run would mostly re-read the same rows.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      window_days:
+        description: "Lookback for the time-series sources"
+        required: false
+        default: "28"
+
+concurrency:
+  group: seo-evidence
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Collect the evidence ledger
+    runs-on: ubuntu-latest
+    # Every source is network-bound with a 60s per-request client timeout.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Report which sources are configured
+        run: |
+          cargo run --quiet --manifest-path tooling/seo-evidence/Cargo.toml -- \
+            doctor --format markdown >> "$GITHUB_STEP_SUMMARY"
+
+      # Chrome is the only source needing a binary rather than a credential.
+      # Installing it keeps the rendered-vs-static comparison running in CI,
+      # which is what licenses the cheap static audits elsewhere.
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+
+      - name: Collect
+        id: collect
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+          SEO_SITE_URL: https://www.all-source.xyz
+          GSC_SERVICE_ACCOUNT_JSON: ${{ secrets.GSC_SERVICE_ACCOUNT_JSON }}
+          GA4_SERVICE_ACCOUNT_JSON: ${{ secrets.GA4_SERVICE_ACCOUNT_JSON }}
+          GA4_PROPERTY_ID: ${{ secrets.GA4_PROPERTY_ID }}
+          PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+          CRUX_API_KEY: ${{ secrets.CRUX_API_KEY }}
+          BING_WEBMASTER_API_KEY: ${{ secrets.BING_WEBMASTER_API_KEY }}
+        run: |
+          cargo run --quiet --manifest-path tooling/seo-evidence/Cargo.toml -- \
+            collect \
+            --window-days "${{ github.event.inputs.window_days || '28' }}" \
+            --format markdown \
+            --out ledger.json >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
+
+      - name: Upload the ledger
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: seo-evidence-ledger
+          path: ledger.json
+          if-no-files-found: error
+
+      - name: Compare against the committed baseline
+        id: drift
+        run: |
+          cargo run --quiet --manifest-path tooling/seo-evidence/Cargo.toml -- \
+            drift \
+            --before docs/reports/baselines/seo-evidence-2026-10-20.json \
+            --after ledger.json >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
+
+      # A source that was configured and then refused is a broken pipeline; a
+      # source nobody has set up yet is a chore. `collect` exits 2 only for the
+      # first, and `drift` exits 2 only when an observation was LOST, so neither
+      # turns red merely because a credential has not been created.
+      - name: Fail when a source stopped answering
+        if: steps.collect.outcome == 'failure' || steps.drift.outcome == 'failure'
+        run: exit 1

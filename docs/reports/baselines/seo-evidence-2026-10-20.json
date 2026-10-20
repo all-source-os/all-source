@@ -1,0 +1,337 @@
+{
+  "property": "https://www.all-source.xyz",
+  "generated_at": "2026-10-20T19:02:47.860997Z",
+  "schema_version": 1,
+  "coverage": {
+    "observed": 8,
+    "setup_required": 14,
+    "failed": 0,
+    "total": 22
+  },
+  "entries": [
+    {
+      "source": "gsc.queries",
+      "measures": "queries this property is served for: clicks, impressions, CTR, position",
+      "state": "setup_required",
+      "missing": [
+        "GSC_SERVICE_ACCOUNT_JSON"
+      ],
+      "unblock": "a service-account key exists AND that account's email is added as a user on the Search Console property",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "gsc.pages",
+      "measures": "per-page clicks and impressions — the indexation signal",
+      "state": "setup_required",
+      "missing": [
+        "GSC_SERVICE_ACCOUNT_JSON"
+      ],
+      "unblock": "a service-account key exists AND that account's email is added as a user on the Search Console property",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "ga4.organic_landing_pages",
+      "measures": "sessions, engagement and conversions by landing page for organic search",
+      "state": "setup_required",
+      "missing": [
+        "GA4_SERVICE_ACCOUNT_JSON",
+        "GA4_PROPERTY_ID"
+      ],
+      "unblock": "a service-account key exists AND that account's email has Viewer on the GA4 property AND GA4_PROPERTY_ID is the numeric property id",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/pricing",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/docs",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/prime",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/what-is-an-event-store",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/platform/event-sourcing",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/install/cursor",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "psi.https://www.all-source.xyz/blog/why-your-agents-memory-returned-nothing",
+      "measures": "lab Lighthouse scores and, where CrUX has coverage, field Core Web Vitals",
+      "state": "setup_required",
+      "missing": [
+        "PAGESPEED_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the PageSpeed Insights API enabled (the anonymous quota is 0)",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "crux.origin",
+      "measures": "origin-level field Core Web Vitals: LCP, INP, CLS, TTFB",
+      "state": "setup_required",
+      "missing": [
+        "CRUX_API_KEY"
+      ],
+      "unblock": "a Google Cloud API key with the Chrome UX Report API enabled",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "bing.query_stats",
+      "measures": "queries Bing serves this site for: impressions, clicks, average position",
+      "state": "setup_required",
+      "missing": [
+        "BING_WEBMASTER_API_KEY"
+      ],
+      "unblock": "the site is verified in Bing Webmaster Tools AND an API key is generated under Settings -> API access",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "bing.rank_and_traffic",
+      "measures": "Bing impressions and clicks over time — the indexation trend",
+      "state": "setup_required",
+      "missing": [
+        "BING_WEBMASTER_API_KEY"
+      ],
+      "unblock": "the site is verified in Bing Webmaster Tools AND an API key is generated under Settings -> API access",
+      "runbook": "docs/runbooks/SEO_EVIDENCE_SETUP.md"
+    },
+    {
+      "source": "render.https://www.all-source.xyz/",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:16.436934Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz",
+        "dom_bytes": 234165,
+        "robots_meta": null,
+        "schema_types": [
+          "Answer",
+          "ContactPoint",
+          "FAQPage",
+          "ImageObject",
+          "Organization",
+          "Person",
+          "Question",
+          "SoftwareApplication",
+          "WebSite"
+        ],
+        "title": "Event Store Database for Event Sourcing | AllSource",
+        "url": "https://www.all-source.xyz/"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/pricing",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:25.151140Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/pricing",
+        "dom_bytes": 157049,
+        "robots_meta": null,
+        "schema_types": [
+          "Answer",
+          "ContactPoint",
+          "FAQPage",
+          "ImageObject",
+          "Offer",
+          "Organization",
+          "Person",
+          "Question",
+          "SoftwareApplication",
+          "UnitPriceSpecification",
+          "WebSite"
+        ],
+        "title": "Pricing — pay for the events your agents write",
+        "url": "https://www.all-source.xyz/pricing"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/docs",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:28.964711Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/docs",
+        "dom_bytes": 119275,
+        "robots_meta": null,
+        "schema_types": [
+          "ContactPoint",
+          "ImageObject",
+          "Organization",
+          "Person",
+          "SoftwareApplication",
+          "WebSite"
+        ],
+        "title": "Documentation",
+        "url": "https://www.all-source.xyz/docs"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/prime",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:32.672856Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/prime",
+        "dom_bytes": 150230,
+        "robots_meta": null,
+        "schema_types": [
+          "ContactPoint",
+          "ImageObject",
+          "Organization",
+          "Person",
+          "SoftwareApplication",
+          "WebSite"
+        ],
+        "title": "AllSource Prime: Agent Memory for MCP Clients",
+        "url": "https://www.all-source.xyz/prime"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/what-is-an-event-store",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:36.472111Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/what-is-an-event-store",
+        "dom_bytes": 138149,
+        "robots_meta": null,
+        "schema_types": [
+          "BreadcrumbList",
+          "ContactPoint",
+          "ImageObject",
+          "ListItem",
+          "Organization",
+          "Person",
+          "SoftwareApplication",
+          "TechArticle",
+          "WebSite"
+        ],
+        "title": "What Is an Event Store Database? Uses and Trade-offs",
+        "url": "https://www.all-source.xyz/what-is-an-event-store"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/platform/event-sourcing",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:40.704800Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/platform/event-sourcing",
+        "dom_bytes": 124763,
+        "robots_meta": null,
+        "schema_types": [
+          "ContactPoint",
+          "ImageObject",
+          "Organization",
+          "Person",
+          "SoftwareApplication",
+          "WebSite"
+        ],
+        "title": "Event Store Database for Event Sourcing",
+        "url": "https://www.all-source.xyz/platform/event-sourcing"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/install/cursor",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:44.873045Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/install/cursor",
+        "dom_bytes": 132058,
+        "robots_meta": null,
+        "schema_types": [
+          "ContactPoint",
+          "ImageObject",
+          "Organization",
+          "Person",
+          "SoftwareApplication",
+          "WebSite"
+        ],
+        "title": "Cursor + AllSource Prime",
+        "url": "https://www.all-source.xyz/install/cursor"
+      }
+    },
+    {
+      "source": "render.https://www.all-source.xyz/blog/why-your-agents-memory-returned-nothing",
+      "measures": "rendered DOM: schema types, title and description after JavaScript runs",
+      "state": "observed",
+      "captured_at": "2026-10-20T19:02:47.860974Z",
+      "value": {
+        "canonical": "https://www.all-source.xyz/blog/why-your-agents-memory-returned-nothing",
+        "dom_bytes": 165691,
+        "robots_meta": null,
+        "schema_types": [
+          "BlogPosting",
+          "BreadcrumbList",
+          "ContactPoint",
+          "ImageObject",
+          "ListItem",
+          "Organization",
+          "Person",
+          "SoftwareApplication",
+          "WebPage",
+          "WebSite"
+        ],
+        "title": "Why Your Agent's Memory Returned Nothing — and How We Fixed Hybrid Recall",
+        "url": "https://www.all-source.xyz/blog/why-your-agents-memory-returned-nothing"
+      }
+    }
+  ]
+}

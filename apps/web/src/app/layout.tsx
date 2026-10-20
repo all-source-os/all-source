@@ -37,6 +37,14 @@ export const metadata: Metadata = constructMetadata({
   canonical: "/",
   verification: {
     google: "BbHb4BnJ4QZYJmCEPpGhADhmJdSq6eGYRtAteMyjYwU",
+    // Bing's index is what ChatGPT search and Copilot read, so AI citability
+    // depends on it separately from Google. Build-time env var: an absent one
+    // emits no tag, which is the correct state before the site is verified.
+    ...(process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION && {
+      other: {
+        "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION,
+      },
+    }),
   },
 });
 

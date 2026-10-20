@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { InstallPage } from "@/components/install/install-page";
 import { siteConfig } from "@/lib/config";
 import { getIntegration, integrations } from "@/lib/integrations";
-import { constructMetadata } from "@/lib/utils";
+import { clampDescription, constructMetadata } from "@/lib/utils";
 
 // One route, every per-tool install page. Adding a tool to lib/integrations.ts
 // produces a new statically-generated page here — no new file required.
@@ -27,7 +27,9 @@ export async function generateMetadata({
   }
   return constructMetadata({
     title: `${integration.name} + ${siteConfig.name} Prime`,
-    description: `Wire ${siteConfig.name} Prime into ${integration.name} — mint a hosted API key, paste the MCP config, or run locally over stdio. ${integration.blurb}`,
+    description: clampDescription(
+      `${integration.blurb} Mint a hosted ${siteConfig.name} key or run Prime locally over stdio.`
+    ),
     canonical: `/install/${integration.slug}`,
   });
 }
