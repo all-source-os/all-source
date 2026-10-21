@@ -97,6 +97,7 @@ type ControlPlane struct {
 	// service JWT (backends trust CP, not the caller). Tenant is injected from
 	// the authenticated caller's identity before forwarding.
 	delegation *delegationClient
+	queryMeter *queryUsageMeter
 	turnstile  *TurnstileVerifier
 
 	// extractionGate hard-gates the hosted Hound doc-extraction proxy
@@ -364,6 +365,7 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 		extractionGate:  x402.NewCoreQuotaChecker(coreClient),
 	}
 
+	cp.queryMeter = newQueryUsageMeter(cp.persistQueryUsage)
 	cp.setupMiddleware()
 	cp.setupRoutes()
 
@@ -1118,6 +1120,11 @@ func (cp *ControlPlane) Shutdown() {
 	// Stop scheduler first
 	if cp.container != nil && cp.container.Scheduler != nil {
 		cp.container.Scheduler.Stop()
+	}
+	if cp.queryMeter != nil {
+		if err := cp.queryMeter.close(); err != nil {
+			log.Printf("Query meter shutdown: %v", err)
+		}
 	}
 	if cp.auditLogger != nil {
 		if err := cp.auditLogger.Close(); err != nil {

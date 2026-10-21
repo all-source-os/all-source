@@ -10,9 +10,11 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 
 	"github.com/allsource/control-plane/internal/domain/entities"
 )
@@ -36,6 +38,11 @@ type fakeBackend struct {
 func newFakeBackend(respBy func(w http.ResponseWriter, r *http.Request)) (*fakeBackend, *httptest.Server) {
 	fb := &fakeBackend{respBy: respBy}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/usage/increment") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"type":"queries","used":1}`)) //nolint:errcheck // test response
+			return
+		}
 		body, _ := io.ReadAll(r.Body) //nolint:errcheck // test reader
 		fb.method = r.Method
 		fb.path = r.URL.Path
@@ -64,7 +71,14 @@ func newTestCP(t *testing.T, coreURL, qsURL string) *ControlPlane {
 	if err != nil {
 		t.Fatalf("newDelegationClient: %v", err)
 	}
-	return &ControlPlane{delegation: d}
+	cp := &ControlPlane{delegation: d, client: resty.New().SetTimeout(time.Second).SetBaseURL(coreURL).SetAuthToken("test-admin-service-token")}
+	cp.queryMeter = newQueryUsageMeter(cp.persistQueryUsage)
+	t.Cleanup(func() {
+		if err := cp.queryMeter.close(); err != nil {
+			t.Logf("query meter cleanup: %v", err)
+		}
+	})
+	return cp
 }
 
 func callHandler(h gin.HandlerFunc, req *http.Request, tenantID string) *httptest.ResponseRecorder {
@@ -177,6 +191,7 @@ func TestProxyEventsQuery_InjectsTenantAsQueryParam(t *testing.T) {
 	// Spoofed tenant must be overwritten; since= must be forwarded unchanged.
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/events/query?tenant_id=spoof&since=2026-04-17T00:00:00Z", http.NoBody)
 	w := callHandler(cp.ProxyEventsQuery, req, "tenant-real")
+	cp.queryMeter.flush(t.Context())
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (body=%s)", w.Code, w.Body.String())
