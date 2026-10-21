@@ -60,7 +60,7 @@ func queryNamespace(value, separator string) string {
 }
 
 func (s *queryEgressSampler) sample(q url.Values, bytes int64, now time.Time) string {
-	if bytes < 256*1024 {
+	if bytes < 16*1024 {
 		return ""
 	}
 	next := s.next.Load()
@@ -74,6 +74,7 @@ func (s *queryEgressSampler) sample(q url.Values, bytes int64, now time.Time) st
 	}
 	tenantHash := sha256.Sum256([]byte(q.Get("tenant_id")))
 	entityHash := sha256.Sum256([]byte(q.Get("entity_id")))
-	return fmt.Sprintf("event_query_large_response bytes=%d selector=%s entity_namespace=%q event_namespace=%q tenant_fingerprint=%x entity_fingerprint=%x time_bounded=%s payload_filtered=%s",
-		bytes, selector, queryNamespace(q.Get("entity_id"), ":"), queryNamespace(eventType, "."), tenantHash[:6], entityHash[:6], bounded, filtered)
+	eventHash := sha256.Sum256([]byte(eventType))
+	return fmt.Sprintf("event_query_large_response bytes=%d selector=%s entity_namespace=%q event_namespace=%q tenant_fingerprint=%x entity_fingerprint=%x event_fingerprint=%x time_bounded=%s payload_filtered=%s",
+		bytes, selector, queryNamespace(q.Get("entity_id"), ":"), queryNamespace(eventType, "."), tenantHash[:6], entityHash[:6], eventHash[:6], bounded, filtered)
 }
