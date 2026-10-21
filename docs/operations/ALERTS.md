@@ -5,6 +5,14 @@ a rule clicked into a vendor dashboard, because that kind of rule cannot be
 reviewed in a pull request, cannot be diffed when it changes, and does not
 survive an account or plan change.
 
+## Control-plane bandwidth and private email
+
+The [bandwidth alert runbook](../runbooks/BANDWIDTH_ALERTS.md) covers the production
+Prometheus/Alertmanager worker, byte thresholds, read-only credentials, and
+verified firing/recovery delivery. Its source is `tooling/monitor-stack`; its
+canonical rules and rule tests live in `deploy/prometheus/`. Alerts go to a
+privately configured email recipient. The financial audit is excluded.
+
 ## Disk usage on Fly volumes
 
 | | |
