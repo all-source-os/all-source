@@ -71,3 +71,21 @@ func TestLargeQuerySampleConcurrentBudget(t *testing.T) {
 		t.Fatalf("concurrent samples=%d", count.Load())
 	}
 }
+
+func TestQuerySampleIncludesSmallerRepeatedPagesWithoutSelectorValues(t *testing.T) {
+	var sampler queryEgressSampler
+	q := url.Values{"event_type_prefix": {"team_queue.work_item."}, "payload_filter": {"private-filter"}}
+	now := time.Unix(100, 0)
+	if got := sampler.sample(q, 16*1024-1, now); got != "" {
+		t.Fatalf("below-floor response sampled: %s", got)
+	}
+	got := sampler.sample(q, 16*1024, now)
+	if !strings.Contains(got, "event_fingerprint=b3c08b101aed") {
+		t.Fatalf("missing selector fingerprint: %s", got)
+	}
+	for _, secret := range []string{"work_item", "private-filter"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("selector value leaked: %s", got)
+		}
+	}
+}
