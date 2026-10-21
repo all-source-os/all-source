@@ -11,7 +11,7 @@ export default function PrivacyPolicy() {
   return (
     <div className="mx-auto w-full max-w-screen-md px-4 lg:px-8 py-24">
       <h1 className="text-3xl font-bold text-foreground sm:text-4xl mb-2">Privacy Policy</h1>
-      <p className="text-sm text-muted-foreground mb-10">Last updated: August 27, 2026</p>
+      <p className="text-sm text-muted-foreground mb-10">Last updated: October 21, 2026</p>
 
       <div className="prose prose-neutral dark:prose-invert max-w-none space-y-8">
         <section>
@@ -100,6 +100,32 @@ export default function PrivacyPolicy() {
             retention deadline 90 days after the decision. Accepted applications receive a retention
             deadline 90 days after the 60-day program. You can request earlier removal using the
             contact address below.
+          </p>
+
+          <h3
+            id="changelog-emails"
+            className="scroll-mt-24 text-lg font-medium text-foreground mt-4 mb-2"
+          >
+            2.7 Changelog and Benchmark Emails
+          </h3>
+          <p className="text-muted-foreground leading-relaxed">
+            If you sign up for the changelog and benchmark notes, we collect your email address, the
+            page you signed up from, campaign attribution parameters, consent version, and signup
+            time. We use your address only to send release notes and benchmark write-ups. Signing up
+            again with the same address does not create a second record.
+          </p>
+          <p className="text-muted-foreground leading-relaxed mt-2">
+            Signups are stored in a private administrative event stream, separate from customer and
+            public event streams. Your address is not put in analytics properties, campaign URLs, or
+            GitHub issues, and is not sold or shared with third parties.
+          </p>
+          <p className="text-muted-foreground leading-relaxed mt-2">
+            Every changelog email carries a one-click unsubscribe link that works without signing
+            in; you can also write to the contact address below. Once you unsubscribe we stop
+            sending. The stream is append-only, so unsubscribing adds a record rather than removing
+            your signup: your address, consent and unsubscribe stay in it as the record of what you
+            agreed to and when. To request erasure of that record, write to the contact address
+            below; we answer erasure requests within one month.
           </p>
         </section>
 

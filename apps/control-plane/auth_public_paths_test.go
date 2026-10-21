@@ -39,6 +39,10 @@ func TestAuthMiddleware_PublicPathAllowlist(t *testing.T) {
 		{"onboard prefix is public", http.MethodPost, "/api/v1/onboard/start", true},
 		{"design partner application is public", http.MethodPost, "/api/v1/design-partners/applications", true},
 		{"design partner list is not public", http.MethodGet, "/api/v1/design-partners/applications", false},
+		{"changelog signup is public", http.MethodPost, "/api/v1/changelog/subscriptions", true},
+		{"changelog signup read is not public", http.MethodGet, "/api/v1/changelog/subscriptions", false},
+		{"changelog token unsubscribe is public", http.MethodPost, "/api/v1/changelog/unsubscribe", true},
+		{"changelog unsubscribe read is not public", http.MethodGet, "/api/v1/changelog/unsubscribe", false},
 	}
 
 	for _, tc := range cases {

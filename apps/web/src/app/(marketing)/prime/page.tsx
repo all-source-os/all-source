@@ -2,6 +2,7 @@ import { Badge, buttonVariants, Card, CardContent, cn } from "@allsource/ui";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { FaGithub } from "react-icons/fa";
+import { ChangelogSignup } from "@/components/changelog-signup";
 import { FadeIn } from "@/components/ui/fade-in";
 
 const PRIME_VERSION = "0.22.0";
@@ -361,6 +362,8 @@ export default function PrimeLandingPage() {
           </CardContent>
         </Card>
       </FadeIn>
+
+      <ChangelogSignup placement="prime" className="mt-8 rounded-xl" />
     </div>
   );
 }
