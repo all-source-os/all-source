@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -263,6 +264,12 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 	written, copyErr := io.Copy(c.Writer, resp.Body)
 	if beforeSuccess != nil {
 		queryResponseBytes.Add(float64(written))
+		selector, bounded, filtered := queryShape(query)
+		queryShapeBytes.WithLabelValues(selector, bounded, filtered).Add(float64(written))
+		queryShapeRequests.WithLabelValues(selector, bounded, filtered).Inc()
+		if sample := queryEgressSamples.sample(query, written, time.Now()); sample != "" {
+			log.Print(sample)
+		}
 	}
 	if copyErr != nil {
 		log.Printf("delegation response copy failed: %v", copyErr)
