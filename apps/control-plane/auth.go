@@ -384,7 +384,8 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		// this must not become a HasPrefix("/api/v1/agents/").
 		isPublicTrialMint := path == "/api/v1/agents/anonymous-trial"
 		isPublicDesignPartnerApplication := path == "/api/v1/design-partners/applications" && c.Request.Method == http.MethodPost
-		if path == pathHealth || path == pathLivez || path == pathMetrics || path == "/docs" || path == "/openapi" || path == "/api/v1/cluster/health" || isPublicStatusPath || isPublicCatalog || isPublicTrialMint || isPublicDesignPartnerApplication || strings.HasPrefix(path, "/api/v1/webhooks/") || isPublicAuthPath || strings.HasPrefix(path, "/api/v1/onboard/") || strings.HasPrefix(path, "/api/v1/demo/") || strings.HasPrefix(path, "/api/v1/admin/") || strings.HasPrefix(path, "/x402/") {
+		isPublicChangelogSubscription := (path == "/api/v1/changelog/subscriptions" || path == "/api/v1/changelog/unsubscribe") && c.Request.Method == http.MethodPost
+		if path == pathHealth || path == pathLivez || path == pathMetrics || path == "/docs" || path == "/openapi" || path == "/api/v1/cluster/health" || isPublicStatusPath || isPublicCatalog || isPublicTrialMint || isPublicDesignPartnerApplication || isPublicChangelogSubscription || strings.HasPrefix(path, "/api/v1/webhooks/") || isPublicAuthPath || strings.HasPrefix(path, "/api/v1/onboard/") || strings.HasPrefix(path, "/api/v1/demo/") || strings.HasPrefix(path, "/api/v1/admin/") || strings.HasPrefix(path, "/x402/") {
 			c.Next()
 			return
 		}

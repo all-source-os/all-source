@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { clientIpForUpstream, readCappedText, UPSTREAM_TIMEOUT_MS } from "@/lib/upstream-request";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -7,8 +8,8 @@ function controlPlaneUrl(): string {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const body = await request.text();
-  if (new TextEncoder().encode(body).byteLength > MAX_BODY_BYTES) {
+  const body = await readCappedText(request, MAX_BODY_BYTES);
+  if (body === null) {
     return NextResponse.json(
       { error: "payload_too_large", message: "Application is too large." },
       { status: 413 }
@@ -16,10 +17,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const headers: Record<string, string> = { "content-type": "application/json" };
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    headers["x-forwarded-for"] = forwardedFor.split(",", 1)[0]?.trim() || "";
-  }
+  const visitorIp = clientIpForUpstream(request.headers);
+  if (visitorIp) headers["x-forwarded-for"] = visitorIp;
 
   try {
     const response = await fetch(`${controlPlaneUrl()}/api/v1/design-partners/applications`, {
@@ -27,6 +26,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headers,
       body,
       cache: "no-store",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const responseBody = await response.text();
     const responseHeaders: Record<string, string> = {

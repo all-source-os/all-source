@@ -112,3 +112,29 @@ func TestIPRateLimitMiddleware_Returns429(t *testing.T) {
 		t.Error("expected Retry-After header")
 	}
 }
+
+func TestIPRateLimitMiddleware_ForgedForwardedForDoesNotResetTheLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rl := NewIPRateLimiter(1, time.Hour)
+	defer rl.Stop()
+
+	router := gin.New()
+	router.Use(IPRateLimitMiddleware(rl))
+	router.POST("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	codes := make([]int, 0, 2)
+	for _, forged := range []string{"198.51.100.1", "198.51.100.2"} {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/test", http.NoBody)
+		req.Header.Set("Fly-Client-IP", "203.0.113.9")
+		req.Header.Set("X-Forwarded-For", forged+", 203.0.113.9")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		codes = append(codes, w.Code)
+	}
+	if codes[0] != http.StatusOK || codes[1] != http.StatusTooManyRequests {
+		t.Fatalf("want [200 429] keyed on Fly-Client-IP, got %v", codes)
+	}
+}

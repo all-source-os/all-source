@@ -8,12 +8,14 @@
     "source": "github",
     "subfolder": "apps/prime-mcp"
   },
-  "version": "0.23.1",
+  "websiteUrl": "https://www.all-source.xyz/prime",
+  "version": "0.26.1",
   "packages": [
     {
-      "registryType": "cargo",
-      "identifier": "allsource-prime",
-      "version": "0.23.1",
+      "registryType": "mcpb",
+      "identifier": "https://github.com/all-source-os/all-source/releases/download/v0.26.1/allsource-prime.dxt",
+      "version": "0.26.1",
+      "fileSha256": "b862a3fc7b95fcea1bb4e790b03fddf6217ff6d8fd8dddf71f0cc13694451fb1",
       "transport": {
         "type": "stdio"
       }

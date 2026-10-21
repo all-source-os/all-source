@@ -1,3 +1,4 @@
+import { ChangelogSignup } from "@/components/changelog-signup";
 import { EarlyAccessBanner } from "@/components/early-access-banner";
 import Blog from "@/components/sections/blog";
 import CTA from "@/components/sections/cta";
@@ -32,6 +33,9 @@ export default function Home() {
       <Features />
       <SocialProof />
       <Pricing />
+      <section className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+        <ChangelogSignup placement="home" />
+      </section>
       <FAQ />
       <Blog />
       <CTA />

@@ -490,6 +490,14 @@ func (cp *ControlPlane) setupRoutes() {
 	designPartners.Use(IPRateLimitMiddleware(designPartnerLimiter))
 	designPartners.POST("/applications", MaxBodySize(16*1024), cp.DesignPartnerApplyHandler)
 
+	// Changelog signups take the same spam check, body cap and per-IP limit
+	// before an address reaches the private Core stream.
+	changelogLimiter := NewIPRateLimiter(5, time.Hour)
+	changelog := cp.router.Group("/api/v1/changelog")
+	changelog.Use(IPRateLimitMiddleware(changelogLimiter))
+	changelog.POST("/subscriptions", MaxBodySize(4*1024), cp.ChangelogSubscribeHandler)
+	changelog.POST("/unsubscribe", MaxBodySize(1024), cp.ChangelogUnsubscribeWithTokenHandler)
+
 	// Agent registration (public, no auth required)
 	agents := cp.router.Group("/api/v1/agents")
 	agents.POST("/register", cp.AgentRegisterHandler)
@@ -753,6 +761,8 @@ func (cp *ControlPlane) setupRoutes() {
 	// applicant fields never enter public or tenant-facing routes.
 	admin.GET("/design-partners/applications", cp.DesignPartnerApplicationsHandler)
 	admin.PUT("/design-partners/applications/:id/status", cp.DesignPartnerStatusHandler)
+	admin.GET("/changelog/subscribers", cp.ChangelogSubscribersHandler)
+	admin.POST("/changelog/subscribers/:id/unsubscribe", cp.ChangelogUnsubscribeHandler)
 
 	// Operator-only commercial exploration; never a public/customer event stream.
 	admin.GET("/partnerships", cp.PartnershipsListHandler)

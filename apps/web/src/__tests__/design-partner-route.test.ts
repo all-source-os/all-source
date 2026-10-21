@@ -7,7 +7,8 @@ function applicationRequest(body: string): NextRequest {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-forwarded-for": "203.0.113.5, 10.0.0.2",
+      "fly-client-ip": "198.51.100.7",
+      "x-forwarded-for": "203.0.113.5, 198.51.100.7",
     },
     body,
   });
@@ -37,7 +38,7 @@ describe("POST /api/design-partners/applications", () => {
         method: "POST",
         body,
         cache: "no-store",
-        headers: expect.objectContaining({ "x-forwarded-for": "203.0.113.5" }),
+        headers: expect.objectContaining({ "x-forwarded-for": "198.51.100.7" }),
       })
     );
     expect(response.status).toBe(201);

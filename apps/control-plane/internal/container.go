@@ -166,6 +166,7 @@ type Container struct {
 	ClaimTrialAgentUC     *usecases.ClaimTrialAgentUseCase
 	AgentPaymentHistoryUC *usecases.GetAgentPaymentHistoryUseCase
 	DesignPartnerUC       *usecases.DesignPartnerUseCase
+	ChangelogUC           *usecases.ChangelogUseCase
 	PartnershipsUC        *usecases.PartnershipsUseCase
 
 	// Use Cases — Webhooks
@@ -736,6 +737,7 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 		ClaimTrialAgentUC:            claimTrialAgentUC,
 		AgentPaymentHistoryUC:        agentPaymentHistoryUC,
 		DesignPartnerUC:              designPartnerUC,
+		ChangelogUC:                  usecases.NewChangelogUseCase(cfg.CoreClient, cfg.JWTSecret),
 		PartnershipsUC:               usecases.NewPartnershipsUseCase(cfg.CoreClient),
 		AlertHandler:                 alertHandler,
 		SLOHandler:                   sloHandler,

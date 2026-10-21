@@ -141,10 +141,15 @@ func IPRateLimitMiddleware(limiter *IPRateLimiter) gin.HandlerFunc {
 	}
 }
 
-// clientIP extracts the client IP from the request. Prefers X-Forwarded-For
-// (first entry, set by Fly's proxy) over Gin's ClientIP which may not
-// handle Fly's topology correctly.
+// clientIP extracts the client IP from the request. Fly's edge proxy sets
+// Fly-Client-IP on every public request and replaces any client-supplied
+// value, whereas the first X-Forwarded-For entry is whatever the client sent.
+// X-Forwarded-For is only trusted when Fly-Client-IP is absent, which is the
+// private-network path the web app uses to forward a visitor's address.
 func clientIP(c *gin.Context) string {
+	if ip := strings.TrimSpace(c.GetHeader("Fly-Client-IP")); ip != "" {
+		return ip
+	}
 	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
 		// X-Forwarded-For can be "client, proxy1, proxy2" — take the first
 		parts := strings.SplitN(xff, ",", 2)
