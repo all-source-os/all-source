@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -211,6 +212,10 @@ func injectTenantIntoBatch(body []byte, tenantID string) ([]byte, error) {
 // does NOT forward the inbound Authorization header — the backend trusts
 // the JWT we signed, not any ask_ key the client presented.
 func (d *delegationClient) forwardRequest(c *gin.Context, method string, backend *url.URL, path string, query url.Values, body []byte, bearerToken string, extraHeaders map[string]string) {
+	d.forwardRequestChecked(c, method, backend, path, query, body, bearerToken, extraHeaders, nil)
+}
+
+func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, backend *url.URL, path string, query url.Values, body []byte, bearerToken string, extraHeaders map[string]string, beforeSuccess func() error) {
 	target := *backend
 	target.Path = strings.TrimRight(backend.Path, "/") + "/" + strings.TrimLeft(path, "/")
 	if query != nil {
@@ -242,15 +247,25 @@ func (d *delegationClient) forwardRequest(c *gin.Context, method string, backend
 	}
 	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // close-on-defer, non-actionable
 
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 && beforeSuccess != nil {
+		if err := beforeSuccess(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "query_meter_unavailable", "message": "Query usage could not be recorded. Retry when the service is available."})
+			return
+		}
+	}
+
 	// Copy status + response body. Content-Type comes from the backend so
 	// JSON responses carry through unchanged.
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		c.Writer.Header().Set("Content-Type", ct)
 	}
 	c.Writer.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(c.Writer, resp.Body); err != nil {
-		// Response headers already sent — best we can do is log.
-		_ = err
+	written, copyErr := io.Copy(c.Writer, resp.Body)
+	if beforeSuccess != nil {
+		queryResponseBytes.Add(float64(written))
+	}
+	if copyErr != nil {
+		log.Printf("delegation response copy failed: %v", copyErr)
 	}
 }
 
@@ -545,5 +560,7 @@ func (cp *ControlPlane) ProxyEventsQuery(c *gin.Context) {
 	// REGIONAL_INDEPENDENCE.md), this should switch to
 	// coreForRegion(localRegion) so reads stay in-region. For now
 	// "home region" resolves to a single Core for both directions.
-	cp.delegation.forwardRequest(c, http.MethodGet, cp.delegation.coreForTenant(tenantID), "/api/v1/events/query", q, nil, bearer, nil)
+	cp.delegation.forwardRequestChecked(c, http.MethodGet, cp.delegation.coreForTenant(tenantID), "/api/v1/events/query", q, nil, bearer, nil, func() error {
+		return cp.recordQueryUsage(c.Request.Context(), tenantID)
+	})
 }

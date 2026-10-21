@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -22,6 +23,7 @@ const workspaceTestSecret = "synthetic-workspace-core-secret-only-2026"
 
 type workspaceCore struct {
 	binary, directory, url, port, role string
+	image, container                   string
 	cmd                                *exec.Cmd
 	done                               chan error
 }
@@ -29,8 +31,9 @@ type workspaceCore struct {
 func newWorkspaceCore(t *testing.T) *workspaceCore {
 	t.Helper()
 	binary := os.Getenv("ALLSOURCE_CORE_BINARY")
-	if binary == "" {
-		t.Skip("set ALLSOURCE_CORE_BINARY for actual Core proof")
+	image := os.Getenv("ALLSOURCE_CORE_IMAGE")
+	if binary == "" && image == "" {
+		t.Skip("set ALLSOURCE_CORE_BINARY or ALLSOURCE_CORE_IMAGE for actual Core proof")
 	}
 	config := net.ListenConfig{}
 	listener, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
@@ -46,6 +49,10 @@ func newWorkspaceCore(t *testing.T) *workspaceCore {
 		t.Fatal(err)
 	}
 	core := &workspaceCore{binary: binary, directory: t.TempDir(), port: port, role: "leader", url: "http://127.0.0.1:" + port}
+	if binary == "" {
+		core.image = image
+		core.container = "allsource-test-" + port + "-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
 	if err := os.Chmod(core.directory, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +75,18 @@ func (core *workspaceCore) start(t *testing.T) {
 		"ALLSOURCE_CLUSTER_ENABLED=false", "ALLSOURCE_BOOTSTRAP_API_KEY=",
 		"ALLSOURCE_BOOTSTRAP_TENANT=", "ALLSOURCE_RESP_PORT=", "RUST_LOG=error",
 	)
+	if core.image != "" {
+		core.cmd = exec.CommandContext(t.Context(), "docker", "run", "--rm",
+			"--name", core.container, "--user", strconv.Itoa(os.Getuid())+":"+strconv.Itoa(os.Getgid()),
+			"-p", "127.0.0.1:"+core.port+":3900",
+			"--mount", "type=bind,source="+core.directory+",target=/data",
+			"-e", "ALLSOURCE_HOST=0.0.0.0", "-e", "ALLSOURCE_PORT=3900",
+			"-e", "ALLSOURCE_DATA_DIR=/data", "-e", "ALLSOURCE_SYSTEM_DATA_DIR=/data/system",
+			"-e", "ALLSOURCE_JWT_SECRET="+workspaceTestSecret,
+			"-e", "ALLSOURCE_DEV_MODE=false", "-e", "ALLSOURCE_AUTH_DISABLED=false",
+			"-e", "ALLSOURCE_ROLE="+core.role, "-e", "ALLSOURCE_REPLICATION_ENABLED=false",
+			"-e", "ALLSOURCE_CLUSTER_ENABLED=false", "-e", "RUST_LOG=error", core.image)
+	}
 	core.cmd.Stdout = io.Discard
 	core.cmd.Stderr = io.Discard
 	if err := core.cmd.Start(); err != nil {
@@ -107,6 +126,13 @@ func (core *workspaceCore) stop(t *testing.T) {
 	t.Helper()
 	if core.cmd == nil {
 		return
+	}
+	if core.container != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := exec.CommandContext(ctx, "docker", "rm", "--force", core.container).Run(); err != nil {
+			t.Error("unable to remove owned Core fixture container")
+		}
 	}
 	if err := core.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Error("unable to kill owned Core process")
