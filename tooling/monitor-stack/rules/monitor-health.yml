@@ -1,0 +1,21 @@
+groups:
+  - name: monitor-health
+    rules:
+      - alert: BandwidthSourceScrapeFailed
+        expr: up{job="fly-edge"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: allsource-bandwidth-alerts
+        annotations:
+          summary: Bandwidth source cannot be read
+          action: Check the read-only Fly credential and federation endpoint. Usage is unknown while the scrape fails.
+      - alert: BandwidthEmailDeliveryFailed
+        expr: increase(alertmanager_notifications_failed_total{integration="email"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: allsource-bandwidth-alerts
+        annotations:
+          summary: Bandwidth email delivery failed
+          action: Check SMTP authentication, sender verification, and Alertmanager retry logs. Email failures may prevent this notification from arriving.

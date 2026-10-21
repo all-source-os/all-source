@@ -1,0 +1,40 @@
+groups:
+  - name: allsource-bandwidth
+    interval: 1m
+    rules:
+      - alert: ControlPlaneDailyBandwidthWarning
+        expr: sum(increase(fly_edge_data_out{app="allsource-control-plane"}[24h])) > 10000000000
+        for: 5m
+        labels:
+          severity: warning
+          service: allsource-control-plane
+        annotations:
+          summary: Control-plane edge output exceeded 10 GB in 24 hours
+          action: Inspect sender/receiver rates and query response bytes; compare successful workflows before changing traffic limits.
+      - alert: ControlPlaneDailyBandwidthCritical
+        expr: sum(increase(fly_edge_data_out{app="allsource-control-plane"}[24h])) > 50000000000
+        for: 5m
+        labels:
+          severity: critical
+          service: allsource-control-plane
+        annotations:
+          summary: Control-plane edge output exceeded 50 GB in 24 hours
+          action: Investigate callers and redundant reads; contain confirmed abusive clients without interrupting unrelated tenants.
+      - alert: ControlPlaneSustainedBandwidthCritical
+        expr: sum(rate(fly_edge_data_out{app="allsource-control-plane"}[5m])) > 1000000
+        for: 10m
+        labels:
+          severity: critical
+          service: allsource-control-plane
+        annotations:
+          summary: Control-plane edge output stayed above 1 MB/s
+          action: Inspect event-query response bytes and caller activity; verify whether successful work justifies this transfer.
+      - alert: ControlPlaneBandwidthMetricsMissing
+        expr: absent_over_time(fly_edge_data_out{app="allsource-control-plane"}[15m])
+        for: 5m
+        labels:
+          severity: warning
+          service: allsource-control-plane
+        annotations:
+          summary: Control-plane bandwidth measurements are unavailable
+          action: Check Fly datasource authentication and metric availability; missing samples do not establish zero usage.

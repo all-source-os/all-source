@@ -1,0 +1,71 @@
+name: Bandwidth Alerts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tooling/monitor-stack/**'
+      - 'deploy/prometheus/bandwidth.rules*.yml'
+      - '.github/workflows/bandwidth-alerts.yml'
+  pull_request:
+    paths:
+      - 'tooling/monitor-stack/**'
+      - 'deploy/prometheus/bandwidth.rules*.yml'
+      - '.github/workflows/bandwidth-alerts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    name: Bandwidth Alert Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tooling/monitor-stack
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+      - uses: dtolnay/rust-toolchain@1.95.0
+        timeout-minutes: 5
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        timeout-minutes: 5
+        with:
+          workspaces: 'tooling/monitor-stack -> target'
+      - name: Check formatting
+        timeout-minutes: 5
+        run: timeout -k 15 300 cargo fmt --check
+      - name: Run tests
+        timeout-minutes: 5
+        run: timeout -k 15 300 cargo test --locked
+      - name: Run Clippy
+        timeout-minutes: 5
+        run: timeout -k 15 300 cargo clippy --locked --all-targets -- -D warnings
+      - uses: taiki-e/install-action@v2
+        timeout-minutes: 5
+        with:
+          tool: cargo-deny@0.19.2
+      - name: Check dependency policy
+        timeout-minutes: 5
+        run: timeout -k 15 300 cargo deny check
+      - name: Verify bandwidth rules
+        timeout-minutes: 5
+        working-directory: .
+        run: >-
+          timeout -k 15 300 docker run --rm --network none
+          --entrypoint /bin/promtool
+          --mount type=bind,source="$PWD/deploy/prometheus",target=/rules,readonly
+          --workdir /rules prom/prometheus:v2.51.0
+          test rules bandwidth.rules.test.yml
+      - name: Validate deployed rule files
+        timeout-minutes: 5
+        working-directory: .
+        run: >-
+          timeout -k 15 300 docker run --rm --network none
+          --entrypoint /bin/promtool
+          --mount type=bind,source="$PWD/tooling/monitor-stack/rules",target=/rules,readonly
+          prom/prometheus:v2.51.0 check rules
+          /rules/monitor-health.yml /rules/bandwidth.rules.yml

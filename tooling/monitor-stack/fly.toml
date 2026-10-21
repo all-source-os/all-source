@@ -1,0 +1,22 @@
+app = "allsource-bandwidth-alerts"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "20s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  GOMEMLIMIT = "80MiB"
+  ALERT_DASHBOARD_URL = "https://fly-metrics.net/d/fly-app/fly-app?orgId=1483699&var-app=allsource-control-plane"
+
+[[mounts]]
+  source = "monitor_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[[restart]]
+  policy = "always"

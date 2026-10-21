@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /app/rules/*.yml
+  - /data/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["127.0.0.1:9093"]
+
+scrape_configs:
+  - job_name: fly-edge
+    scheme: https
+    metrics_path: /prometheus/allsource/federate
+    honor_labels: true
+    honor_timestamps: true
+    scrape_timeout: 10s
+    params:
+      match[]:
+        - '{__name__="fly_edge_data_out",app="allsource-control-plane"}'
+    authorization:
+      type: FlyV1
+      credentials_file: /run/monitor/fly-token
+    static_configs:
+      - targets: ["api.fly.io"]
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["127.0.0.1:9093"]
