@@ -51,6 +51,7 @@ defmodule QueryServiceExWeb.ChannelCase do
   end
 
   setup _tags do
+    QueryServiceEx.ChannelEgressFixture.start()
     System.put_env("JWT_SECRET", QueryServiceEx.AuthHelpers.test_jwt_secret())
     on_exit(fn -> System.delete_env("JWT_SECRET") end)
     :ok

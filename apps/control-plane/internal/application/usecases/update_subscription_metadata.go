@@ -169,6 +169,7 @@ func (uc *UpdateSubscriptionMetadataUseCase) applyLocked(tenant *entities.Tenant
 			X402Allowance:         tierQuotas.X402Allowance,
 			ExtractionTokensQuota: tierQuotas.ExtractionTokensQuota,
 			RetentionDays:         tierQuotas.RetentionDays,
+			EgressBytesQuota:      tierQuotas.EgressBytesQuota,
 			MaxStreams:            tierQuotas.MaxStreams,
 			MCPScope:              tierQuotas.MCPScope,
 			// Carry usage forward — do not reset on a tier apply.

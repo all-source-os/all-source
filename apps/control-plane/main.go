@@ -21,6 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/allsource/control-plane/internal"
+	"github.com/allsource/control-plane/internal/application/usecases"
 	"github.com/allsource/control-plane/internal/domain/entities"
 	"github.com/allsource/control-plane/internal/infrastructure/clients"
 	"github.com/allsource/control-plane/internal/infrastructure/x402"
@@ -78,6 +79,8 @@ func NewPooledHTTPClient() *http.Client {
 
 // ControlPlane is the main control plane service that manages the event store cluster.
 type ControlPlane struct {
+	egressPrepaid   *usecases.EgressPrepaid
+	egressExchange  egressExchange
 	client          *resty.Client
 	router          *gin.Engine
 	metrics         *ControlPlaneMetrics
@@ -365,7 +368,13 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 		extractionGate:  x402.NewCoreQuotaChecker(coreClient),
 	}
 
+	cp.egressExchange = cp.exchangeEgress
+	cp.egressPrepaid, err = usecases.NewEgressPrepaid(coreClient, lsClient, os.Getenv("LEMON_SQUEEZY_EGRESS_VARIANT_MAP"))
+	if err != nil {
+		return nil, err
+	}
 	cp.queryMeter = newQueryUsageMeter(cp.persistQueryUsage)
+	cp.container.ProcessLSWebhookUC.Prepaid = cp.egressPrepaid
 	cp.setupMiddleware()
 	cp.setupRoutes()
 
@@ -536,6 +545,7 @@ func (cp *ControlPlane) setupRoutes() {
 
 	// Protected API endpoints
 	api := cp.router.Group("/api/v1")
+	api.Use(cp.enforceEgress)
 
 	// x402 auto-pay middleware: intercepts quota-exceeded requests, auto-settles via CDP wallet
 	// when the agent has one; falls back to a standard 402 when CDP is unavailable.
@@ -665,6 +675,8 @@ func (cp *ControlPlane) setupRoutes() {
 	// PermissionWrite — a tenant owner (RoleDeveloper) manages their own
 	// subscription. ManageTenants is admin-only and would 403 every real user.
 	billing := api.Group("/billing")
+	billing.GET("/egress", RequirePermission(entities.PermissionRead), cp.egressUsage)
+	billing.POST("/egress/checkout", MaxBodySize(2*1024), RequirePermission(entities.PermissionWrite), IPRateLimitMiddleware(NewIPRateLimiter(10, time.Hour)), cp.egressCheckout)
 	billing.POST("/checkout", RequirePermission(entities.PermissionWrite), cp.container.BillingHandler.CreateCheckout)
 	billing.POST("/change-plan", RequirePermission(entities.PermissionWrite), cp.container.BillingHandler.ChangePlan)
 	billing.GET("/portal", RequirePermission(entities.PermissionWrite), cp.container.BillingHandler.GetPortal)

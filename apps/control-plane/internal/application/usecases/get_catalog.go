@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/allsource/control-plane/internal/domain/entities"
 	"github.com/allsource/control-plane/internal/infrastructure/clients"
 )
 
@@ -17,6 +18,8 @@ import (
 var catalogTiers = []string{"indie", "studio", "scale"}
 
 const (
+	currencyUSD         = "USD"
+	currencyGBP         = "GBP"
 	catalogTTL          = 5 * time.Minute
 	catalogRetryDelay   = 30 * time.Second
 	catalogMaxStale     = 14 * 24 * time.Hour
@@ -34,9 +37,10 @@ type CatalogPrice struct {
 
 // CatalogTier is the price pair for a single tier.
 type CatalogTier struct {
-	Tier    string        `json:"tier"`
-	Monthly *CatalogPrice `json:"monthly,omitempty"`
-	Annual  *CatalogPrice `json:"annual,omitempty"`
+	IncludedEgressBytes int64         `json:"included_egress_bytes"`
+	Tier                string        `json:"tier"`
+	Monthly             *CatalogPrice `json:"monthly,omitempty"`
+	Annual              *CatalogPrice `json:"annual,omitempty"`
 }
 
 // Catalog is the public pricing catalog, read live from LemonSqueezy.
@@ -78,9 +82,9 @@ func NewGetCatalogUseCase(ls clients.LemonSqueezyClient, store ...CatalogStore) 
 // mislabeled as dollars.
 func currencySymbol(code string) string {
 	switch strings.ToUpper(code) {
-	case "USD", "AUD", "CAD", "NZD", "":
+	case currencyUSD, "AUD", "CAD", "NZD", "":
 		return "$"
-	case "GBP":
+	case currencyGBP:
 		return "£"
 	case "EUR":
 		return "€"
@@ -158,6 +162,10 @@ func (uc *GetCatalogUseCase) Execute(ctx context.Context, now time.Time) (*Catal
 // response copies response metadata; cached price tiers remain immutable.
 func (uc *GetCatalogUseCase) response(now time.Time) *Catalog {
 	cat := *uc.cached
+	cat.Tiers = append([]CatalogTier(nil), uc.cached.Tiers...)
+	for i := range cat.Tiers {
+		cat.Tiers[i].IncludedEgressBytes = entities.QuotasForTier(cat.Tiers[i].Tier).EgressBytesQuota
+	}
 	cat.FetchedAt = uc.cachedAt.UTC().Format(time.RFC3339)
 	cat.Stale = now.Sub(uc.cachedAt) >= 24*time.Hour
 	return &cat
@@ -179,7 +187,7 @@ func (uc *GetCatalogUseCase) fetchProvider(ctx context.Context) *Catalog {
 	cat.Currency = strings.ToUpper(currency)
 
 	for _, tier := range catalogTiers {
-		entry := CatalogTier{Tier: tier}
+		entry := CatalogTier{Tier: tier, IncludedEgressBytes: entities.QuotasForTier(tier).EgressBytesQuota}
 		if p := uc.price(ctx, tier, defaultBillingPeriod, false, cat.Currency); p != nil {
 			entry.Monthly = p
 		}

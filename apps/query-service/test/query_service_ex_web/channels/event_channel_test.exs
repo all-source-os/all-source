@@ -33,7 +33,7 @@ defmodule QueryServiceExWeb.EventChannelTest do
 
       broadcast_event(event)
 
-      assert_push("new_event", pushed_event)
+      assert_push("new_event", pushed_event, 1_000)
       assert pushed_event["id"] == event["id"]
       assert pushed_event["entity_id"] == "user-123"
     end
@@ -41,7 +41,7 @@ defmodule QueryServiceExWeb.EventChannelTest do
     test "receives presence_state after joining", %{socket: socket} do
       {:ok, _reply, _socket} = subscribe_and_join(socket, EventChannel, "events:all")
 
-      assert_push("presence_state", _state)
+      assert_push("presence_state", _state, 1_000)
     end
 
     test "rejects join when the socket has no tenant" do
@@ -103,7 +103,7 @@ defmodule QueryServiceExWeb.EventChannelTest do
 
       broadcast_event(matching_event)
 
-      assert_push("new_event", pushed_event)
+      assert_push("new_event", pushed_event, 1_000)
       assert pushed_event["entity_id"] == "user-456"
     end
   end
@@ -142,7 +142,7 @@ defmodule QueryServiceExWeb.EventChannelTest do
 
       broadcast_event(matching_event)
 
-      assert_push("new_event", pushed_event)
+      assert_push("new_event", pushed_event, 1_000)
       assert pushed_event["event_type"] == "order.placed"
     end
   end
@@ -162,7 +162,7 @@ defmodule QueryServiceExWeb.EventChannelTest do
 
       broadcast_event(event)
 
-      assert_push("new_event", _)
+      assert_push("new_event", _, 1_000)
     end
   end
 
@@ -170,7 +170,7 @@ defmodule QueryServiceExWeb.EventChannelTest do
     test "tracks user presence on join", %{socket: socket, user: user} do
       {:ok, _reply, _socket} = subscribe_and_join(socket, EventChannel, "events:all")
 
-      assert_push("presence_state", state)
+      assert_push("presence_state", state, 1_000)
 
       assert Map.has_key?(state, to_string(user.id))
       user_presence = state[to_string(user.id)]

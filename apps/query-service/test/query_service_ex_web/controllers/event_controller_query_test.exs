@@ -45,6 +45,10 @@ defmodule QueryServiceExWeb.EventControllerQueryTest do
 
     def init(opts), do: opts
 
+    def call(%{method: "POST", request_path: "/api/v1/tenants/" <> _} = conn, opts) do
+      QueryServiceEx.ChannelEgressFixture.call(conn, opts)
+    end
+
     def call(%{request_path: "/api/v1/events/query"} = conn, _opts) do
       conn = fetch_query_params(conn)
       body = Agent.get(FakeCoreState, & &1.body)
@@ -81,7 +85,11 @@ defmodule QueryServiceExWeb.EventControllerQueryTest do
     })
 
     port = free_port()
-    start_supervised!({Bandit, plug: FakeCore, scheme: :http, port: port, ip: {127, 0, 0, 1}})
+    ledger = start_supervised!({Agent, fn -> %{left: 1_000_000, holds: %{}} end})
+
+    start_supervised!(
+      {Bandit, plug: {FakeCore, ledger: ledger}, scheme: :http, port: port, ip: {127, 0, 0, 1}}
+    )
 
     url = "http://127.0.0.1:#{port}"
     prev = Enum.map([:core_url, :core_read_urls, :core_write_url], &{&1, get_env(&1)})

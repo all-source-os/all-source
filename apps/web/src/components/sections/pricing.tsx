@@ -10,6 +10,7 @@ import { staticMotion as motion } from "@/components/ui/static-motion";
 import { siteConfig } from "@/lib/config";
 import {
   type Catalog,
+  egressAllowanceLabel,
   indexByTier,
   minimumAnnualSavingsPercent,
   PriceUnavailable,
@@ -198,6 +199,10 @@ export default function PricingSection({
                 )}
 
                 <ul className="mt-5 gap-2 flex flex-col text-left">
+                  <li className="flex items-start">
+                    <Check className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span className="text-sm">{egressAllowanceLabel(cat)}</span>
+                  </li>
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start">
                       <Check className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -230,14 +235,21 @@ export default function PricingSection({
         })}
       </div>
 
+      <p className="mx-auto mt-6 max-w-3xl text-center text-sm text-muted-foreground">
+        Outbound data allowances reset each UTC calendar month, including annual plans. GB means
+        1,000,000,000 bytes. Requests stop when included data and prepaid credits run out; no
+        automatic top-ups. Storage quotas apply separately. Data retention is not limited by plan
+        tier.
+      </p>
+
       {/* Enterprise — quieter strip below, width-matched to the cards above. */}
       {enterpriseTier && (
         <div className="mx-auto mt-6 flex max-w-5xl flex-col items-start justify-between gap-4 rounded-2xl border border-border bg-[#0E2E4F] px-8 py-6 text-[#F1F7FB] sm:flex-row sm:items-center">
           <div>
             <p className="text-lg font-semibold">{enterpriseTier.name}</p>
             <p className="text-sm opacity-80">
-              {enterpriseTier.description} {enterpriseTier.mcp}. Negotiated volume, unlimited
-              retention, 24/7 + dedicated SE.
+              {enterpriseTier.description} {enterpriseTier.mcp}. Negotiated volume and finite
+              outbound data allowance, 24/7 + dedicated SE.
             </p>
           </div>
           {/* 011: map tier -> price id. Enterprise is sales-led, not self-serve checkout. */}

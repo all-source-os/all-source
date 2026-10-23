@@ -630,6 +630,9 @@ func quotasFromMap(m map[string]interface{}) entities.QuotaMetadata {
 	if v, ok := m["retention_days"].(float64); ok {
 		q.RetentionDays = int64(v)
 	}
+	if v, ok := m["egress_bytes_quota"].(float64); ok {
+		q.EgressBytesQuota = int64(v)
+	}
 	if v, ok := m["max_streams"].(float64); ok {
 		q.MaxStreams = int64(v)
 	}

@@ -95,19 +95,16 @@ defmodule QueryServiceExWeb.ProjectionChannel do
         online_at: System.system_time(:second)
       })
 
-    push(socket, "presence_state", Presence.list(socket))
-    {:noreply, socket}
+    QueryServiceExWeb.FundedChannel.deliver(socket, "presence_state", Presence.list(socket))
   end
 
   # Handle projection state updates from PubSub
   def handle_info({:state_updated, update}, socket) do
-    push(socket, "state_updated", update)
-    {:noreply, socket}
+    QueryServiceExWeb.FundedChannel.deliver(socket, "state_updated", update)
   end
 
   def handle_info({:projection_error, error}, socket) do
-    push(socket, "projection_error", error)
-    {:noreply, socket}
+    QueryServiceExWeb.FundedChannel.deliver(socket, "projection_error", error)
   end
 
   @impl true
@@ -116,22 +113,24 @@ defmodule QueryServiceExWeb.ProjectionChannel do
 
     case get_projection_state(projection_name, entity_id) do
       {:ok, state} ->
-        {:reply, {:ok, state}, socket}
+        QueryServiceExWeb.FundedChannel.reply(socket, {:ok, state})
 
       {:error, :not_found} ->
-        {:reply, {:error, %{reason: "not_found", entity_id: entity_id}}, socket}
+        QueryServiceExWeb.FundedChannel.reply(
+          socket,
+          {:error, %{reason: "not_found", entity_id: entity_id}}
+        )
     end
   end
 
   def handle_in("get_state", _payload, socket) do
-    {:reply, {:error, %{reason: "missing_entity_id"}}, socket}
+    QueryServiceExWeb.FundedChannel.reply(socket, {:error, %{reason: "missing_entity_id"}})
   end
 
   # Handle presence_diff broadcasts from Presence tracker
   @impl true
   def handle_out("presence_diff", msg, socket) do
-    push(socket, "presence_diff", msg)
-    {:noreply, socket}
+    QueryServiceExWeb.FundedChannel.deliver(socket, "presence_diff", msg)
   end
 
   @impl true

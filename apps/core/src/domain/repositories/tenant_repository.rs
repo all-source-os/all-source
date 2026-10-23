@@ -292,6 +292,32 @@ pub trait TenantRepository: Send + Sync {
         ))
     }
 
+    async fn mutate_egress(
+        &self,
+        _id: &TenantId,
+        _command: crate::domain::entities::egress::EgressCommand,
+    ) -> Result<
+        Option<
+            std::result::Result<
+                crate::domain::entities::egress::EgressAdmission,
+                crate::domain::entities::egress::EgressDenial,
+            >,
+        >,
+    > {
+        Err(crate::error::AllSourceError::InternalError(
+            "Durable egress admission is unavailable".into(),
+        ))
+    }
+
+    async fn egress_snapshot(
+        &self,
+        _id: &TenantId,
+    ) -> Result<Option<crate::domain::entities::egress::EgressSnapshot>> {
+        Err(crate::error::AllSourceError::InternalError(
+            "Durable egress admission is unavailable".into(),
+        ))
+    }
+
     /// Activate a tenant
     ///
     /// # Arguments

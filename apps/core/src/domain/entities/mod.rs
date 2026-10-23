@@ -1,5 +1,6 @@
 // Core event sourcing entities
 pub mod audit_event;
+pub mod egress;
 pub mod event;
 pub mod event_store_fork;
 pub mod event_stream;

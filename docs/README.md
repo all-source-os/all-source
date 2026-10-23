@@ -79,6 +79,7 @@ For understanding the system architecture and design decisions.
 | [Clean Architecture](./current/CLEAN_ARCHITECTURE.md) | Layered architecture guide | ✅ |
 | [SOLID Principles](./current/SOLID_PRINCIPLES.md) | Design principles applied | ✅ |
 | [Tenant Architecture](./current/TENANT_ARCHITECTURE.md) | Multi-tenancy and isolation | ✅ |
+| [Tenant egress and prepaid credits](./plans/2026-10-22-tenant-egress-prepaid-design.md) | Proposed allowances, durable hard stops, payment verification and activation requirements | Local implementation |
 | [Event Store Features](./current/EVENT_STORE_FEATURES.md) | Core event sourcing capabilities | ✅ |
 | [Architecture Optimization](./current/ARCHITECTURE_OPTIMIZATION.md) | System-level optimizations | ✅ |
 | [OCC version index](./research/2026-10-04-occ-version-index.md) | Why entity versions must be read, never counted; the eviction and memory defects that follow | ✅ |

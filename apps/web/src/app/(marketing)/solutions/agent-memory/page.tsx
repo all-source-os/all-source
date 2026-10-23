@@ -88,7 +88,8 @@ const productLayers = [
   },
   {
     name: "AllSource hosted",
-    answer: "Managed Core access with retention, event, stream, and MCP limits set by plan.",
+    answer:
+      "Managed Core access with outbound data allowances, event quotas, stream limits, and MCP access set by plan. Data retention is not limited by plan tier; storage quotas apply separately.",
     href: "/pricing",
   },
 ];

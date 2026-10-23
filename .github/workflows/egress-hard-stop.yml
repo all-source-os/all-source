@@ -1,0 +1,48 @@
+name: Tenant Egress Hard Stop
+
+on:
+  pull_request:
+    paths:
+      - 'apps/core/**'
+      - 'apps/control-plane/**'
+      - 'Cargo.lock'
+      - '.github/workflows/egress-hard-stop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/core/**'
+      - 'apps/control-plane/**'
+      - 'Cargo.lock'
+      - '.github/workflows/egress-hard-stop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+      - uses: dtolnay/rust-toolchain@1.95.0
+        timeout-minutes: 5
+      - uses: Swatinem/rust-cache@v2
+        timeout-minutes: 5
+      - uses: actions/setup-go@v7
+        timeout-minutes: 5
+        with:
+          go-version: '1.26.9'
+          cache-dependency-path: apps/control-plane/go.sum
+      - name: Build tested Core server
+        timeout-minutes: 5
+        run: timeout -k 15 300 cargo build --locked --manifest-path apps/core/Cargo.toml --features multi-tenant --bin allsource-core
+      - name: Verify durable tenant budgets
+        timeout-minutes: 5
+        run: timeout -k 15 300 cargo test --locked --manifest-path apps/core/Cargo.toml --features multi-tenant --test egress_budget --test egress_response_limit
+      - name: Verify gateway hard stop against real Core
+        timeout-minutes: 5
+        working-directory: apps/control-plane
+        env:
+          ALLSOURCE_CORE_BINARY: ${{ github.workspace }}/target/debug/allsource-core
+        run: timeout -k 15 300 go test -tags egressintegration -run '^TestEgressRealCore' -v -count=1 .

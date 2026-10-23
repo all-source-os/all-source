@@ -2,7 +2,12 @@ import { Section } from "@allsource/ui";
 import FAQ from "@/components/sections/faq";
 import PricingSection from "@/components/sections/pricing";
 import { siteConfig } from "@/lib/config";
-import { fetchCatalog, indexByTier, resolveMonthly } from "@/lib/pricing-catalog";
+import {
+  egressAllowanceLabel,
+  fetchCatalog,
+  indexByTier,
+  resolveMonthly,
+} from "@/lib/pricing-catalog";
 import { softwareApplicationSchema } from "@/lib/structured-data";
 
 // Render at request time: build workers cannot reach the runtime billing service.
@@ -22,15 +27,6 @@ const matrixRows: { label: string; cells: Record<string, string> }[] = [
       studio: "5M + 500K x402",
       scale: "50M + 5M x402",
       enterprise: "Negotiated",
-    },
-  },
-  {
-    label: "Retention",
-    cells: {
-      indie: "14 days",
-      studio: "90 days",
-      scale: "365 days",
-      enterprise: "Unlimited",
     },
   },
   {
@@ -104,6 +100,16 @@ export default async function PricingPage() {
                 </tr>
               </thead>
               <tbody>
+                <tr className="border-b border-border">
+                  <td className="px-4 py-3 text-left font-medium text-foreground">Outbound data</td>
+                  {tiers.map((tier) => (
+                    <td key={tier.tier} className={cellBodyClass(tier.isPopular)}>
+                      {tier.isEnterprise
+                        ? "Custom finite allowance"
+                        : egressAllowanceLabel(prices[tier.tier])}
+                    </td>
+                  ))}
+                </tr>
                 {matrixRows.map((row) => (
                   <tr key={row.label} className="border-b border-border">
                     <td className="px-4 py-3 text-left font-medium text-foreground">{row.label}</td>
