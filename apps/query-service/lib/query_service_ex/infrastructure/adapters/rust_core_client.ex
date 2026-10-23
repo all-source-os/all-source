@@ -36,6 +36,25 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
     write_client()
   end
 
+  def change_egress(tenant_id, command) when is_binary(tenant_id) and is_map(command) do
+    path = "/api/v1/tenants/#{URI.encode_www_form(tenant_id)}/egress"
+
+    case Tesla.post(authorization_client(), path, command) do
+      {:ok,
+       %Tesla.Env{
+         status: 200,
+         body: %{"protocol" => "funded-egress-v1", "admission" => admission}
+       }} ->
+        {:ok, admission}
+
+      {:ok, %Tesla.Env{status: status}} when status in [402, 429] ->
+        {:error, status}
+
+      _ ->
+        {:error, 503}
+    end
+  end
+
   @doc """
   Returns a Tesla client targeting the write (leader) URL.
 

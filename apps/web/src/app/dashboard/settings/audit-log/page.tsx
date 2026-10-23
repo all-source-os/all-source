@@ -74,12 +74,19 @@ export default function AuditLogPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Audit Log</h1>
             <p className="mt-1 text-muted-foreground">
-              Track actions taken on your workspace (last {retentionDays} days)
+              Track actions taken on your workspace
+              {retentionDays !== null && retentionDays > 0 ? ` (last ${retentionDays} days)` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Shield className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">{retentionDays}-day retention</span>
+            <span className="text-sm text-muted-foreground">
+              {retentionDays === -1
+                ? "Available audit history"
+                : retentionDays !== null && retentionDays > 0
+                  ? `${retentionDays}-day retention`
+                  : "Audit history"}
+            </span>
           </div>
         </div>
       </FadeIn>

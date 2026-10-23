@@ -20,7 +20,7 @@ export function useAuditLogs(params?: AuditLogParams) {
 
   return {
     entries: data?.entries || [],
-    retentionDays: data?.retention_days || 90,
+    retentionDays: data?.retention_days ?? null,
     actions: data?.actions || [],
     isLoading,
     error: error?.message,

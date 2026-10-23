@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type CatalogTier,
+  egressAllowanceLabel,
   minimumAnnualSavingsPercent,
   PriceUnavailable,
   pricingSignupHref,
@@ -15,6 +16,21 @@ const indie: CatalogTier = {
 };
 
 describe("billing price presentation", () => {
+  it("uses decimal GB from the server allowance and refuses missing or invalid values", () => {
+    expect(egressAllowanceLabel({ ...indie, included_egress_bytes: 25_000_000_000 })).toBe(
+      "25 GB outbound data/month"
+    );
+    expect(egressAllowanceLabel({ ...indie, included_egress_bytes: 1_500_000_000 })).toBe(
+      "1.5 GB outbound data/month"
+    );
+    for (const bytes of [-1, 0, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
+      expect(egressAllowanceLabel({ ...indie, included_egress_bytes: bytes })).toBe(
+        "Allowance unavailable"
+      );
+    }
+    expect(egressAllowanceLabel(indie)).toBe("Allowance unavailable");
+  });
+
   it("uses charged annual total, not the monthly equivalent, as yearly headline", () => {
     expect(resolveBilledPrice(indie, "£20", "monthly")).toBe("£18.99");
     expect(resolveBilledPrice(indie, "£20", "annual")).toBe("£181.99");

@@ -161,10 +161,10 @@ export default function PrivacyPolicy() {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">5. Data Retention</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Event data retention depends on your plan tier (7 days for Developer, 90 days for Team,
-            unlimited for Enterprise). Account information is retained while your account is active
-            and for a reasonable period afterward for legal and operational purposes. You may
-            request deletion of your account and associated data at any time.
+            Event data retention is not limited by plan tier. Storage quotas, deletion requests, and
+            applicable legal requirements still apply. Account information is retained while your
+            account is active and for a reasonable period afterward for legal and operational
+            purposes. You may request deletion of your account and associated data at any time.
           </p>
         </section>
 

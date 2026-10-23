@@ -10,16 +10,19 @@ const catalog: Catalog = {
   tiers: [
     {
       tier: "indie",
+      included_egress_bytes: 25_000_000_000,
       monthly: { cents: 1899, formatted: "£18.99" },
       annual: { cents: 18199, formatted: "£181.99", per_month: "£15.17" },
     },
     {
       tier: "studio",
+      included_egress_bytes: 150_000_000_000,
       monthly: { cents: 7899, formatted: "£78.99" },
       annual: { cents: 75799, formatted: "£757.99", per_month: "£63.17" },
     },
     {
       tier: "scale",
+      included_egress_bytes: 750_000_000_000,
       monthly: { cents: 29899, formatted: "£298.99" },
       annual: { cents: 286999, formatted: "£2869.99", per_month: "£239.17" },
     },
@@ -29,6 +32,19 @@ const catalog: Catalog = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("pricing section", () => {
+  it("shows funded outbound allowances without plan retention limits", () => {
+    render(<PricingSection catalog={catalog} />);
+
+    for (const gb of [25, 150, 750]) {
+      expect(screen.getByText(`${gb} GB outbound data/month`)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/reset each UTC calendar month/)).toHaveTextContent(
+      /no automatic top-ups/
+    );
+    expect(screen.queryByText(/\d+-day retention/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unlimited retention/i)).not.toBeInTheDocument();
+  });
+
   it("loads current prices after a static homepage render", async () => {
     const fetchCatalog = vi.fn().mockResolvedValue({
       ok: true,

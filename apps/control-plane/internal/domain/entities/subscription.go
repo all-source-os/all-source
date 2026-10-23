@@ -122,7 +122,8 @@ type QuotaMetadata struct {
 	// is sold as a fixed add-on that raises ExtractionTokensQuota.
 	ExtractionTokensUsed int64 `json:"extraction_tokens_used,omitempty"`
 	// RetentionDays is the event retention window for the tier. -1 = forever.
-	RetentionDays int64 `json:"retention_days,omitempty"`
+	RetentionDays    int64 `json:"retention_days,omitempty"`
+	EgressBytesQuota int64 `json:"egress_bytes_quota,omitempty"`
 	// MaxStreams is the allowed stream count. -1 = unlimited.
 	MaxStreams int64 `json:"max_streams,omitempty"`
 	// MCPScope gates hosted MCP verbs (see MCPScope* constants).
@@ -239,13 +240,12 @@ func PrimarySubscriptionFor(subs map[string]SubscriptionRef, defaultProvider str
 	return primary
 }
 
-// TierQuotas defines the full entitlement set for a given tier. Beyond the
-// original events/queries quotas it now (011) carries the x402 allowance,
-// retention window, stream cap, and hosted MCP scope so a single tier lookup
-// produces everything the webhook needs to persist on the tenant.
+// TierQuotas defines the entitlements persisted by subscription webhooks.
+// Egress allowances reset each UTC calendar month; storage quotas are separate.
 //
 // Sentinel: -1 means unlimited / forever.
 type TierQuotas struct {
+	EgressBytesQuota      int64
 	EventsQuota           int64
 	QueriesQuota          int64
 	X402Allowance         int64  // included x402 calls per period before overage
@@ -255,33 +255,26 @@ type TierQuotas struct {
 	MCPScope              string // hosted MCP verbs (MCPScope* constants)
 }
 
-// TierQuotaMap maps tiers to their entitlements. Numbers come from
-// docs/proposals/PRICING_EXPOSURE_PLAN.md §2 (the canonical 011 source).
-//
-//	Indie  $19  — 500K events, 50K x402, 14d retention, 3 streams, MCP read
-//	Studio $79  — 5M events, 500K x402, 90d retention, unlimited streams, MCP read+write
-//	Scale  $299 — 50M events, 5M x402, 365d retention, unlimited streams, MCP read+write+dedicated
-//
-// Retired tiers are NOT listed here; resolve them through MapRetiredTier first
-// (QuotasForTier does this automatically).
+// TierQuotaMap maps hosted tiers to finite egress allowances. Retention has no
+// plan-based expiry; existing storage quotas still apply.
 var TierQuotaMap = map[SubscriptionTier]TierQuotas{
 	TierFree: {
 		// Self-Host: no hosted quota path. Kept minimal so a free/grandfathered
 		// hosted tenant still resolves to *something* non-nil.
 		EventsQuota: 100_000, QueriesQuota: 10_000,
-		X402Allowance: 0, ExtractionTokensQuota: 0, RetentionDays: 7, MaxStreams: 1, MCPScope: MCPScopeNone,
+		X402Allowance: 0, ExtractionTokensQuota: 0, RetentionDays: -1, EgressBytesQuota: 1_000_000_000, MaxStreams: 1, MCPScope: MCPScopeNone,
 	},
 	TierIndie: {
 		EventsQuota: 500_000, QueriesQuota: 50_000,
-		X402Allowance: 50_000, ExtractionTokensQuota: 1_000_000, RetentionDays: 14, MaxStreams: 3, MCPScope: MCPScopeRead,
+		X402Allowance: 50_000, ExtractionTokensQuota: 1_000_000, RetentionDays: -1, EgressBytesQuota: 25_000_000_000, MaxStreams: 3, MCPScope: MCPScopeRead,
 	},
 	TierStudio: {
 		EventsQuota: 5_000_000, QueriesQuota: 500_000,
-		X402Allowance: 500_000, ExtractionTokensQuota: 10_000_000, RetentionDays: 90, MaxStreams: -1, MCPScope: MCPScopeReadWrite,
+		X402Allowance: 500_000, ExtractionTokensQuota: 10_000_000, RetentionDays: -1, EgressBytesQuota: 150_000_000_000, MaxStreams: -1, MCPScope: MCPScopeReadWrite,
 	},
 	TierScale: {
 		EventsQuota: 50_000_000, QueriesQuota: 5_000_000,
-		X402Allowance: 5_000_000, ExtractionTokensQuota: 100_000_000, RetentionDays: 365, MaxStreams: -1, MCPScope: MCPScopeReadWriteDedi,
+		X402Allowance: 5_000_000, ExtractionTokensQuota: 100_000_000, RetentionDays: -1, EgressBytesQuota: 750_000_000_000, MaxStreams: -1, MCPScope: MCPScopeReadWriteDedi,
 	},
 	TierEnterprise: {
 		EventsQuota: -1, QueriesQuota: -1,

@@ -14,6 +14,7 @@ export type CatalogPrice = {
 
 export type CatalogTier = {
   tier: string;
+  included_egress_bytes?: number;
   monthly?: CatalogPrice;
   annual?: CatalogPrice;
 };
@@ -57,6 +58,14 @@ export async function fetchCatalog(): Promise<Catalog | null> {
 // PriceUnavailable is shown when a paid tier's live price can't be resolved
 // from Lemon Squeezy. Never fall back to a config number.
 export const PriceUnavailable = "—";
+
+export function egressAllowanceLabel(tier: CatalogTier | undefined): string {
+  const bytes = tier?.included_egress_bytes;
+  if (bytes === undefined || !Number.isSafeInteger(bytes) || bytes <= 0) {
+    return "Allowance unavailable";
+  }
+  return `${new Intl.NumberFormat("en-GB", { maximumFractionDigits: 9 }).format(bytes / 1_000_000_000)} GB outbound data/month`;
+}
 
 /**
  * isFixedConfigPrice reports whether a config price string is fixed metadata

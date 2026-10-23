@@ -219,13 +219,7 @@ export const siteConfig = {
       mcp: "Hosted MCP: read",
       // x402 overage rate per PRICING_EXPOSURE_PLAN.md §3.5 ("$0.0001/call after").
       x402: { included: "50K x402 calls", overage: "$0.0001/call after" },
-      features: [
-        "500K events/month",
-        "14-day retention",
-        "3 streams",
-        "Hosted MCP: read",
-        "Email support (48h)",
-      ],
+      features: ["500K events/month", "3 streams", "Hosted MCP: read", "Email support (48h)"],
       description: "Solo builders running one agent.",
       buttonText: "Start Indie",
       isPopular: false,
@@ -243,7 +237,6 @@ export const siteConfig = {
       x402: { included: "500K x402 calls", overage: "$0.0001/call after" },
       features: [
         "5M events/month",
-        "90-day retention",
         "Unlimited streams",
         "Hosted MCP: read + write",
         "Email support (24h) + Discord",
@@ -265,7 +258,6 @@ export const siteConfig = {
       x402: { included: "5M x402 calls", overage: "$0.0001/call after" },
       features: [
         "50M events/month",
-        "365-day retention",
         "Unlimited streams",
         "Hosted MCP: read + write + dedicated",
         "Priority support + Slack",
@@ -290,7 +282,7 @@ export const siteConfig = {
       x402: null,
       features: [
         "Negotiated event volume",
-        "Unlimited retention",
+        "Custom finite outbound data allowance",
         "Unlimited streams",
         "Dedicated MCP cluster",
         "24/7 + dedicated SE",
@@ -319,12 +311,17 @@ export const siteConfig = {
     {
       question: "How much does AllSource cost?",
       answer:
-        "Hosted AllSource starts at £18.99/month for Indie (500K events/month, 14-day retention, 3 streams). Studio is £78.99/month (5M events, 90-day retention, unlimited streams) and Scale is £298.99/month (50M events, 365-day retention). Enterprise is negotiated. The live LemonSqueezy catalog is authoritative.",
+        "Hosted AllSource starts at £18.99/month for Indie (500K events/month, 25 GB outbound data, 3 streams). Studio is £78.99/month (5M events, 150 GB outbound data, unlimited streams) and Scale is £298.99/month (50M events, 750 GB outbound data). Data allowances reset each UTC calendar month, including annual plans. Enterprise has a custom finite allowance. The live LemonSqueezy catalog is authoritative for subscription prices.",
     },
     {
       question: "Does AllSource have a free tier?",
       answer:
-        "No free hosted tier. AllSource Core and community components are available under Apache-2.0, so the community route can be self-hosted on your own hardware. Designated enterprise features use BSL 1.1. Hosted plans start with a 14-day trial (1,000 events) and then require a paid tier.",
+        "No free hosted tier. AllSource Core and community components are available under Apache-2.0, so the community route can be self-hosted on your own hardware. Designated enterprise features use BSL 1.1. Hosted plans start with a 14-day trial (1,000 events and 1 GB outbound data) and then require a paid tier.",
+    },
+    {
+      question: "What happens when my outbound data allowance runs out?",
+      answer:
+        "Hosted requests stop when the workspace's included outbound data and prepaid credits are exhausted. A workspace owner can purchase available prepaid packs explicitly; there are no automatic top-ups or postpaid bandwidth charges. Included data resets each UTC calendar month. One GB means 1,000,000,000 bytes. Storage quotas remain separate, and data retention is not limited by plan tier.",
     },
     {
       question: "What happens if I exceed my monthly event quota?",
@@ -339,7 +336,7 @@ export const siteConfig = {
     {
       question: "Is AllSource priced per seat or per user?",
       answer:
-        "Neither. AllSource prices on events written and retained, not on people. A team of one and a team of thirty pay the same for the same event volume, because the cost driver is agent throughput and retention window — not headcount. Streams and MCP access level vary by tier.",
+        "AllSource does not charge per seat. A team of one and a team of thirty pay the same for the same plan and usage. Hosted plans include event quotas and outbound data allowances. Streams and MCP access level vary by tier; storage quotas apply separately.",
     },
   ],
   faqs: [

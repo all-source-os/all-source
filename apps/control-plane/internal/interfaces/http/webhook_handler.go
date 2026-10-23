@@ -31,7 +31,7 @@ func NewWebhookHandler(
 // LemonSqueezy handles POST /api/v1/webhooks/lemonsqueezy
 func (h *WebhookHandler) LemonSqueezy(c *gin.Context) { //nolint:dupl // each webhook handler has different signature verification and event types
 	// Read the raw body for HMAC verification
-	body, err := io.ReadAll(c.Request.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1024*1024))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 		return

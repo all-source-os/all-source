@@ -6,6 +6,7 @@ import { ArrowDown, Check, Loader2, Sparkles } from "lucide-react";
 import { siteConfig } from "@/lib/config";
 import {
   type Catalog,
+  egressAllowanceLabel,
   indexByTier,
   PriceUnavailable,
   resolveAnnualTotal,
@@ -117,6 +118,12 @@ export function PlanCards({
             <CardContent className="flex flex-1 flex-col space-y-4">
               {/* Features */}
               <ul className="space-y-2">
+                {!plan.isEnterprise && (
+                  <li className="flex items-center gap-2 text-sm">
+                    <Check className="h-4 w-4 shrink-0 text-primary" />
+                    <span>{egressAllowanceLabel(cat)}</span>
+                  </li>
+                )}
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-center gap-2 text-sm">
                     <Check className="h-4 w-4 shrink-0 text-primary" />

@@ -3,9 +3,7 @@ defmodule QueryServiceExWeb.AuditLogController do
   Controller for customer-facing audit log entries.
 
   Provides a paginated, filterable list of actions taken on a tenant.
-  Retention is enforced client-side based on subscription tier:
-  - Pro (growth): last 90 days
-  - Team (enterprise): last 1 year
+  Available history is paginated independently of the subscription tier.
   """
 
   use Phoenix.Controller, formats: [:json]
@@ -16,13 +14,6 @@ defmodule QueryServiceExWeb.AuditLogController do
   alias QueryServiceEx.TenantCache
 
   action_fallback(QueryServiceExWeb.FallbackController)
-
-  @retention_days %{
-    "free" => 7,
-    "pro" => 30,
-    "growth" => 90,
-    "enterprise" => 365
-  }
 
   @doc """
   Lists audit log entries for the authenticated tenant.
@@ -36,8 +27,6 @@ defmodule QueryServiceExWeb.AuditLogController do
   def index(conn, params) do
     with {:ok, tenant} <- get_tenant(conn) do
       tenant_id = tenant["id"]
-      tier = get_tier(tenant)
-      retention = Map.get(@retention_days, tier, 90)
 
       limit = parse_int(params["limit"], 50, 1, 200)
       offset = parse_int(params["offset"], 0, 0, 10_000)
@@ -59,22 +48,12 @@ defmodule QueryServiceExWeb.AuditLogController do
 
       case AuditLog.list(tenant_id, opts) do
         {:ok, entries} ->
-          cutoff =
-            DateTime.utc_now()
-            |> DateTime.add(-retention * 86_400, :second)
-            |> DateTime.to_iso8601()
-
-          filtered =
-            Enum.filter(entries, fn entry ->
-              (entry["timestamp"] || "") >= cutoff
-            end)
-
           conn
           |> put_status(:ok)
           |> json(%{
             data: %{
-              entries: filtered,
-              retention_days: retention,
+              entries: entries,
+              retention_days: -1,
               actions: AuditLog.valid_actions()
             }
           })
@@ -111,12 +90,6 @@ defmodule QueryServiceExWeb.AuditLogController do
         tenant -> {:ok, tenant}
       end
     end
-  end
-
-  defp get_tier(tenant) do
-    metadata = tenant["metadata"] || %{}
-    subscription = metadata["subscription"] || %{}
-    subscription["tier"] || "free"
   end
 
   defp parse_int(nil, default, _min, _max), do: default

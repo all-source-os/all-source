@@ -499,6 +499,14 @@ func (c *lemonSqueezyClient) GetStoreID() string {
 // Variant.price is deprecated and can diverge from the checkout price after a
 // price edit; historical Price objects must not be used either.
 func (c *lemonSqueezyClient) GetVariant(ctx context.Context, variantID string) (*VariantResponse, error) {
+	return c.getVariantCategory(ctx, variantID, "subscription")
+}
+
+func (c *lemonSqueezyClient) GetPrepaidVariant(ctx context.Context, variantID string) (*VariantResponse, error) {
+	return c.getVariantCategory(ctx, variantID, "one_time")
+}
+
+func (c *lemonSqueezyClient) getVariantCategory(ctx context.Context, variantID, category string) (*VariantResponse, error) {
 	var respEnvelope jsonAPIEnvelope
 	resp, err := c.client.R().
 		SetContext(ctx).
@@ -538,10 +546,11 @@ func (c *lemonSqueezyClient) GetVariant(ctx context.Context, variantID string) (
 	if err := json.Unmarshal(priceEnvelope.Data.Attributes, &price); err != nil {
 		return nil, fmt.Errorf("unmarshal current price response: %w", err)
 	}
-	if fmt.Sprint(price.VariantID) != variantID || price.Category != "subscription" || price.Scheme != "standard" ||
+	if fmt.Sprint(price.VariantID) != variantID || price.Category != category || price.Scheme != "standard" ||
 		price.UsageAggregation != nil || price.UnitPrice == nil || *price.UnitPrice <= 0 ||
-		price.SetupFeeEnabled || price.RenewalIntervalQuantity != 1 ||
-		(price.RenewalIntervalUnit != "month" && price.RenewalIntervalUnit != "year") {
+		price.SetupFeeEnabled ||
+		(category == "subscription" && (price.RenewalIntervalQuantity != 1 || (price.RenewalIntervalUnit != "month" && price.RenewalIntervalUnit != "year"))) ||
+		(category == "one_time" && (price.RenewalIntervalQuantity != 0 || price.RenewalIntervalUnit != "")) {
 		return nil, fmt.Errorf("variant %s has an unsupported current Price model", variantID)
 	}
 

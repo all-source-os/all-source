@@ -125,8 +125,7 @@ defmodule QueryServiceExWeb.EventChannel do
         online_at: System.system_time(:second)
       })
 
-    push(socket, "presence_state", Presence.list(socket))
-    {:noreply, socket}
+    QueryServiceExWeb.FundedChannel.deliver(socket, "presence_state", Presence.list(socket))
   end
 
   # Handle PubSub events from CoreWebSocketClient. The subscription is already
@@ -135,10 +134,10 @@ defmodule QueryServiceExWeb.EventChannel do
   # can never spill another tenant's (or the `system` tenant's) events.
   def handle_info({:new_event, event}, socket) do
     if event_tenant(event) == socket.assigns[:tenant_id] do
-      push(socket, "new_event", event)
+      QueryServiceExWeb.FundedChannel.deliver(socket, "new_event", event)
+    else
+      {:noreply, socket}
     end
-
-    {:noreply, socket}
   end
 
   defp event_tenant(event), do: event["tenant_id"] || event[:tenant_id]
@@ -146,8 +145,7 @@ defmodule QueryServiceExWeb.EventChannel do
   # Handle presence_diff broadcasts from Presence tracker
   @impl true
   def handle_out("presence_diff", msg, socket) do
-    push(socket, "presence_diff", msg)
-    {:noreply, socket}
+    QueryServiceExWeb.FundedChannel.deliver(socket, "presence_diff", msg)
   end
 
   @impl true

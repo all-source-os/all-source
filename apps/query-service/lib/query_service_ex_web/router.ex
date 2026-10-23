@@ -35,6 +35,7 @@ defmodule QueryServiceExWeb.Router do
     plug(QueryServiceExWeb.Plugs.AuthPipeline)
     plug(QueryServiceExWeb.Plugs.TenantContext)
     plug(QueryServiceExWeb.Plugs.ConsistencyRouting)
+    plug(QueryServiceExWeb.Plugs.EgressBudget)
   end
 
   # Requires tenant + enforces event usage quota
@@ -58,6 +59,7 @@ defmodule QueryServiceExWeb.Router do
     plug(QueryServiceExWeb.Plugs.CorrelationId)
     plug(QueryServiceExWeb.Plugs.ApiKeyAuth)
     plug(QueryServiceExWeb.Plugs.ConsistencyRouting)
+    plug(QueryServiceExWeb.Plugs.EgressBudget)
   end
 
   # Internal service-to-service auth via shared INTERNAL_API_KEY

@@ -11,9 +11,11 @@ pub mod demo_api;
 pub mod handlers;
 #[cfg(feature = "prime")]
 pub mod prime_api;
+pub mod response_limit;
 mod retained_query;
 #[cfg(feature = "multi-tenant")]
 pub mod tenant_api;
+pub mod tenant_egress_api;
 #[cfg(feature = "multi-tenant")]
 pub mod tenant_query_usage_api;
 pub mod websocket;

@@ -16,6 +16,7 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+mod egress;
 mod query_usage;
 
 /// Event-sourced TenantRepository backed by SystemMetadataStore.
@@ -56,6 +57,7 @@ pub struct EventSourcedTenantRepository {
     /// `increment_usage`.
     usage_locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
     query_usage: DashMap<String, query_usage::QueryUsageState>,
+    egress_accounts: DashMap<String, crate::domain::entities::egress::EgressAccount>,
 }
 
 impl EventSourcedTenantRepository {
@@ -70,6 +72,7 @@ impl EventSourcedTenantRepository {
             cache,
             usage_locks: Arc::new(DashMap::new()),
             query_usage: DashMap::new(),
+            egress_accounts: DashMap::new(),
         };
         repo.rebuild_cache();
         repo
@@ -147,6 +150,9 @@ impl EventSourcedTenantRepository {
                 }
             }
             t if t == tenant_events::UPDATED => {
+                if let Some(event) = payload.get(egress::EVENT_KEY) {
+                    self.apply_egress_event(tenant_id_str, event);
+                }
                 if let Some(mut entry) = self.cache.get_mut(tenant_id_str) {
                     let tenant = entry.value_mut();
                     if let Some(name) = payload["name"].as_str() {
@@ -614,6 +620,30 @@ impl TenantRepository for EventSourcedTenantRepository {
         id: &TenantId,
     ) -> Result<Option<crate::domain::entities::query_usage::QueryUsageSnapshot>> {
         self.query_usage_snapshot(id).await
+    }
+
+    async fn mutate_egress(
+        &self,
+        id: &TenantId,
+        command: crate::domain::entities::egress::EgressCommand,
+    ) -> Result<
+        Option<
+            std::result::Result<
+                crate::domain::entities::egress::EgressAdmission,
+                crate::domain::entities::egress::EgressDenial,
+            >,
+        >,
+    > {
+        self.change_egress(id, command).await
+    }
+
+    async fn egress_snapshot(
+        &self,
+        id: &TenantId,
+    ) -> Result<Option<crate::domain::entities::egress::EgressSnapshot>> {
+        let lock = self.usage_lock_for(id.as_str());
+        let _guard = lock.lock().await;
+        Ok(self.current_egress(id))
     }
 }
 

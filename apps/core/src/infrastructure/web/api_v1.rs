@@ -212,6 +212,12 @@ pub async fn serve_v1(
         .route("/api/v1/tenants/{id}/stats", get(get_tenant_stats_handler))
         .route("/api/v1/tenants/{id}/quotas", put(update_quotas_handler))
         .route(
+            "/api/v1/tenants/{id}/egress",
+            get(super::tenant_egress_api::snapshot)
+                .post(super::tenant_egress_api::mutate)
+                .layer(axum::extract::DefaultBodyLimit::max(2_048)),
+        )
+        .route(
             "/api/v1/tenants/{id}/usage/increment",
             post(increment_usage_handler),
         )
@@ -550,6 +556,7 @@ pub async fn serve_v1(
         }
     };
 
+    let app = app.layer(middleware::from_fn(super::response_limit::bounded));
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     // Graceful shutdown on SIGTERM (required for serverless platforms)

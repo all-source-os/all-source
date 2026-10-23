@@ -70,15 +70,18 @@ export default function TermsOfService() {
             The hosted Service is offered in paid tiers (Indie, Studio, and Scale) and a custom
             Enterprise tier. New accounts begin with a time-limited trial, after which a paid plan
             is required to continue using the hosted Service. Each tier has defined usage limits for
-            events, streams, tenants, and retention periods as described on our pricing page. The
-            open-source core may also be self-hosted under its license at no charge.
+            events, streams, tenants, and outbound data as described on our pricing page. Data
+            retention is not limited by plan tier; storage quotas apply separately. The open-source
+            core may also be self-hosted under its license at no charge.
           </p>
 
           <h3 className="text-lg font-medium text-foreground mt-4 mb-2">5.2 Billing</h3>
           <p className="text-muted-foreground leading-relaxed">
             Paid plans are billed monthly or annually in advance. Usage-based overages, if
-            applicable, are billed at the end of each billing period. All fees are non-refundable
-            except as required by law.
+            applicable, are billed at the end of each billing period. Outbound bandwidth requires
+            included allowance or prepaid credits and stops when both are exhausted. Bandwidth does
+            not trigger automatic top-ups or postpaid charges. All fees are non-refundable except as
+            required by law.
           </p>
 
           <h3 className="text-lg font-medium text-foreground mt-4 mb-2">5.3 Trial</h3>

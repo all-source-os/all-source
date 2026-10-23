@@ -58,6 +58,7 @@ type VariantTierMap map[string]string
 
 // ProcessLemonSqueezyWebhookUseCase processes incoming LemonSqueezy webhook events.
 type ProcessLemonSqueezyWebhookUseCase struct {
+	Prepaid        *EgressPrepaid
 	tenantRepo     repositories.TenantRepository
 	auditRepo      repositories.AuditRepository
 	updateSubUC    *UpdateSubscriptionMetadataUseCase
@@ -90,6 +91,17 @@ func NewProcessLemonSqueezyWebhookUseCase(
 
 // Execute processes a LemonSqueezy webhook event.
 func (uc *ProcessLemonSqueezyWebhookUseCase) Execute(ctx context.Context, event LemonSqueezyWebhookEvent) error {
+	if event.EventName == "" {
+		if name, ok := event.Meta["event_name"].(string); ok {
+			event.EventName = name
+		}
+	}
+	if custom, ok := event.Meta["custom_data"].(map[string]interface{}); ok && custom["egress_checkout"] != nil {
+		if uc.Prepaid == nil {
+			return fmt.Errorf("prepaid processing unavailable")
+		}
+		return uc.Prepaid.Process(ctx, event)
+	}
 	tenantID := extractTenantIDFromWebhook(event)
 	if tenantID == "" {
 		return fmt.Errorf("webhook missing tenant_id in custom_data")

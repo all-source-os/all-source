@@ -30,7 +30,7 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
       {:ok, _reply, _socket} =
         subscribe_and_join(socket, ProjectionChannel, "projections:user_stats")
 
-      assert_push("presence_state", _state)
+      assert_push("presence_state", _state, 1_000)
     end
   end
 
@@ -43,7 +43,7 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
 
       broadcast_projection_update(@tenant, "user_stats", "user-123", state, version: 5)
 
-      assert_push("state_updated", update)
+      assert_push("state_updated", update, 1_000)
       assert update.entity_id == "user-123"
       assert update.state == state
       assert update.version == 5
@@ -69,7 +69,7 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
         event_id: "evt-789"
       )
 
-      assert_push("projection_error", error)
+      assert_push("projection_error", error, 1_000)
       assert error.entity_id == "user-456"
       assert error.error == "Failed to process event"
       assert error.event_id == "evt-789"
@@ -82,7 +82,7 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
         subscribe_and_join(socket, ProjectionChannel, "projections:user_stats")
 
       ref = push(socket, "get_state", %{})
-      assert_reply(ref, :error, %{reason: "missing_entity_id"})
+      assert_reply(ref, :error, %{reason: "missing_entity_id"}, 1_000)
     end
 
     test "returns error for non-existent state", %{socket: socket} do
@@ -90,7 +90,7 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
         subscribe_and_join(socket, ProjectionChannel, "projections:nonexistent_projection")
 
       ref = push(socket, "get_state", %{"entity_id" => "user-999"})
-      assert_reply(ref, :error, %{reason: "not_found", entity_id: "user-999"})
+      assert_reply(ref, :error, %{reason: "not_found", entity_id: "user-999"}, 1_000)
     end
   end
 
@@ -99,7 +99,7 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
       {:ok, _reply, _socket} =
         subscribe_and_join(socket, ProjectionChannel, "projections:user_stats")
 
-      assert_push("presence_state", state)
+      assert_push("presence_state", state, 1_000)
 
       user_id_str = to_string(user.id)
       assert Map.has_key?(state, user_id_str)
