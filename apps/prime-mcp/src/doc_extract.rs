@@ -477,6 +477,10 @@ async fn emit_usage(prime: &Prime, model: &str, s: &DocSummary) {
 }
 
 #[cfg(test)]
+#[path = "doc_extract_pdf_tests.rs"]
+mod pdf_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use wiremock::{

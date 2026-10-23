@@ -43,6 +43,10 @@ jobs:
         include:
           - name: rust
             working-directory: apps/core
+            lockfile: Cargo.lock
+          - name: rust
+            working-directory: apps/prime-mcp
+            lockfile: apps/prime-mcp/Cargo.lock
           - name: go
             working-directory: apps/control-plane
           - name: elixir
@@ -64,14 +68,14 @@ jobs:
 
       - name: Rust dependency audit
         if: matrix.name == 'rust'
-        # Audit the root workspace lockfile — apps/core is a workspace
-        # member and doesn't have its own Cargo.lock.
+        timeout-minutes: 3
+        # Core uses the root lockfile; Prime has a standalone workspace lockfile.
         # RUSTSEC-2026-0112/0113/0145 (astral-tokio-tar): dev-only, pulled via
         # testcontainers, never in a shipped artifact; no upstream fix yet
         # (0145 wants >=0.6.2; testcontainers 0.26.3 pins 0.5.x).
         run: |
-          cargo audit \
-            --file Cargo.lock \
+          timeout -k 15 120 cargo audit \
+            --file "${{ matrix.lockfile }}" \
             --ignore RUSTSEC-2023-0071 \
             --ignore RUSTSEC-2026-0041 \
             --ignore RUSTSEC-2026-0049 \

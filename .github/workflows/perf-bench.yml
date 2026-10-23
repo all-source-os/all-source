@@ -76,6 +76,7 @@ jobs:
         timeout-minutes: 5
         env:
           BENCHMARK_BINARY: ${{ steps.pr-binary.outputs.binary }}
+          CRITERION_HOME: ${{ runner.temp }}/criterion-pr
         run: |
           set -o pipefail
           timeout -k 15 285 "$BENCHMARK_BINARY" --bench --output-format bencher --warm-up-time 0.1 --measurement-time 0.2 --sample-size 10 | tee /tmp/pr-bench.txt
@@ -126,6 +127,7 @@ jobs:
         working-directory: base/apps/core
         env:
           BENCHMARK_BINARY: ${{ steps.base-binary.outputs.binary }}
+          CRITERION_HOME: ${{ runner.temp }}/criterion-base
         run: |
           set -o pipefail
           timeout -k 15 285 "$BENCHMARK_BINARY" --bench --output-format bencher --warm-up-time 0.1 --measurement-time 0.2 --sample-size 10 | tee /tmp/base-bench.txt
@@ -161,6 +163,8 @@ jobs:
             /tmp/pr-build.json
             /tmp/base-dependencies.json
             /tmp/base-build.json
+            /tmp/pr-bench.txt
+            /tmp/base-bench.txt
 
   iai-callgrind:
     # Deterministic instruction-count regression gate. Runs alongside the
@@ -216,7 +220,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
-          shared-key: iai-perf-${{ matrix.package }}
+          shared-key: iai-perf-${{ matrix.package }}${{ matrix.package == 'allsource-prime' && '-phased-v2' || '' }}
           cache-on-failure: true
 
       # iai-callgrind needs its companion runner binary on PATH; without it the
@@ -293,6 +297,22 @@ jobs:
           if (!real.length || JSON.stringify(real) !== JSON.stringify(skeleton)) throw Error('dependency compiler fingerprints differ');
           console.log(`Verified ${real.length} native dependency units`);
           NODE
+
+      - name: Cook Prime image dependencies
+        if: matrix.package == 'allsource-prime'
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}/iai-cook/${{ matrix.working-directory }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo build --profile bench -p image --lib --message-format=json-render-diagnostics | tee /tmp/iai-image-foundation.json
+
+      - name: Cook Prime Core dependency foundation
+        if: matrix.package == 'allsource-prime'
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}/iai-cook/${{ matrix.working-directory }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo build --profile bench -p allsource-core --lib --message-format=json-render-diagnostics | tee /tmp/iai-core-foundation.json
 
       - name: Cook native instruction dependencies
         timeout-minutes: 5

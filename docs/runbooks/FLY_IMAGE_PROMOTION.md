@@ -14,6 +14,8 @@ For a PR candidate, dispatch Security Scanning with `scan_published_images=true`
 after Docker Build succeeds. Main scans run automatically when its Docker Build
 finishes. Scans pull the commit-tagged images, verify their full revision labels
 and refuse fixed HIGH or CRITICAL vulnerabilities. They do not rebuild images.
+Docker Build publishes all four scanned deployment images for each revision,
+including services whose source did not change.
 The full SARIF report retains all severities; a separate filtered scan enforces
 the HIGH/CRITICAL refusal policy.
 
@@ -51,6 +53,12 @@ unchanged. Native dependencies compile before the final harness codegen phase.
 Deterministic instruction-count gates keep their existing 3% failure threshold.
 Their library-only dependency, harness and execution phases have separate
 deadlines and retain the original release optimization profile.
+Prime prepares image dependencies, Core dependencies and remaining native
+dependencies in separate bounded phases. The full real/skeleton fingerprint
+comparison remains mandatory; Cargo rebuilds packages when feature selections
+differ between phases.
+Prime container builds export separate image, Parquet and Core library caches
+before compiling the final binary. Each phase retains a five-minute ceiling.
 Instruction dependencies cook from a generated skeleton before real application
 compilation. The current manifests select dependency features in both phases.
 

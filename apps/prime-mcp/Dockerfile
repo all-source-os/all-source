@@ -14,7 +14,7 @@ ARG RUST_VERSION=1.92
 # =============================================================================
 # Stage 1: Builder
 # =============================================================================
-FROM rust:${RUST_VERSION}-slim AS builder
+FROM rust:${RUST_VERSION}-slim AS builder-source
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev cmake g++ \
@@ -48,9 +48,19 @@ RUN mkdir -p apps/mcp-server-elixir/native/core_nif/src \
     && printf '[package]\nname = "allsource-performance"\nversion = "0.1.0"\nedition = "2024"\n[[bin]]\nname = "allsource-performance"\npath = "src/main.rs"\n' \
        > tooling/performance/Cargo.toml
 
-# Build release binary
 WORKDIR /build/apps/prime-mcp
-RUN cargo build --release
+
+FROM builder-source AS builder-image
+RUN timeout -k 15 260 cargo build --release --locked -p image --lib
+
+FROM builder-image AS builder-parquet
+RUN timeout -k 15 260 cargo build --release --locked -p parquet --lib
+
+FROM builder-parquet AS builder-core
+RUN timeout -k 15 260 cargo build --release --locked -p allsource-core --lib
+
+FROM builder-core AS builder
+RUN timeout -k 15 260 cargo build --release --locked
 
 # =============================================================================
 # Stage 2: Runtime
