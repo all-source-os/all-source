@@ -20,6 +20,8 @@ jobs:
   criterion:
     name: Criterion wall-clock (throughput tracker, non-blocking)
     runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
     defaults:
       run:
         working-directory: apps/core
@@ -29,16 +31,54 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-16
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "apps/core -> target"
+          workspaces: ". -> target"
           cache-on-failure: true
 
+      - name: Scope PR benchmark to library APIs
+        timeout-minutes: 1
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'Cargo.toml';
+          const source = fs.readFileSync(path, 'utf8');
+          if (!source.includes('[[bin]]')) throw Error('expected CLI targets missing');
+          let binary = false;
+          const lines = source.split('\n').filter(line => {
+            if (line === '[[bin]]') { binary = true; return false; }
+            if (line.startsWith('[')) binary = false;
+            return !binary;
+          });
+          fs.writeFileSync(path, lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n'));
+          NODE
+
+      - name: Compile benchmark dependencies (PR)
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/pr-dependencies.json
+
+      - name: Compile benchmarks (PR)
+        id: pr-binary
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -C lto=thin -C codegen-units=16 -C llvm-args=-import-instr-limit=0 | tee /tmp/pr-build.json
+          node -e 'const fs=require("node:fs");const rows=fs.readFileSync("/tmp/pr-build.json","utf8").trim().split("\n").map(JSON.parse);const artifact=rows.find(r=>r.reason==="compiler-artifact"&&r.target.name==="performance_benchmarks"&&r.executable);if(!artifact)throw Error("benchmark executable missing");fs.appendFileSync(process.env.GITHUB_OUTPUT,"binary="+artifact.executable+"\n");'
+
       - name: Run benchmarks (PR)
-        run: cargo bench --bench performance_benchmarks -- --output-format bencher | tee /tmp/pr-bench.txt
+        timeout-minutes: 5
+        env:
+          BENCHMARK_BINARY: ${{ steps.pr-binary.outputs.binary }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 "$BENCHMARK_BINARY" --bench --output-format bencher --warm-up-time 0.1 --measurement-time 0.2 --sample-size 10 | tee /tmp/pr-bench.txt
 
       - name: Checkout base branch
         uses: actions/checkout@v7
@@ -47,22 +87,80 @@ jobs:
           clean: false
           path: base
 
-      - name: Run benchmarks (base)
+      - name: Scope base benchmark to library APIs
+        timeout-minutes: 1
         working-directory: base/apps/core
-        run: cargo bench --bench performance_benchmarks -- --output-format bencher | tee /tmp/base-bench.txt
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'Cargo.toml';
+          const source = fs.readFileSync(path, 'utf8');
+          if (!source.includes('[[bin]]')) throw Error('expected CLI targets missing');
+          let binary = false;
+          const lines = source.split('\n').filter(line => {
+            if (line === '[[bin]]') { binary = true; return false; }
+            if (line.startsWith('[')) binary = false;
+            return !binary;
+          });
+          fs.writeFileSync(path, lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n'));
+          NODE
+
+      - name: Compile benchmark dependencies (base)
+        timeout-minutes: 5
+        working-directory: base/apps/core
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/base-dependencies.json
+
+      - name: Compile benchmarks (base)
+        id: base-binary
+        timeout-minutes: 5
+        working-directory: base/apps/core
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -C lto=thin -C codegen-units=16 -C llvm-args=-import-instr-limit=0 | tee /tmp/base-build.json
+          node -e 'const fs=require("node:fs");const rows=fs.readFileSync("/tmp/base-build.json","utf8").trim().split("\n").map(JSON.parse);const artifact=rows.find(r=>r.reason==="compiler-artifact"&&r.target.name==="performance_benchmarks"&&r.executable);if(!artifact)throw Error("benchmark executable missing");fs.appendFileSync(process.env.GITHUB_OUTPUT,"binary="+artifact.executable+"\n");'
+
+      - name: Run benchmarks (base)
+        timeout-minutes: 5
+        working-directory: base/apps/core
+        env:
+          BENCHMARK_BINARY: ${{ steps.base-binary.outputs.binary }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 "$BENCHMARK_BINARY" --bench --output-format bencher --warm-up-time 0.1 --measurement-time 0.2 --sample-size 10 | tee /tmp/base-bench.txt
 
       - name: Compare benchmarks
-        uses: benchmark-action/github-action-benchmark@v1
+        timeout-minutes: 1
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const parse = path => new Map([...fs.readFileSync(path, 'utf8').matchAll(/^test (.+?) \.\.\. bench:\s*([\d,]+) ns\/iter/gm)].map(m => [m[1], Number(m[2].replaceAll(',', ''))]));
+          const baseline = parse('/tmp/base-bench.txt');
+          const candidate = parse('/tmp/pr-bench.txt');
+          if (!baseline.size || candidate.size !== baseline.size) throw Error('benchmark cases missing');
+          const lines = ['| Case | Base ns | PR ns | Change |', '|---|---:|---:|---:|'];
+          for (const [name, current] of candidate) {
+            const previous = baseline.get(name);
+            if (!previous) throw Error(`baseline missing: ${name}`);
+            const change = (current / previous - 1) * 100;
+            lines.push(`| ${name} | ${previous} | ${current} | ${change.toFixed(1)}% |`);
+            if (change > 15) console.log(`::warning::Advisory benchmark ${name}: ${change.toFixed(1)}% slower`);
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+          NODE
+
+      - name: Preserve compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        timeout-minutes: 5
         with:
-          tool: cargo
-          output-file-path: /tmp/pr-bench.txt
-          external-data-json-path: /tmp/base-bench.txt
-          comment-on-alert: true
-          alert-threshold: "115%"
-          fail-on-alert: false
-          summary-always: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          comment-always: true
+          name: criterion-compiler-diagnostics
+          path: |
+            /tmp/pr-dependencies.json
+            /tmp/pr-build.json
+            /tmp/base-dependencies.json
+            /tmp/base-build.json
 
   iai-callgrind:
     # Deterministic instruction-count regression gate. Runs alongside the
@@ -71,6 +169,8 @@ jobs:
     # See ~/.claude/skills/rust-perf/SKILL.md Phase 3.
     name: iai-callgrind (${{ matrix.package }})
     runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
     strategy:
       fail-fast: false
       matrix:
@@ -95,40 +195,159 @@ jobs:
           fetch-depth: 0
 
       - name: Install valgrind
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind
+          if command -v valgrind >/dev/null; then
+            valgrind --version
+          else
+            source /etc/os-release
+            printf 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu %s main universe\ndeb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu %s-updates main universe\ndeb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu %s-security main universe\n' "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" > "$RUNNER_TEMP/valgrind.list"
+            apt_options=(-o "Dir::Etc::sourcelist=$RUNNER_TEMP/valgrind.list" -o Dir::Etc::sourceparts=- -o Acquire::Retries=0 -o Acquire::https::Timeout=20 -o Acquire::ForceIPv4=true -o Acquire::Languages=none)
+            sudo timeout -k 15 45 apt-get "${apt_options[@]}" update
+            sudo timeout -k 15 210 apt-get "${apt_options[@]}" install -y --no-install-recommends valgrind
+          fi
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-16
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "${{ matrix.working-directory }} -> target"
+          workspaces: ". -> target"
           shared-key: iai-perf-${{ matrix.package }}
           cache-on-failure: true
 
       # iai-callgrind needs its companion runner binary on PATH; without it the
       # bench aborts with "Failed to run benchmarks: No such file or directory".
       - name: Install iai-callgrind-runner
+        timeout-minutes: 5
         # MUST match the iai-callgrind dev-dependency in EVERY benched crate —
         # apps/core, apps/prime-mcp and apps/chronis. The runner refuses to run
         # against a mismatched crate in either direction, so bumping one side
         # alone reds the bench job for every PR touching that crate's lockfile.
-        run: cargo install iai-callgrind-runner --version 0.16.1 --locked
+        run: timeout -k 15 285 cargo install iai-callgrind-runner --version 0.16.1 --locked
+
+      - name: Scope instruction benchmark to library APIs
+        timeout-minutes: 1
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'Cargo.toml';
+          const source = fs.readFileSync(path, 'utf8');
+          let binary = false;
+          const lines = source.split('\n').filter(line => {
+            if (line === '[[bin]]') { binary = true; return false; }
+            if (line.startsWith('[')) binary = false;
+            return !binary;
+          });
+          fs.writeFileSync(path, lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n'));
+          NODE
+
+      - name: Prepare dependency-only instruction build
+        timeout-minutes: 1
+        working-directory: .
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const destination = path.join(process.env.RUNNER_TEMP, 'iai-cook');
+          fs.cpSync(process.env.GITHUB_WORKSPACE, destination, {
+            recursive: true,
+            filter: source => !['.git', 'target'].includes(path.basename(source)),
+          });
+          for (const member of ['apps/core', 'apps/prime-mcp', 'apps/chronis']) {
+            const manifest = path.join(destination, member, 'Cargo.toml');
+            const source = fs.readFileSync(manifest, 'utf8');
+            let binary = false;
+            const lines = source.split('\n').filter(line => {
+              if (line === '[[bin]]') { binary = true; return false; }
+              if (line.startsWith('[')) binary = false;
+              return !binary;
+            });
+            let scoped = lines.join('\n');
+            if (!scoped.includes('autobins = false')) scoped = scoped.replace('[package]\n', '[package]\nautobins = false\n');
+            fs.writeFileSync(manifest, scoped);
+            const library = path.join(destination, member, 'src/lib.rs');
+            if (fs.existsSync(library)) fs.writeFileSync(library, '');
+            fs.writeFileSync(path.join(destination, member, 'benches/iai.rs'), 'fn main() {}\n');
+          }
+          NODE
+
+      - name: Verify native dependency fingerprints
+        timeout-minutes: 1
+        env:
+          BENCHMARK_DIRECTORY: ${{ matrix.working-directory }}
+        run: |
+          timeout -k 5 20 cargo rustc --profile bench --bench iai -Z unstable-options --unit-graph > "$RUNNER_TEMP/iai-real-units.json"
+          timeout -k 5 20 cargo rustc --manifest-path "$RUNNER_TEMP/iai-cook/$BENCHMARK_DIRECTORY/Cargo.toml" --profile bench --bench iai -Z unstable-options --unit-graph > "$RUNNER_TEMP/iai-cook-units.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const native = file => JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, file), 'utf8')).units
+            .filter(unit => unit.pkg_id.startsWith('registry+'))
+            .map(unit => JSON.stringify([unit.pkg_id, unit.target.name, unit.target.kind, unit.mode, unit.platform, unit.features, unit.profile])).sort();
+          const real = native('iai-real-units.json');
+          const skeleton = native('iai-cook-units.json');
+          if (!real.length || JSON.stringify(real) !== JSON.stringify(skeleton)) throw Error('dependency compiler fingerprints differ');
+          console.log(`Verified ${real.length} native dependency units`);
+          NODE
+
+      - name: Cook native instruction dependencies
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}/iai-cook/${{ matrix.working-directory }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/iai-native-dependencies.json
+
+      - name: Require real application source compilation
+        timeout-minutes: 1
+        working-directory: .
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const now = new Date();
+          for (const member of ['apps/core', 'apps/prime-mcp', 'apps/chronis']) {
+            for (const file of ['src/lib.rs', 'benches/iai.rs']) {
+              const source = `${member}/${file}`;
+              if (fs.existsSync(source)) fs.utimesSync(source, now, now);
+            }
+          }
+          NODE
+
+      - name: Compile instruction benchmark dependencies
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/iai-dependencies.json
+
+      - name: Compile instruction benchmark harness
+        id: iai-binary
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics | tee /tmp/iai-build.json
+          node -e 'const fs=require("node:fs");const rows=fs.readFileSync("/tmp/iai-build.json","utf8").trim().split("\n").map(JSON.parse);const artifact=rows.find(r=>r.reason==="compiler-artifact"&&r.target.name==="iai"&&r.executable);if(!artifact)throw Error("instruction benchmark executable missing");fs.appendFileSync(process.env.GITHUB_OUTPUT,"binary="+artifact.executable+"\n");'
 
       - name: Run iai-callgrind and compare to main baseline
         id: bench
+        timeout-minutes: 5
+        env:
+          BENCHMARK_BINARY: ${{ steps.iai-binary.outputs.binary }}
         run: |
           set -o pipefail
-          cargo bench --bench iai -- --save-baseline main | tee /tmp/iai-output.txt
+          timeout -k 15 285 "$BENCHMARK_BINARY" --bench --save-baseline=main | tee /tmp/iai-output.txt
 
       - name: Enforce 3% regression threshold
+        timeout-minutes: 1
         run: |
           python3 - <<'PY'
           import pathlib, re, sys
           output = pathlib.Path("/tmp/iai-output.txt").read_text()
+          output = re.sub(r"\x1b\[[0-9;]*m", "", output)
+          if not re.search(r"Instructions:\s*[\d,]+", output):
+              sys.exit("instruction measurements missing")
           pattern = re.compile(r"Instructions:.*?Change:\s*([+-]?\d+\.?\d*)%", re.DOTALL)
           worst = 0.0
           for m in pattern.finditer(output):
@@ -142,7 +361,7 @@ jobs:
           PY
 
       - name: Comment iai summary on PR
-        if: always() && github.event_name == 'pull_request'
+        if: always() && steps.bench.outcome == 'success' && github.event_name == 'pull_request'
         uses: actions/github-script@v9
         with:
           script: |

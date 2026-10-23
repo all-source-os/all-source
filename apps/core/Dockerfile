@@ -16,16 +16,19 @@
 ARG RUST_VERSION=1.94
 ARG ALPINE_VERSION=3.23
 ARG EDITION=enterprise
+ARG CORE_DEPS_IMAGE=ghcr.io/all-source-os/allsource-core-community@sha256:735073e48106cf69f61cc5481bc09f8605e8dfc7fb2e9e6f262c084d1cf3c0f5
 
 # =============================================================================
 # Stage 1: Chef - Prepare cargo-chef for dependency caching
 # =============================================================================
 FROM rust:${RUST_VERSION}-alpine AS chef
 
-RUN apk add --no-cache musl-dev && \
-    cargo install cargo-chef --locked
+RUN apk add --no-cache musl-dev coreutils && \
+    timeout -k 15 240 cargo install cargo-chef --locked
 
 WORKDIR /app
+
+FROM ${CORE_DEPS_IMAGE} AS dependency-seed
 
 # =============================================================================
 # Stage 2: Planner - Analyze dependencies
@@ -67,11 +70,10 @@ RUN mkdir -p tooling/performance/src sdks/rust/src sdks/rust/examples \
 # =============================================================================
 # Stage 3: Builder base - Shared dependency cooking
 # =============================================================================
-FROM chef AS builder-base
+FROM chef AS builder-deps
 
-ARG VERSION=dev
-ARG REVISION=unknown
-ARG BUILDTIME=unknown
+COPY --from=dependency-seed /app/target /app/target
+COPY --from=dependency-seed /usr/local/cargo/registry /usr/local/cargo/registry
 
 # Stub the optional allsource-prime-models path dep BEFORE cook: cargo-chef
 # reconstructs the workspace skeleton from recipe.json and needs this directory
@@ -86,7 +88,9 @@ RUN mkdir -p crates/allsource-prime-models/src && \
 # cargo-chef replaces version fields with placeholders, so version bumps in
 # Cargo.toml/Cargo.lock don't invalidate this expensive layer.
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics
+RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics
+
+FROM builder-deps AS builder-base
 
 # Now copy real manifests (version-sensitive) and set up workspace structure
 COPY Cargo.toml Cargo.lock ./
@@ -117,29 +121,40 @@ RUN mkdir -p apps/core/benches apps/core/tests/stress_tests && \
 # =============================================================================
 # Stage 3a: Builder Community - Community edition (Apache 2.0)
 # =============================================================================
-FROM builder-base AS builder-community
-# One binary per invocation. Three `--bin` flags in one cargo call link them
-# concurrently, and each LTO link at codegen-units=1 over datafusion/arrow
-# needs several GiB — together they exceed the remote builder and the step
-# dies on SIGKILL, which reads as `could not compile` rather than as OOM.
-RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
-        --bin allsource-core --features community,analytics
-RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+FROM builder-base AS builder-community-lib
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
+        --lib --features community,analytics
+
+FROM builder-community-lib AS builder-community-core
+# Separate binaries prevent concurrent linkers from exhausting builder memory.
+RUN CARGO_BUILD_JOBS=4 RUSTC_LOG=rustc_codegen_ssa::back::link=info,rustc_codegen_ssa::back::write=info \
+    timeout -k 15 255 cargo rustc --release -p allsource-core \
+        --bin allsource-core --features community,analytics -- -C lto=thin -C codegen-units=16 -C llvm-args=-import-instr-limit=0
+FROM builder-community-core AS builder-community-migrate
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
         --bin allsource-migrate-storage --features community,analytics
-RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+FROM builder-community-migrate AS builder-community
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
         --bin allsource-repack-archive --features community,analytics && \
     strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
 # Stage 3b: Builder Enterprise - Enterprise edition (BSL 1.1)
 # =============================================================================
-FROM builder-base AS builder-enterprise
+FROM builder-base AS builder-enterprise-lib
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
+        --lib --features enterprise,analytics
+
+FROM builder-enterprise-lib AS builder-enterprise-core
 # One binary per invocation — see the community stage for why.
-RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
-        --bin allsource-core --features enterprise,analytics
-RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+RUN CARGO_BUILD_JOBS=4 RUSTC_LOG=rustc_codegen_ssa::back::link=info,rustc_codegen_ssa::back::write=info \
+    timeout -k 15 255 cargo rustc --release -p allsource-core \
+        --bin allsource-core --features enterprise,analytics -- -C lto=thin -C codegen-units=16 -C llvm-args=-import-instr-limit=0
+FROM builder-enterprise-core AS builder-enterprise-migrate
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
         --bin allsource-migrate-storage --features enterprise,analytics
-RUN CARGO_BUILD_JOBS=4 cargo build --release -p allsource-core \
+FROM builder-enterprise-migrate AS builder-enterprise
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
         --bin allsource-repack-archive --features enterprise,analytics && \
     strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 

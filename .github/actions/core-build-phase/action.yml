@@ -1,0 +1,36 @@
+name: Cache Core build phase
+description: Export a completed Core compilation phase within the step deadline
+inputs:
+  phase:
+    required: true
+    description: Docker target to finish
+  cache:
+    required: true
+    description: Registry cache owned by this image variant
+  seed:
+    required: true
+    description: Immutable dependency seed image
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PHASE: ${{ inputs.phase }}
+        CACHE: ${{ inputs.cache }}
+        SEED: ${{ inputs.seed }}
+      run: |
+        set -euo pipefail
+        edition=enterprise
+        if [[ "$PHASE" == builder-community* ]]; then edition=community; fi
+        case "$PHASE" in
+          builder-deps) previous=builder-deps ;;
+          builder-*-lib) previous=builder-deps ;;
+          builder-*-core) previous="builder-$edition-lib" ;;
+          builder-*-migrate) previous="builder-$edition-core" ;;
+          *) echo "Unsupported Core phase: $PHASE" >&2; exit 1 ;;
+        esac
+        timeout -k 15 285 docker buildx build \
+          --file apps/core/Dockerfile --target "$PHASE" \
+          --build-arg "CORE_DEPS_IMAGE=$SEED" \
+          --cache-from "type=registry,ref=$CACHE-$previous" \
+          --cache-to "type=registry,ref=$CACHE-$PHASE,mode=max" .

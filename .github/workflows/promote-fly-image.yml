@@ -1,0 +1,76 @@
+name: Promote Fly Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Image to copy into its existing Fly registry
+        required: true
+        type: choice
+        options:
+          - core
+          - control-plane
+          - query-service
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: promote-fly-image
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+
+      - name: Select image
+        id: image
+        timeout-minutes: 1
+        env:
+          COMPONENT: ${{ inputs.component }}
+        run: |
+          set -euo pipefail
+          case "$COMPONENT" in
+            core) package=allsource-core-alpine; app=allsource-core ;;
+            control-plane) package=allsource-control-plane; app=allsource-control-plane ;;
+            query-service) package=allsource-query-service; app=allsource-query ;;
+            *) exit 1 ;;
+          esac
+          revision=$(git rev-parse --short=7 HEAD)
+          echo "source=ghcr.io/${{ github.repository_owner }}/$package:sha-$revision" >> "$GITHUB_OUTPUT"
+          echo "destination=registry.fly.io/$app:sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        timeout-minutes: 1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Fly registry
+        uses: docker/login-action@v4
+        timeout-minutes: 1
+        with:
+          registry: registry.fly.io
+          username: x
+          password: ${{ secrets.FLY_IMAGE_PROMOTION_TOKEN }}
+
+      - name: Copy immutable image
+        timeout-minutes: 5
+        env:
+          SOURCE: ${{ steps.image.outputs.source }}
+          DESTINATION: ${{ steps.image.outputs.destination }}
+        run: |
+          set -euo pipefail
+          timeout -k 15 120 docker pull "$SOURCE"
+          revision=$(docker image inspect "$SOURCE" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
+          test "$revision" = "${{ github.sha }}"
+          docker tag "$SOURCE" "$DESTINATION"
+          timeout -k 15 120 docker push "$DESTINATION"
+          echo "Published $DESTINATION from $SOURCE" >> "$GITHUB_STEP_SUMMARY"

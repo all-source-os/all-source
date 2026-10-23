@@ -9,7 +9,14 @@ defmodule QueryServiceExWeb.Plugs.EgressBudgetTest do
     import Plug.Conn
     def init(opts), do: opts
 
-    def call(conn, _) do
+    def call(
+          %{method: "POST", path_info: ["api", "v1", "tenants", _, "usage", "increment"]} = conn,
+          _
+        ) do
+      send_resp(conn, 200, "{}")
+    end
+
+    def call(%{method: "POST", path_info: ["api", "v1", "tenants", _, "egress"]} = conn, _) do
       {:ok, body, conn} = read_body(conn)
       command = Jason.decode!(body)
 
@@ -37,6 +44,9 @@ defmodule QueryServiceExWeb.Plugs.EgressBudgetTest do
               else
                 {{503, %{}}, state}
               end
+
+            _ ->
+              {{400, %{}}, state}
           end
         end)
 
@@ -44,6 +54,8 @@ defmodule QueryServiceExWeb.Plugs.EgressBudgetTest do
       |> put_resp_content_type("application/json")
       |> send_resp(status, Jason.encode!(%{protocol: "funded-egress-v1", admission: response}))
     end
+
+    def call(conn, _), do: send_resp(conn, 404, "not found")
   end
 
   setup do
