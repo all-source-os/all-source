@@ -42,6 +42,10 @@ jobs:
           filters: |
             core:
               - 'apps/core/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/docker-build.yml'
+              - '.github/actions/core-build-phase/**'
             control-plane:
               - 'apps/control-plane/**'
             query-service:
@@ -77,6 +81,7 @@ jobs:
 
           # Enterprise editions (default targets)
           add_service "core" "." "${{ steps.filter.outputs.core }}" "apps/core/Dockerfile" "runtime" ""
+          add_service "core-alpine" "." "${{ steps.filter.outputs.core }}" "apps/core/Dockerfile" "runtime-alpine" ""
           add_service "control-plane" "apps/control-plane" "${{ steps.filter.outputs.control-plane }}"
           add_service "query-service" "apps/query-service" "${{ steps.filter.outputs.query-service }}" "" "" "ALLSOURCE_EDITION=enterprise"
           add_service "mcp-server" "apps/mcp-server-elixir" "${{ steps.filter.outputs.mcp-server }}"
@@ -90,13 +95,77 @@ jobs:
           add_service "query-service-community" "apps/query-service" "${{ steps.filter.outputs.query-service }}" "" "" "ALLSOURCE_EDITION=community"
 
           MATRIX="$MATRIX]}"
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Build Matrix: $MATRIX"
+
+  compiler-seed:
+    name: Recover Core compiler cache
+    needs: changes
+    if: needs.changes.outputs.core == 'true' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.force_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ghcr.io/${{ github.repository_owner }}/allsource-core-community@${{ steps.seed.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+        with:
+          ref: a8b94f3998563da014a29667e3c38a4478dcf5fa
+          path: legacy
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v4
+        timeout-minutes: 5
+
+      - uses: docker/login-action@v4
+        timeout-minutes: 1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract dependency-only Docker target
+        timeout-minutes: 1
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const source = fs.readFileSync('legacy/apps/core/Dockerfile', 'utf8');
+          const boundary = source.indexOf('# Now copy real manifests');
+          if (boundary < 0) throw new Error('dependency boundary missing');
+          const prefix = source.slice(0, boundary);
+          if (!prefix.includes('RUN cargo chef cook --release')) throw new Error('dependency cook missing');
+          fs.writeFileSync('legacy/Dockerfile.dependencies', prefix);
+          NODE
+
+      - name: Recover immutable compiled dependencies
+        id: seed
+        uses: docker/build-push-action@v7
+        timeout-minutes: 5
+        with:
+          context: legacy
+          file: legacy/Dockerfile.dependencies
+          target: builder-base
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/allsource-core-community:deps-a8b94f3
+          cache-from: type=registry,ref=ghcr.io/all-source-os/allsource-core-community@sha256:4a1d02a35daf9ca1780832c3a7d66fb9816db5f9363786ccc5762d5059cba0e8
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=a8b94f3998563da014a29667e3c38a4478dcf5fa
+            org.opencontainers.image.description=Compiler dependency cache; never deploy as an application
+          build-args: |
+            BUILDTIME=2026-10-22T20:01:38Z
+            VERSION=main
+            REVISION=a8b94f3998563da014a29667e3c38a4478dcf5fa
 
   build:
     name: Build ${{ matrix.name }}
-    needs: changes
-    if: needs.changes.outputs.matrix != '{"include":[]}'
+    needs: [changes, compiler-seed]
+    if: always() && !cancelled() && needs.changes.result == 'success' && (needs.compiler-seed.result == 'success' || needs.compiler-seed.result == 'skipped') && needs.changes.outputs.matrix != '{"include":[]}'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -133,8 +202,45 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Cache remaining Core dependencies
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Cache Core library
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: ${{ matrix.name == 'core-community' && 'builder-community-lib' || 'builder-enterprise-lib' }}
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Cache Core binary
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: ${{ matrix.name == 'core-community' && 'builder-community-core' || 'builder-enterprise-core' }}
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Cache migration binary
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: ${{ matrix.name == 'core-community' && 'builder-community-migrate' || 'builder-enterprise-migrate' }}
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
       - name: Build and push
         id: build
+        timeout-minutes: 5
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
@@ -144,7 +250,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache${{ startsWith(matrix.name, 'core') && (matrix.name == 'core-community' && '-builder-community-migrate' || '-builder-enterprise-migrate') || '' }}
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache,mode=max
           provenance: true
           sbom: true
@@ -152,6 +259,7 @@ jobs:
             BUILDTIME=${{ github.event.repository.updated_at }}
             VERSION=${{ github.ref_name }}
             REVISION=${{ github.sha }}
+            CORE_DEPS_IMAGE=${{ needs.compiler-seed.outputs.image }}
             ${{ matrix.extra_args }}
 
       - name: Generate attestation
@@ -160,6 +268,57 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+  verify-core-release:
+    name: Verify Core release hard stop and reads
+    runs-on: ubuntu-latest
+    needs: [changes, build]
+    if: needs.build.result == 'success' && (needs.changes.outputs.core == 'true' || startsWith(github.ref, 'refs/tags/v') || github.event.inputs.force_build == 'true')
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 5
+
+      - uses: actions/setup-go@v6
+        timeout-minutes: 5
+        with:
+          go-version: '1.26.10'
+          cache-dependency-path: apps/control-plane/go.sum
+
+      - uses: docker/login-action@v4
+        timeout-minutes: 1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract baseline and candidate binaries
+        timeout-minutes: 5
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/core-release"
+          baseline="ghcr.io/all-source-os/allsource-core:sha-a8b94f3"
+          candidate="ghcr.io/all-source-os/allsource-core-alpine:sha-${SOURCE_SHA:0:7}"
+          timeout -k 15 90 docker pull "$baseline"
+          timeout -k 15 90 docker pull "$candidate"
+          baseline_container=$(docker create "$baseline")
+          candidate_container=$(docker create "$candidate")
+          trap 'docker rm -f "$baseline_container" "$candidate_container"' EXIT
+          docker cp "$baseline_container:/app/allsource-core" "$RUNNER_TEMP/core-release/baseline"
+          docker cp "$candidate_container:/app/allsource-core" "$RUNNER_TEMP/core-release/candidate"
+          chmod +x "$RUNNER_TEMP/core-release/baseline" "$RUNNER_TEMP/core-release/candidate"
+
+      - name: Prove release refusal, recovery and read performance
+        timeout-minutes: 5
+        working-directory: apps/control-plane
+        env:
+          ALLSOURCE_CORE_BASELINE_BINARY: ${{ runner.temp }}/core-release/baseline
+          ALLSOURCE_CORE_BINARY: ${{ runner.temp }}/core-release/candidate
+        run: timeout -k 15 280 go test -timeout 180s -tags egressintegration,corerelease -run '^TestEgressRealCore' -v -count=1 .
 
   verify-community-public:
     name: Verify -community packages are public
@@ -202,27 +361,29 @@ jobs:
     steps:
       - name: Generate summary
         run: |
-          echo "## Docker Build Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Service | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Docker Build Summary"
+            echo ""
+            echo "| Service | Status |"
+            echo "|---------|--------|"
 
-          if [ "${{ needs.build.result }}" == "success" ]; then
-            echo "| Build | ✅ Published |" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ needs.build.result }}" == "skipped" ]; then
-            echo "| Build | ⏭️ Skipped (no changes) |" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "| Build | ❌ Failed |" >> "$GITHUB_STEP_SUMMARY"
-          fi
+            if [ "${{ needs.build.result }}" == "success" ]; then
+              echo "| Build | ✅ Published |"
+            elif [ "${{ needs.build.result }}" == "skipped" ]; then
+              echo "| Build | ⏭️ Skipped (no changes) |"
+            else
+              echo "| Build | ❌ Failed |"
+            fi
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Platform:** linux/amd64" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Images:**" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository_owner }}/allsource-core" >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository_owner }}/allsource-control-plane" >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository_owner }}/allsource-query-service" >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository_owner }}/allsource-mcp-server" >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository_owner }}/allsource-mcp-server-embedded" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo ""
+            echo "**Platform:** linux/amd64"
+            echo ""
+            echo "**Images:**"
+            echo '```'
+            echo "ghcr.io/${{ github.repository_owner }}/allsource-core"
+            echo "ghcr.io/${{ github.repository_owner }}/allsource-control-plane"
+            echo "ghcr.io/${{ github.repository_owner }}/allsource-query-service"
+            echo "ghcr.io/${{ github.repository_owner }}/allsource-mcp-server"
+            echo "ghcr.io/${{ github.repository_owner }}/allsource-mcp-server-embedded"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
