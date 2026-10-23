@@ -2,7 +2,7 @@ use crate::{
     error::AllSourceError,
     infrastructure::security::{
         auth::{AuthManager, Claims, Permission, Role},
-        rate_limit::RateLimiter,
+        rate_limit::{RateLimitConfig, RateLimiter},
     },
 };
 use axum::{
@@ -132,6 +132,20 @@ pub struct AuthState {
 #[derive(Clone)]
 pub struct RateLimitState {
     pub rate_limiter: Arc<RateLimiter>,
+    pub egress_rate_limiter: Arc<RateLimiter>,
+}
+
+impl RateLimitState {
+    pub fn new(rate_limiter: Arc<RateLimiter>) -> Self {
+        Self {
+            rate_limiter,
+            // Each admitted data response reserves and completes one ledger entry.
+            egress_rate_limiter: Arc::new(RateLimiter::new(RateLimitConfig {
+                requests_per_minute: 1200,
+                burst_size: 2000,
+            })),
+        }
+    }
 }
 
 /// Authenticated request context
@@ -431,10 +445,20 @@ pub async fn rate_limit_middleware(
         .get::<AuthContext>()
         .ok_or(RateLimitError::Unauthorized)?;
 
-    // Check rate limit for this tenant
-    let result = rate_limit_state
-        .rate_limiter
-        .check_rate_limit(auth_ctx.tenant_id());
+    let ledger_tenant = path
+        .strip_prefix("/api/v1/tenants/")
+        .and_then(|suffix| suffix.strip_suffix("/egress"))
+        .filter(|tenant| !tenant.is_empty() && !tenant.contains('/'))
+        .filter(|_| auth_ctx.claims.has_permission(Permission::Admin));
+    let result = if let Some(tenant) = ledger_tenant {
+        rate_limit_state
+            .egress_rate_limiter
+            .check_rate_limit(tenant)
+    } else {
+        rate_limit_state
+            .rate_limiter
+            .check_rate_limit(auth_ctx.tenant_id())
+    };
 
     if !result.allowed {
         return Err(RateLimitError::RateLimitExceeded {
@@ -1242,7 +1266,7 @@ mod tests {
     fn test_rate_limit_state_clone() {
         use crate::infrastructure::security::rate_limit::RateLimitConfig;
         let rate_limiter = Arc::new(RateLimiter::new(RateLimitConfig::free_tier()));
-        let state = RateLimitState { rate_limiter };
+        let state = RateLimitState::new(rate_limiter);
         let cloned = state.clone();
         assert!(Arc::ptr_eq(&state.rate_limiter, &cloned.rate_limiter));
     }

@@ -179,7 +179,7 @@ pub async fn serve_v1(
         auth_manager: auth_manager.clone(),
     };
 
-    let rate_limit_state = RateLimitState { rate_limiter };
+    let rate_limit_state = RateLimitState::new(rate_limiter);
 
     let app = Router::new()
         // Public routes (no auth)
