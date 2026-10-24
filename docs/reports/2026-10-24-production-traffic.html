@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production Traffic Report</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #dddcd6;
+  --accent: #2557d6; --ok: #1f8a4c; --warn: #c27c0e; --bad: #c8322b;
+  --a1: #2557d6; --a2: #c8322b; --a3: #1f8a4c; --a4: #8a4fbf; --a5: #c27c0e; --a6: #0f8f9a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f;
+    --accent: #6f95ff; --ok: #4cc27f; --warn: #e3a43a; --bad: #ff6b62;
+    --a1: #6f95ff; --a2: #ff6b62; --a3: #4cc27f; --a4: #b98cf0; --a5: #e3a43a; --a6: #39c3cf;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f;
+  --accent: #6f95ff; --ok: #4cc27f; --warn: #e3a43a; --bad: #ff6b62;
+  --a1: #6f95ff; --a2: #ff6b62; --a3: #4cc27f; --a4: #b98cf0; --a5: #e3a43a; --a6: #39c3cf;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 20px 0 6px; }
+p { margin: 6px 0 10px; max-width: 78ch; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: color-mix(in srgb, var(--line) 45%, transparent); padding: 1px 4px; border-radius: 4px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.card .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.card .k { font-size: 12.5px; color: var(--muted); }
+.card.bad .v { color: var(--bad); } .card.warn .v { color: var(--warn); } .card.ok .v { color: var(--ok); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 12px 0; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+td.n, th.n { text-align: right; }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.tag.bad { color: var(--bad); } .tag.warn { color: var(--warn); } .tag.ok { color: var(--ok); } .tag.info { color: var(--accent); }
+.problem { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+.problem.warn { border-left-color: var(--warn); }
+.problem h3 { margin-top: 0; }
+.evidence { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.axis text { fill: var(--muted); font-size: 11px; }
+.axis line, .axis path { stroke: var(--line); }
+.grid line { stroke: var(--line); stroke-dasharray: 2 3; }
+.annot line { stroke: var(--muted); stroke-dasharray: 3 3; }
+.annot text { fill: var(--muted); font-size: 10.5px; }
+#diagram svg { width: 100%; height: auto; }
+.node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.node.hot rect { stroke: var(--bad); stroke-width: 2.5; }
+.node text { fill: var(--ink); font-size: 12.5px; }
+.node .sub { fill: var(--muted); font-size: 11px; }
+.flow { fill: none; stroke-linecap: round; stroke-dasharray: 10 12; animation: dash linear infinite; }
+@keyframes dash { to { stroke-dashoffset: -220; } }
+.flowlabel { fill: var(--ink); font-size: 11.5px; font-weight: 600; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; }
+.marker circle { fill: var(--bad); }
+.marker text { fill: #fff; font-size: 11px; font-weight: 700; }
+.marker .pulse { fill: none; stroke: var(--bad); stroke-width: 2; animation: pulse 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes pulse { from { r: 9; opacity: .9; } to { r: 22; opacity: 0; } }
+.marker { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .flow, .marker .pulse { animation: none; } }
+ol.fixes > li { margin: 10px 0; }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc { font-size: 13.5px; columns: 2; max-width: 640px; }
+@media (max-width: 640px) { .toc { columns: 1; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Production traffic report</h1>
+<p class="muted small">AllSource production, read on 2026-10-24 between 17:00Z and 19:56Z. Sources: the <code>allsource</code> org's Fly Prometheus, the control plane's <code>/metrics</code>, Core's <code>/metrics</code>, service logs, the alert evaluator, Longhand's public <code>/health</code>, and code on <code>main</code>. Every chart reads <code>data/2026-10-24-production-traffic.js</code>, which was generated from the raw captures. Numbers quoted in the text name the capture they come from.</p>
+
+<div class="cards" id="cards"></div>
+
+<div class="panel toc">
+<a href="#diagram-s">System diagram</a><br>
+<a href="#who">Who uses the bandwidth</a><br>
+<a href="#timeline">Timeline</a><br>
+<a href="#bytes">What the bytes are</a><br>
+<a href="#p1">1. Longhand re-reads history</a><br>
+<a href="#p2">2. The egress guard throttles reads and writes</a><br>
+<a href="#p3">3. Billing writes fill Core's system log</a><br>
+<a href="#p4">4. Core memory and hydration refusals</a><br>
+<a href="#p5">5. Control-plane CPU baseline</a><br>
+<a href="#p6">6. What we cannot see</a><br>
+<a href="#tick">The schedule-tick question</a><br>
+<a href="#fixes">What to fix, in order</a><br>
+<a href="#sources">Sources</a>
+</div>
+
+<h2 id="diagram-s">System diagram</h2>
+<p>Line widths scale with the bytes per second each hop carried on average over the last three days. Moving dashes show direction. Red markers are the bottlenecks in this report; select one to jump to its evidence.</p>
+<div class="panel" id="diagram"></div>
+
+<h2 id="who">Who uses the bandwidth</h2>
+<p>The alert counts bytes leaving <code>allsource-control-plane</code> through Fly's edge. Fly labels those bytes by the edge region the client connected through, and the control plane's sampler labels large responses by authenticated tenant. No metric anywhere carries a per-tenant byte count, so tenant attribution rests on these two signals (see <a href="#p6">6</a>).</p>
+<div class="panel chart" id="region-chart"></div>
+<div class="panel">
+<h3>Edge output by app, last 24 hours</h3>
+<table id="app-table"></table>
+<p class="evidence">Source: <code>sum by (app)(increase(fly_edge_data_out[1h]))</code>, last 24 hourly buckets.</p>
+</div>
+<div class="panel">
+<h3>Sampled large responses by tenant</h3>
+<table>
+<tr><th>Tenant fingerprint</th><th>Tenant</th><th class="n">Sampled responses</th><th class="n">Share</th><th class="n">Sampled bytes</th></tr>
+<tr><td><code>2732b1a7938f</code></td><td>onboard-control-plane-at-technical-leaders-com (the Longhand control plane)</td><td class="n">139</td><td class="n">97.2%</td><td class="n">14.34 MB</td></tr>
+<tr><td><code>5e38134908d5</code></td><td>decebal-dobrica-at-gmail-com (<code>aplaceahead.*</code> events)</td><td class="n">4</td><td class="n">2.8%</td><td class="n">0.19 MB</td></tr>
+</table>
+<p class="evidence">143 <code>event_query_large_response</code> lines from the control plane's log buffer plus a 280-second live capture ending 19:56Z. The fingerprint is the first 6 bytes of <code>sha256(tenant_id)</code>, where <code>tenant_id</code> is the authenticated tenant (<code>delegation.go</code>, <code>ProxyEventsQuery</code>). The sampler logs only bodies of at least 16 KiB and at most one line per 10 seconds (<code>query_egress.go</code>), so it shows which tenants make large reads, not their exact byte totals.</p>
+</div>
+
+<h2 id="timeline">Timeline</h2>
+<div class="panel chart" id="daily-chart"></div>
+<div class="panel chart" id="hourly-chart"></div>
+<div class="panel chart" id="status-chart"></div>
+
+<h2 id="bytes">What the bytes are</h2>
+<p>The control plane counts every event-query response body by query shape. Since its restart at 15:40:36Z it has sent 7.84 GB of bodies (snapshot at 19:50:26Z), against 7.86 GB of edge output from <code>iad</code> in the same window, so query bodies are effectively all of the egress.</p>
+<div class="panel chart" id="shape-chart"></div>
+<div class="panel">
+<h3>Requests since 15:40:36Z, by route and status</h3>
+<table>
+<tr><th>Route</th><th class="n">200</th><th class="n">429</th><th class="n">503</th><th class="n">504</th><th class="n">Refused</th></tr>
+<tr><td><code>GET /api/v1/events/query</code></td><td class="n">139,075</td><td class="n">17,853</td><td class="n">229</td><td class="n">149</td><td class="n">11.6%</td></tr>
+<tr><td><code>POST /api/v1/events</code> (writes)</td><td class="n">469</td><td class="n">2,103</td><td class="n">3</td><td class="n">1</td><td class="n"><b>81.8%</b></td></tr>
+<tr><td><code>GET /api/v1/auth/session</code></td><td class="n">257</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0%</td></tr>
+</table>
+<p class="evidence">Source: <code>control_plane_http_requests_total</code> from the control plane's <code>/metrics</code> at 19:50:26Z. A second snapshot 54 seconds later added 1,258 query 200s and 191 query 429s: 23.3 successful queries per second, 13% refused, 447 KB/s of bodies.</p>
+</div>
+<div class="panel">
+<h3>Core, since its 17:07Z start</h3>
+<table>
+<tr><th>Query type</th><th class="n">Queries</th><th class="n">Events returned</th><th class="n">Events per query</th></tr>
+<tr><td>event-type prefix</td><td class="n">59,387</td><td class="n">2,484,625</td><td class="n">41.8</td></tr>
+<tr><td>entity</td><td class="n">25,310</td><td class="n">253,768</td><td class="n">10.0</td></tr>
+<tr><td>event type</td><td class="n">7,392</td><td class="n">129,413</td><td class="n">17.5</td></tr>
+<tr><td>full scan</td><td class="n">480</td><td class="n">416</td><td class="n">0.9</td></tr>
+<tr><td><b>All reads</b> vs <b>events ingested</b></td><td class="n">92,569</td><td class="n" colspan="2">289 ingested: 320 reads for every write</td></tr>
+</table>
+<p class="evidence">Source: Core's <code>/metrics</code> (<code>allsource_queries_total</code>, <code>allsource_query_results_total</code>, <code>allsource_events_ingested_total</code>), read at about 19:45Z.</p>
+</div>
+
+<h2>Problems and bottlenecks</h2>
+
+<div class="problem" id="p1">
+<h3>1. Longhand's control plane re-reads the same history <span class="tag bad">bandwidth</span></h3>
+<p>Every hour, including every night hour, the control plane sends 1.6–3.5 GB to one caller in <code>iad</code>. Core answers 320 reads for every event written. The reads are whole histories fetched again: sampled response bodies repeat byte for byte (75,734 B for <code>auth.member.</code>, 26,478 B for <code>auth.org.</code>, 29,269 B for <code>queue_binding.</code>) minute after minute.</p>
+<table>
+<tr><th>Read pattern (Longhand code)</th><th>Shape counter</th><th class="n">Bytes since 15:40Z</th><th class="n">Share</th></tr>
+<tr><td>Team-queue and skill windows re-fetched in full every poll (<code>team_queue.rs:476-478</code>, <code>skill_catalog_paging.rs:35</code>)</td><td>prefix, time-bounded, filtered</td><td class="n">4.94 GB</td><td class="n">63.0%</td></tr>
+<tr><td>Filtered prefix reads with no time bound (membership, entitlements)</td><td>prefix, unbounded, filtered</td><td class="n">1.29 GB</td><td class="n">16.4%</td></tr>
+<tr><td>RBAC <code>auth.member</code>/<code>auth.org.</code> reads on every authorised request, and <code>queue_binding.</code> re-reads in the schedule tick (<code>members_skills.rs:82-144</code>, <code>schedule_tick.rs:132-166</code>)</td><td>prefix, unbounded, unfiltered</td><td class="n">1.00 GB</td><td class="n">12.7%</td></tr>
+<tr><td>Session history, up to 1000 events, on every request (<code>better-auth-allsource</code> <code>client.rs:106,204</code>; 15 s cache, <code>auth_cache.rs:119</code>)</td><td>entity, unbounded</td><td class="n">0.47 GB</td><td class="n">6.0%</td></tr>
+<tr><td>Other</td><td>event type and bounded entity reads</td><td class="n">0.15 GB</td><td class="n">1.9%</td></tr>
+</table>
+<p class="evidence">Shape counters: <code>control_plane_event_query_body_bytes_by_shape_total</code> at 19:50:26Z. Mapping shapes to Longhand code: sampled event fingerprints decoded with <code>sha256</code> (<code>auth.member.</code> → <code>51addf8d1b92</code>, <code>skill.</code> → <code>78d5a2aee9e5</code>, <code>team_queue.work_item.</code> → <code>b3c08b101aed</code>, <code>queue_binding.</code> → <code>f54e004241cf</code>) and the files cited. The counters have no namespace label, so the split inside the 63% bucket between team queue and skills is not measured.</p>
+</div>
+
+<div class="problem" id="p2">
+<h3>2. The egress guard throttles Longhand's reads and refuses most of its writes <span class="tag bad">availability</span></h3>
+<p>Control plane v120 started at 15:40:36Z with the egress guard: one pool of 16 slots shared by every tenant, answering 429 when full (<code>egress_guard.go:23,90-96</code>). Successful requests from <code>iad</code> fell from about 21,000 to about 5,600 per 10 minutes, and 429s appeared. The guard treats every <code>/api/v1/*</code> route as billable (<code>egress_guard.go:152-166</code>), so writes compete for the same slots: <b>2,103 of 2,576 writes (81.8%) have been refused since 15:40Z</b>. Whether Longhand retries a refused write was not visible from AllSource.</p>
+<div class="chart" id="refusal-chart"></div>
+<p>On Longhand's side, its own health endpoint reports the damage:</p>
+<table id="longhand-table"></table>
+<p class="evidence">Sources: <code>sum by (status)(increase(fly_edge_http_responses_count{app="allsource-control-plane"}[1h]))</code>; <code>control_plane_http_requests_total</code>; <code>https://longhand-control-plane-api.fly.dev/health</code> at 19:52Z. The 24-hour alert value falls only because these refusals remove traffic.</p>
+</div>
+
+<div class="problem" id="p3">
+<h3>3. Every billed response writes two events into Core's system log, which is never checkpointed <span class="tag bad">disk and memory</span></h3>
+<p>Each guarded response calls Core's egress ledger twice (reserve, then complete). Each call emits a <code>tenant_events::UPDATED</code> system event (<code>event_sourced_tenant_repository/egress.rs</code>) through <code>append_system_event</code> (<code>event_sourced_tenant_repository.rs:229</code>). The system store has no checkpoint or truncate path and keeps every event in memory (<code>system_store.rs</code>).</p>
+<table>
+<tr><th>Period</th><th>System-log growth</th></tr>
+<tr><td>Aug 29 – Oct 21</td><td>segments roll every few days, most under 7 MB</td></tr>
+<tr><td>Oct 22 – Oct 24 13:58Z</td><td>one 16 MB segment every 8–13 hours</td></tr>
+<tr><td><b>Since Oct 24 15:39Z</b> (guard live)</td><td><b>one 16 MB segment every 28–30 minutes</b>: sequence 153,499 → 418,603 in 4 h 13 min = <b>17.5 events/s</b>, about 0.8 GB a day</td></tr>
+</table>
+<p>Consequences: the system log is now 283 MB on disk across 46 segments and is replayed in full on every boot (151,329 events at the 13:58Z boot; the health check now reports 252,539 system events). The same events stay resident in Core's memory, which <a href="#p4">4</a> shows is already tight.</p>
+<p class="evidence">Sources: <code>ls -la /app/data/__system/wal</code> on the Core machine at 19:52Z (segment names are sequence numbers); Core health check; code on <code>main</code>.</p>
+</div>
+
+<div class="problem" id="p4">
+<h3>4. Core runs at 70–80% memory and refuses a tenant's hydration every five minutes <span class="tag warn">capacity</span></h3>
+<div class="chart" id="mem-chart"></div>
+<p>Core uses 5.9 GB of 8.3 GB on average over three days, peaking at 6.7 GB. Its tenant cache accounts for 633 MB (<code>allsource_core_cache_bytes</code>), so most of the resident memory is something else, and the system store in <a href="#p3">3</a> is one measured contributor. With about 2.4 GB available, Core refuses to hydrate <code>decebal-dobrica-at-gmail-com</code>, which needs 2.94 GB (16 × its 116.9 MB archive + 1 GiB reserve). That tenant's usage sync fails every five minutes and its quota meters stop reconciling.</p>
+<p class="evidence">Sources: <code>fly_instance_memory_mem_total - fly_instance_memory_mem_available</code>; Core <code>/metrics</code>; control-plane log <code>archive_hydration_refused</code> with <code>needed_bytes=2943581248</code>; <code>hydration_admission.rs</code>.</p>
+</div>
+
+<div class="problem warn" id="p5">
+<h3>5. The control plane is a shared-CPU VM that ran out of CPU credit under this load <span class="tag warn">capacity</span></h3>
+<div class="chart" id="cpu-chart"></div>
+<p>A shared-cpu-1x machine is guaranteed 6.25% of one vCPU (<code>fly_instance_cpu_baseline</code> = 0.0625) and bursts on a credit balance. Over three days the control plane averaged 6.73% busy, above its baseline. On 2026-10-21 from 19:00Z its balance sat at 0.5–17 and it was throttled 35–62% of every 10-minute bucket until 23:40Z, when Longhand's replay cache cut the response sizes. It is not throttled now, but it has no headroom: any return to that load throttles it again, and it has 256 MB of memory against a guard that can buffer 16 × 16 MiB.</p>
+<p class="evidence">Sources: <code>rate(fly_instance_cpu{mode!="idle"}[10m])</code>, <code>rate(fly_instance_cpu_throttle[10m])</code>, <code>fly_instance_cpu_balance</code>, <code>fly_instance_cpu_baseline</code>. Fly reports CPU time in centiseconds, so these rates read as percent of one vCPU.</p>
+</div>
+
+<div class="problem warn" id="p6">
+<h3>6. What we cannot see <span class="tag info">observability</span></h3>
+<ul>
+<li>No metric carries a tenant or namespace label. Per-tenant bytes exist only as a frequency-biased log sample.</li>
+<li>Fly does not scrape the control plane's <code>/metrics</code> (<code>fly.toml</code> has no <code>[metrics]</code> section), so its counters reset on every restart and have no history before 15:40Z today.</li>
+<li>Per-tenant query counts exist in Core's usage records (the query meter flushes them), but reading them needs an admin credential that this report did not use.</li>
+<li>The Longhand control plane runs in another Fly organisation, so its machine count, logs and retry behaviour were not read.</li>
+</ul>
+</div>
+
+<h2 id="tick">The schedule-tick question</h2>
+<p>An earlier draft recommended raising <code>SCHEDULE_TICK_INTERVAL_SECS</code>. That was not backed by a measurement, and it is withdrawn. The numbers:</p>
+<table>
+<tr><th>Input</th><th>Value</th><th>Source</th></tr>
+<tr><td>Live Longhand orgs the tick visits</td><td>32 (43 created − 11 deleted)</td><td><code>auth.org.created</code> and <code>auth.org.deleted</code> counts in Longhand's tenant</td></tr>
+<tr><td>One <code>queue_binding.</code> read</td><td>29,269 B</td><td>sampled response, 13 identical samples</td></tr>
+<tr><td>Reads per pass</td><td>one per org, unscoped, filtered locally</td><td><code>schedule_tick.rs:132-166</code></td></tr>
+<tr><td>Passes</td><td>every 60 s on every Longhand machine</td><td><code>schedule_tick.rs:23,87</code></td></tr>
+<tr><td>Longhand machines</td><td>4 per a code comment; not verified</td><td><code>auth_cache.rs:91</code></td></tr>
+</table>
+<p>Binding re-reads therefore cost 32 × 29,269 B × 1,440 passes = 1.35 GB a day per machine, and 1.35–5.4 GB a day for one to four machines: 2–8% of the 66 GB. A longer interval would lower AllSource's cost, not raise it, but it also delays schedules. Reading the bindings once per pass instead of once per org removes 31 of every 32 reads without changing schedule timing, so that is the change to make.</p>
+
+<h2 id="fixes">What to fix, in order</h2>
+<ol class="fixes">
+<li><b>Stop the guard from refusing writes, and make its slots per tenant.</b> Writes carry no egress, yet 81.8% are refused (<a href="#p2">2</a>). Exempt <code>POST /api/v1/events</code> from the egress slots, and replace the single pool with per-tenant admission so one tenant cannot starve the rest. Effect: Longhand's writes stop failing immediately, at no bandwidth cost.</li>
+<li><b>Stop writing two durable events per billed response.</b> The ledger turns 23 reads a second into 17.5 system events a second that are never checkpointed (<a href="#p3">3</a>). Lease bytes per tenant and settle in batches, and give the system store a checkpoint. Effect: system-log growth returns to the pre-15:39Z rate (one segment per 8–13 hours instead of every 30 minutes), and Core memory stops climbing with traffic.</li>
+<li><b>Give Longhand incremental reads, then move its polling onto them.</b> 63% of bytes are time-bounded windows re-fetched in full (<a href="#p1">1</a>). Positions from #345 and a conditional read (ETag/304 when nothing under the prefix changed) let a poll that finds nothing new return zero bytes. On Longhand's side: read forward from the last position, keep the window locally. Effect: bounded by the 63% share, about 41 GB a day at today's rate.</li>
+<li><b>Bound per-request authentication reads.</b> Session histories (6%) and per-request RBAC and binding reads (12.7%) are re-fetched on every request. Bound the session read with an overflow fallback, memoise RBAC per request and invalidate it from events, and read bindings once per tick pass. Effect: up to about 12 GB a day at today's rate, plus 1.35–5.4 GB a day from the tick.</li>
+<li><b>Make the traffic visible.</b> Scrape the control plane's metrics and add tenant and namespace labels, so the next report reads per-tenant bytes directly instead of inferring them from samples (<a href="#p6">6</a>).</li>
+</ol>
+<p class="muted small">Expected effects are upper bounds computed from today's shares and rates, not forecasts of the post-fix rate.</p>
+
+<h2 id="sources">Sources</h2>
+<table id="sources-table">
+<tr><th>Capture</th><th>What it is</th></tr>
+<tr><td>Fly Prometheus, org <code>allsource</code></td><td><code>fly_edge_data_out</code> by app and region (hourly from 10-14, daily from 10-15); <code>fly_edge_http_responses_count</code> by status; memory, CPU, CPU throttle, CPU balance and baseline, network sent, concurrency and response-time histogram at 10-minute resolution from 10-21 19:00Z</td></tr>
+<tr><td>Control plane <code>/metrics</code></td><td>two snapshots, 19:50:26Z and 19:51:20Z</td></tr>
+<tr><td>Core <code>/metrics</code></td><td>one snapshot at about 19:45Z, read from inside the machine</td></tr>
+<tr><td>Logs</td><td>control plane: 100-line buffer plus a 280-second capture; Core: a 150-second capture</td></tr>
+<tr><td>Alert evaluator</td><td><code>/api/v2/alerts</code> on <code>allsource-bandwidth-alerts</code></td></tr>
+<tr><td>Longhand</td><td>public <code>/health</code> at 19:52Z; code on <code>main</code></td></tr>
+<tr><td>Core machine</td><td><code>/app/data/__system/wal</code> listing and <code>/proc/meminfo</code> at 19:52Z</td></tr>
+</table>
+<p class="muted small">Root-cause narrative: <a href="./2026-10-24-control-plane-egress-rca.md">control-plane egress RCA</a>. Plan: <a href="../plans/2026-10-24-tenant-polling-defense.md">tenant polling defence</a>.</p>
+</main>
+
+<script src="./data/2026-10-24-production-traffic.js"></script>
+<script>
+(function () {
+  const D = window.REPORT_DATA;
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const PAL = ["--a1", "--a2", "--a3", "--a4", "--a5", "--a6"];
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const fmtBytes = (b) => {
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (Math.abs(b) >= 1000 && i < u.length - 1) { b /= 1000; i++; }
+    return (b >= 100 ? b.toFixed(0) : b >= 10 ? b.toFixed(1) : b.toFixed(2)) + " " + u[i];
+  };
+  const fmtNum = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : n.toFixed(n < 10 ? 2 : 0);
+  const iso = (t) => new Date(t * 1000).toISOString();
+  const day = (t) => iso(t).slice(5, 10);
+  const hm = (t) => iso(t).slice(5, 16).replace("T", " ");
+  const find = (series, key) => (series.find((s) => s.key === key) || { values: [] }).values;
+
+  function chart(container, opts) {
+    const host = document.getElementById(container);
+    const W = 1060, H = (opts.height || 280) + (opts.annotations ? 40 : 0), L = 64, R = 16, T = opts.annotations ? 70 : 30, B = 34;
+    const title = document.createElement("h3");
+    title.textContent = opts.title;
+    host.appendChild(title);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opts.title }, host);
+    const all = opts.series.flatMap((s) => s.values);
+    if (!all.length) return;
+    const x0 = Math.min(...all.map((v) => v[0])), x1 = Math.max(...all.map((v) => v[0]));
+    let ymax = opts.ymax || Math.max(...(opts.stacked ? stackTotals(opts.series) : all.map((v) => v[1])));
+    ymax = ymax * 1.08 || 1;
+    const sx = (x) => L + ((x - x0) / Math.max(1, x1 - x0)) * (W - L - R);
+    const sy = (y) => H - B - (y / ymax) * (H - T - B);
+    const grid = el("g", { class: "grid" }, svg), axis = el("g", { class: "axis" }, svg);
+    for (let i = 0; i <= 4; i++) {
+      const y = (ymax / 1.08) * (i / 4);
+      el("line", { x1: L, x2: W - R, y1: sy(y), y2: sy(y) }, grid);
+      const t = el("text", { x: L - 6, y: sy(y) + 4, "text-anchor": "end" }, axis);
+      t.textContent = opts.yfmt ? opts.yfmt(y) : fmtNum(y);
+    }
+    const ticks = opts.xticks || 8;
+    for (let i = 0; i <= ticks; i++) {
+      const x = x0 + ((x1 - x0) * i) / ticks;
+      const t = el("text", { x: sx(x), y: H - B + 16, "text-anchor": "middle" }, axis);
+      t.textContent = (opts.xfmt || hm)(x);
+    }
+    if (opts.kind === "bar") {
+      const n = opts.series[0].values.length;
+      const bw = ((W - L - R) / Math.max(1, n)) * 0.7;
+      const base = new Array(n).fill(0);
+      opts.series.forEach((s, si) => {
+        s.values.forEach((v, i) => {
+          const y0 = opts.stacked ? base[i] : 0;
+          const y1 = y0 + v[1];
+          el("rect", { x: sx(v[0]) - bw / 2, y: sy(y1), width: bw, height: Math.max(0, sy(y0) - sy(y1)), fill: css(PAL[si % PAL.length]), opacity: 0.9 }, svg)
+            .appendChild(document.createElementNS(NS, "title")).textContent = `${s.label} ${(opts.xfmt || hm)(v[0])}: ${(opts.yfmt || fmtNum)(v[1])}`;
+          if (opts.stacked) base[i] = y1;
+        });
+      });
+    } else {
+      opts.series.forEach((s, si) => {
+        const d = s.values.map((v, i) => `${i ? "L" : "M"}${sx(v[0]).toFixed(1)},${sy(v[1]).toFixed(1)}`).join("");
+        el("path", { d, fill: "none", stroke: css(s.color || PAL[si % PAL.length]), "stroke-width": s.width || 1.8, "stroke-dasharray": s.dash || "" }, svg);
+      });
+    }
+    if (opts.annotations) {
+      const g = el("g", { class: "annot" }, svg);
+      opts.annotations.forEach((a, i) => {
+        if (a.t < x0 || a.t > x1) return;
+        el("line", { x1: sx(a.t), x2: sx(a.t), y1: T - 6, y2: H - B }, g);
+        const t = el("text", { x: sx(a.t) + 4, y: T - 14 + (i % 5) * 12 }, g);
+        t.textContent = a.label;
+      });
+    }
+    const leg = document.createElement("div");
+    leg.className = "legend";
+    opts.series.forEach((s, si) => {
+      const span = document.createElement("span");
+      span.innerHTML = `<i style="background:${css(s.color || PAL[si % PAL.length])}"></i>${s.label}`;
+      leg.appendChild(span);
+    });
+    host.appendChild(leg);
+    if (opts.note) {
+      const p = document.createElement("p");
+      p.className = "evidence";
+      p.innerHTML = opts.note;
+      host.appendChild(p);
+    }
+  }
+  function stackTotals(series) {
+    const n = series[0].values.length, out = new Array(n).fill(0);
+    series.forEach((s) => s.values.forEach((v, i) => (out[i] += v[1])));
+    return out;
+  }
+
+  const T = {
+    alertApp: Date.parse("2026-10-21T17:19:00Z") / 1000,
+    acd4952: Date.parse("2026-10-21T23:32:00Z") / 1000,
+    burst: Date.parse("2026-10-22T21:05:00Z") / 1000,
+    v118: Date.parse("2026-10-23T16:39:00Z") / 1000,
+    v120: Date.parse("2026-10-24T15:40:36Z") / 1000,
+  };
+  const ANN = [
+    { t: T.alertApp, label: "alert evaluator deployed" },
+    { t: T.acd4952, label: "Longhand acd4952 replay cache" },
+    { t: T.burst, label: "unexplained burst" },
+    { t: T.v118, label: "CP v118 guard (rolled back)" },
+    { t: T.v120, label: "CP v120 guard live" },
+  ];
+
+  // Headline cards
+  const cpHourly = find(D.hourly_by_app, "allsource-control-plane");
+  const last24 = cpHourly.slice(-24).reduce((a, v) => a + v[1], 0);
+  const iadDaily = find(D.daily_by_region, "iad");
+  const allRegions = D.daily_by_region.map((s) => s.values[s.values.length - 1][1]).reduce((a, b) => a + b, 0);
+  const iadLast = iadDaily.length ? iadDaily[iadDaily.length - 1][1] : 0;
+  const lh = D.longhand_health || {};
+  const cards = [
+    { v: fmtBytes(last24), k: "control-plane edge output, last 24 h (alert threshold 50 GB)", c: "bad" },
+    { v: (Math.floor(10000 * iadLast / allRegions) / 100).toFixed(2) + "%", k: "of it to clients entering Fly's edge in iad", c: "warn" },
+    { v: "97.2%", k: "of sampled large responses: the Longhand control plane's tenant", c: "warn" },
+    { v: "81.8%", k: "of writes refused by the egress guard since 15:40Z", c: "bad" },
+    { v: "17.5/s", k: "billing events written to Core's never-checkpointed system log", c: "bad" },
+    { v: "320 : 1", k: "reads per write in Core since 17:07Z", c: "warn" },
+    { v: lh.ops && lh.ops.degraded ? "degraded" : "ok", k: `Longhand health: ${(lh.ops || {}).failures_total || 0} failures, p95 ${((lh.latency || {}).all || {}).p95_ms || "?"} ms`, c: lh.ops && lh.ops.degraded ? "bad" : "ok" },
+    { v: (D.alerts || []).filter((a) => a.state === "active").length + " firing", k: "bandwidth alerts on the evaluator now", c: "bad" },
+  ];
+  document.getElementById("cards").innerHTML = cards.map((c) => `<div class="card ${c.c}"><div class="v">${c.v}</div><div class="k">${c.k}</div></div>`).join("");
+
+  // Diagram
+  (function diagram() {
+    const host = document.getElementById("diagram");
+    const W = 1060, H = 470;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "System diagram with measured flows and bottlenecks" }, host);
+    const avg = (vals) => vals.length ? vals.reduce((a, v) => a + v[1], 0) / vals.length : 0;
+    const coreSent = avg(find(D.net_sent, "allsource-core"));
+    const cpSent = avg(find(D.net_sent, "allsource-control-plane"));
+    const webOut = avg(find(D.hourly_by_app, "allsource-web").slice(-72)) / 3600;
+    const nodes = {
+      desk: { x: 10, y: 50, w: 160, h: 70, t: "Longhand desktops", s: "poll Longhand CP" },
+      lcp: { x: 250, y: 50, w: 175, h: 70, t: "Longhand control plane", s: "Fly iad · other org" },
+      edge: { x: 505, y: 50, w: 140, h: 70, t: "Fly edge (iad)", s: "billed egress" },
+      cp: { x: 725, y: 50, w: 325, h: 70, t: "AllSource control plane", s: "256 MB · shared-cpu-1x · guard 16 slots", hot: true },
+      core: { x: 725, y: 300, w: 325, h: 80, t: "AllSource Core", s: "8 GB · 1 machine · system log never checkpointed", hot: true },
+      prime: { x: 505, y: 300, w: 160, h: 64, t: "Prime", s: "hosted, stateless" },
+      query: { x: 285, y: 300, w: 160, h: 64, t: "Query service", s: "health checks only" },
+      web: { x: 285, y: 400, w: 160, h: 56, t: "allsource-web", s: "marketing + dashboard" },
+      users: { x: 10, y: 400, w: 160, h: 56, t: "Web users", s: "lhr, ams, others" },
+      alert: { x: 505, y: 400, w: 200, h: 56, t: "Bandwidth alert evaluator", s: "fires > 50 GB / 24 h" },
+    };
+    const mid = (n, side) => {
+      const N = nodes[n];
+      if (side === "r") return [N.x + N.w, N.y + N.h / 2];
+      if (side === "l") return [N.x, N.y + N.h / 2];
+      if (side === "b") return [N.x + N.w / 2, N.y + N.h];
+      if (side === "t") return [N.x + N.w / 2, N.y];
+      return [N.x + N.w / 2, N.y + N.h / 2];
+    };
+    const width = (bps) => Math.max(1.5, Math.min(18, Math.sqrt(bps / 1000) * 0.45));
+    const flow = (a, b, bps, label, color, speed, labelAt) => {
+      const [x1, y1] = a, [x2, y2] = b;
+      const cx = (x1 + x2) / 2;
+      const d = `M${x1},${y1} C${cx},${y1} ${cx},${y2} ${x2},${y2}`;
+      el("path", { d, class: "flow", stroke: css(color), "stroke-width": width(bps), style: `animation-duration:${speed}s` }, svg);
+      if (!label) return;
+      const [lx, ly] = labelAt || [cx, (y1 + y2) / 2 - 8];
+      label.split("\n").forEach((line, i) => {
+        const t = el("text", { x: lx, y: ly + i * 14, "text-anchor": "middle", class: "flowlabel" }, svg);
+        t.textContent = line;
+      });
+    };
+    const rowY = nodes.cp.y + nodes.cp.h + 30;
+    flow(mid("core", "t"), mid("cp", "b"), coreSent, `Core → CP\n${fmtBytes(coreSent)}/s`, "--a4", 3, [nodes.cp.x + nodes.cp.w / 2 + 60, 210]);
+    flow(mid("cp", "l"), mid("edge", "r"), cpSent, `${fmtBytes(cpSent)}/s\nquery bodies`, "--a2", 2, [685, rowY]);
+    flow(mid("edge", "l"), mid("lcp", "r"), cpSent, `99.98% of it\nto one tenant`, "--a2", 2, [465, rowY]);
+    flow(mid("lcp", "l"), mid("desk", "r"), 20000, `board, queue,\nskill polls`, "--a1", 4, [210, rowY]);
+    flow(mid("users", "r"), mid("web", "l"), webOut, `${fmtBytes(webOut)}/s`, "--a3", 6, [228, 420]);
+    flow(mid("query", "r"), mid("core", "l"), 50, "", "--line", 9);
+    flow(mid("prime", "r"), mid("core", "l"), 50, "", "--line", 9);
+    flow(mid("edge", "b"), mid("alert", "t"), 50, "scrapes edge counters", "--a5", 8, [600, 260]);
+    Object.entries(nodes).forEach(([k, n]) => {
+      const g = el("g", { class: "node" + (n.hot ? " hot" : "") }, svg);
+      el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: 10 }, g);
+      const t1 = el("text", { x: n.x + 12, y: n.y + 26 }, g); t1.textContent = n.t;
+      const t2 = el("text", { x: n.x + 12, y: n.y + 46, class: "sub" }, g); t2.textContent = n.s;
+    });
+    const markers = [
+      { x: 425, y: 40, n: 1, href: "#p1", tip: "1. Longhand re-reads history every poll" },
+      { x: 880, y: 40, n: 2, href: "#p2", tip: "2. Global 16-slot guard refuses 13% of reads and 82% of writes" },
+      { x: 1050, y: 290, n: 3, href: "#p3", tip: "3. 17.5 billing events/s into a never-checkpointed log" },
+      { x: 725, y: 390, n: 4, href: "#p4", tip: "4. Core at 70–80% memory, hydration refused" },
+      { x: 1050, y: 40, n: 5, href: "#p5", tip: "5. CP CPU above its 6.25% baseline; throttled on 10-21" },
+      { x: 705, y: 440, n: 6, href: "#p6", tip: "6. No per-tenant byte metric" },
+    ];
+    markers.forEach((m) => {
+      const a = el("a", { href: m.href, class: "marker" }, svg);
+      el("circle", { cx: m.x, cy: m.y, r: 9, class: "pulse" }, a);
+      el("circle", { cx: m.x, cy: m.y, r: 10 }, a);
+      const t = el("text", { x: m.x, y: m.y + 4, "text-anchor": "middle" }, a); t.textContent = m.n;
+      el("title", {}, a).textContent = m.tip;
+    });
+    const p = document.createElement("p");
+    p.className = "evidence";
+    p.textContent = `Flow widths: mean network bytes sent by allsource-core (${fmtBytes(coreSent)}/s) and allsource-control-plane (${fmtBytes(cpSent)}/s) over the last three days (fly_instance_net_sent_bytes), and allsource-web edge output. The Longhand desktop to Longhand control plane hop is outside this organisation and drawn without a measurement.`;
+    host.appendChild(p);
+  })();
+
+  // Region chart: daily CP edge output by region
+  chart("region-chart", {
+    title: "Control-plane edge output per day, by edge region",
+    kind: "bar", stacked: true, height: 260, xticks: 9, xfmt: day, yfmt: fmtBytes,
+    series: D.daily_by_region
+      .map((s) => ({ label: s.key, values: s.values, total: s.values.reduce((a, v) => a + v[1], 0) }))
+      .sort((a, b) => b.total - a.total),
+    note: "Each bar is the 24 hours ending at 00:00Z on the date shown, except the last, which ends at 19:00Z. Source: <code>sum by (region)(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[1d]))</code>.",
+  });
+
+  // App table
+  const appRows = D.hourly_by_app
+    .map((s) => ({ app: s.key, b: s.values.slice(-24).reduce((a, v) => a + v[1], 0) }))
+    .sort((a, b) => b.b - a.b);
+  const tot = appRows.reduce((a, r) => a + r.b, 0);
+  document.getElementById("app-table").innerHTML = "<tr><th>App</th><th class=n>Bytes</th><th class=n>Share</th></tr>" +
+    appRows.map((r) => `<tr><td>${r.app}</td><td class=n>${fmtBytes(r.b)}</td><td class=n>${(100 * r.b / tot).toFixed(2)}%</td></tr>`).join("");
+
+  // Daily chart
+  const daily = cpHourly.reduce((acc, v) => {
+    const k = Math.floor(v[0] / 86400) * 86400;
+    acc[k] = (acc[k] || 0) + v[1];
+    return acc;
+  }, {});
+  chart("daily-chart", {
+    title: "Control-plane edge output per calendar day (UTC)",
+    kind: "bar", height: 260, xticks: 10, xfmt: day, yfmt: fmtBytes,
+    series: [{ label: "allsource-control-plane", values: Object.entries(daily).map(([k, v]) => [Number(k), v]), color: "--a2" }],
+    annotations: ANN,
+    note: "Summed from hourly <code>increase(fly_edge_data_out[1h])</code>. 10-24 is a partial day.",
+  });
+  chart("hourly-chart", {
+    title: "Edge output per hour, by app",
+    height: 280, xticks: 10, xfmt: day, yfmt: fmtBytes,
+    series: D.hourly_by_app.map((s) => ({ label: s.key, values: s.values })),
+    annotations: ANN,
+  });
+  const groupStatus = (pred) => {
+    const acc = new Map();
+    D.hourly_by_status.filter((s) => pred(s.key)).forEach((s) => s.values.forEach((v) => acc.set(v[0], (acc.get(v[0]) || 0) + v[1])));
+    return [...acc.entries()].sort((a, b) => a[0] - b[0]);
+  };
+  chart("status-chart", {
+    title: "Control-plane responses per hour, by status",
+    height: 260, xticks: 10, xfmt: day,
+    series: [
+      { label: "HTTP 200", values: groupStatus((k) => k === "200"), color: "--a1" },
+      { label: "HTTP 429", values: groupStatus((k) => k === "429"), color: "--a2", width: 2.4 },
+      { label: "other 4xx", values: groupStatus((k) => k[0] === "4" && k !== "429"), color: "--a5" },
+      { label: "5xx", values: groupStatus((k) => k[0] === "5"), color: "--a4" },
+    ],
+    annotations: ANN,
+    note: "Source: <code>sum by (status)(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[1h]))</code>. Successful responses per hour rose after 10-21 while bytes per hour fell: the replay cache shrank responses, not the number of polls.",
+  });
+
+  // Shape chart (static snapshot)
+  (function () {
+    const host = document.getElementById("shape-chart");
+    const rows = [
+      ["prefix, time-bounded, filtered", 4.938097684e9],
+      ["prefix, unbounded, filtered", 1.288546684e9],
+      ["prefix, unbounded, unfiltered", 0.99696731e9],
+      ["entity, unbounded", 0.468881149e9],
+      ["event type, unbounded", 0.095133239e9],
+      ["entity, time-bounded", 0.041952493e9],
+      ["event type, filtered", 0.012454468e9],
+    ];
+    const total = 7.842033027e9;
+    host.innerHTML = "<h3>Response bytes by query shape since 15:40:36Z</h3>";
+    const W = 1060, rowH = 30, H = rows.length * rowH + 10;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}` }, host);
+    rows.forEach(([label, b], i) => {
+      const y = i * rowH + 4, w = (b / rows[0][1]) * 640;
+      const t = el("text", { x: 0, y: y + 18, class: "flowlabel", style: "stroke:none;font-weight:500" }, svg); t.textContent = label;
+      el("rect", { x: 250, y, width: w, height: rowH - 8, rx: 4, fill: css(i === 0 ? "--a2" : "--a1"), opacity: 0.85 }, svg);
+      const v = el("text", { x: 256 + w, y: y + 17, class: "flowlabel", style: "stroke:none;font-weight:500" }, svg);
+      v.textContent = `${fmtBytes(b)} · ${(100 * b / total).toFixed(1)}%`;
+    });
+    const p = document.createElement("p");
+    p.className = "evidence";
+    p.innerHTML = "Source: <code>control_plane_event_query_body_bytes_by_shape_total</code> at 19:50:26Z (total <code>control_plane_event_query_response_bytes_total</code> = 7.842 GB).";
+    host.appendChild(p);
+  })();
+
+  // Refusal chart: 429 share per hour
+  const s200 = find(D.hourly_by_status, "200"), s429 = find(D.hourly_by_status, "429");
+  const m429 = new Map(s429.map((v) => [v[0], v[1]]));
+  chart("refusal-chart", {
+    title: "HTTP 429 as a percentage of control-plane responses, per hour, last 72 hours",
+    height: 220, xticks: 8, xfmt: hm, yfmt: (y) => y.toFixed(1) + "%",
+    series: [
+      { label: "429 share of responses", values: s200.slice(-72).map((v) => { const r = m429.get(v[0]) || 0; return [v[0], (100 * r) / Math.max(1, r + v[1])]; }), color: "--a2", width: 2.4 },
+    ],
+    annotations: ANN,
+    note: "Hourly edge counts; the control plane's own counters for the window since 15:40:36Z give 11.6% of reads and 81.8% of writes refused.",
+  });
+
+  // Longhand table
+  const lt = [];
+  if (lh.ops) lt.push(["Status", lh.ops.degraded ? "degraded" : "ok"], ["Read query failures", (lh.ops.failures.find((f) => f.kind === "read_query_failed") || {}).count]);
+  if (lh.latency) lt.push(["Requests since process start", lh.latency.requests], ["Latency p50 / p95 / p99", `${lh.latency.all.p50_ms} / ${lh.latency.all.p95_ms} / ${lh.latency.all.p99_ms} ms`], ["Board read mean", `${lh.latency.board_read.mean_ms} ms`]);
+  if (lh.read_cost) lt.push(["Reads over the 15 s SLO", `${lh.read_cost.over_slo} of ${lh.read_cost.reads}`], ["Snapshot hit rate", `${lh.read_cost.snapshot_hit_pct}%`]);
+  document.getElementById("longhand-table").innerHTML = "<tr><th>Longhand /health</th><th>Value</th></tr>" + lt.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+
+  // Memory chart
+  const memSeries = ["allsource-core", "allsource-control-plane", "allsource-query", "allsource-prime"].map((app, i) => {
+    const used = find(D.mem_used, app), total = new Map(find(D.mem_total, app).map((v) => [v[0], v[1]]));
+    return { label: app + " (% used)", values: used.map((v) => [v[0], total.get(v[0]) ? (100 * v[1]) / total.get(v[0]) : 0]), color: PAL[i] };
+  });
+  chart("mem-chart", {
+    title: "Memory used, percent of machine memory",
+    height: 240, xticks: 6, ymax: 100, yfmt: (y) => y.toFixed(0) + "%",
+    series: memSeries, annotations: ANN,
+    note: "Source: <code>fly_instance_memory_mem_total - fly_instance_memory_mem_available</code> over <code>fly_instance_memory_mem_total</code>.",
+  });
+
+  // CPU chart for the control plane
+  const baseline = find(D.cp_cpu_baseline, "allsource-control-plane");
+  const busy = find(D.cpu_busy, "allsource-control-plane");
+  chart("cpu-chart", {
+    title: "Control-plane CPU: busy and throttled, percent of one vCPU",
+    height: 240, xticks: 6, yfmt: (y) => y.toFixed(0) + "%",
+    series: [
+      { label: "busy", values: busy, color: "--a1" },
+      { label: "throttled", values: find(D.cpu_throttle, "allsource-control-plane"), color: "--a2", width: 2.4 },
+      { label: "baseline (6.25%)", values: busy.map((v) => [v[0], (baseline.length ? baseline[0][1] : 0.0625) * 100]), color: "--a5", dash: "5 4" },
+    ],
+    annotations: ANN,
+  });
+})();
+</script>
+</body>
+</html>
