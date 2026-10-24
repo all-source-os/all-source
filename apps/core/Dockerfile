@@ -70,7 +70,7 @@ RUN mkdir -p tooling/performance/src sdks/rust/src sdks/rust/examples \
 # =============================================================================
 # Stage 3: Builder base - Shared dependency cooking
 # =============================================================================
-FROM chef AS builder-deps
+FROM chef AS builder-deps-warm
 
 COPY --from=dependency-seed /app/target /app/target
 COPY --from=dependency-seed /usr/local/cargo/registry /usr/local/cargo/registry
@@ -88,6 +88,22 @@ RUN mkdir -p crates/allsource-prime-models/src && \
 # cargo-chef replaces version fields with placeholders, so version bumps in
 # Cargo.toml/Cargo.lock don't invalidate this expensive layer.
 COPY --from=planner /app/recipe.json recipe.json
+# A dependency change that alters shared feature sets can recompile more than
+# one deadline allows. Exit 124 keeps the finished units for the next phase to
+# resume; any other failure stops the build. 200s leaves the 285s phase room
+# for seed import and cache export.
+RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps-warm AS builder-deps-resume
+RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps-resume AS builder-deps
 RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics
 
 FROM builder-deps AS builder-base

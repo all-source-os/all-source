@@ -201,6 +201,24 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Warm Core dependencies
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps-warm
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Resume Core dependencies
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps-resume
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
       - name: Cache remaining Core dependencies
         if: startsWith(matrix.name, 'core')
         uses: ./.github/actions/core-build-phase

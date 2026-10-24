@@ -77,10 +77,13 @@ impl EventStore {
                 ));
             }
             let mut encoded = EncodedBudget { remaining, work };
+            // The writer also fails on cancellation and deadline; report those, not size.
             serde_json::to_writer(&mut encoded, event).map_err(|_| {
-                AllSourceError::StorageError(
-                    "Strict retained read encoded data budget exceeded".into(),
-                )
+                work.check().err().unwrap_or_else(|| {
+                    AllSourceError::StorageError(
+                        "Strict retained read encoded data budget exceeded".into(),
+                    )
+                })
             })?;
             remaining = encoded.remaining;
             seen.insert(event.id);

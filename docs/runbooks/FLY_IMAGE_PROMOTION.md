@@ -28,6 +28,12 @@ The seed is a compiler input and must never be deployed as an application.
 Its default image is pinned by digest in the Core Dockerfile. CI also passes the
 recovery job's exact image digest into every Core build phase.
 
+Dependency cooking runs up to three times with the same command. The warm and
+resume phases keep the finished units when they reach their 200-second deadline
+(exit 124), and the dependency phase resumes from them under 240 seconds and must
+complete. A lockfile change that alters feature sets shared by datafusion measured
+about 480 seconds of cooking from the seed.
+
 Application library, binary and migration phases export separate cache tags under
 five-minute CI deadlines. Server compilation has a 255-second budget inside its
 285-second build phase. Server binaries use ThinLTO and 16 codegen units with
