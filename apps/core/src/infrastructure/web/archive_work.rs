@@ -77,7 +77,6 @@ pub(super) async fn retained_query(
     limit: usize,
 ) -> Result<(Vec<Event>, usize)> {
     run(Arc::clone(&SLOTS), RESPONSE_TIMEOUT, move |cancellation| {
-        store.prepare_http_archive(&tenant, &cancellation)?;
         // Core is an internal service. Its gateway supplies the authoritative
         // tenant; entity-level customer grants are enforced before this call.
         store.query_retained_entity_cancellable(

@@ -1,3 +1,6 @@
+#[path = "storage_retained_entity.rs"]
+mod retained_entity;
+
 use super::{
     archive_budget::{ArchiveReadBudget, ArchiveReadLimits},
     archive_output::{

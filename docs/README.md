@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Bounded retained entity reads](./plans/2026-10-24-bounded-retained-entity.md): memory-bounded archive reads and verification requirements.
+
 - [AllSource LinkedIn company page](./brand/LINKEDIN_COMPANY_PAGE.md)
 - [AllSource and WolvenTech keyword demand (2026-10-01)](./seo/2026-10-01-allsource-wolventech-keyword-demand.md): treg/DataForSEO volumes, related keywords, intent exclusions and targeting priorities.
 - [Search-content implementation (2026-10-01)](./seo/2026-10-01-search-content-implementation.md): page intent, content changes, technical verification and measurement limits for both sites.

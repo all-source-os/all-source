@@ -198,8 +198,6 @@ pub struct EventStore {
     /// strategy.
     tenant_loader: Arc<TenantLoader>,
     strict_archive_limits: ArchiveReadLimits,
-    #[cfg(feature = "server")]
-    http_archive_warmup_timeout: Option<std::time::Duration>,
     /// Eviction must not reset indexes/versions underneath a writer or a
     /// certified cache load. Acquire before durability, events and storage locks.
     cache_residency_gate: RwLock<()>,
@@ -360,8 +358,6 @@ impl EventStore {
 
         let store = Self {
             strict_archive_limits: config.strict_archive_limits,
-            #[cfg(feature = "server")]
-            http_archive_warmup_timeout: config.http_archive_warmup_timeout,
             cache_residency_gate: RwLock::new(()),
             cache_generations: DashMap::new(),
             events: Arc::new(RwLock::new(Vec::new())),
@@ -1778,26 +1774,6 @@ impl EventStore {
     ) -> Result<()> {
         self.ensure_writable()?;
         self.validate_event(event)?;
-        check_cancelled(Some(cancellation.as_ref()))
-    }
-
-    /// An admitted HTTP worker owns this bounded cache warmup even if its
-    /// caller leaves. Cancellation still prevents the subsequent operation.
-    #[cfg(feature = "server")]
-    pub(crate) fn prepare_http_archive(
-        &self,
-        tenant_id: &str,
-        cancellation: &Arc<std::sync::atomic::AtomicBool>,
-    ) -> Result<()> {
-        crate::domain::value_objects::TenantId::new(tenant_id.to_string())?;
-        check_cancelled(Some(cancellation.as_ref()))?;
-        if let Some(timeout) = self.http_archive_warmup_timeout {
-            let limits = ArchiveReadLimits {
-                timeout,
-                ..self.strict_archive_limits.clone()
-            };
-            self.ensure_tenant_loaded_with_limits(tenant_id, true, None, &limits)?;
-        }
         check_cancelled(Some(cancellation.as_ref()))
     }
 

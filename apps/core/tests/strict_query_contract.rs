@@ -1,7 +1,7 @@
 use allsource_core::{
     domain::entities::Event,
     infrastructure::{security::middleware::OptionalAuth, web::api::query_events},
-    store::EventStore,
+    store::{EventStore, EventStoreConfig},
 };
 use axum::{
     extract::{Query, State},
@@ -9,6 +9,49 @@ use axum::{
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
+
+#[tokio::test]
+async fn http_retained_read_does_not_warm_unrelated_history() {
+    let directory = tempfile::TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for entity in ["run", "other"] {
+            store
+                .ingest(
+                    &Event::from_strings(
+                        "synthetic.updated".into(),
+                        entity.into(),
+                        "synthetic".into(),
+                        if entity == "run" {
+                            json!({})
+                        } else {
+                            json!({"text": "x".repeat(4096)})
+                        },
+                        None,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        store.flush_storage().unwrap();
+    }
+    let store = Arc::new(EventStore::with_config(EventStoreConfig {
+        http_archive_warmup_timeout: Some(std::time::Duration::from_secs(2)),
+        strict_archive_limits: allsource_core::infrastructure::persistence::ArchiveReadLimits {
+            max_uncompressed_bytes: 1024,
+            ..Default::default()
+        },
+        ..EventStoreConfig::with_persistence(directory.path())
+    }));
+    let result = query(
+        &store,
+        "tenant_id=synthetic&entity_id=run&limit=1001&integrity=retained-entity-v1",
+    )
+    .await
+    .unwrap();
+    assert_eq!(result["total_count"], 1);
+    assert!(!store.is_tenant_loaded("synthetic"));
+}
 
 async fn query(store: &Arc<EventStore>, parameters: &str) -> allsource_core::error::Result<Value> {
     let uri: Uri = format!("/api/v1/events/query?{parameters}")
