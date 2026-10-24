@@ -92,6 +92,18 @@ pub(super) async fn retained_query(
 
 struct CancelOnDrop(Arc<AtomicBool>);
 
+pub(super) async fn prefix_query(
+    store: Arc<EventStore>,
+    request: crate::application::dto::QueryEventsRequest,
+    offset: usize,
+    descending: bool,
+) -> Result<(Vec<Event>, usize)> {
+    run(Arc::clone(&SLOTS), RESPONSE_TIMEOUT, move |cancellation| {
+        store.query_retained_prefix(&request, offset, descending, cancellation)
+    })
+    .await
+}
+
 impl Drop for CancelOnDrop {
     fn drop(&mut self) {
         self.0.store(true, Ordering::Release);

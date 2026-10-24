@@ -612,7 +612,17 @@ pub async fn query_events(
         .clone()
         .or_else(|| auth.as_ref().map(|a| a.tenant_id().to_string()));
 
-    if let Some(protocol) = integrity_param.integrity {
+    let retained_prefix = integrity_param.integrity.as_deref() == Some("retained-prefix-v1");
+    if retained_prefix
+        && (enforced_tenant.as_deref().is_none_or(str::is_empty)
+            || req.event_type_prefix.as_deref().is_none_or(str::is_empty)
+            || req.entity_id.is_some())
+    {
+        return Err(crate::error::AllSourceError::InvalidInput(
+            "Strict prefix read requires tenant_id and nonempty event_type_prefix without entity_id".into(),
+        ));
+    }
+    if let Some(protocol) = integrity_param.integrity.filter(|_| !retained_prefix) {
         return super::retained_query::query(
             store,
             QueryEventsRequest {
@@ -668,7 +678,12 @@ pub async fn query_events(
             "query limit clamped to the maximum page size"
         );
     }
-    let (limited_events, total_count) = store.query_window(&scoped_req, offset, descending)?;
+    let (limited_events, total_count) = if retained_prefix {
+        super::archive_work::prefix_query(Arc::clone(&store), scoped_req, offset, descending)
+            .await?
+    } else {
+        store.query_window(&scoped_req, offset, descending)?
+    };
 
     let count = limited_events.len();
     // `has_more` is relative to the window actually served, not to the page
