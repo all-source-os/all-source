@@ -12,6 +12,7 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Tenant polling defence](./plans/2026-10-24-tenant-polling-defense.md): per-tenant admission, conditional reads, change detection and caches on both sides, phased so Longhand is never starved.
 - [Bounded event-prefix reads](./plans/2026-10-24-bounded-prefix-auth-reads.md): authentication lookups without whole-tenant hydration.
 - [Shared tenant read model](./plans/2026-10-24-shared-tenant-read-model.md): bounded feeds, atomic checkpoints, conditional reads and rollout requirements.
 
@@ -133,6 +134,7 @@ For DevOps and platform engineers.
 |----------|-------------|--------|
 | [Alerts](./operations/ALERTS.md) | Repo-defined alarms, their thresholds and escalation | ✅ |
 | [Bandwidth alerts](./runbooks/BANDWIDTH_ALERTS.md) | Production edge-output thresholds, private email delivery, and operator checks | Active; firing and recovery verified |
+| [Control-plane egress root cause (2026-10-24)](./reports/2026-10-24-control-plane-egress-rca.md) | 66 GB/day alert: Longhand control-plane polling over the public edge, egress-guard throttling since 15:40Z, fix sites | ✅ |
 | [Fly image promotion](./runbooks/FLY_IMAGE_PROMOTION.md) | Copy tested private CI images into app-scoped Fly registries before deployment | Operator runbook |
 | [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
 | [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |
