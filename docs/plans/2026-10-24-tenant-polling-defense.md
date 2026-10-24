@@ -61,7 +61,6 @@ has a path that stays under it.
 
 | Phase | Repo | Changes | Confidence |
 |---|---|---|---|
-| P0 | Longhand (Fly secret) | Raise `SCHEDULE_TICK_INTERVAL_SECS` (`schedule_tick.rs:76`) to cut the per-tenant binding re-reads. Check `interval_from`'s clamp first | sand |
 | P1 | Longhand | Governor with `Retry-After` pause and priorities; Redis leader lease for the three background loops; bindings and teams hoisted to once per pass; request-scoped RBAC memo; serve-stale for non-authorisation reads with `X-Longhand-Stale` | rock |
 | P2 | AllSource SDK and `better-auth-allsource`, then a Longhand bump | SDK 0.25 rate-limit handling and gzip; bounded session read with overflow fallback | rock |
 | P3 | AllSource control plane | Per-tenant admission in shadow; computed `Retry-After` and refusal scopes; `/api/v1/tenants/me/limits`; tenant and namespace labels on byte metrics; `[metrics]` scraping; header passthrough with explicit 304 metering | rock |
@@ -105,8 +104,14 @@ has a path that stays under it.
 
 The global guard stays as the bound until P1 and P3 land. Raising its slots
 risks out-of-memory on the 256 MB VM, and shortening `Retry-After` by hand
-reopens the unbounded load. P0 is a Longhand secret change. P1, P2 and P3 do
-not depend on each other and can proceed together.
+reopens the unbounded load. P1, P2 and P3 do not depend on each other and can
+proceed together.
+
+A longer schedule-tick interval is not part of this plan. The tick's binding
+re-reads measure at 1.35–5.4 GB a day (32 live orgs × 29,269 B × 1,440 passes,
+for one to four machines), and reading the bindings once per pass in P1 removes
+31 of every 32 of them without delaying schedules. See the
+[production traffic report](../reports/2026-10-24-production-traffic.html).
 
 ## Decisions for the owner
 
@@ -116,7 +121,6 @@ not depend on each other and can proceed together.
    any response cache requires.
 4. Security sign-off on a 60-second session TTL once cross-machine sign-out
    invalidation is in place.
-5. An acceptable `SCHEDULE_TICK_INTERVAL_SECS` for schedule fire granularity.
-6. Whether Core's `/events*` routes are reachable only through the control
+5. Whether Core's `/events*` routes are reachable only through the control
    plane's private network, which the Core limiter's trust in `tenant_id`
    depends on.
