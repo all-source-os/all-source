@@ -70,6 +70,81 @@ async fn query(store: &Arc<EventStore>, parameters: &str) -> allsource_core::err
 }
 
 #[tokio::test]
+async fn prefix_http_query_filters_before_decoding_and_preserves_pagination() {
+    let directory = tempfile::TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for (tenant, kind, entity, payload) in [
+            (
+                "synthetic",
+                "auth.user.created",
+                "user",
+                json!({"id":"user"}),
+            ),
+            (
+                "synthetic",
+                "auth.user.deleted",
+                "user",
+                json!({"id":"user","_deleted":true}),
+            ),
+            (
+                "synthetic",
+                "unrelated.created",
+                "noise",
+                json!({"text":"x".repeat(4096)}),
+            ),
+            (
+                "other",
+                "auth.user.created",
+                "foreign",
+                json!({"id":"foreign"}),
+            ),
+        ] {
+            store
+                .ingest(
+                    &Event::from_strings(kind.into(), entity.into(), tenant.into(), payload, None)
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+        store.flush_storage().unwrap();
+    }
+    let store = Arc::new(EventStore::with_config(EventStoreConfig {
+        strict_archive_limits: allsource_core::infrastructure::persistence::ArchiveReadLimits {
+            max_uncompressed_bytes: 1024,
+            ..Default::default()
+        },
+        ..EventStoreConfig::with_persistence(directory.path())
+    }));
+    let first = query(
+        &store,
+        "tenant_id=synthetic&event_type_prefix=auth.user.&integrity=retained-prefix-v1&order=desc&limit=1",
+    )
+    .await
+    .unwrap();
+    assert_eq!(first["total_count"], 2);
+    assert_eq!(first["has_more"], true);
+    assert_eq!(first["events"][0]["payload"]["_deleted"], true);
+    let next = query(
+        &store,
+        "tenant_id=synthetic&event_type_prefix=auth.user.&integrity=retained-prefix-v1&order=desc&limit=1&offset=1",
+    )
+    .await
+    .unwrap();
+    assert_eq!(next["has_more"], false);
+    assert_eq!(next["events"][0]["entity_id"], "user");
+    assert!(!store.is_tenant_loaded("synthetic"));
+    for invalid in [
+        "integrity=retained-prefix-v1&event_type_prefix=auth.user.",
+        "integrity=retained-prefix-v1&tenant_id=synthetic",
+        "integrity=retained-prefix-v1&tenant_id=synthetic&event_type_prefix=",
+        "integrity=retained-prefix-v1&tenant_id=synthetic&event_type_prefix=auth.user.&entity_id=user",
+    ] {
+        assert!(query(&store, invalid).await.is_err());
+    }
+}
+
+#[tokio::test]
 async fn only_explicit_strict_reads_attest_bound_retained_history() {
     let store = Arc::new(EventStore::new());
     for entity in ["run", "run", "other"] {
@@ -113,7 +188,24 @@ async fn only_explicit_strict_reads_attest_bound_retained_history() {
     .await
     .unwrap();
     assert_eq!(empty["events"], json!([]));
+    assert_eq!(empty["entity_version"], 0);
     assert_eq!(empty["archive_integrity"]["entity_id"], "absent");
+    let complete = query(
+        &store,
+        "tenant_id=synthetic&entity_id=run&limit=1001&integrity=retained-entity-v1",
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        complete["entity_version"],
+        complete["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|event| event["version"].as_u64().unwrap())
+            .max()
+            .unwrap()
+    );
 }
 
 #[tokio::test]

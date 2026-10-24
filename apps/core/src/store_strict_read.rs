@@ -150,9 +150,9 @@ impl EventStore {
     }
 }
 
-struct EncodedBudget<'a> {
-    remaining: usize,
-    work: &'a ArchiveReadBudget,
+pub(super) struct EncodedBudget<'a> {
+    pub(super) remaining: usize,
+    pub(super) work: &'a ArchiveReadBudget,
 }
 
 impl io::Write for EncodedBudget<'_> {

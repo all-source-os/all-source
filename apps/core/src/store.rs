@@ -3484,6 +3484,9 @@ impl Default for EventStore {
 #[path = "store_strict_read.rs"]
 mod strict_read;
 
+#[path = "store_prefix_read.rs"]
+mod prefix_read;
+
 #[path = "store_refresh.rs"]
 mod refresh;
 pub use refresh::RefreshReport;

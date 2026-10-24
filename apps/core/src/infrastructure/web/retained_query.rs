@@ -45,12 +45,19 @@ pub(super) async fn query(
     let (events, total_count) =
         archive_work::retained_query(store, tenant.clone(), entity.clone(), limit).await?;
     let count = events.len();
+    let entity_version = (count == total_count).then(|| {
+        events
+            .iter()
+            .map(|event| event.version as u64)
+            .max()
+            .unwrap_or(0)
+    });
     Ok(QueryEventsResponse {
         events: events.into_iter().map(EventDto::from).collect(),
         count,
         total_count,
         has_more: count < total_count,
-        entity_version: None,
+        entity_version,
         archive_integrity: Some(RetainedEntityIntegrity {
             protocol: "retained-entity-v1",
             tenant_id: tenant,
