@@ -78,7 +78,7 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 }
 
 func (cp *ControlPlane) enforceEgress(c *gin.Context) {
-	if cp.egressExchange == nil || !billableEgressPath(c.Request.URL.Path) {
+	if cp.egressExchange == nil || !billableEgressRequest(c.Request) {
 		c.Next()
 		return
 	}
@@ -147,6 +147,21 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	if _, err := original.Write(buffer.body.Bytes()); err != nil {
 		log.Printf("funded response delivery failed: %v", err)
 	}
+}
+
+// Ingest writes and the empty event-feed position probe return no tenant data,
+// so they must not wait for a response slot or a ledger round trip.
+func billableEgressRequest(r *http.Request) bool {
+	path := r.URL.Path
+	switch {
+	case r.Method == http.MethodPost && (path == "/api/v1/events" || path == "/api/v1/events/batch"):
+		return false
+	case r.Method == http.MethodPut && strings.HasPrefix(path, "/api/v1/read-models/"):
+		return false
+	case r.Method == http.MethodGet && path == eventFeedPath && r.URL.Query().Get("limit") == "0":
+		return false
+	}
+	return billableEgressPath(path)
 }
 
 func billableEgressPath(path string) bool {
