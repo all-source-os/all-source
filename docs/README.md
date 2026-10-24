@@ -13,6 +13,7 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 ## Quick Navigation
 
 - [Bounded retained entity reads](./plans/2026-10-24-bounded-retained-entity.md): memory-bounded archive reads and verification requirements.
+- [JWT crypto backend](./plans/2026-10-24-jwt-crypto-backend.md): remove the vulnerable transitive dependency while preserving token compatibility.
 
 - [AllSource LinkedIn company page](./brand/LINKEDIN_COMPANY_PAGE.md)
 - [AllSource and WolvenTech keyword demand (2026-10-01)](./seo/2026-10-01-allsource-wolventech-keyword-demand.md): treg/DataForSEO volumes, related keywords, intent exclusions and targeting priorities.
