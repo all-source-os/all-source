@@ -35,6 +35,7 @@ pub struct FeedPage {
     pub cursor: FeedCursor,
     pub head: FeedCursor,
     pub events: Vec<EventDto>,
+    pub positions: Vec<usize>,
     pub caught_up: bool,
 }
 
@@ -129,10 +130,12 @@ impl EventStore {
                 cursor: head,
                 head,
                 events: vec![],
+                positions: vec![],
                 caught_up: true,
             });
         }
         let mut output = Vec::new();
+        let mut positions = Vec::new();
         let mut bytes = 1024;
         let mut position = start.position;
         let scan_end = head_position.min(start.position.saturating_add(10_000));
@@ -157,7 +160,7 @@ impl EventStore {
                         .any(|prefix| event.event_type_str().starts_with(prefix)))
             {
                 let dto = EventDto::from(event);
-                let size = serde_json::to_vec(&dto)?.len();
+                let size = serde_json::to_vec(&dto)?.len() + 24;
                 if bytes + size > FEED_BYTES {
                     if output.is_empty() {
                         return Err(AllSourceError::InvalidInput(
@@ -168,6 +171,7 @@ impl EventStore {
                 }
                 bytes += size;
                 output.push(dto);
+                positions.push(position + 1);
             }
             position += 1;
             if output.len() == limit {
@@ -179,6 +183,7 @@ impl EventStore {
             cursor: FeedCursor { epoch, position },
             head,
             events: output,
+            positions,
             caught_up: position >= head_position,
         })
     }

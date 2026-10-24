@@ -20,6 +20,10 @@ flowchart LR
 The feed excludes read-model journal events. Checkpoint-only commits preserve
 content revisions. Intermediate batches remain unready until the final source
 checkpoint is published. Competing writers must retry after a revision conflict.
+Each returned event carries its source position in an aligned `positions` array.
+Positions preserve filtered gaps and let consumers deduplicate partially committed
+pages without assuming entity versions describe feed order. Consumers reject a
+nonempty page with missing, unordered or out-of-range positions.
 HTTP ingestion rejects reserved journal names. Authentication binds every feed,
 model read and model write to its tenant; the gateway meters successful reads
 and refuses exhausted egress budgets before contacting Core.
@@ -46,11 +50,13 @@ only after checking archive size, admission and process routing for the tenant.
 
 ## Verification
 
-Twenty-six scoped Core tests pass for tenant isolation, byte limits, atomic
+Core scoped checks cover tenant isolation, byte limits, atomic
 checkpoints, competing writers, durable restoration, epoch invalidation,
 response admission, rate-limit separation and reserved-journal sync refusal
 before any batch write. Core Clippy passes with warnings
 denied. Gateway metering and hard-budget refusal tests pass.
+Eight feed and durable read-model tests pass with per-event source positions,
+including filtered gaps and restart recovery.
 
 Real HTTP model-handler tests run five idle rounds with 1, 5 and 20 clients.
 Conditional response bodies total 695, 3,475 and 13,900 bytes respectively, with
