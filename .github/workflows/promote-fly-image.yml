@@ -11,6 +11,7 @@ on:
           - core
           - control-plane
           - query-service
+          - prime
 
 permissions:
   contents: read
@@ -39,6 +40,7 @@ jobs:
             core) package=allsource-core-alpine; app=allsource-core ;;
             control-plane) package=allsource-control-plane; app=allsource-control-plane ;;
             query-service) package=allsource-query-service; app=allsource-query ;;
+            prime) package=allsource-prime; app=allsource-prime ;;
             *) exit 1 ;;
           esac
           revision=$(git rev-parse --short=7 HEAD)

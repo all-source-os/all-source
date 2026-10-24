@@ -4,11 +4,18 @@ Use the `Promote Fly Image` workflow after the target main commit passes CI,
 security scanning and Docker Build. It copies an existing image into the
 corresponding Fly registry. It does not deploy or change runtime configuration.
 
-The workflow accepts `core`, `control-plane` or `query-service`, runs only on
-`main`, and checks the image revision label against the workflow commit before
-pushing. Core uses `runtime-alpine`, preserving UID 1000 for its existing volume.
-The Docker Build filter includes the root lockfile so dependency patches rebuild
-Core images.
+The workflow accepts `core`, `control-plane`, `query-service` or `prime`, runs
+only on `main`, and checks the image revision label against the workflow commit
+before pushing. Core uses `runtime-alpine`, preserving UID 1000 for its existing
+volume. The Docker Build filter includes the root lockfile so dependency patches
+rebuild Core images.
+
+Docker Build publishes a Prime image only when Prime paths change, so a main
+commit without one needs Docker Build dispatched on `main` with
+`force_build=true` before promotion. Container scanning covers the four
+deployment images, not Prime; Prime's dependencies are audited from
+`apps/prime-mcp/Cargo.lock`. Deploy Prime with
+`fly deploy --config apps/prime-mcp/fly.toml --image registry.fly.io/allsource-prime:sha-<full-commit>`.
 
 For a PR candidate, dispatch Security Scanning with `scan_published_images=true`
 after Docker Build succeeds. Main scans run automatically when its Docker Build
