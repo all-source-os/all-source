@@ -72,7 +72,8 @@ async fn snapshot_lease_blocks_eviction_and_observes_cancellation_before_return(
         eviction.await.unwrap();
         holder.join().unwrap();
         if cancel {
-            assert!(result.unwrap_err().to_string().contains("cancelled"));
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("cancelled"), "{error}");
         } else {
             let (snapshot, total) = result.unwrap();
             assert_eq!(total, 1);
