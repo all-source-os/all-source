@@ -306,6 +306,14 @@ jobs:
           set -o pipefail
           timeout -k 15 285 cargo build --profile bench -p image --lib --message-format=json-render-diagnostics | tee /tmp/iai-image-foundation.json
 
+      - name: Cook Prime embedding dependencies
+        if: matrix.package == 'allsource-prime'
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}/iai-cook/${{ matrix.working-directory }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo build --profile bench -p fastembed --lib --message-format=json-render-diagnostics | tee /tmp/iai-embedding-foundation.json
+
       - name: Cook Prime Core dependency foundation
         if: matrix.package == 'allsource-prime'
         timeout-minutes: 5

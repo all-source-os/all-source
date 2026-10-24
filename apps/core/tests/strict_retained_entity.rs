@@ -1,6 +1,7 @@
 use allsource_core::{
     QueryEventsRequest,
     domain::entities::Event,
+    infrastructure::persistence::ArchiveReadLimits,
     store::{EventStore, EventStoreConfig, ReadScope},
 };
 use serde_json::json;
@@ -8,6 +9,60 @@ use tempfile::TempDir;
 
 const TENANT: &str = "synthetic-strict-read";
 const ENTITY: &str = "synthetic-run";
+
+#[test]
+fn cold_entity_read_does_not_hydrate_unrelated_payloads() {
+    let directory = TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for index in 0..600 {
+            store
+                .ingest(&event(
+                    TENANT,
+                    &format!("unrelated-{index}"),
+                    json!({"text": "x".repeat(4096)}),
+                ))
+                .unwrap();
+        }
+        store
+            .ingest_with_expected_version(&event(TENANT, ENTITY, json!({"kept": true})), Some(0))
+            .unwrap();
+        store.flush_storage().unwrap();
+    }
+    let store = EventStore::with_config(EventStoreConfig {
+        strict_archive_limits: ArchiveReadLimits {
+            max_uncompressed_bytes: 1024,
+            ..ArchiveReadLimits::default()
+        },
+        ..EventStoreConfig::with_persistence(directory.path())
+    });
+    let resident_before = store.total_events();
+    let (events, total) = store
+        .query_retained_entity(TENANT, ENTITY, 1001, &ReadScope::unrestricted())
+        .unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(events[0].payload, json!({"kept": true}));
+    assert!(!store.is_tenant_loaded(TENANT));
+    assert_eq!(store.total_events(), resident_before);
+    store
+        .ingest_with_expected_version(&event(TENANT, ENTITY, json!({"tail": true})), Some(1))
+        .unwrap();
+    store.flush_storage().unwrap();
+    let (events, total) = store
+        .query_retained_entity(TENANT, ENTITY, 1001, &ReadScope::unrestricted())
+        .unwrap();
+    assert_eq!(total, 2);
+    assert_eq!(
+        events.iter().map(|event| event.version).collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert!(!store.is_tenant_loaded(TENANT));
+    assert!(
+        store
+            .ingest_with_expected_version(&event(TENANT, ENTITY, json!({})), Some(1))
+            .is_err()
+    );
+}
 
 fn event(tenant: &str, entity: &str, payload: serde_json::Value) -> Event {
     Event::from_strings(

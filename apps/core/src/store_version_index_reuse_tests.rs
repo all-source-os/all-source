@@ -103,6 +103,25 @@ fn verified_archive_does_not_certify_another_tenant() {
 }
 
 #[test]
+fn verified_entity_does_not_certify_another_entity_in_same_tenant() {
+    let (directory, mut store) = seeded();
+    ParquetStorage::new(directory.path())
+        .unwrap()
+        .write_atomic_parquet(TENANT, "events-other", &[event(TENANT, "other-entity", 9)])
+        .unwrap();
+    verify(&store, TENANT, ENTITY).unwrap();
+    assert!(store.version_index_entities.contains_key(ENTITY));
+    assert!(!store.version_index_tenants.contains_key(TENANT));
+    assert!(!store.version_index_entities.contains_key("other-entity"));
+    store.strict_archive_limits.timeout = Duration::ZERO;
+    assert!(
+        store
+            .ingest_with_expected_version(&event(TENANT, "other-entity", 0), Some(9))
+            .is_err()
+    );
+}
+
+#[test]
 fn tolerant_hydration_does_not_certify_the_version_index() {
     let (_directory, mut store) = seeded();
     store.ensure_tenant_loaded(TENANT).unwrap();
@@ -176,6 +195,7 @@ fn cancelled_strict_hydration_does_not_certify_or_append() {
     );
     assert!(!store.version_index_tenants.contains_key(TENANT));
     assert!(!store.tenant_loader.is_complete(TENANT));
+    assert!(!store.version_index_entities.contains_key(ENTITY));
     assert_eq!(store.total_events(), 0);
     cancellation.store(false, Ordering::Release);
     verify(&store, TENANT, ENTITY).unwrap();
@@ -190,7 +210,7 @@ fn cancelled_strict_hydration_does_not_certify_or_append() {
             )
             .is_err()
     );
-    assert_eq!(store.total_events(), 2);
+    assert_eq!(store.total_events(), 0);
     assert!(subscriber.try_recv().is_err());
 }
 
