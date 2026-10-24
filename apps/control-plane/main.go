@@ -17,7 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
 
 	"github.com/allsource/control-plane/internal"
@@ -81,6 +80,7 @@ func NewPooledHTTPClient() *http.Client {
 type ControlPlane struct {
 	egressPrepaid   *usecases.EgressPrepaid
 	egressExchange  egressExchange
+	admission       *tenantAdmission
 	client          *resty.Client
 	router          *gin.Engine
 	metrics         *ControlPlaneMetrics
@@ -369,6 +369,11 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 	}
 
 	cp.egressExchange = cp.exchangeEgress
+	cp.admission, err = newTenantAdmissionFromEnv(os.LookupEnv)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("Tenant admission mode: %s", cp.admission.mode)
 	cp.egressPrepaid, err = usecases.NewEgressPrepaid(coreClient, lsClient, os.Getenv("LEMON_SQUEEZY_EGRESS_VARIANT_MAP"))
 	if err != nil {
 		return nil, err
@@ -423,6 +428,8 @@ func corsMiddleware(allowed map[string]struct{}) gin.HandlerFunc {
 }
 
 func (cp *ControlPlane) setupMiddleware() {
+	cp.router.Use(TenantMetering())
+
 	// CORS — credentialed only for allowlisted frontend origins (web + admin),
 	// derived from the FRONTEND_URL / ALLOWED_FRONTEND_URLS allowlist. See
 	// corsMiddleware and docs/runbooks/CONTROL_PLANE_CORS.md.
@@ -462,7 +469,7 @@ func (cp *ControlPlane) setupRoutes() {
 	// Public endpoints (no auth required — skipped by AuthMiddleware)
 	cp.router.GET("/livez", cp.livezHandler) // liveness only — Fly machine check uses this
 	cp.router.GET("/health", cp.healthHandler)
-	cp.router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	cp.router.GET("/metrics", gin.WrapH(publicMetricsHandler()))
 	cp.router.GET("/docs", cp.docsHandler)
 	cp.router.GET("/openapi", cp.openAPIHandler)
 
@@ -627,6 +634,7 @@ func (cp *ControlPlane) setupRoutes() {
 	// Tenant management (Clean Architecture handlers with per-route RBAC)
 	tenants := api.Group("/tenants")
 	tenants.GET("", RequirePermission(entities.PermissionRead), cp.container.TenantHandler.List)
+	tenants.GET("/me/limits", RequirePermission(entities.PermissionRead), cp.TenantLimits)
 	tenants.GET("/:id", RequirePermission(entities.PermissionRead), cp.container.TenantHandler.Get)
 	tenants.POST("", RequirePermission(entities.PermissionManageTenants), cp.container.TenantHandler.Create)
 	tenants.PUT("/:id", RequirePermission(entities.PermissionManageTenants), cp.container.TenantHandler.Update)
@@ -1200,6 +1208,9 @@ func main() {
 		}
 	}()
 
+	metricsSrv := newPrivateMetricsServer(os.Getenv)
+	startPrivateMetricsServer(metricsSrv)
+
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -1211,6 +1222,9 @@ func main() {
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
+	}
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Private metrics server forced to shutdown: %v", err)
 	}
 
 	// Cleanup resources

@@ -34,11 +34,42 @@ replace them.
 | `better-auth-allsource` does not trust `order=desc` and reads up to 1000 session events | `better-auth-allsource/src/client.rs:106,117-133,204` | Bound the session window but keep `newest_event` selection and an overflow fallback; never a bare `limit=1` |
 | Longhand caches session lookups for 15 seconds and caches no authorisation input | `auth_cache.rs:30,119` | Authorisation caches need event-driven invalidation, with zero stale grace on authorisation decisions |
 
+## Architecture: the data path is a gateway
+
+Today every client read passes through the control plane, which per request
+authenticates and mints a JWT, takes one of 16 global slots, makes a
+synchronous ledger reserve call to Core (one durable event), proxies the query,
+buffers the full response (up to 16 MiB), makes a ledger complete call (a second
+durable event), and then writes the body. It does this on a 256 MB VM with a
+6.25% CPU baseline. The [production traffic report](../reports/2026-10-24-production-traffic.html)
+measures the cost: 81.8% of writes refused by the global slots, 17.5 ledger
+events per second into Core's never-checkpointed system log, CPU throttled
+35–62% on 2026-10-21, and no way to stream or long-poll because responses are
+buffered.
+
+The client data path becomes a gateway. The control plane leaves it.
+
+| Gateway: public, `/api/v1/*` data routes | Control plane: off the data path |
+|---|---|
+| Stateless and horizontally scalable; streams responses, never buffers them | Admin, billing, onboarding, OAuth, dashboards |
+| Verifies API keys from a local cache refreshed in the background; no per-request Core call | Owns tenants, plans and prepaid credit |
+| Per-tenant token buckets in memory; refusals carry a computed `Retry-After` | Settles usage asynchronously from the gateway's aggregates |
+| Counts request and response bytes per tenant in memory; flushes one aggregate per tenant per minute | Issues budget leases |
+| Enforces prepaid hard stops from a budget lease held locally and renewed in bulk, never per request | |
+| Long-poll and push become possible because nothing is buffered | |
+
+Both roles come from the existing Go codebase in two modes (`data` and `admin`),
+deployed as two Fly apps. `api.all-source.xyz` moves to the gateway, which
+forwards non-data routes to the control plane over the private network. The
+per-response ledger in `egress_guard.go` is removed; its billing guarantee is
+kept by the lease: a tenant can overrun its prepaid balance by at most one
+lease, and the lease size is the knob.
+
 ## Layers
 
 | Layer | Side | Mechanism |
 |---|---|---|
-| Per-tenant admission | AllSource control plane | Token buckets keyed by the authenticated tenant, checked before the ledger reserve so a refusal costs no Core round trip. A data lane and a cheaper metadata lane (heads, revision reads, waits, 304s), a byte bucket, and an in-flight cap. A fair-share rule inside the global 16 slots. Refusals carry a computed `Retry-After`, `RateLimit-Policy` and `RateLimit` headers, and a `scope` of `tenant`, `global_fair_share` or `global` |
+| Per-tenant admission | AllSource control plane | Token buckets keyed by the authenticated tenant, checked before the ledger reserve so a refusal costs no Core round trip. A data lane and a cheaper metadata lane (registered metadata route templates, and reads the server answered 304), a byte bucket, and an in-flight cap. A fair-share rule inside the global 16 slots. In enforce mode, per-tenant refusals carry a computed `Retry-After` and a `scope` of `tenant` or `global_fair_share`, and responses carry `RateLimit-Policy` and `RateLimit`. Global-pool and ledger refusals keep their status and `Retry-After: 30` in every mode |
 | Header passthrough and conditional reads | AllSource control plane | Forward `If-None-Match` and `Accept-Encoding` to Core. Pass back `ETag`, `Retry-After` and `RateLimit-*`. Meter 304s explicitly as a conditional count with 0 bytes |
 | Compression and ledger lease | AllSource control plane | gzip after buffering, charged at compressed length. A per-tenant byte lease replaces the per-response reserve and complete calls |
 | Change detection | AllSource Core | Per-tenant prefix heads to depth 3 and bounded per-tenant entity heads. `GET /event-feed/heads`. A pre-scan ETag on `/events/query` with a 304 when nothing under the query's prefix changed. Epoch bump on rewrites (tombstones, retention, repack) |
@@ -83,7 +114,7 @@ has a path that stays under it.
   same session as the 1000-event read over recorded entities, including a
   tombstone as newest, and takes the overflow path when Core ignores ordering.
 - **P3:** shadow mode changes no behaviour and populates would-refuse counters
-  per tenant; `Retry-After` is never the constant 30; a Core 304 reaches the
+  per tenant; a per-tenant refusal's `Retry-After` is never the constant 30; a Core 304 reaches the
   client with its `ETag` and is metered as 0 bytes.
 - **P5:** a tenant at 200 requests a second is refused with `scope=tenant` and
   zero ledger calls, while a tenant at 5 requests a second gets 100% 2xx; the

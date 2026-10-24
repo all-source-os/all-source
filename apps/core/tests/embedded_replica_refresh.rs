@@ -130,6 +130,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_replica_never_adds_or_removes_a_wal_segment() {
+        let tmp = TempDir::new().unwrap();
+        let data_dir = tmp.path();
+        let wal_dir = data_dir.join("wal");
+        let listing = || {
+            let mut names: Vec<_> = std::fs::read_dir(&wal_dir)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+            names.sort();
+            names
+        };
+
+        let writer = EmbeddedCore::open(Config::builder().data_dir(data_dir).build().unwrap())
+            .await
+            .expect("open writer");
+        ingest(&writer, 3).await;
+        let before_open = listing();
+
+        let reader = EmbeddedCore::open(
+            Config::builder()
+                .data_dir(data_dir)
+                .read_only(true)
+                .build()
+                .unwrap(),
+        )
+        .await
+        .expect("open replica");
+        assert_eq!(listing(), before_open);
+
+        ingest(&writer, 2).await;
+        let before_refresh = listing();
+        let report = reader.refresh().await.expect("refresh");
+        assert!(report.wal_changed);
+        assert_eq!(listing(), before_refresh);
+    }
+
+    #[tokio::test]
     async fn refresh_on_a_writable_store_is_a_no_op() {
         let tmp = TempDir::new().unwrap();
         let writer = EmbeddedCore::open(Config::builder().data_dir(tmp.path()).build().unwrap())

@@ -31,7 +31,7 @@ func TestEgressRealCoreBookkeepingDoesNotThrottleMetadata(t *testing.T) {
 		}
 		id := uuid.NewString()
 		workspaceJSON(t, cp.client, "POST", path, map[string]any{"operation": "reserve", "id": id}, 200)
-		workspaceJSON(t, cp.client, "POST", path, map[string]any{"operation": "complete", "id": id, "bytes": 0}, 200)
+		workspaceJSON(t, cp.client, "POST", path, map[string]any{"operation": egressOperationComplete, "id": id, "bytes": 0}, 200)
 	}
 	workspaceJSON(t, cp.client, "GET", "/api/v1/tenants/ledger-load", nil, 200)
 	workspaceJSON(t, cp.client, "GET", path, nil, 200)

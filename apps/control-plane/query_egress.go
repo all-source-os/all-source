@@ -23,6 +23,21 @@ var queryShapeRequests = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help: "Forwarded event-query responses by bounded selector shape.",
 }, []string{"selector", "time_bounded", "payload_filtered"})
 
+var tenantQueryBytes = tenantMetrics.NewCounterVec(prometheus.CounterOpts{
+	Name: "control_plane_tenant_event_query_body_bytes_total",
+	Help: "Event-query response body bytes by tenant, namespace and selector shape.",
+}, []string{"tenant", "namespace", "selector", "time_bounded", "payload_filtered"})
+
+var tenantQueries = tenantMetrics.NewCounterVec(prometheus.CounterOpts{
+	Name: "control_plane_tenant_event_queries_total",
+	Help: "Forwarded event-query responses by tenant, namespace and selector shape.",
+}, []string{"tenant", "namespace", "selector", "time_bounded", "payload_filtered"})
+
+var queryConditional = tenantMetrics.NewCounterVec(prometheus.CounterOpts{
+	Name: "control_plane_tenant_event_query_conditional_total",
+	Help: "Event queries answered 304 Not Modified; metered as zero body bytes.",
+}, []string{"tenant", "namespace"})
+
 var queryEgressSamples queryEgressSampler
 
 const queryOpaqueNamespace = "opaque"

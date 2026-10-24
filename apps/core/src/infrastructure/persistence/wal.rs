@@ -444,15 +444,34 @@ impl WriteAheadLog {
         Ok(stamps)
     }
 
-    /// Recover events from WAL files
+    /// Recover events from WAL files in file order. Reads only: safe for a
+    /// replica or a tail over a WAL another process is appending to.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn recover(&self) -> Result<Vec<Event>> {
+        Ok(self
+            .recover_entries()?
+            .into_iter()
+            .map(|(_, event)| event)
+            .collect())
+    }
+
+    /// Recover in sequence order, then move the writer past every recovered
+    /// entry. Only for the single process that owns the WAL and appends to it.
+    pub fn recover_for_append(&self) -> Result<Vec<Event>> {
+        let mut recovered = self.recover_entries()?;
+        // An older segment can end with entries appended after a restart.
+        recovered.sort_by_key(|(sequence, _)| *sequence);
+        self.seal()?;
+        Ok(recovered.into_iter().map(|(_, event)| event).collect())
+    }
+
+    fn recover_entries(&self) -> Result<Vec<(u64, Event)>> {
         tracing::info!("🔄 Starting WAL recovery...");
 
         let mut wal_files = self.list_wal_files()?;
         wal_files.sort();
 
-        let mut recovered_events = Vec::new();
+        let mut recovered = Vec::new();
         let mut max_sequence = 0u64;
         let mut corrupted_entries = 0;
 
@@ -499,7 +518,7 @@ impl WriteAheadLog {
                         }
 
                         max_sequence = max_sequence.max(entry.sequence);
-                        recovered_events.push(entry.event);
+                        recovered.push((entry.sequence, entry.event));
                     }
                     Err(e) => {
                         tracing::warn!(
@@ -532,11 +551,11 @@ impl WriteAheadLog {
 
         tracing::info!(
             "✅ WAL recovery complete: {} events recovered, {} corrupted entries",
-            recovered_events.len(),
+            recovered.len(),
             corrupted_entries
         );
 
-        Ok(recovered_events)
+        Ok(recovered)
     }
 
     /// Manually flush the current WAL file
@@ -811,6 +830,106 @@ mod tests {
 
         let stats = wal.stats();
         assert!(stats.files_rotated > 0);
+    }
+
+    #[test]
+    fn test_wal_recovery_keeps_append_order_across_restarts() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = || WALConfig {
+            max_file_size: 1,
+            ..Default::default()
+        };
+        let mut appended = Vec::new();
+
+        let first = WriteAheadLog::new(temp_dir.path(), config()).unwrap();
+        for _ in 0..2 {
+            let event = create_test_event();
+            appended.push(event.id());
+            first.append(event).unwrap();
+        }
+        drop(first);
+
+        let second = WriteAheadLog::new(temp_dir.path(), config()).unwrap();
+        second.recover_for_append().unwrap();
+        let event = create_test_event();
+        appended.push(event.id());
+        second.append(event).unwrap();
+        drop(second);
+
+        let first_segment =
+            std::fs::read_to_string(temp_dir.path().join("wal-0000000000000000.log")).unwrap();
+        assert_eq!(
+            first_segment
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .count(),
+            1,
+            "an append after recovery must not land in the oldest segment"
+        );
+
+        let third = WriteAheadLog::new(temp_dir.path(), config()).unwrap();
+        let recovered: Vec<Uuid> = third
+            .recover_for_append()
+            .unwrap()
+            .iter()
+            .map(Event::id)
+            .collect();
+        assert_eq!(recovered, appended);
+    }
+
+    #[test]
+    fn test_wal_recovery_orders_misplaced_entries_by_sequence() {
+        let temp_dir = TempDir::new().unwrap();
+        let older = create_test_event();
+        let newer = create_test_event();
+        let line = |sequence, event: &Event| {
+            format!(
+                "{}\n",
+                serde_json::to_string(&WALEntry::new(sequence, event.clone())).unwrap()
+            )
+        };
+        std::fs::write(
+            temp_dir.path().join("wal-0000000000000000.log"),
+            line(1, &older) + &line(3, &newer),
+        )
+        .unwrap();
+        std::fs::write(
+            temp_dir.path().join("wal-0000000000000001.log"),
+            line(2, &create_test_event()),
+        )
+        .unwrap();
+
+        let wal = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        let recovered = wal.recover_for_append().unwrap();
+
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(recovered[0].id(), older.id());
+        assert_eq!(recovered[2].id(), newer.id());
+    }
+
+    #[test]
+    fn test_wal_read_only_recovery_creates_no_segment() {
+        let temp_dir = TempDir::new().unwrap();
+        let writer = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        for _ in 0..3 {
+            writer.append(create_test_event()).unwrap();
+        }
+        writer.flush().unwrap();
+        let listing = || {
+            let mut names: Vec<_> = std::fs::read_dir(temp_dir.path())
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+            names.sort();
+            names
+        };
+        let before = listing();
+
+        let reader = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        assert_eq!(reader.recover().unwrap().len(), 3);
+        assert_eq!(reader.recover().unwrap().len(), 3);
+
+        assert_eq!(listing(), before);
     }
 
     #[test]

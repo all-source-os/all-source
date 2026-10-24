@@ -236,6 +236,11 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+bearerToken)
+	for _, name := range forwardedRequestHeaders {
+		if value := c.Request.Header.Get(name); value != "" {
+			req.Header.Set(name, value)
+		}
+	}
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
 	}
@@ -257,24 +262,50 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 		}
 	}
 
-	// Copy status + response body. Content-Type comes from the backend so
-	// JSON responses carry through unchanged.
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		c.Writer.Header().Set("Content-Type", ct)
-	}
+	copyResponseHeaders(c.Writer.Header(), resp.Header)
 	c.Writer.WriteHeader(resp.StatusCode)
 	written, copyErr := io.Copy(c.Writer, resp.Body)
 	if beforeSuccess != nil && path == queryEventsPath {
-		queryResponseBytes.Add(float64(written))
-		selector, bounded, filtered := queryShape(query)
-		queryShapeBytes.WithLabelValues(selector, bounded, filtered).Add(float64(written))
-		queryShapeRequests.WithLabelValues(selector, bounded, filtered).Inc()
-		if sample := queryEgressSamples.sample(query, written, time.Now()); sample != "" {
-			log.Print(sample)
+		tenant, namespace := tenantLabel(query.Get("tenant_id")), queryNamespaceLabel(query)
+		if resp.StatusCode == http.StatusNotModified {
+			queryConditional.WithLabelValues(tenant, namespace).Inc()
+		} else {
+			queryResponseBytes.Add(float64(written))
+			selector, bounded, filtered := queryShape(query)
+			queryShapeBytes.WithLabelValues(selector, bounded, filtered).Add(float64(written))
+			queryShapeRequests.WithLabelValues(selector, bounded, filtered).Inc()
+			tenantQueryBytes.WithLabelValues(tenant, namespace, selector, bounded, filtered).Add(float64(written))
+			tenantQueries.WithLabelValues(tenant, namespace, selector, bounded, filtered).Inc()
+			if sample := queryEgressSamples.sample(query, written, time.Now()); sample != "" {
+				log.Print(sample)
+			}
 		}
 	}
 	if copyErr != nil {
 		log.Printf("delegation response copy failed: %v", copyErr)
+	}
+}
+
+// Accept-Encoding is forwarded verbatim, so a compressed backend body passes
+// through undecoded and must keep its Content-Encoding and Vary.
+var forwardedRequestHeaders = []string{"If-None-Match", "Accept-Encoding"}
+
+var forwardedResponseHeaders = []string{"Content-Type", "Content-Encoding", "Vary", "ETag", "Retry-After", "Cache-Control"}
+
+// copyResponseHeaders adds backend RateLimit fields to any the guard set, since
+// both are structured-field lists of independent policies.
+func copyResponseHeaders(dst, src http.Header) {
+	for _, name := range forwardedResponseHeaders {
+		if value := src.Get(name); value != "" {
+			dst.Set(name, value)
+		}
+	}
+	for name, values := range src {
+		if strings.HasPrefix(http.CanonicalHeaderKey(name), "Ratelimit") {
+			for _, value := range values {
+				dst.Add(name, value)
+			}
+		}
 	}
 }
 

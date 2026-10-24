@@ -52,11 +52,17 @@ impl EventSourcedTenantRepository {
 
     pub(super) fn apply_egress_event(&self, tenant: &str, value: &Value) {
         let mut account = self.egress_accounts.entry(tenant.to_string()).or_default();
-        let valid = serde_json::from_value::<EgressEvent>(value.clone())
-            .is_ok_and(|event| account.apply(&event).is_ok());
-        if !valid {
+        let outcome = serde_json::from_value::<EgressEvent>(value.clone())
+            .map_err(|e| e.to_string())
+            .and_then(|event| {
+                account
+                    .apply(&event)
+                    .map(|_| ())
+                    .map_err(|d| format!("{d:?}"))
+            });
+        if let Err(reason) = outcome {
             account.invalidate();
-            tracing::error!("Invalid durable egress event; admission disabled");
+            tracing::error!(tenant, %reason, "Invalid durable egress event; admission disabled");
         }
     }
 

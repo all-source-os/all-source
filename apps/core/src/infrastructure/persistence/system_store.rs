@@ -89,7 +89,7 @@ impl SystemMetadataStore {
         let events = Arc::new(RwLock::new(Vec::new()));
 
         // Recover from WAL
-        match wal.recover() {
+        match wal.recover_for_append() {
             Ok(recovered_events) if !recovered_events.is_empty() => {
                 tracing::info!(
                     "Recovered {} system events from WAL",

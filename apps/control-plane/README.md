@@ -240,6 +240,9 @@ CMD ["./control-plane"]
 | `OTLP_ENDPOINT` | `` | OTLP HTTP endpoint (e.g., `localhost:4318` for Jaeger/Tempo) |
 | `ENVIRONMENT` | `development` | Environment name (development, staging, production) |
 | `GIN_MODE` | `debug` | Gin mode (`debug` or `release`) |
+| `METRICS_ADDR` | `:9091` | Private listener for tenant-labelled Prometheus metrics; never expose it publicly |
+| `ALLSOURCE_ADMISSION_MODE` | `shadow` | Per-tenant admission: `off`, `shadow` (count only, no response changes) or `enforce` |
+| `ALLSOURCE_ADMISSION_OVERRIDES` | `` | JSON object of per-tenant limit overrides; required (`{}` for none) when enforcing |
 
 ### Example Configuration
 
@@ -437,6 +440,25 @@ control_plane_replay_operations_total
 # System metrics
 control_plane_uptime_seconds
 ```
+
+Series labelled with a tenant are served only by the private listener on
+`METRICS_ADDR` (Fly scrapes it over the private network through `[metrics]` in
+`fly.toml`). It serves everything above plus:
+
+```
+control_plane_tenant_response_bytes_total{tenant,route,method,status_class}
+control_plane_tenant_request_bytes_total{tenant,route,method}
+control_plane_tenant_requests_total{tenant,route,method,status_class}
+control_plane_tenant_event_query_body_bytes_total{tenant,namespace,selector,...}
+control_plane_tenant_event_queries_total{tenant,namespace,selector,...}
+control_plane_tenant_event_query_conditional_total{tenant,namespace}
+admission_would_refuse_total{lane,scope,tenant}
+admission_refused_total{lane,scope,tenant}
+```
+
+`tenant` is capped at 256 distinct values (later tenants report as `other`;
+unauthenticated requests as `anonymous`). `route` is the matched route
+template, or `unmatched`.
 
 ### Distributed Tracing (OTLP)
 
