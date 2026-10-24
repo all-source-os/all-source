@@ -578,6 +578,9 @@ func (cp *ControlPlane) setupRoutes() {
 	api.POST("/events", MaxBodySize(256*1024), RequirePermission(entities.PermissionWrite), cp.ProxyIngestSingle)
 	api.POST("/events/batch", MaxBodySize(1024*1024), RequirePermission(entities.PermissionWrite), cp.ProxyIngestBatch)
 	api.GET("/events/query", RequirePermission(entities.PermissionRead), cp.ProxyEventsQuery)
+	api.GET("/event-feed", RequirePermission(entities.PermissionRead), cp.ProxyReadModel)
+	api.GET("/read-models/:name", RequirePermission(entities.PermissionRead), cp.ProxyReadModel)
+	api.PUT("/read-models/:name", RequirePermission(entities.PermissionWrite), cp.ProxyReadModel)
 
 	// Tenant-scoped analytics surface (#230). Each of these forces an
 	// auth-derived tenant_id before forwarding; Core's equivalents are global

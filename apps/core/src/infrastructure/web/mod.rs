@@ -11,6 +11,7 @@ pub mod demo_api;
 pub mod handlers;
 #[cfg(feature = "prime")]
 pub mod prime_api;
+pub mod read_model_api;
 pub mod response_limit;
 mod retained_query;
 #[cfg(feature = "multi-tenant")]

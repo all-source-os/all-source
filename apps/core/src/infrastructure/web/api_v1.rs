@@ -444,6 +444,11 @@ pub async fn serve_v1(
             "/api/v1/webhooks/{webhook_id}/deliveries",
             get(super::api::list_webhook_deliveries),
         )
+        .route("/api/v1/event-feed", get(super::read_model_api::feed))
+        .route(
+            "/api/v1/read-models/{name}",
+            get(super::read_model_api::read).put(super::read_model_api::commit),
+        )
         // v0.14: Durable consumer subscriptions
         .route("/api/v1/consumers", post(super::api::register_consumer))
         .route(
@@ -574,6 +579,7 @@ const WRITE_PATHS: &[&str] = &[
     "/api/v1/events/batch",
     "/api/v1/snapshots",
     "/api/v1/projections/",
+    "/api/v1/read-models/",
     "/api/v1/schemas",
     "/api/v1/replay",
     "/api/v1/pipelines",

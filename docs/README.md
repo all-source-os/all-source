@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Shared tenant read model](./plans/2026-10-24-shared-tenant-read-model.md): bounded feeds, atomic checkpoints, conditional reads and rollout requirements.
+
 - [Bounded retained entity reads](./plans/2026-10-24-bounded-retained-entity.md): memory-bounded archive reads and verification requirements.
 - [JWT crypto backend](./plans/2026-10-24-jwt-crypto-backend.md): remove the vulnerable transitive dependency while preserving token compatibility.
 
