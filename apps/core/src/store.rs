@@ -2671,6 +2671,10 @@ impl EventStore {
             );
         }
 
+        for event in &events {
+            self.observe_entity_version(event);
+        }
+
         let mut matches: Vec<(usize, Event)> = events
             .into_iter()
             .filter(|event| self.apply_filters(event, request))
