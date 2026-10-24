@@ -1,13 +1,19 @@
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, Mutex, PoisonError},
+    time::{Duration, Instant},
+};
 
 use crate::{
-    circuit_breaker::CircuitBreaker,
+    circuit_breaker::{CircuitBreaker, State as CircuitState},
     error::Error,
     fold::EventFolder,
     normalize::normalize_event_type,
     paginate::{EntityPaginator, EventPaginator, DEFAULT_PAGE_SIZE},
+    response_meta::{
+        is_rate_limit_refusal, parse_retry_after, refusal_scope, EventsQuery, ResponseMeta,
+    },
     types::*,
 };
 
@@ -75,6 +81,9 @@ pub(crate) struct HttpTransport {
     http: reqwest::Client,
     retry: RetryConfig,
     circuit_breaker: CircuitBreaker,
+    /// The instant before which every call fails fast with
+    /// [`Error::RateLimited`], and the scope of the refusal that set it.
+    not_before: Mutex<Option<(Instant, Option<String>)>>,
 }
 
 impl HttpTransport {
@@ -108,7 +117,68 @@ impl HttpTransport {
                 config.circuit_breaker_threshold,
                 config.circuit_breaker_recovery,
             ),
+            not_before: Mutex::new(None),
         })
+    }
+
+    pub(crate) fn circuit_state(&self) -> CircuitState {
+        self.circuit_breaker.state()
+    }
+
+    fn pending_rate_limit(&self) -> Option<Error> {
+        let mut guard = self
+            .not_before
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let (until, scope) = guard.as_ref()?;
+        let now = Instant::now();
+        if now < *until {
+            return Some(Error::RateLimited {
+                retry_after: Some(*until - now),
+                scope: scope.clone(),
+            });
+        }
+        *guard = None;
+        None
+    }
+
+    fn note_rate_limit(&self, err: &Error) {
+        if let Error::RateLimited {
+            retry_after: Some(wait),
+            scope,
+        } = err
+        {
+            *self
+                .not_before
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner) =
+                Some((Instant::now() + *wait, scope.clone()));
+        }
+    }
+
+    /// GET that sends `If-None-Match` when given and returns `None` on a 304,
+    /// together with the response's [`ResponseMeta`].
+    pub(crate) async fn get_with_meta<T: for<'de> Deserialize<'de>>(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+        if_none_match: Option<&str>,
+    ) -> Result<(Option<T>, ResponseMeta), Error> {
+        self.with_retry(|| async {
+            let url = format!("{}{}", self.base_url, path);
+            let mut req = self.http.get(&url).query(query);
+            if let Some(etag) = if_none_match {
+                req = req.header(reqwest::header::IF_NONE_MATCH, etag);
+            }
+            let resp = req.send().await?;
+            let meta = ResponseMeta::from_headers(resp.headers());
+            if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
+                return Ok((None, meta));
+            }
+            let value: T = self.handle_response(resp).await?;
+            Ok((Some(value), meta))
+        })
+        .await
     }
 
     pub(crate) async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, Error> {
@@ -182,15 +252,22 @@ impl HttpTransport {
         F: Fn() -> Fut,
         Fut: std::future::Future<Output = Result<T, Error>>,
     {
-        // Check circuit breaker
-        if let Err(retry_after) = self.circuit_breaker.check() {
-            return Err(Error::CircuitOpen {
-                retry_after_secs: retry_after,
-            });
+        if let Some(err) = self.pending_rate_limit() {
+            return Err(err);
         }
+        let permit = self
+            .circuit_breaker
+            .acquire()
+            .map_err(|retry_after_secs| Error::CircuitOpen { retry_after_secs })?;
+        // A half-open probe is one request, not one request plus its retries.
+        let max_retries = if permit.is_probe() {
+            0
+        } else {
+            self.retry.max_retries
+        };
 
         let mut last_error = None;
-        for attempt in 0..=self.retry.max_retries {
+        for attempt in 0..=max_retries {
             if attempt > 0 {
                 let delay = self
                     .retry
@@ -206,7 +283,11 @@ impl HttpTransport {
                     self.circuit_breaker.record_success();
                     return Ok(result);
                 }
-                Err(e) if e.is_retryable() && attempt < self.retry.max_retries => {
+                Err(e @ Error::RateLimited { .. }) => {
+                    self.note_rate_limit(&e);
+                    return Err(e);
+                }
+                Err(e) if e.is_retryable() && attempt < max_retries => {
                     tracing::warn!(attempt, error = %e, "transient error, will retry");
                     self.circuit_breaker.record_failure();
                     last_error = Some(e);
@@ -229,7 +310,12 @@ impl HttpTransport {
     ) -> Result<T, Error> {
         let status = resp.status().as_u16();
         if !(200..300).contains(&status) {
+            let retry_after = parse_retry_after(resp.headers());
             let body: Option<serde_json::Value> = resp.json().await.ok();
+            let scope = refusal_scope(body.as_ref());
+            if is_rate_limit_refusal(status, scope.as_deref()) {
+                return Err(Error::RateLimited { retry_after, scope });
+            }
             let message = body
                 .as_ref()
                 .and_then(|b| b.get("error").and_then(|e| e.get("message")))
@@ -322,14 +408,48 @@ impl QueryClient {
     /// `(timestamp, version)` — ascending (oldest first) by default, or set
     /// [`QueryEventsParams::order`] / [`QueryEventsParams::order_desc`] for
     /// newest-first.
+    ///
+    /// The response headers are in [`QueryEventsResponse::meta`]. With
+    /// [`QueryEventsParams::if_none_match`] set, a 304 fails with
+    /// [`Error::NotModified`]; use [`Self::query_events_conditional`] to get it
+    /// as a value instead.
     pub async fn query_events(
         &self,
         params: QueryEventsParams,
     ) -> Result<QueryEventsResponse, Error> {
+        match self.query_events_conditional(params).await? {
+            EventsQuery::Modified(resp) => Ok(resp),
+            EventsQuery::NotModified(meta) => Err(Error::NotModified { etag: meta.etag }),
+        }
+    }
+
+    /// Query events, sending [`QueryEventsParams::if_none_match`] as
+    /// `If-None-Match`, and report a 304 as [`EventsQuery::NotModified`].
+    pub async fn query_events_conditional(
+        &self,
+        params: QueryEventsParams,
+    ) -> Result<EventsQuery, Error> {
         let pairs = params.to_query_pairs();
-        self.transport
-            .get_with_query("/api/v1/events/query", &pairs)
-            .await
+        let (body, meta) = self
+            .transport
+            .get_with_meta::<QueryEventsResponse>(
+                "/api/v1/events/query",
+                &pairs,
+                params.if_none_match.as_deref(),
+            )
+            .await?;
+        Ok(match body {
+            Some(mut resp) => {
+                resp.meta = meta;
+                EventsQuery::Modified(resp)
+            }
+            None => EventsQuery::NotModified(meta),
+        })
+    }
+
+    /// The circuit breaker's current state.
+    pub fn circuit_state(&self) -> CircuitState {
+        self.transport.circuit_state()
     }
 
     /// Get all events for a specific entity.
@@ -604,6 +724,11 @@ impl CoreClient {
         Ok(Self {
             transport: Arc::new(HttpTransport::new(&config)?),
         })
+    }
+
+    /// The circuit breaker's current state.
+    pub fn circuit_state(&self) -> CircuitState {
+        self.transport.circuit_state()
     }
 
     /// Shared transport handle, for in-crate modules that add more HTTP methods.

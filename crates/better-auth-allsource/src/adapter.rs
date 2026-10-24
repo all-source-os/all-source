@@ -414,7 +414,7 @@ impl SessionOps for AllsourceAuthAdapter {
     async fn get_session(&self, token: &str) -> AuthResult<Option<Session>> {
         let session: Option<Session> = self
             .client
-            .get_latest(&session_entity(token))
+            .get_latest_session(&session_entity(token))
             .await
             .map_err(AuthError::from)?;
         // Session.active is #[serde(skip)] so it defaults to false after deserialization.

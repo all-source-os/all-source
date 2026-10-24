@@ -6,6 +6,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-10-24
+
+### Added
+
+- `Error::RateLimited { retry_after, scope }` for a 429, and for a 503 whose
+  body names a refusal `scope` (the control plane's global capacity refusal).
+  `retry_after` is `Retry-After` in delta-seconds; `scope` is `tenant`,
+  `global_fair_share` or `global`. `Error::retry_after()` reads it.
+- A client-wide not-before deadline: after a refusal with `Retry-After`, every
+  call on that client and its clones fails with `RateLimited` (carrying the
+  time left) without a network call until the deadline passes.
+- `QueryEventsParams::if_none_match` and `QueryClient::query_events_conditional`,
+  which returns `EventsQuery::NotModified(ResponseMeta)` on a 304.
+  `query_events` returns `Error::NotModified` for the same case.
+- `QueryEventsResponse::meta: ResponseMeta` with the response's `ETag`,
+  `RateLimit` and `RateLimit-Policy` headers.
+- `gzip` cargo feature: sends `Accept-Encoding: gzip` and decodes gzip bodies.
+- `CircuitBreaker::acquire` and `CircuitPermit`; `QueryClient::circuit_state`
+  and `CoreClient::circuit_state`; `CircuitState` re-export.
+
+### Changed
+
+- A 429 is no longer retried inside the client and no longer counts as a
+  circuit-breaker failure. Retrying a refusal inside its `Retry-After` only
+  adds load to the server that refused it.
+- Half-open admits exactly one probe, with no retries; concurrent callers get
+  `CircuitOpen` until it resolves. `CircuitBreaker::check` reports a half-open
+  breaker with a probe in flight as closed to new requests.
+- `QueryEventsResponse` and `QueryEventsParams` have new public fields, so
+  struct literals of either need updating.
+
 ## [0.24.0] — 2026-08-12
 
 ### Added

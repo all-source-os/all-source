@@ -88,17 +88,19 @@ mod paginate;
 mod projection_api;
 #[cfg(feature = "projection-worker")]
 pub mod projection_worker;
+mod response_meta;
 mod types;
 #[cfg(feature = "ws")]
 mod ws;
 
-pub use circuit_breaker::CircuitBreaker;
+pub use circuit_breaker::{CircuitBreaker, CircuitPermit, State as CircuitState};
 pub use client::{ClientConfig, CoreClient, QueryClient, RetryConfig};
 pub use error::Error;
 pub use fold::{fold_events, EventFolder};
 pub use normalize::normalize_event_type;
 pub use paginate::{EntityPaginator, EventPaginator, DEFAULT_PAGE_SIZE};
 pub use projection_api::{ProjectionStateSummaryPage, ProjectionStateSummaryParams};
+pub use response_meta::{EventsQuery, ResponseMeta};
 pub use types::*;
 
 #[cfg(feature = "ws")]
