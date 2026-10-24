@@ -49,9 +49,11 @@ fn feed_is_tenant_scoped_bounded_and_ignores_projection_writes() {
     let first = store.tenant_feed("alice", None, 1).unwrap();
     assert_eq!(first.events.len(), 1);
     assert_eq!(first.events[0].entity_id, "one");
+    assert_eq!(first.positions, vec![1]);
     assert!(!first.caught_up);
     let second = store.tenant_feed("alice", Some(first.cursor), 1).unwrap();
     assert_eq!(second.events[0].entity_id, "two");
+    assert_eq!(second.positions, vec![2]);
     assert!(second.caught_up);
     let head = second.head;
     commit(
@@ -73,6 +75,27 @@ fn feed_is_tenant_scoped_bounded_and_ignores_projection_writes() {
             .read_model_page("bob", "board", "", None, 100, None)
             .unwrap()
             .rows
+            .is_empty()
+    );
+}
+
+#[test]
+fn filtered_feed_positions_preserve_source_gaps() {
+    let store = EventStore::new();
+    append(&store, "alice", "one");
+    append(&store, "alice", "other");
+    append(&store, "alice", "one");
+    let page = store
+        .tenant_feed_scoped("alice", None, 100, &[], Some("one"))
+        .unwrap();
+    assert_eq!(page.positions, vec![1, 3]);
+    assert_eq!(page.cursor.position, 3);
+    assert_eq!(page.events.len(), page.positions.len());
+    assert!(
+        store
+            .tenant_feed("alice", None, 0)
+            .unwrap()
+            .positions
             .is_empty()
     );
 }

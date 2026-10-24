@@ -322,6 +322,21 @@ jobs:
           set -o pipefail
           timeout -k 15 285 cargo build --profile bench -p allsource-core --lib --message-format=json-render-diagnostics | tee /tmp/iai-core-foundation.json
 
+      - name: Warm Chronis instruction dependencies
+        if: matrix.package == 'chronis'
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}/iai-cook/${{ matrix.working-directory }}
+        run: |
+          set +e
+          timeout -k 15 200 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen > /tmp/iai-native-warm.json
+          result=$?
+          set -e
+          case "$result" in
+            0) ;;
+            124) echo "Dependency warm phase paused; strict cook resumes completed units." ;;
+            *) exit "$result" ;;
+          esac
+
       - name: Cook native instruction dependencies
         timeout-minutes: 5
         working-directory: ${{ runner.temp }}/iai-cook/${{ matrix.working-directory }}
