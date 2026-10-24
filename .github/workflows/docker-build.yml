@@ -201,6 +201,24 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Cache query engine foundation
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-query-foundation
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Cache query engine dependencies
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-query-deps
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
       - name: Cache remaining Core dependencies
         if: startsWith(matrix.name, 'core')
         uses: ./.github/actions/core-build-phase

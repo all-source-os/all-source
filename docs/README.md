@@ -12,6 +12,7 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Core dependency build phases](./plans/2026-10-24-core-dependency-build-phases.md): bounded image compilation with reusable query-engine layers.
 - [Bounded retained entity reads](./plans/2026-10-24-bounded-retained-entity.md): memory-bounded archive reads and verification requirements.
 - [JWT crypto backend](./plans/2026-10-24-jwt-crypto-backend.md): remove the vulnerable transitive dependency while preserving token compatibility.
 

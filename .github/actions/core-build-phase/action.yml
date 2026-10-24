@@ -23,7 +23,9 @@ runs:
         edition=enterprise
         if [[ "$PHASE" == builder-community* ]]; then edition=community; fi
         case "$PHASE" in
-          builder-deps) previous=builder-deps ;;
+          builder-query-foundation) previous=builder-deps ;;
+          builder-query-deps) previous=builder-query-foundation ;;
+          builder-deps) previous=builder-query-deps ;;
           builder-*-lib) previous=builder-deps ;;
           builder-*-core) previous="builder-$edition-lib" ;;
           builder-*-migrate) previous="builder-$edition-core" ;;

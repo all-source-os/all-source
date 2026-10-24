@@ -70,7 +70,7 @@ RUN mkdir -p tooling/performance/src sdks/rust/src sdks/rust/examples \
 # =============================================================================
 # Stage 3: Builder base - Shared dependency cooking
 # =============================================================================
-FROM chef AS builder-deps
+FROM chef AS builder-query-foundation
 
 COPY --from=dependency-seed /app/target /app/target
 COPY --from=dependency-seed /usr/local/cargo/registry /usr/local/cargo/registry
@@ -88,6 +88,12 @@ RUN mkdir -p crates/allsource-prime-models/src && \
 # cargo-chef replaces version fields with placeholders, so version bumps in
 # Cargo.toml/Cargo.lock don't invalidate this expensive layer.
 COPY --from=planner /app/recipe.json recipe.json
+RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p datafusion-physical-plan
+
+FROM builder-query-foundation AS builder-query-deps
+RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p datafusion
+
+FROM builder-query-deps AS builder-deps
 RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics
 
 FROM builder-deps AS builder-base
