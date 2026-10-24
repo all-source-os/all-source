@@ -4,6 +4,51 @@ use tempfile::TempDir;
 
 const TENANT: &str = "synthetic-archive-consistency";
 
+#[test]
+fn cold_archive_window_reports_version_before_filtering_and_paging() {
+    let directory = TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for _ in 0..3 {
+            store.ingest(&event()).unwrap();
+        }
+        store.flush_storage().unwrap();
+    }
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    assert_eq!(store.get_entity_version("synthetic-entity"), 0);
+    let request = QueryEventsRequest {
+        tenant_id: Some(TENANT.into()),
+        entity_id: Some("synthetic-entity".into()),
+        limit: Some(1),
+        ..Default::default()
+    };
+    let (events, total) = store
+        .query_window_from_archive(&request, 0, false, &ReadScope::unrestricted())
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].version, 1);
+    assert_eq!(total, 3);
+    assert_eq!(store.get_entity_version("synthetic-entity"), 3);
+    assert_eq!(store.total_events(), 0);
+    assert!(!store.is_tenant_loaded(TENANT));
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+    assert_eq!(store.get_entity_version("synthetic-entity"), 0);
+    let (events, total) = store
+        .query_window_from_archive(
+            &QueryEventsRequest {
+                event_type: Some("synthetic.absent".into()),
+                ..request
+            },
+            0,
+            false,
+            &ReadScope::unrestricted(),
+        )
+        .unwrap();
+    assert!(events.is_empty());
+    assert_eq!(total, 0);
+    assert_eq!(store.get_entity_version("synthetic-entity"), 3);
+}
+
 fn event() -> Event {
     Event::from_strings(
         "synthetic.updated".into(),
