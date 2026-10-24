@@ -1,6 +1,6 @@
 [package]
 name = "allsource"
-version = "0.24.0"
+version = "0.25.0"
 edition = "2021"
 description = "Rust client for the AllSource event store — query, ingest, and fold events"
 license = "MIT"
@@ -10,6 +10,8 @@ categories = ["api-bindings", "database"]
 
 [features]
 default = ["rustls", "projection-worker"]
+# Sends `Accept-Encoding: gzip` and decompresses gzip responses.
+gzip = ["reqwest/gzip"]
 rustls = ["reqwest/rustls", "tokio-tungstenite?/rustls-tls-webpki-roots"]
 native-tls = ["reqwest/native-tls", "tokio-tungstenite?/native-tls"]
 ws = [
@@ -35,6 +37,7 @@ tracing = "0.1"
 url = { version = "2", optional = true }
 
 [dev-dependencies]
+flate2 = "1"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wiremock = "0.6"

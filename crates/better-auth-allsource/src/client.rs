@@ -2,6 +2,10 @@ use crate::error::AllsourceAuthError;
 use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{
+    sync::{Arc, Mutex, PoisonError},
+    time::{Duration, Instant},
+};
 
 /// Convert a `snake_case` field name to `camelCase`. Idempotent for inputs
 /// that have no underscores (e.g. `email`, `slug`, `credentialID`).
@@ -73,7 +77,13 @@ pub struct AllsourceClient {
     query_url: String,
     api_key: String,
     tenant_id: Option<String>,
+    /// Shared by every clone: the instant before which calls fail fast with
+    /// [`AllsourceAuthError::RateLimited`], and the refusal's scope.
+    not_before: Arc<Mutex<Option<NotBefore>>>,
 }
+
+/// The fail-fast deadline and the scope of the refusal that set it.
+type NotBefore = (Instant, Option<String>);
 
 #[derive(Debug, Serialize)]
 struct IngestEvent<'a> {
@@ -108,6 +118,12 @@ pub struct StoredEvent {
 /// effectively "the whole stream" while bounding pathological cases.
 const ENTITY_HISTORY_LIMIT: usize = 1000;
 
+/// The first read window for a session. A window that comes back with fewer
+/// events than this holds the entity's whole history whatever order Core
+/// applied; a full window may be truncated, so it is re-read at
+/// [`ENTITY_HISTORY_LIMIT`].
+const SESSION_WINDOW: usize = 16;
+
 /// True when an event payload carries the soft-delete tombstone written by
 /// `AllsourceClient::append_delete` (`{"_deleted": true, ...}`).
 fn is_deleted(payload: &serde_json::Value) -> bool {
@@ -135,6 +151,19 @@ fn newest_event(events: &[StoredEvent]) -> Option<&StoredEvent> {
     })
 }
 
+/// The newest event's payload, or `None` when there is none or it is a
+/// tombstone.
+fn latest_payload<T: DeserializeOwned>(
+    events: &[StoredEvent],
+) -> Result<Option<T>, AllsourceAuthError> {
+    match newest_event(events) {
+        Some(event) if !is_deleted(&event.payload) => {
+            Ok(Some(serde_json::from_value(event.payload.clone())?))
+        }
+        _ => Ok(None),
+    }
+}
+
 impl AllsourceClient {
     pub fn new(core_url: &str, query_url: &str, api_key: &str) -> Self {
         let http = Client::builder()
@@ -148,7 +177,61 @@ impl AllsourceClient {
             query_url: query_url.trim_end_matches('/').to_string(),
             api_key: api_key.to_string(),
             tenant_id: None,
+            not_before: Arc::new(Mutex::new(None)),
         }
+    }
+
+    fn fail_fast(&self) -> Result<(), AllsourceAuthError> {
+        let mut guard = self
+            .not_before
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some((until, scope)) = guard.as_ref() {
+            let now = Instant::now();
+            if now < *until {
+                return Err(AllsourceAuthError::RateLimited {
+                    retry_after: Some(*until - now),
+                    scope: scope.clone(),
+                });
+            }
+            *guard = None;
+        }
+        Ok(())
+    }
+
+    /// Turn a non-2xx response into an error. A rate-limit refusal with a
+    /// `Retry-After` arms the fail-fast window for every clone.
+    async fn error_from(&self, resp: reqwest::Response) -> AllsourceAuthError {
+        let status = resp.status().as_u16();
+        let retry_after = resp
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .map(Duration::from_secs);
+        let body = resp.text().await.unwrap_or_default();
+        let json = serde_json::from_str::<serde_json::Value>(&body).ok();
+        let scope = json
+            .as_ref()
+            .and_then(|j| j.get("scope"))
+            .and_then(|s| s.as_str())
+            .map(str::to_string);
+        if status == 429 || (status == 503 && scope.is_some()) {
+            if let Some(wait) = retry_after {
+                *self
+                    .not_before
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner) =
+                    Some((Instant::now() + wait, scope.clone()));
+            }
+            return AllsourceAuthError::RateLimited { retry_after, scope };
+        }
+        let message = json
+            .as_ref()
+            .and_then(|j| j.get("error"))
+            .and_then(|e| e.as_str())
+            .map_or(body, str::to_string);
+        AllsourceAuthError::Api { status, message }
     }
 
     /// Scope writes and reads identically when connecting directly to Core.
@@ -180,6 +263,7 @@ impl AllsourceClient {
             payload,
         };
 
+        self.fail_fast()?;
         let resp = self
             .http
             .post(&url)
@@ -190,11 +274,7 @@ impl AllsourceClient {
 
         let status = resp.status();
         if !status.is_success() {
-            let message = extract_error_message(resp).await;
-            return Err(AllsourceAuthError::Api {
-                status: status.as_u16(),
-                message,
-            });
+            return Err(self.error_from(resp).await);
         }
 
         Ok(())
@@ -205,15 +285,43 @@ impl AllsourceClient {
         &self,
         entity_id: &str,
     ) -> Result<Option<T>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
+        let events = self.entity_events(entity_id, ENTITY_HISTORY_LIMIT).await?;
+        latest_payload(&events)
+    }
 
-        // Fetch the entity's recent events and choose the newest CLIENT-SIDE by
-        // (timestamp, version). `order=desc` is sent as a hint so Core can keep
-        // the window cheap, but correctness does NOT depend on it: if a deleted
-        // user's `auth.user.deleted` tombstone is anywhere in the window, it is
-        // the newest event, so `get_latest` returns `None` (issues #177, #188).
-        // The limit is generous because auth entities (user/session/account)
-        // accrue only a handful of events.
+    /// [`Self::get_latest`] that first reads at most `window` events and
+    /// re-reads at [`ENTITY_HISTORY_LIMIT`] only when the window comes back
+    /// full, so it resolves the same state with a smaller read.
+    pub async fn get_latest_windowed<T: DeserializeOwned>(
+        &self,
+        entity_id: &str,
+        window: usize,
+    ) -> Result<Option<T>, AllsourceAuthError> {
+        let mut events = self.entity_events(entity_id, window).await?;
+        if events.len() >= window {
+            events = self.entity_events(entity_id, ENTITY_HISTORY_LIMIT).await?;
+        }
+        latest_payload(&events)
+    }
+
+    /// The bounded session read; see [`SESSION_WINDOW`].
+    pub async fn get_latest_session<T: DeserializeOwned>(
+        &self,
+        entity_id: &str,
+    ) -> Result<Option<T>, AllsourceAuthError> {
+        self.get_latest_windowed(entity_id, SESSION_WINDOW).await
+    }
+
+    /// Up to `limit` of an entity's events. `order=desc` is only a hint for
+    /// Core to keep the window cheap; callers select the newest with
+    /// `newest_event` because Core has not always honoured it (#177, #188).
+    async fn entity_events(
+        &self,
+        entity_id: &str,
+        limit: usize,
+    ) -> Result<Vec<StoredEvent>, AllsourceAuthError> {
+        let url = format!("{}/api/v1/events/query", self.query_url);
+        self.fail_fast()?;
         let resp = self
             .http
             .get(&url)
@@ -221,7 +329,7 @@ impl AllsourceClient {
             .header("Authorization", format!("Bearer {}", self.api_key))
             .query(&[
                 ("entity_id", entity_id),
-                ("limit", &ENTITY_HISTORY_LIMIT.to_string()),
+                ("limit", &limit.to_string()),
                 ("order", "desc"),
             ])
             .send()
@@ -229,25 +337,11 @@ impl AllsourceClient {
 
         let status = resp.status();
         if !status.is_success() {
-            let message = extract_error_message(resp).await;
-            return Err(AllsourceAuthError::Api {
-                status: status.as_u16(),
-                message,
-            });
+            return Err(self.error_from(resp).await);
         }
 
         let query_resp: QueryResponse = resp.json().await?;
-
-        match newest_event(&query_resp.events) {
-            Some(event) => {
-                if is_deleted(&event.payload) {
-                    return Ok(None);
-                }
-                let entity: T = serde_json::from_value(event.payload.clone())?;
-                Ok(Some(entity))
-            }
-            None => Ok(None),
-        }
+        Ok(query_resp.events)
     }
 
     /// Query all non-deleted entities of a given type by event_type prefix.
@@ -259,6 +353,7 @@ impl AllsourceClient {
     ) -> Result<Vec<T>, AllsourceAuthError> {
         let url = format!("{}/api/v1/events/query", self.query_url);
 
+        self.fail_fast()?;
         let resp = self
             .http
             .get(&url)
@@ -274,11 +369,7 @@ impl AllsourceClient {
 
         let status = resp.status();
         if !status.is_success() {
-            let message = extract_error_message(resp).await;
-            return Err(AllsourceAuthError::Api {
-                status: status.as_u16(),
-                message,
-            });
+            return Err(self.error_from(resp).await);
         }
 
         let query_resp: QueryResponse = resp.json().await?;
@@ -353,6 +444,7 @@ impl AllsourceClient {
 
         let filter = build_payload_filter(field, value);
 
+        self.fail_fast()?;
         let resp = self
             .http
             .get(&url)
@@ -374,11 +466,7 @@ impl AllsourceClient {
                     .find_by_field_scan(event_type_prefix, field, value)
                     .await;
             }
-            let message = extract_error_message(resp).await;
-            return Err(AllsourceAuthError::Api {
-                status: status.as_u16(),
-                message,
-            });
+            return Err(self.error_from(resp).await);
         }
 
         let query_resp: QueryResponse = resp.json().await?;
@@ -410,6 +498,7 @@ impl AllsourceClient {
     ) -> Result<Option<T>, AllsourceAuthError> {
         let url = format!("{}/api/v1/events/query", self.query_url);
 
+        self.fail_fast()?;
         let resp = self
             .http
             .get(&url)
@@ -425,11 +514,7 @@ impl AllsourceClient {
 
         let status = resp.status();
         if !status.is_success() {
-            let message = extract_error_message(resp).await;
-            return Err(AllsourceAuthError::Api {
-                status: status.as_u16(),
-                message,
-            });
+            return Err(self.error_from(resp).await);
         }
 
         let query_resp: QueryResponse = resp.json().await?;
@@ -471,6 +556,7 @@ impl AllsourceClient {
     ) -> Result<Vec<T>, AllsourceAuthError> {
         let url = format!("{}/api/v1/events/query", self.query_url);
 
+        self.fail_fast()?;
         let resp = self
             .http
             .get(&url)
@@ -486,11 +572,7 @@ impl AllsourceClient {
 
         let status = resp.status();
         if !status.is_success() {
-            let message = extract_error_message(resp).await;
-            return Err(AllsourceAuthError::Api {
-                status: status.as_u16(),
-                message,
-            });
+            return Err(self.error_from(resp).await);
         }
 
         let query_resp: QueryResponse = resp.json().await?;
@@ -537,21 +619,6 @@ impl AllsourceClient {
         )
         .await
     }
-}
-
-/// Extract a human-readable error message from an API error response.
-///
-/// Core returns `{"error": "..."}`, so we parse the JSON and extract the
-/// `error` field. Falls back to the raw response body if parsing fails.
-async fn extract_error_message(resp: reqwest::Response) -> String {
-    let body = resp.text().await.unwrap_or_default();
-    // Try to extract structured error from Core's JSON response
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-        if let Some(msg) = json.get("error").and_then(|e| e.as_str()) {
-            return msg.to_string();
-        }
-    }
-    body
 }
 
 #[cfg(test)]

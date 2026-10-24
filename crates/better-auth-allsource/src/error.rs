@@ -1,4 +1,5 @@
 use better_auth_core::error::{AuthError, DatabaseError};
+use std::time::Duration;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AllsourceAuthError {
@@ -10,10 +11,22 @@ pub enum AllsourceAuthError {
 
     #[error("Allsource API error ({status}): {message}")]
     Api { status: u16, message: String },
+
+    /// AllSource refused the request for rate or capacity: a 429, or a 503
+    /// naming a refusal `scope`. While `retry_after` is pending, every call
+    /// on the same client returns this without a network call.
+    #[error("Allsource rate limited (scope: {}), retry after {:?}", scope.as_deref().unwrap_or("unknown"), retry_after)]
+    RateLimited {
+        retry_after: Option<Duration>,
+        scope: Option<String>,
+    },
 }
 
 impl From<AllsourceAuthError> for AuthError {
     fn from(err: AllsourceAuthError) -> Self {
-        AuthError::Database(DatabaseError::Query(err.to_string()))
+        match err {
+            AllsourceAuthError::RateLimited { .. } => AuthError::RateLimited,
+            other => AuthError::Database(DatabaseError::Query(other.to_string())),
+        }
     }
 }

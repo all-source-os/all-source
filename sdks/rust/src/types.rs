@@ -158,6 +158,8 @@ pub struct QueryEventsParams {
     /// Sort order for the returned events, by `(timestamp, version)`.
     /// `None` leaves Core's default (ascending / oldest first) in effect.
     pub order: Option<SortOrder>,
+    /// Sent as the `If-None-Match` header, never as a query parameter.
+    pub if_none_match: Option<String>,
 }
 
 impl QueryEventsParams {
@@ -227,6 +229,13 @@ impl QueryEventsParams {
     /// Return events oldest first (Core's default). Shorthand for `.order(SortOrder::Asc)`.
     pub fn order_asc(self) -> Self {
         self.order(SortOrder::Asc)
+    }
+
+    /// Send an `ETag` from an earlier [`QueryEventsResponse::meta`] as
+    /// `If-None-Match`, so an unchanged result comes back as a 304.
+    pub fn if_none_match(mut self, etag: &str) -> Self {
+        self.if_none_match = Some(etag.to_string());
+        self
     }
 
     /// Convert to query string pairs for reqwest.
@@ -373,6 +382,9 @@ pub struct QueryEventsResponse {
     pub total_count: Option<u64>,
     /// Whether more results are available beyond the current page. `None` if not supported.
     pub has_more: Option<bool>,
+    /// Response headers, filled in by [`crate::QueryClient::query_events`].
+    #[serde(skip)]
+    pub meta: crate::ResponseMeta,
 }
 
 /// Summary of a single entity returned by the list-entities endpoint.
