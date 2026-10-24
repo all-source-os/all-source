@@ -48,6 +48,8 @@ func egressTestRouter(exchange egressExchange, handler gin.HandlerFunc) *gin.Eng
 	api := router.Group("/api/v1")
 	api.Use(cp.enforceEgress)
 	api.GET("/events/query", handler)
+	api.GET("/event-feed", handler)
+	api.GET("/read-models/:name", handler)
 	api.GET("/billing/egress", handler)
 	return router
 }
@@ -126,7 +128,7 @@ func TestEgressRecoveryRoutesRemainReachable(t *testing.T) {
 			t.Fatalf("recovery route requires credit: %s", path)
 		}
 	}
-	for _, path := range []string{"/api/v1/events/query", "/api/v1/billing-evil/events"} {
+	for _, path := range []string{"/api/v1/events/query", "/api/v1/event-feed", "/api/v1/read-models/board", "/api/v1/billing-evil/events"} {
 		if !billableEgressPath(path) {
 			t.Fatalf("data route bypasses budget: %s", path)
 		}

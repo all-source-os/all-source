@@ -290,6 +290,7 @@ pub async fn ingest_event(
     State(store): State<SharedStore>,
     Json(req): Json<IngestEventRequest>,
 ) -> Result<Json<IngestEventResponse>> {
+    super::read_model_api::protect_ingest(&req.event_type, &req.entity_id)?;
     let expected_version = req.expected_version;
 
     let tenant_id = req.tenant_id.unwrap_or_else(|| "default".to_string());
@@ -404,6 +405,7 @@ pub async fn ingest_event_v1(
     State(state): State<AppState>,
     Json(req): Json<IngestEventRequest>,
 ) -> Result<Json<IngestEventResponse>> {
+    super::read_model_api::protect_ingest(&req.event_type, &req.entity_id)?;
     let expected_version = req.expected_version;
 
     let tenant_id = req.tenant_id.unwrap_or_else(|| "default".to_string());
@@ -446,6 +448,9 @@ pub async fn ingest_events_batch(
     State(store): State<SharedStore>,
     Json(req): Json<IngestEventsBatchRequest>,
 ) -> Result<Json<IngestEventsBatchResponse>> {
+    for event in &req.events {
+        super::read_model_api::protect_ingest(&event.event_type, &event.entity_id)?;
+    }
     let total = req.events.len();
     let mut ingested_events = Vec::with_capacity(total);
 
@@ -498,6 +503,9 @@ pub async fn ingest_events_batch_v1(
     State(state): State<AppState>,
     Json(req): Json<IngestEventsBatchRequest>,
 ) -> Result<Json<IngestEventsBatchResponse>> {
+    for event in &req.events {
+        super::read_model_api::protect_ingest(&event.event_type, &event.entity_id)?;
+    }
     let total = req.events.len();
     let mut ingested_events = Vec::with_capacity(total);
 
@@ -2470,10 +2478,23 @@ pub async fn sync_pull_handler(
 /// POST /api/v1/sync/push — Client pushes events, server applies CRDT resolution.
 #[cfg(feature = "embedded-sync")]
 pub async fn sync_push_handler(
-    State(state): State<AppState>,
+    State(store): State<SharedStore>,
     Json(request): Json<crate::embedded::sync_types::SyncPushRequest>,
 ) -> Result<Json<crate::embedded::sync_types::SyncPushResponse>> {
-    let store = &state.store;
+    for event in &request.events {
+        super::read_model_api::protect_ingest(
+            event
+                .event_data
+                .get("event_type")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown"),
+            event
+                .event_data
+                .get("entity_id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown"),
+        )?;
+    }
 
     let mut accepted = 0usize;
     let mut skipped = 0usize;

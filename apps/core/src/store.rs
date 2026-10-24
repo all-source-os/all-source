@@ -37,6 +37,10 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use std::{path::PathBuf, sync::Arc};
+#[path = "store_feed.rs"]
+pub mod feed;
+#[path = "store_read_model.rs"]
+pub mod read_model;
 #[cfg(feature = "server")]
 use tokio::sync::mpsc;
 
@@ -143,6 +147,8 @@ pub struct EventStore {
     /// Key format: "{projection_name}:{entity_id}"
     /// This DashMap provides O(1) access with ~11.9 μs latency
     projection_state_cache: Arc<DashMap<String, serde_json::Value>>,
+    feed_indexes: DashMap<String, feed::FeedIndex>,
+    read_models: parking_lot::Mutex<std::collections::HashMap<String, read_model::ReadModel>>,
 
     /// Projection status overrides (v0.13 feature)
     /// Tracks pause/start state per projection name: "running" or "paused"
@@ -376,6 +382,8 @@ impl EventStore {
             metrics,
             total_ingested: Arc::new(RwLock::new(0)),
             projection_state_cache,
+            feed_indexes: DashMap::new(),
+            read_models: parking_lot::Mutex::new(std::collections::HashMap::new()),
             projection_status: Arc::new(DashMap::new()),
             #[cfg(feature = "server")]
             webhook_registry,
@@ -470,7 +478,9 @@ impl EventStore {
                             .entry(event.entity_id_str().to_string())
                             .or_insert(0) += 1;
 
-                        store.events.write().push(event);
+                        let mut events = store.events.write();
+                        store.observe_feed_head(&event, events.len() + 1);
+                        events.push(event);
                         wal_new += 1;
                     }
 
@@ -723,6 +733,7 @@ impl EventStore {
         }
 
         // Store the event in memory
+        self.observe_feed_head(event, events.len() + 1);
         events.push(event.clone());
         let total_events = events.len();
         drop(events);
@@ -874,6 +885,7 @@ impl EventStore {
         }
 
         // Store the event in memory
+        self.observe_feed_head(event, events.len() + 1);
         events.push(event.clone());
         let total_events = events.len();
         drop(events); // Release lock early
@@ -999,6 +1011,7 @@ impl EventStore {
             // Broadcast to in-process subscribers
             let _ = self.event_broadcast_tx.send(Arc::new(event.clone()));
 
+            self.observe_feed_head(&event, events.len() + 1);
             events.push(event);
         }
 
@@ -1062,6 +1075,7 @@ impl EventStore {
         }
 
         // Store the event in memory
+        self.observe_feed_head(event, events.len() + 1);
         events.push(event.clone());
         let total_events = events.len();
         drop(events);
@@ -1411,11 +1425,21 @@ impl EventStore {
         // Phase 3: Acquire write lock for the swap + WAL + index rebuild
         let mut events = self.events.write();
 
+        let affected_tenants: std::collections::BTreeSet<_> = events
+            .iter()
+            .filter(|event| {
+                event.entity_id_str() == entity_id && event.event_type_str() == token_event_type
+            })
+            .map(|event| event.tenant_id_str().to_owned())
+            .collect();
         events.retain(|e| {
             !(e.entity_id_str() == entity_id && e.event_type_str() == token_event_type)
         });
 
         events.push(merged_event);
+        for tenant in affected_tenants {
+            self.rebuild_tenant_feed(&tenant, &events);
+        }
 
         // Rebuild entire index since retain() shifted event positions.
         // Errors here indicate a corrupt event (missing entity_id/event_type)
@@ -2105,6 +2129,7 @@ impl EventStore {
         let evicted_bytes = self.tenant_loader.bytes_for(tenant_id);
 
         events.retain(|e| e.tenant_id_str() != tenant_id);
+        self.feed_indexes.remove(tenant_id);
         let after = events.len();
         let dropped = before - after;
 
@@ -2227,6 +2252,7 @@ impl EventStore {
 
         self.observe_entity_version(&event);
 
+        self.observe_feed_head(&event, events.len() + 1);
         events.push(event);
         // Account for the bytes AFTER the push so a panic in the
         // index/projection path doesn't leave the counter inflated.

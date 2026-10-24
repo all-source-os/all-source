@@ -26,6 +26,8 @@ import (
 	"github.com/allsource/control-plane/internal/domain/entities"
 )
 
+const queryEventsPath = "/api/v1/events/query"
+
 // delegationClient holds the resolved backend URLs and the shared HTTP
 // client used to forward requests. signToken mints a per-request JWT for
 // the authenticated caller — NOT a Control Plane admin token — so backends
@@ -262,7 +264,7 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 	}
 	c.Writer.WriteHeader(resp.StatusCode)
 	written, copyErr := io.Copy(c.Writer, resp.Body)
-	if beforeSuccess != nil {
+	if beforeSuccess != nil && path == queryEventsPath {
 		queryResponseBytes.Add(float64(written))
 		selector, bounded, filtered := queryShape(query)
 		queryShapeBytes.WithLabelValues(selector, bounded, filtered).Add(float64(written))
@@ -567,7 +569,7 @@ func (cp *ControlPlane) ProxyEventsQuery(c *gin.Context) {
 	// REGIONAL_INDEPENDENCE.md), this should switch to
 	// coreForRegion(localRegion) so reads stay in-region. For now
 	// "home region" resolves to a single Core for both directions.
-	cp.delegation.forwardRequestChecked(c, http.MethodGet, cp.delegation.coreForTenant(tenantID), "/api/v1/events/query", q, nil, bearer, nil, func() error {
+	cp.delegation.forwardRequestChecked(c, http.MethodGet, cp.delegation.coreForTenant(tenantID), queryEventsPath, q, nil, bearer, nil, func() error {
 		return cp.recordQueryUsage(c.Request.Context(), tenantID)
 	})
 }

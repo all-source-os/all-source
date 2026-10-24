@@ -7,14 +7,21 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde_json::json;
+use std::time::Duration;
 use tokio::sync::Semaphore;
 
 static RESPONSES: Semaphore = Semaphore::const_new(16);
+static WAITING: Semaphore = Semaphore::const_new(64);
 
 pub async fn bounded(request: Request, next: Next) -> Response {
-    let Ok(_permit) = RESPONSES.try_acquire() else {
-        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    let Ok(waiting) = WAITING.try_acquire() else {
+        return (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, "1")]).into_response();
     };
+    let Ok(Ok(_permit)) = tokio::time::timeout(Duration::from_secs(2), RESPONSES.acquire()).await
+    else {
+        return (StatusCode::TOO_MANY_REQUESTS, [(header::RETRY_AFTER, "1")]).into_response();
+    };
+    drop(waiting);
     let response = next.run(request).await;
     if response.status() == StatusCode::SWITCHING_PROTOCOLS {
         return response;

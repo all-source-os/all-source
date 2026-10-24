@@ -14,16 +14,14 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn router() -> Router {
-    let state = RateLimitState {
-        rate_limiter: Arc::new(RateLimiter::new(RateLimitConfig {
-            requests_per_minute: 1,
-            burst_size: 1,
-        })),
-        egress_rate_limiter: Arc::new(RateLimiter::new(RateLimitConfig {
-            requests_per_minute: 1,
-            burst_size: 2,
-        })),
-    };
+    let mut state = RateLimitState::new(Arc::new(RateLimiter::new(RateLimitConfig {
+        requests_per_minute: 1,
+        burst_size: 1,
+    })));
+    state.egress_rate_limiter = Arc::new(RateLimiter::new(RateLimitConfig {
+        requests_per_minute: 1,
+        burst_size: 2,
+    }));
     Router::new()
         .route("/api/v1/auth/me", get(|| async { StatusCode::OK }))
         .route(

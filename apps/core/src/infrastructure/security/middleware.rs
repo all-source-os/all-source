@@ -133,12 +133,22 @@ pub struct AuthState {
 pub struct RateLimitState {
     pub rate_limiter: Arc<RateLimiter>,
     pub egress_rate_limiter: Arc<RateLimiter>,
+    pub read_model_reads: Arc<RateLimiter>,
+    pub read_model_writes: Arc<RateLimiter>,
 }
 
 impl RateLimitState {
     pub fn new(rate_limiter: Arc<RateLimiter>) -> Self {
         Self {
             rate_limiter,
+            read_model_reads: Arc::new(RateLimiter::new(RateLimitConfig {
+                requests_per_minute: 6000,
+                burst_size: 1000,
+            })),
+            read_model_writes: Arc::new(RateLimiter::new(RateLimitConfig {
+                requests_per_minute: 600,
+                burst_size: 120,
+            })),
             // Each admitted data response reserves and completes one ledger entry.
             egress_rate_limiter: Arc::new(RateLimiter::new(RateLimitConfig {
                 requests_per_minute: 1200,
@@ -450,7 +460,21 @@ pub async fn rate_limit_middleware(
         .and_then(|suffix| suffix.strip_suffix("/egress"))
         .filter(|tenant| !tenant.is_empty() && !tenant.contains('/'))
         .filter(|_| auth_ctx.claims.has_permission(Permission::Admin));
-    let result = if let Some(tenant) = ledger_tenant {
+    let read_model_path = path == "/api/v1/event-feed"
+        || path
+            .strip_prefix("/api/v1/read-models/")
+            .is_some_and(|name| !name.is_empty() && !name.contains('/'));
+    let result = if read_model_path {
+        if request.method() == axum::http::Method::GET {
+            rate_limit_state
+                .read_model_reads
+                .check_rate_limit(auth_ctx.tenant_id())
+        } else {
+            rate_limit_state
+                .read_model_writes
+                .check_rate_limit(auth_ctx.tenant_id())
+        }
+    } else if let Some(tenant) = ledger_tenant {
         rate_limit_state
             .egress_rate_limiter
             .check_rate_limit(tenant)
