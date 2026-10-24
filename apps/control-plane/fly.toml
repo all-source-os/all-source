@@ -63,6 +63,13 @@ primary_region = "iad"
     path = "/livez"
     timeout = "5s"
 
+# Private listener (METRICS_ADDR, default :9091) with tenant-labelled series.
+# It is not an [http_service] port, so it is off the public internet, but any
+# machine in the org can reach it over 6PN. It answers GET only.
+[metrics]
+  port = 9091
+  path = "/metrics"
+
 [[vm]]
   cpu_kind = "shared"
   cpus = 1

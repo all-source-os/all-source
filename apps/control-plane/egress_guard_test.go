@@ -22,7 +22,7 @@ func (l *testEgressLedger) exchange(_ context.Context, tenant string, command eg
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	var result egressAdmission
-	result.Protocol = "funded-egress-v1"
+	result.Protocol = fundedEgressProtocol
 	if command.Operation == "reserve" {
 		if l.left[tenant] == 0 {
 			return result, egressError{status: 402}
@@ -147,7 +147,7 @@ func TestEgressUnavailableLedgerDoesNotReachUpstream(t *testing.T) {
 
 func TestEgressSettlementFailureNeverReturnsData(t *testing.T) {
 	router := egressTestRouter(func(_ context.Context, _ string, command egressCommand) (egressAdmission, error) {
-		if command.Operation == "complete" {
+		if command.Operation == egressOperationComplete {
 			return egressAdmission{}, egressError{status: 503}
 		}
 		var result egressAdmission

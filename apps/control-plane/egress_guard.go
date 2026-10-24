@@ -18,7 +18,11 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxEgressResponse = 16 * 1024 * 1024
+const (
+	maxEgressResponse       = 16 * 1024 * 1024
+	egressOperationComplete = "complete"
+	fundedEgressProtocol    = "funded-egress-v1"
+)
 
 var egressResponseSlots = make(chan struct{}, 16)
 
@@ -52,7 +56,7 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 	target := *cp.delegation.coreForTenant(tenant)
 	target.Path = strings.TrimRight(target.Path, "/") + "/api/v1/tenants/" + url.PathEscape(tenant) + "/egress"
 	payload := map[string]any{"operation": command.Operation, "id": command.ID}
-	if command.Operation == "complete" {
+	if command.Operation == egressOperationComplete {
 		payload["bytes"] = command.Bytes
 	}
 	for attempt := 0; attempt < 2; attempt++ {
@@ -69,7 +73,7 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 		if !response.IsSuccess() {
 			return result, egressError{status: response.StatusCode()}
 		}
-		if result.Protocol != "funded-egress-v1" {
+		if result.Protocol != fundedEgressProtocol {
 			return result, errors.New("unsupported egress ledger")
 		}
 		return result, nil
@@ -78,19 +82,44 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 }
 
 func (cp *ControlPlane) enforceEgress(c *gin.Context) {
-	if cp.egressExchange == nil || !billableEgressRequest(c.Request) {
+	if cp.egressExchange == nil || !billableEgressPath(c.Request.URL.Path) {
 		c.Next()
 		return
 	}
+	billable := billableEgressRequest(c.Request)
 	tenant, ok := authTenantFromContext(c)
 	if !ok {
+		if !billable {
+			c.Next()
+			return
+		}
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication_required"})
 		return
 	}
+	lane := admissionLane(c.Request, c.FullPath())
+	ticket, refusal, headers := cp.admission.admit(tenant, lane, len(egressResponseSlots), cap(egressResponseSlots), time.Now())
+	if cp.admission.enforcing() {
+		for name, values := range headers {
+			c.Writer.Header()[name] = values
+		}
+	}
+	if refusal != nil {
+		c.AbortWithStatusJSON(refusal.status, writeAdmissionRefusal(c.Writer, refusal))
+		return
+	}
+	if !billable {
+		defer func() { ticket.release(uint64(max(0, c.Writer.Size())), c.Writer.Status()) }() //nolint:gosec // Size is clamped nonnegative.
+		c.Next()
+		return
+	}
+	var charged uint64
+	status := 0
+	defer func() { ticket.release(charged, status) }()
 	select {
 	case egressResponseSlots <- struct{}{}:
 		defer func() { <-egressResponseSlots }()
 	default:
+		admissionRefused.WithLabelValues(lane, admissionScopeGlobal, tenantLabel(tenant)).Inc()
 		rejectEgress(c, egressError{status: http.StatusTooManyRequests})
 		return
 	}
@@ -120,11 +149,12 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	}
 	settlementContext, stop := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 3*time.Second)
 	defer stop()
-	settled, err := cp.egressExchange(settlementContext, tenant, egressCommand{Operation: "complete", ID: operation, Bytes: charge})
+	settled, err := cp.egressExchange(settlementContext, tenant, egressCommand{Operation: egressOperationComplete, ID: operation, Bytes: charge})
 	if err != nil {
 		rejectEgress(c, err)
 		return
 	}
+	charged = charge
 	if buffer.failed {
 		if capacity < maxEgressResponse {
 			rejectEgress(c, egressError{status: http.StatusPaymentRequired})
@@ -140,10 +170,16 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	for name, values := range buffer.headers {
 		original.Header()[name] = values
 	}
-	original.Header().Set("Content-Length", strconv.Itoa(buffer.body.Len()))
+	if buffer.status != http.StatusNotModified && buffer.status != http.StatusNoContent {
+		original.Header().Set("Content-Length", strconv.Itoa(buffer.body.Len()))
+	}
 	original.Header().Set("X-Egress-Included-Remaining", strconv.FormatUint(settled.Admission.Snapshot.IncludedAvailable, 10))
 	original.Header().Set("X-Egress-Prepaid-Remaining", strconv.FormatUint(settled.Admission.Snapshot.PrepaidAvailable, 10))
+	status = buffer.status
 	original.WriteHeader(buffer.status)
+	if buffer.body.Len() == 0 {
+		return
+	}
 	if _, err := original.Write(buffer.body.Bytes()); err != nil {
 		log.Printf("funded response delivery failed: %v", err)
 	}
@@ -171,6 +207,9 @@ func billableEgressPath(path string) bool {
 	if !strings.HasPrefix(path, "/api/v1/") {
 		return false
 	}
+	if path == tenantLimitsPath {
+		return false
+	}
 	for _, prefix := range []string{"/api/v1/auth/", "/api/v1/billing/", "/api/v1/admin/", "/api/v1/webhooks/"} {
 		if strings.HasPrefix(path, prefix) {
 			return false
@@ -179,6 +218,8 @@ func billableEgressPath(path string) bool {
 	return true
 }
 
+// Global-pool and ledger refusals answer the same in every admission mode;
+// only per-tenant refusals carry a computed Retry-After.
 func rejectEgress(c *gin.Context, err error) {
 	status := http.StatusServiceUnavailable
 	var refusal egressError
