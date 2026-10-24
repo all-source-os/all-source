@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -376,7 +377,7 @@ func determineAction(method, path string) string {
 	switch method {
 	case "GET":
 		return "read"
-	case "POST":
+	case http.MethodPost:
 		if contains(path, actionLogin) {
 			return actionLogin
 		}

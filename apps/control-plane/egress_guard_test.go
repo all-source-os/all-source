@@ -51,7 +51,48 @@ func egressTestRouter(exchange egressExchange, handler gin.HandlerFunc) *gin.Eng
 	api.GET("/event-feed", handler)
 	api.GET("/read-models/:name", handler)
 	api.GET("/billing/egress", handler)
+	api.POST("/events", handler)
+	api.POST("/events/batch", handler)
+	api.PUT("/read-models/:name", handler)
 	return router
+}
+
+func TestEgressGuardExemptsWritesAndEmptyFeedProbe(t *testing.T) {
+	ledgerCalls := 0
+	router := egressTestRouter(func(context.Context, string, egressCommand) (egressAdmission, error) {
+		ledgerCalls++
+		return egressAdmission{}, egressError{status: http.StatusServiceUnavailable}
+	}, func(c *gin.Context) { c.String(200, "ok") })
+	for range cap(egressResponseSlots) {
+		egressResponseSlots <- struct{}{}
+	}
+	defer func() {
+		for range cap(egressResponseSlots) {
+			<-egressResponseSlots
+		}
+	}()
+	for _, sample := range []struct {
+		method, target string
+		status         int
+	}{
+		{http.MethodPost, "/api/v1/events", 200},
+		{http.MethodPost, "/api/v1/events/batch", 200},
+		{http.MethodPut, "/api/v1/read-models/board", 200},
+		{http.MethodGet, "/api/v1/event-feed?limit=0&prefixes=team_queue.", 200},
+		{http.MethodGet, "/api/v1/event-feed?limit=1", http.StatusTooManyRequests},
+		{http.MethodGet, "/api/v1/events/query", http.StatusTooManyRequests},
+	} {
+		request := httptest.NewRequestWithContext(t.Context(), sample.method, sample.target, http.NoBody)
+		request.Header.Set("Test-Tenant", "a")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != sample.status {
+			t.Fatalf("%s %s: status=%d want %d", sample.method, sample.target, response.Code, sample.status)
+		}
+	}
+	if ledgerCalls != 0 {
+		t.Fatalf("exempt or slot-refused requests reached the ledger %d times", ledgerCalls)
+	}
 }
 
 func TestEgressHardStopBeforeUpstreamAndIndependentTenant(t *testing.T) {

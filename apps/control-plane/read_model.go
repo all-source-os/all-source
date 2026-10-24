@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const eventFeedPath = "/api/v1/event-feed"
+
 func (cp *ControlPlane) ProxyReadModel(c *gin.Context) {
 	_, tenantID, _, ok := authIdentityFromContext(c)
 	if !ok {
@@ -18,7 +20,7 @@ func (cp *ControlPlane) ProxyReadModel(c *gin.Context) {
 	if !ok {
 		return
 	}
-	path := "/api/v1/event-feed"
+	path := eventFeedPath
 	if name := c.Param("name"); name != "" {
 		path = "/api/v1/read-models/" + url.PathEscape(name)
 	}
