@@ -60,6 +60,15 @@ jobs:
           --mount type=bind,source="$PWD/deploy/prometheus",target=/rules,readonly
           --workdir /rules prom/prometheus:v2.51.0
           test rules bandwidth.rules.test.yml
+      - name: Verify scrape-health rules
+        timeout-minutes: 5
+        working-directory: .
+        run: >-
+          timeout -k 15 300 docker run --rm --network none
+          --entrypoint /bin/promtool
+          --mount type=bind,source="$PWD/tooling/monitor-stack",target=/monitor,readonly
+          --workdir /monitor/tests prom/prometheus:v2.51.0
+          test rules scrape-health.test.yml availability.test.yml
       - name: Validate deployed rule files
         timeout-minutes: 5
         working-directory: .
@@ -68,4 +77,4 @@ jobs:
           --entrypoint /bin/promtool
           --mount type=bind,source="$PWD/tooling/monitor-stack/rules",target=/rules,readonly
           prom/prometheus:v2.51.0 check rules
-          /rules/monitor-health.yml /rules/bandwidth.rules.yml
+          /rules/monitor-health.yml /rules/bandwidth.rules.yml /rules/scrape-health.yml /rules/availability.yml

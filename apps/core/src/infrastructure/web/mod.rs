@@ -9,6 +9,7 @@ pub mod auth_api;
 pub mod config_api;
 pub mod demo_api;
 pub mod handlers;
+pub mod http_metrics;
 #[cfg(feature = "prime")]
 pub mod prime_api;
 pub mod read_model_api;

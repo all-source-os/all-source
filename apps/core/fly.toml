@@ -91,6 +91,12 @@ min_machines_running = 1
   timeout = "5s"
   type = "http"
 
+# Fly scrapes this every 15s into the org Prometheus behind fly-metrics.net.
+# The series carry no tenant label; per-tenant usage comes from the control plane.
+[metrics]
+  port = 3900
+  path = "/metrics"
+
 [[vm]]
   # shared-cpu-8x to unlock 16 GiB. On 8 GiB, Core refused to hydrate the
   # largest tenant on 2026-10-24 (needed 2,474,258,624 B, 1,969,930,240 B

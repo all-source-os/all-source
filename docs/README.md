@@ -134,7 +134,8 @@ For DevOps and platform engineers.
 |----------|-------------|--------|
 | [Alerts](./operations/ALERTS.md) | Repo-defined alarms, their thresholds and escalation | ✅ |
 | [Bandwidth alerts](./runbooks/BANDWIDTH_ALERTS.md) | Production edge-output thresholds, private email delivery, and operator checks | Active; firing and recovery verified |
-| [Production traffic report (2026-10-24)](./reports/2026-10-24-production-traffic.html) | Measured bandwidth by app, region and tenant; animated system diagram; six bottlenecks with charts from raw Fly and service metrics | ✅ |
+| [Business dashboards](./runbooks/BUSINESS_DASHBOARD.md) | Business questions, availability and engineering detail on fly-metrics.net: tenant cost vs plan, failed reads, deployment fit, outage signals, and the alerts behind them | ✅ |
+| [Production traffic report (2026-10-24)](./reports/2026-10-24-production-traffic.html) | Measured bandwidth by app, region and tenant; animated system diagram; six bottlenecks with charts from raw Fly and service metrics; the 2026-10-24/25 outage (12 h of failed reads) with timeline, cause and what is still open | ✅ |
 | [Control-plane egress root cause (2026-10-24)](./reports/2026-10-24-control-plane-egress-rca.md) | 66 GB/day alert: Longhand control-plane polling over the public edge, egress-guard throttling since 15:40Z, fix sites | ✅ |
 | [Control-plane tenant outage (2026-10-25)](./reports/2026-10-25-control-plane-tenant-outage.md) | WAL replay outage fixed; strict whole-history reads return in ~16 days and ordinary reads in ~170 at 14 MB/day growth; what removes each limit | ✅ |
 | [Fly image promotion](./runbooks/FLY_IMAGE_PROMOTION.md) | Copy tested private CI images into app-scoped Fly registries before deployment | Operator runbook |

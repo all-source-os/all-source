@@ -83,6 +83,7 @@ pub struct MetricsRegistry {
     pub http_requests_total: IntCounterVec,
     pub http_request_duration_seconds: HistogramVec,
     pub http_requests_in_flight: IntGauge,
+    pub http_response_bytes_total: IntCounterVec,
 
     // Replication metrics (leader)
     pub replication_followers_connected: IntGauge,
@@ -456,6 +457,15 @@ impl MetricsRegistry {
         ))
         .unwrap();
 
+        let http_response_bytes_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_http_response_bytes_total",
+                "HTTP response body bytes before compression",
+            ),
+            &["method", "endpoint", "status"],
+        )
+        .unwrap();
+
         // Replication metrics (leader)
         let replication_followers_connected = IntGauge::with_opts(Opts::new(
             "allsource_replication_followers_connected",
@@ -684,6 +694,9 @@ impl MetricsRegistry {
         registry
             .register(Box::new(http_requests_in_flight.clone()))
             .unwrap();
+        registry
+            .register(Box::new(http_response_bytes_total.clone()))
+            .unwrap();
 
         registry
             .register(Box::new(replication_followers_connected.clone()))
@@ -766,6 +779,7 @@ impl MetricsRegistry {
             http_requests_total,
             http_request_duration_seconds,
             http_requests_in_flight,
+            http_response_bytes_total,
             replication_followers_connected,
             replication_wal_shipped_total,
             replication_wal_shipped_bytes_total,

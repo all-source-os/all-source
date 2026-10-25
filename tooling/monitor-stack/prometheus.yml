@@ -21,6 +21,10 @@ scrape_configs:
     params:
       match[]:
         - '{__name__="fly_edge_data_out",app="allsource-control-plane"}'
+        - '{__name__="fly_edge_http_responses_count",app="allsource-control-plane"}'
+        - '{__name__="allsource_http_requests_total",app="allsource-core"}'
+        - '{__name__="control_plane_http_requests_total",app="allsource-control-plane"}'
+        - '{__name__="vm_memory_total",app="allsource-query"}'
     authorization:
       type: FlyV1
       credentials_file: /run/monitor/fly-token

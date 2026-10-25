@@ -36,6 +36,17 @@ var TierPriceMap = map[string]int{
 	"team":    9900, // $99/mo
 }
 
+// TenantPlan returns a tenant's subscription tier, status and list price in
+// US dollars per month. An enterprise price is negotiated, so it reads as 0.
+func TenantPlan(t *entities.Tenant) (tier, status string, monthlyUSD float64) {
+	sub := extractSubscriptionEntity(t.Metadata)
+	tier = sub.Tier
+	if tier == "" {
+		tier = tierFree
+	}
+	return tier, sub.Status, float64(TierPriceMap[tier]) / 100.0
+}
+
 // AdminRevenueUseCase computes revenue metrics from subscription data.
 type AdminRevenueUseCase struct {
 	tenantRepo repositories.TenantRepository

@@ -1,0 +1,25 @@
+groups:
+  - name: availability
+    rules:
+      - alert: ControlPlaneServingFailures
+        expr: |
+          sum(rate(fly_edge_http_responses_count{app="allsource-control-plane", status=~"5.."}[10m]))
+            / sum(rate(fly_edge_http_responses_count{app="allsource-control-plane"}[10m])) >= 0.5
+        for: 10m
+        labels:
+          severity: critical
+          service: allsource-control-plane
+        annotations:
+          summary: Half of control-plane responses are server errors
+          action: Open the Availability & Incidents dashboard. If Core is idle while callers fail, a gate is refusing work; check Core's 503 refusals and the last restart.
+      - alert: ControlPlaneSuccessCollapsed
+        expr: |
+          sum(rate(fly_edge_http_responses_count{app="allsource-control-plane", status=~"2..|304"}[15m]))
+            < 0.05 * sum(rate(fly_edge_http_responses_count{app="allsource-control-plane", status=~"2..|304"}[15m] offset 1d))
+        for: 15m
+        labels:
+          severity: critical
+          service: allsource-control-plane
+        annotations:
+          summary: Control-plane successful responses fell below 5% of the same time yesterday
+          action: Callers back off on Retry-After, so low traffic is not low demand. Check the response outcome chart and Core's refusals.
