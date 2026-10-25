@@ -1,3 +1,5 @@
+#[path = "storage_feed.rs"]
+mod feed;
 #[path = "storage_retained_entity.rs"]
 mod retained_entity;
 
