@@ -80,7 +80,8 @@ pub fn email_config(from: &str, to: &str, password_file: &str, dashboard: &str) 
         "<html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head>\
          <body style=\"font-family:Arial,sans-serif;line-height:1.5;max-width:600px;margin:auto;padding:16px\">\
          {{{{ range .Alerts }}}}<h2>{{{{ .Status }}}}: {{{{ .Annotations.summary }}}}</h2>\
-         <p>Service: {{{{ .Labels.service }}}}</p><p>{{{{ .Annotations.action }}}}</p>{{{{ end }}}}\
+         <p>Service: {{{{ .Labels.service }}}}</p><p>{{{{ .Annotations.action }}}}</p>\
+         {{{{ with .Annotations.dashboard }}}}<p><a href=\"{{{{ . }}}}\">Open the dashboard for this alert</a></p>{{{{ end }}}}{{{{ end }}}}\
          <p><a href=\"{dashboard}\">Open private Fly metrics dashboard</a></p>\
          <p style=\"font-size:12px\">Private operations alert. Verify caller activity before restricting traffic.</p>\
          </body></html>"
@@ -97,7 +98,7 @@ pub fn email_config(from: &str, to: &str, password_file: &str, dashboard: &str) 
             "to": to, "send_resolved": true,
             "headers": {"Subject": "[AllSource {{ .Status }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.verification_id }} {{ . }}{{ end }}"},
             "html": html,
-            "text": "{{ range .Alerts }}Status: {{ .Status }}\nService: {{ .Labels.service }}\n{{ .Annotations.summary }}\nAction: {{ .Annotations.action }}\n\n{{ end }}Private operations alert. Review current Fly metrics before restricting traffic."
+            "text": "{{ range .Alerts }}Status: {{ .Status }}\nService: {{ .Labels.service }}\n{{ .Annotations.summary }}\nAction: {{ .Annotations.action }}\n{{ with .Annotations.dashboard }}Dashboard: {{ . }}\n{{ end }}\n{{ end }}Private operations alert. Review current Fly metrics before restricting traffic."
         }]}],
         "inhibit_rules": [{
             "source_matchers": ["alertname=ControlPlaneDailyBandwidthCritical"],
