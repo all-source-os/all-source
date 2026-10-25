@@ -10,7 +10,8 @@ groups:
           service: allsource-control-plane
         annotations:
           summary: Control-plane edge output exceeded 10 GB in 24 hours
-          action: Inspect sender/receiver rates and query response bytes; compare successful workflows before changing traffic limits.
+          action: Open Egress Attribution. Section 2 names the route and tenant; section 3 names the event read (namespace and shape). Compare that caller with the work it completed before changing traffic limits.
+          dashboard: https://fly-metrics.net/d/allsource-egress?orgId=1483699
       - alert: ControlPlaneDailyBandwidthCritical
         expr: sum(increase(fly_edge_data_out{app="allsource-control-plane"}[24h])) > 50000000000
         for: 5m
@@ -19,7 +20,8 @@ groups:
           service: allsource-control-plane
         annotations:
           summary: Control-plane edge output exceeded 50 GB in 24 hours
-          action: Investigate callers and redundant reads; contain confirmed abusive clients without interrupting unrelated tenants.
+          action: Open Egress Attribution and find the tenant, route and event read behind the bytes; contain a confirmed abusive client without interrupting unrelated tenants.
+          dashboard: https://fly-metrics.net/d/allsource-egress?orgId=1483699
       - alert: ControlPlaneSustainedBandwidthCritical
         expr: sum(rate(fly_edge_data_out{app="allsource-control-plane"}[5m])) > 1000000
         for: 10m
@@ -28,7 +30,8 @@ groups:
           service: allsource-control-plane
         annotations:
           summary: Control-plane edge output stayed above 1 MB/s
-          action: Inspect event-query response bytes and caller activity; verify whether successful work justifies this transfer.
+          action: Open Egress Attribution, section 3, for the event read sending the bytes; verify whether successful work justifies this transfer.
+          dashboard: https://fly-metrics.net/d/allsource-egress?orgId=1483699
       - alert: ControlPlaneBandwidthMetricsMissing
         expr: absent_over_time(fly_edge_data_out{app="allsource-control-plane"}[15m])
         for: 5m

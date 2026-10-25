@@ -1,0 +1,381 @@
+{
+  "uid": "allsource-egress",
+  "title": "AllSource — Egress Attribution",
+  "description": "What makes the control plane send bytes: edge output, the share attributed to a route, and the tenant, route and read shape behind it.",
+  "tags": ["allsource", "egress", "bandwidth"],
+  "timezone": "utc",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "5m",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Metrics",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus on Fly", "value": "prometheus_on_fly" },
+        "hide": 0
+      },
+      {
+        "name": "tenant",
+        "label": "Tenant",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": { "query": "label_values(control_plane_tenant_requests_total, tenant)", "refId": "tenant" },
+        "definition": "label_values(control_plane_tenant_requests_total, tenant)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "namespace",
+        "label": "Event namespace",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": { "query": "label_values(control_plane_tenant_event_queries_total, namespace)", "refId": "namespace" },
+        "definition": "label_values(control_plane_tenant_event_queries_total, namespace)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "AllSource events",
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "iconColor": "purple",
+        "target": { "type": "tags", "tags": ["allsource-event"], "matchAny": true, "limit": 100 }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Which caller makes the control plane send bytes?** Read top to bottom: how much leaves Fly's edge and how much of it a route accounts for (1), which route and tenant (2), which event read inside `/api/v1/events/query` (3), and who is refused (4). The `ControlPlaneDailyBandwidth*` alerts compare the same edge counter against 10 GB and 50 GB a day. Runbook: `docs/runbooks/BUSINESS_DASHBOARD.md`, section *Which caller sends the bytes*."
+      }
+    },
+    {
+      "id": 100,
+      "type": "row",
+      "title": "1 · How much leaves the edge, and how much can we attribute?",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 101,
+      "type": "stat",
+      "title": "Edge output in window",
+      "description": "Bytes Fly's edge sent to clients of allsource-control-plane. This is the counter the bandwidth alerts and the Fly bill use.",
+      "gridPos": { "x": 0, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "decbytes", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "instant": true, "expr": "sum(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[$__range]))" }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "stat",
+      "title": "Daily pace (last hour × 24)",
+      "description": "The last hour's edge output scaled to a day. Yellow at the 10 GB warning alert, red at the 50 GB critical alert.",
+      "gridPos": { "x": 6, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 10000000000 }, { "color": "red", "value": 50000000000 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[1h])) * 24" }
+      ]
+    },
+    {
+      "id": 103,
+      "type": "stat",
+      "title": "Projected egress cost per 30 days",
+      "description": "Last hour's rate × 30 days at $0.02/GB (Fly's North America and Europe price). Regions billed higher are not separated.",
+      "gridPos": { "x": 12, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "area" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[1h])) * 24 * 30 / 1e9 * 0.02" }
+      ]
+    },
+    {
+      "id": 104,
+      "type": "stat",
+      "title": "Share attributed to a route",
+      "description": "Response body bytes the control plane metered per tenant and route, divided by edge output. Event-query bodies alone measured 97.9% of edge output over 27.6 h (2026-10-25/26, release v121), so expect close to 100%; under 90% means traffic no route meters or a scrape gap. No value means the control plane's private metrics port (9091) is not scraped: check the [metrics] section of the running release.",
+      "gridPos": { "x": 18, "y": 4, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "noValue": "not scraped",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0.8 }, { "color": "green", "value": 0.9 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "instant": true, "expr": "sum(increase(control_plane_tenant_response_bytes_total[$__range])) / sum(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[$__range]))" }
+      ]
+    },
+    {
+      "id": 105,
+      "type": "timeseries",
+      "title": "Edge output vs metered response bytes",
+      "description": "The gap between the two lines is traffic no route accounts for.",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+      "targets": [
+        { "refId": "A", "legendFormat": "edge output", "expr": "sum(rate(fly_edge_data_out{app=\"allsource-control-plane\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "metered response bodies", "expr": "sum(rate(control_plane_tenant_response_bytes_total[$__rate_interval]))" }
+      ]
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "2 · Which route and which tenant?",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 201,
+      "type": "table",
+      "title": "Bytes by route (window)",
+      "gridPos": { "x": 0, "y": 17, "w": 10, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "route" }, "properties": [ { "id": "displayName", "value": "Route" } ] },
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Response bytes" }, { "id": "unit", "value": "decbytes" }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Requests" }, { "id": "unit", "value": "short" } ] },
+          { "matcher": { "id": "byName", "options": "Value #C" }, "properties": [ { "id": "displayName", "value": "Bytes per request" }, { "id": "unit", "value": "decbytes" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Response bytes", "desc": true } ] },
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "sum by (route) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) > 0" },
+        { "refId": "B", "instant": true, "format": "table", "expr": "sum by (route) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__range])) > 0" },
+        { "refId": "C", "instant": true, "format": "table", "expr": "sum by (route) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / (sum by (route) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__range])) > 0)" }
+      ]
+    },
+    {
+      "id": 202,
+      "type": "table",
+      "title": "Bytes by tenant and route (window, top 20)",
+      "gridPos": { "x": 10, "y": 17, "w": 14, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "tenant" }, "properties": [ { "id": "displayName", "value": "Tenant" } ] },
+          { "matcher": { "id": "byName", "options": "route" }, "properties": [ { "id": "displayName", "value": "Route" } ] },
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Response bytes" }, { "id": "unit", "value": "decbytes" }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Share of metered bytes" }, { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 1 } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Response bytes", "desc": true } ] },
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "topk(20, sum by (tenant, route) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) > 0)" },
+        { "refId": "B", "instant": true, "format": "table", "expr": "topk(20, sum by (tenant, route) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) > 0) / scalar(sum(increase(control_plane_tenant_response_bytes_total[$__range])))" }
+      ]
+    },
+    {
+      "id": 203,
+      "type": "timeseries",
+      "title": "Response bytes per second by route",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"], "sortBy": "Mean", "sortDesc": true } },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{route}}", "expr": "topk(8, sum by (route) (rate(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__rate_interval])))" }
+      ]
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "3 · Which event read? (inside /api/v1/events/query)",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 301,
+      "type": "table",
+      "title": "Event-query bytes by tenant, namespace and read shape (window)",
+      "description": "Namespace is the first segment of event_type / event_type_prefix (before '.') or of entity_id (before ':'). Shape: selector used, whether since/until bounded the read, whether payload_filter narrowed it. A bounded, payload-filtered prefix read with a large average is usually a client replaying a whole stream on every call.",
+      "gridPos": { "x": 0, "y": 35, "w": 24, "h": 10 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "tenant" }, "properties": [ { "id": "displayName", "value": "Tenant" } ] },
+          { "matcher": { "id": "byName", "options": "namespace" }, "properties": [ { "id": "displayName", "value": "Namespace" } ] },
+          { "matcher": { "id": "byName", "options": "selector" }, "properties": [ { "id": "displayName", "value": "Selector" } ] },
+          { "matcher": { "id": "byName", "options": "time_bounded" }, "properties": [ { "id": "displayName", "value": "Time-bounded" } ] },
+          { "matcher": { "id": "byName", "options": "payload_filtered" }, "properties": [ { "id": "displayName", "value": "Payload-filtered" } ] },
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Body bytes" }, { "id": "unit", "value": "decbytes" }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Queries" }, { "id": "unit", "value": "short" } ] },
+          { "matcher": { "id": "byName", "options": "Value #C" }, "properties": [ { "id": "displayName", "value": "Bytes per query" }, { "id": "unit", "value": "decbytes" }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "text", "value": null }, { "color": "yellow", "value": 50000 }, { "color": "red", "value": 250000 } ] } } ] },
+          { "matcher": { "id": "byName", "options": "Value #D" }, "properties": [ { "id": "displayName", "value": "Share of query bytes" }, { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 1 } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Body bytes", "desc": true } ] },
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "topk(25, sum by (tenant, namespace, selector, time_bounded, payload_filtered) (increase(control_plane_tenant_event_query_body_bytes_total{tenant=~\"$tenant\", namespace=~\"$namespace\"}[$__range])) > 0)" },
+        { "refId": "B", "instant": true, "format": "table", "expr": "topk(25, sum by (tenant, namespace, selector, time_bounded, payload_filtered) (increase(control_plane_tenant_event_queries_total{tenant=~\"$tenant\", namespace=~\"$namespace\"}[$__range])) > 0)" },
+        { "refId": "C", "instant": true, "format": "table", "expr": "sum by (tenant, namespace, selector, time_bounded, payload_filtered) (increase(control_plane_tenant_event_query_body_bytes_total{tenant=~\"$tenant\", namespace=~\"$namespace\"}[$__range])) / (sum by (tenant, namespace, selector, time_bounded, payload_filtered) (increase(control_plane_tenant_event_queries_total{tenant=~\"$tenant\", namespace=~\"$namespace\"}[$__range])) > 0)" },
+        { "refId": "D", "instant": true, "format": "table", "expr": "sum by (tenant, namespace, selector, time_bounded, payload_filtered) (increase(control_plane_tenant_event_query_body_bytes_total{tenant=~\"$tenant\", namespace=~\"$namespace\"}[$__range])) / scalar(sum(increase(control_plane_tenant_event_query_body_bytes_total[$__range])))" }
+      ]
+    },
+    {
+      "id": 302,
+      "type": "timeseries",
+      "title": "Event-query bytes per second by namespace",
+      "gridPos": { "x": 0, "y": 45, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"], "sortBy": "Mean", "sortDesc": true } },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{namespace}}", "expr": "topk(8, sum by (namespace) (rate(control_plane_tenant_event_query_body_bytes_total{tenant=~\"$tenant\", namespace=~\"$namespace\"}[$__rate_interval])))" }
+      ]
+    },
+    {
+      "id": 303,
+      "type": "stat",
+      "title": "Polls answered 304 Not Modified",
+      "description": "Share of event queries answered from the client's ETag with no body. Low means clients poll without If-None-Match.",
+      "gridPos": { "x": 16, "y": 45, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "instant": true, "expr": "sum(increase(control_plane_tenant_event_query_conditional_total{tenant=~\"$tenant\"}[$__range])) / (sum(increase(control_plane_tenant_event_query_conditional_total{tenant=~\"$tenant\"}[$__range])) + sum(increase(control_plane_tenant_event_queries_total{tenant=~\"$tenant\"}[$__range])))" }
+      ]
+    },
+    {
+      "id": 304,
+      "type": "stat",
+      "title": "Event-query share of metered bytes",
+      "gridPos": { "x": 16, "y": 49, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "instant": true, "expr": "sum(increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\", route=\"/api/v1/events/query\"}[$__range])) / sum(increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range]))" }
+      ]
+    },
+    {
+      "id": 305,
+      "type": "table",
+      "title": "Sampled large responses by namespace and shape (logs)",
+      "description": "From event_query_large_response log lines: at most one sample every 10 s, responses of 16 KiB or more. Counts are samples, not requests; compare rows with each other, not with the metrics above. Works on any release that logs the sampler, so it answers the question when the metrics port is not scraped. Tenant is a SHA-256 fingerprint.",
+      "gridPos": { "x": 0, "y": 53, "w": 24, "h": 9 },
+      "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns", "valueLabel": "__name__" } },
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "indexByName": { "tenant_fp": 0, "namespace": 1, "selector": 2, "bounded": 3, "filtered": 4, "samples": 5, "avg_bytes": 6, "sampled_bytes": 7 } } }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "sampled_bytes" }, "properties": [ { "id": "displayName", "value": "Sampled bytes" }, { "id": "unit", "value": "decbytes" }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } } ] },
+          { "matcher": { "id": "byName", "options": "avg_bytes" }, "properties": [ { "id": "displayName", "value": "Average response" }, { "id": "unit", "value": "decbytes" } ] },
+          { "matcher": { "id": "byName", "options": "samples" }, "properties": [ { "id": "displayName", "value": "Samples" } ] },
+          { "matcher": { "id": "byName", "options": "tenant_fp" }, "properties": [ { "id": "displayName", "value": "Tenant fingerprint" } ] },
+          { "matcher": { "id": "byName", "options": "namespace" }, "properties": [ { "id": "displayName", "value": "Namespace" } ] },
+          { "matcher": { "id": "byName", "options": "selector" }, "properties": [ { "id": "displayName", "value": "Selector" } ] },
+          { "matcher": { "id": "byName", "options": "bounded" }, "properties": [ { "id": "displayName", "value": "Time-bounded" } ] },
+          { "matcher": { "id": "byName", "options": "filtered" }, "properties": [ { "id": "displayName", "value": "Payload-filtered" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Sampled bytes", "desc": true } ] },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "stats",
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+          "expr": "fly.app.name:\"allsource-control-plane\" \"event_query_large_response\" | extract \"bytes=<bytes> selector=<selector> \" | extract \"event_namespace=<namespace> tenant_fingerprint=<tenant_fp> \" | extract \"time_bounded=<bounded> payload_filtered=<filtered>\" | stats by (tenant_fp, namespace, selector, bounded, filtered) count() as samples, sum(bytes) as sampled_bytes, avg(bytes) as avg_bytes | sort by (sampled_bytes desc) | limit 25"
+        }
+      ]
+    },
+    {
+      "id": 400,
+      "type": "row",
+      "title": "4 · Who is refused?",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 62, "w": 24, "h": 1 },
+      "panels": []
+    },
+    {
+      "id": 401,
+      "type": "timeseries",
+      "title": "Edge responses by status",
+      "gridPos": { "x": 0, "y": 63, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (rate(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[$__rate_interval]))" }
+      ]
+    },
+    {
+      "id": 402,
+      "type": "table",
+      "title": "4xx and 5xx by tenant and route (window)",
+      "gridPos": { "x": 12, "y": 63, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "tenant" }, "properties": [ { "id": "displayName", "value": "Tenant" } ] },
+          { "matcher": { "id": "byName", "options": "route" }, "properties": [ { "id": "displayName", "value": "Route" } ] },
+          { "matcher": { "id": "byName", "options": "status_class" }, "properties": [ { "id": "displayName", "value": "Status" } ] },
+          { "matcher": { "id": "byName", "options": "Value" }, "properties": [ { "id": "displayName", "value": "Responses" }, { "id": "unit", "value": "short" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Responses", "desc": true } ] },
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "topk(15, sum by (tenant, route, status_class) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\", status_class=~\"4xx|5xx\"}[$__range])) > 0)" }
+      ]
+    }
+  ]
+}

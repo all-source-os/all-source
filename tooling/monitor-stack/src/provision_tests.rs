@@ -22,6 +22,14 @@ fn mail_uses_tls_private_recipient_and_recovery_notifications() {
         .unwrap()
         .contains("https://monitor.example.test/?app=example&amp;view=metrics"));
     assert!(!receiver["html"].as_str().unwrap().contains("9093"));
+    assert!(receiver["html"]
+        .as_str()
+        .unwrap()
+        .contains("{{ with .Annotations.dashboard }}<p><a href=\"{{ . }}\">"));
+    assert!(receiver["text"]
+        .as_str()
+        .unwrap()
+        .contains("{{ with .Annotations.dashboard }}Dashboard: {{ . }}"));
     assert_eq!(config["route"]["repeat_interval"], "6h");
     assert_eq!(config["inhibit_rules"][0]["equal"], json!(["service"]));
 }
