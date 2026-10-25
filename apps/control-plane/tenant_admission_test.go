@@ -347,7 +347,14 @@ func occupyGlobalPool(t *testing.T) {
 	})
 }
 
-const legacyEgressBody = `{"error":"egress_budget_unavailable","message":"Included allowance and prepaid credit must cover this response. Inspect billing usage or purchase prepaid credit."}`
+func egressBody(reason, message string) string {
+	return `{"error":"egress_budget_unavailable","message":"` + message + `","reason":"` + reason + `"}`
+}
+
+const (
+	busyMessage        = "Too many responses are in flight; retry shortly."
+	unavailableMessage = "The egress ledger is unavailable; retry later."
+)
 
 func admissionModes() map[string]*tenantAdmission {
 	return map[string]*tenantAdmission{
@@ -358,7 +365,7 @@ func admissionModes() map[string]*tenantAdmission {
 	}
 }
 
-func TestGlobalPoolFullKeepsLegacy429InEveryMode(t *testing.T) {
+func TestGlobalPoolFullAnswersAOneSecond429InEveryMode(t *testing.T) {
 	occupyGlobalPool(t)
 	for name, admission := range admissionModes() {
 		t.Run(name, func(t *testing.T) {
@@ -368,23 +375,31 @@ func TestGlobalPoolFullKeepsLegacy429InEveryMode(t *testing.T) {
 			if ledger.total() != 0 {
 				t.Fatal("full pool reached the ledger")
 			}
-			if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "30" || response.Body.String() != legacyEgressBody {
+			if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "1" || response.Body.String() != egressBody(egressReasonPoolFull, busyMessage) {
 				t.Fatalf("full pool in %s changed the response: %d Retry-After=%q %s", name, response.Code, response.Header().Get("Retry-After"), response.Body.String())
 			}
 		})
 	}
 }
 
-func TestLedgerRefusalKeepsLegacyRetryAfterInEveryMode(t *testing.T) {
+func TestLedgerRefusalNamesItsReasonInEveryMode(t *testing.T) {
 	for name, admission := range admissionModes() {
 		t.Run(name, func(t *testing.T) {
-			for _, status := range []int{http.StatusServiceUnavailable, http.StatusTooManyRequests} {
+			for _, tc := range []struct {
+				refusal    egressError
+				retryAfter string
+				body       string
+			}{
+				{egressError{status: http.StatusServiceUnavailable}, "30", egressBody(egressReasonUnavailable, unavailableMessage)},
+				{egressError{status: http.StatusTooManyRequests, reason: "busy"}, "1", egressBody("busy", busyMessage)},
+				{egressError{status: http.StatusTooManyRequests, reason: "capacity"}, "1", egressBody("capacity", busyMessage)},
+			} {
 				router := admissionTestRouter(func(context.Context, string, egressCommand) (egressAdmission, error) {
-					return egressAdmission{}, egressError{status: status}
+					return egressAdmission{}, tc.refusal
 				}, admission, func(c *gin.Context) { c.String(200, "never") })
 				response := admissionRequest(t, router, "ledger-down-"+name, nil)
-				if response.Code != status || response.Header().Get("Retry-After") != "30" || response.Body.String() != legacyEgressBody {
-					t.Fatalf("ledger %d in %s changed the response: %d Retry-After=%q %s", status, name, response.Code, response.Header().Get("Retry-After"), response.Body.String())
+				if response.Code != tc.refusal.status || response.Header().Get("Retry-After") != tc.retryAfter || response.Body.String() != tc.body {
+					t.Fatalf("ledger %+v in %s: %d Retry-After=%q %s", tc.refusal, name, response.Code, response.Header().Get("Retry-After"), response.Body.String())
 				}
 			}
 		})
