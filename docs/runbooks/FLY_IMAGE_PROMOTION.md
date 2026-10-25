@@ -17,12 +17,20 @@ deployment images, not Prime; Prime's dependencies are audited from
 `apps/prime-mcp/Cargo.lock`. Deploy Prime with
 `fly deploy --config apps/prime-mcp/fly.toml --image registry.fly.io/allsource-prime:sha-<full-commit>`.
 
+Docker Build rebuilds an image only when its sources change: Core images on
+`apps/core/**`, the root manifests and lockfile or the Core build workflow;
+control-plane on `apps/control-plane/**`; query-service on `apps/query-service/**`.
+To promote a component, pass `revision`: the full SHA of the newest main commit
+whose Docker Build published that component's image. It must be an ancestor of
+the dispatched commit, and the image's revision label must match it. Leaving it
+empty uses the dispatched commit.
+
 For a PR candidate, dispatch Security Scanning with `scan_published_images=true`
 after Docker Build succeeds. Main scans run automatically when its Docker Build
 finishes. Scans pull the commit-tagged images, verify their full revision labels
 and refuse fixed HIGH or CRITICAL vulnerabilities. They do not rebuild images.
-Docker Build publishes all four scanned deployment images for each revision,
-including services whose source did not change.
+An image that was not rebuilt at the commit is skipped with a notice; any other
+registry error fails the scan.
 The full SARIF report retains all severities; a separate filtered scan enforces
 the HIGH/CRITICAL refusal policy.
 
