@@ -1,14 +1,19 @@
 # Business dashboards
 
-Three dashboards in Fly's managed Grafana. Each section is a question, and the first panel in it is the answer.
+Four dashboards in Fly's managed Grafana. Each section is a question, and the first panel in it is the answer.
 
 | Dashboard | Questions | Link |
 |---|---|---|
 | Business Questions | Are customers getting their data right now? Which tenants can't read their data back? Which tenants cost more than they pay? Which tenants should run their own deployment? What does traffic cost us? Can Core hold every tenant it has to serve? | https://fly-metrics.net/d/allsource-business?orgId=1483699 |
 | Availability & Incidents | Are callers getting answers? Is Core refusing work, and for whom? Did a restart or deploy come first? Is Core busy, or idle while callers fail? Which tenants were hit? | https://fly-metrics.net/d/allsource-availability?orgId=1483699 |
 | Engineering Detail | Raw traffic by app and region, tenant traffic, query shapes and gzip, admission refusals, capacity, Core workload | https://fly-metrics.net/d/allsource-engineering?orgId=1483699 |
+| Traffic & Outage Report | The [production traffic report](../reports/2026-10-24-production-traffic.html) as a live dashboard: what happened, did callers get answers, was Core refusing work and for whom, the timeline and cause, who uses the bandwidth, throttling and capacity. Opens on the 2026-10-24/25 outage window | https://fly-metrics.net/d/allsource-traffic-report?orgId=1483699 |
 
-The sources of truth are the JSON files in [`deploy/grafana/dashboards/`](../../deploy/grafana/dashboards/): `business-overview.json`, `availability.json` and `engineering-detail.json`. Change the files, not the dashboards in the browser. An edit made only in Grafana is lost on the next import, and nobody reviews it.
+The sources of truth are the JSON files in [`deploy/grafana/dashboards/`](../../deploy/grafana/dashboards/): `business-overview.json`, `availability.json`, `engineering-detail.json` and `traffic-outage-report.json`. Change the files, not the dashboards in the browser. An edit made only in Grafana is lost on the next import, and nobody reviews it.
+
+## Event markers
+
+The red markers and shaded bands on the Traffic & Outage Report are Grafana annotations tagged `allsource-event`, listed in [`deploy/grafana/annotations/allsource-events.json`](../../deploy/grafana/annotations/allsource-events.json): deploys, the resize, the outage window, the tenant refusals and when the new alert would have fired. Grafana stores annotations in its own database, not in the dashboard JSON, so this file is their source. To add one, append it to the file, land it through a PR, then create it in Grafana with `POST /api/annotations` (`time` and optional `timeEnd` in epoch milliseconds, `text`, `tags`), skipping any entry whose time and text already exist. Core and control-plane restarts need no entry: the dashboard derives them from `resets(fly_instance_cpu{mode="idle"})`.
 
 ## Where the numbers come from
 

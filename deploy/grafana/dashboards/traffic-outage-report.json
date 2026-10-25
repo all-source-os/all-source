@@ -1,0 +1,1317 @@
+{
+  "uid": "allsource-traffic-report",
+  "title": "AllSource — Traffic & Outage Report",
+  "description": "The production traffic report (docs/reports/2026-10-24-production-traffic.html) as a live dashboard: every number recomputes for the chosen window. Source: deploy/grafana/dashboards/traffic-outage-report.json in all-source-os/all-source.",
+  "tags": [
+    "allsource",
+    "report",
+    "incident"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "2026-10-24T00:00:00.000Z",
+    "to": "2026-10-25T12:00:00.000Z"
+  },
+  "refresh": "",
+  "links": [
+    {
+      "title": "Outage window (10-24 00:00 to 10-25 12:00)",
+      "type": "link",
+      "url": "/d/allsource-traffic-report?from=1792800000000&to=1792929600000",
+      "icon": "bolt"
+    },
+    {
+      "title": "Last 7 days",
+      "type": "link",
+      "url": "/d/allsource-traffic-report?from=now-7d&to=now",
+      "icon": "dashboard"
+    },
+    {
+      "title": "Last 24 hours",
+      "type": "link",
+      "url": "/d/allsource-traffic-report?from=now-24h&to=now",
+      "icon": "dashboard"
+    },
+    {
+      "title": "Business questions",
+      "type": "link",
+      "url": "/d/allsource-business",
+      "keepTime": true,
+      "icon": "dashboard"
+    },
+    {
+      "title": "The written report",
+      "type": "link",
+      "url": "https://github.com/all-source-os/all-source/blob/main/docs/reports/2026-10-24-production-traffic.html",
+      "targetBlank": true,
+      "icon": "doc"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "name": "Events",
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "target": {
+          "type": "tags",
+          "tags": [
+            "allsource-event"
+          ],
+          "matchAny": true,
+          "limit": 200
+        }
+      },
+      {
+        "name": "Core restarts",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_on_fly"
+        },
+        "enable": true,
+        "iconColor": "orange",
+        "expr": "sum(resets(fly_instance_cpu{app=\"allsource-core\", mode=\"idle\", cpu_id=\"0\"}[5m])) > 0",
+        "step": "5m",
+        "titleFormat": "Core restart",
+        "textFormat": "Core machine restarted (CPU counters reset)"
+      },
+      {
+        "name": "Control-plane restarts",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus_on_fly"
+        },
+        "enable": true,
+        "iconColor": "purple",
+        "expr": "sum(resets(fly_instance_cpu{app=\"allsource-control-plane\", mode=\"idle\", cpu_id=\"0\"}[5m])) > 0",
+        "step": "5m",
+        "titleFormat": "Control-plane restart",
+        "textFormat": "Control-plane machine restarted (CPU counters reset)"
+      }
+    ]
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## What happened on 2026-10-24/25\nCore lacked the memory to load one tenant, so that tenant could read nothing from about 13:00Z. Core was resized by hand at 21:51Z to make room; the resize restarted it, and on that restart a write-ahead-log ordering defect made Core refuse every egress reservation. **Every read through the control plane failed for 12 hours 7 minutes**, until a fixed Core build started at 10:05Z on the 25th. **No alert fired.**\n\nEvery number here recomputes for the time window (top right). Red markers are events, orange are Core restarts, purple are control-plane restarts; hover one for its text. Use **Last 7 days** for the bandwidth history."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Answered (by volume)",
+      "description": "Control-plane responses that were 2xx or 304, as a share of all its responses in the window. Busy hours outweigh quiet ones, so an outage that also cuts traffic barely moves it: read 'Hours with most reads failing' beside it.",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.9
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[$__range])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Hours mostly failing",
+      "description": "15-minute buckets where under half of control-plane responses were answered, added up in hours. The outage alone is 12.",
+      "gridPos": {
+        "x": 4,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.25
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "(count_over_time(((sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[15m]))) < 0.5)[$__range:15m]) * 0.25) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Successful responses",
+      "gridPos": {
+        "x": 8,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "locale",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Answered 503 or 504",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "locale",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"503|504\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Core restarts",
+      "description": "Each restart replays the write-ahead log.",
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(resets(fly_instance_cpu{app=\"allsource-core\", mode=\"idle\", cpu_id=\"0\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Core load refusals",
+      "description": "Core log lines 'refusing to hydrate tenant' in the window. Every read for a refused tenant fails.",
+      "gridPos": {
+        "x": 20,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "application_logs_vlog"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "locale",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "stats",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "application_logs_vlog"
+          },
+          "expr": "fly.app.name:\"allsource-core\" \"refusing to hydrate tenant\" | stats count() as refusals"
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Did callers get answers?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 101,
+      "type": "timeseries",
+      "title": "Share of control-plane responses answered (2xx or 304), per 15 minutes",
+      "description": "429 throttling from 15:40Z holds it at 80–95%; the outage takes it to 0–5% for 12 hours.",
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "interval": "15m",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "transparent",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "answered",
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[$__interval])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "timeseries",
+      "title": "Control-plane responses per 15 minutes, by outcome",
+      "description": "Volume falls during the outage because callers back off on Retry-After: lower traffic is not lower demand.",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "interval": "15m",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "answered (2xx, 304)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "refused (429)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "yellow"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unavailable (503, 504)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "server error (500, 502)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "sum",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "answered (2xx, 304)",
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[$__interval]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "refused (429)",
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=\"429\"}[$__interval]))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "unavailable (503, 504)",
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"503|504\"}[$__interval]))"
+        },
+        {
+          "refId": "D",
+          "legendFormat": "server error (500, 502)",
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"500|502\"}[$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Was Core refusing work, and for whom?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 201,
+      "type": "timeseries",
+      "title": "Core 503 responses logged per 30 minutes",
+      "description": "Before 21:55Z these are hydration refusals; after it, egress reservations refused in 0 ms.",
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "application_logs_vlog"
+      },
+      "interval": "30m",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "statsRange",
+          "legendFormat": "503s",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "application_logs_vlog"
+          },
+          "expr": "fly.app.name:\"allsource-core\" \"503 Service Unavailable\" | stats count() as refusals"
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "type": "timeseries",
+      "title": "Tenants Core refused to load, per hour",
+      "description": "Core logs 'refusing to hydrate tenant' when a tenant's archive needs more memory than is free; every read for that tenant fails.",
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "victoriametrics-logs-datasource",
+        "uid": "application_logs_vlog"
+      },
+      "interval": "1h",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "queryType": "statsRange",
+          "legendFormat": "{{tenant}}",
+          "datasource": {
+            "type": "victoriametrics-logs-datasource",
+            "uid": "application_logs_vlog"
+          },
+          "expr": "fly.app.name:\"allsource-core\" \"refusing to hydrate tenant\" | extract_regexp \"tenant_id\\\\S*?\\\"(?P<tenant>[^\\\"]+)\\\"\" | stats by (tenant) count() as refusals"
+        }
+      ]
+    },
+    {
+      "id": 203,
+      "type": "timeseries",
+      "title": "Core: free memory and machine size, CPU busy",
+      "description": "During the outage Core had 9.4 GB free and ran at 0.3–0.4% CPU: it was refusing work, not overloaded.",
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "machine memory"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineInterpolation",
+                "value": "stepAfter"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "free memory"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU busy"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "machine memory",
+          "expr": "sum(fly_instance_memory_mem_total{app=\"allsource-core\"})"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "free memory",
+          "expr": "sum(fly_instance_memory_mem_available{app=\"allsource-core\"})"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "CPU busy",
+          "expr": "1 - sum(rate(fly_instance_cpu{app=\"allsource-core\", mode=\"idle\"}[$__rate_interval])) / sum(rate(fly_instance_cpu{app=\"allsource-core\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "Timeline, cause and what is still open",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 301,
+      "type": "text",
+      "title": "Timeline (UTC)",
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 14,
+        "h": 14
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "| When | What happened | Evidence |\n|---|---|---|\n| 10-24 00:59 | Core first refuses to load `decebal-dobrica-at-gmail-com`: needs 2,943,809,744 B, has 1,881,874,432 B free | Core log |\n| 01:15, 14:00, 15:40, 17:10 | Core restarts four times. From about 13:00 the tenant is refused continuously, 142–231 times an hour | orange markers; Core log |\n| 15:40 | Control plane v120 starts with the egress guard; 429s begin | red marker; edge status counts |\n| 20:17 | Core also refuses the Longhand control plane's tenant (needs 2,475,612,384 B): 625 refusals in the next hour | Core log |\n| 21:51 | Core resized by hand from 8 GB to 16 GB; the machine restarts | memory size steps 7,942 → 15,993 MiB |\n| 21:55 | Core back with 9.4 GB free at 0.3% CPU, answering every egress reservation with 503 in 0 ms. Answered responses fall from ~8,400 to 0–16 per 15 min | Core log; edge status counts |\n| 22:25 | `ControlPlaneServingFailures` (added afterwards) would have fired | rule replayed |\n| 10-25 10:05 | Core v56 (`fe6be49`) with the write-ahead-log fix starts; 503s stop | red marker; `fly releases` |\n| 10:05–11:15 | 949 control-plane 500s, peaking at 256 per 5 min, then gone. Source not identified | `fly_app_http_responses_count` |"
+      }
+    },
+    {
+      "id": 302,
+      "type": "text",
+      "title": "Why every read failed, and why nobody noticed",
+      "gridPos": {
+        "x": 14,
+        "y": 45,
+        "w": 10,
+        "h": 14
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Cause.** The control plane reserves egress bytes in Core's ledger before each read and completes the reservation after. The ledger lives in Core's system store, which is write-ahead-log only and never checkpointed. On every boot its writer reopened the *oldest* segment, so entries appended after a restart replayed near the start of history, out of order. An out-of-order Reserve or Complete invalidates the tenant's account, and every later Reserve answers 503. `fe6be49` (#351) recovers in sequence order.\n\n**Unnoticed.** The only alerts watched for *too many* bytes; refusals lower bytes, so the outage looked like the bandwidth problem healing. Core's 503 log line names no reason. No AllSource metric was scraped.\n\n**Still open.** The system store is still never checkpointed. Core still refuses a whole tenant that doesn't fit in memory. The control plane runs `300f852`. The post-recovery 500s are unattributed."
+      }
+    },
+    {
+      "id": 400,
+      "type": "row",
+      "title": "Who uses the bandwidth?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 401,
+      "type": "timeseries",
+      "title": "Control-plane edge output per day, by edge region",
+      "description": "Each bar is one UTC day. iad is the Longhand control plane calling the public hostname from Fly iad.",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "interval": "1d",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 85,
+            "lineWidth": 0,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{region}}",
+          "expr": "sum by (region) (increase(fly_edge_data_out{app=\"allsource-control-plane\"}[$__interval])) > 1e6"
+        }
+      ]
+    },
+    {
+      "id": 402,
+      "type": "timeseries",
+      "title": "Edge output per hour, by app",
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "interval": "1h",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{app}}",
+          "expr": "sum by (app) (increase(fly_edge_data_out[$__interval])) > 1e6"
+        }
+      ]
+    },
+    {
+      "id": 403,
+      "type": "bargauge",
+      "title": "Edge output by app (window)",
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 12,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{app}}",
+          "expr": "sort_desc(sum by (app) (increase(fly_edge_data_out[$__range])) > 0)"
+        }
+      ]
+    },
+    {
+      "id": 404,
+      "type": "stat",
+      "title": "Control-plane egress cost in window",
+      "description": "Priced at Fly's $0.02/GB North America and Europe rate; outside those regions this is a lower bound.",
+      "gridPos": {
+        "x": 12,
+        "y": 68,
+        "w": 6,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[$__range])) / 1e9 * 0.02"
+        }
+      ]
+    },
+    {
+      "id": 405,
+      "type": "stat",
+      "title": "Share of it from iad",
+      "gridPos": {
+        "x": 18,
+        "y": 68,
+        "w": 6,
+        "h": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_data_out{app=\"allsource-control-plane\", region=\"iad\"}[$__range])) / sum(increase(fly_edge_data_out{app=\"allsource-control-plane\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "Throttling and capacity",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 501,
+      "type": "timeseries",
+      "title": "HTTP 429 as a share of control-plane responses, per hour",
+      "description": "The egress guard's single 16-slot pool answers 429 when full.",
+      "gridPos": {
+        "x": 0,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "interval": "1h",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "yellow"
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "429 share",
+          "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=\"429\"}[$__interval])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[$__interval]))"
+        }
+      ]
+    },
+    {
+      "id": 502,
+      "type": "timeseries",
+      "title": "Memory used, share of machine memory",
+      "gridPos": {
+        "x": 12,
+        "y": 75,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{app}}",
+          "expr": "1 - sum by (app) (fly_instance_memory_mem_available{app=~\"allsource-core|allsource-control-plane|allsource-query|allsource-prime\"}) / sum by (app) (fly_instance_memory_mem_total{app=~\"allsource-core|allsource-control-plane|allsource-query|allsource-prime\"})"
+        }
+      ]
+    },
+    {
+      "id": 503,
+      "type": "timeseries",
+      "title": "Control-plane CPU: busy and throttled, percent of one vCPU",
+      "description": "A shared-cpu-1x machine is guaranteed its baseline and bursts on credit. Throttled time means requests waited for CPU.",
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus_on_fly"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "baseline"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "throttled"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "busy"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "busy",
+          "expr": "sum(rate(fly_instance_cpu{app=\"allsource-control-plane\", mode!=\"idle\"}[$__rate_interval]))"
+        },
+        {
+          "refId": "B",
+          "legendFormat": "throttled",
+          "expr": "sum(rate(fly_instance_cpu_throttle{app=\"allsource-control-plane\"}[$__rate_interval]))"
+        },
+        {
+          "refId": "C",
+          "legendFormat": "baseline",
+          "expr": "max(fly_instance_cpu_baseline{app=\"allsource-control-plane\"}) * 100"
+        }
+      ]
+    }
+  ]
+}
