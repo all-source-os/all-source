@@ -76,6 +76,57 @@ fn head_pages_and_commits_serve_a_tenant_over_the_strict_budget() {
 }
 
 #[test]
+fn the_index_charges_only_the_columns_it_reads_against_the_compressed_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let writer = EventStore::with_config(EventStoreConfig::with_persistence(dir.path()));
+    for file in 0..4 {
+        for index in 0..10 {
+            let noise: String = (0..256)
+                .map(|_| uuid::Uuid::new_v4().simple().to_string())
+                .collect();
+            let event = Event::from_strings(
+                "item.changed".into(),
+                format!("entity-{file}-{index}"),
+                "alice".into(),
+                json!({"noise": noise}),
+                None,
+            )
+            .unwrap();
+            writer.ingest(&event).unwrap();
+        }
+        writer.flush_storage().unwrap();
+    }
+    drop(writer);
+    let archive_bytes: u64 = walkdir(dir.path())
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "parquet"))
+        .map(|path| std::fs::metadata(path).unwrap().len())
+        .sum();
+
+    let mut config = EventStoreConfig::with_persistence(dir.path());
+    config.strict_archive_limits.max_compressed_bytes = archive_bytes / 4;
+    let store = EventStore::with_config(config);
+
+    assert_eq!(
+        store.tenant_feed("alice", None, 0).unwrap().head.position,
+        40
+    );
+}
+
+fn walkdir(root: &Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            found.extend(walkdir(&path));
+        } else {
+            found.push(path);
+        }
+    }
+    found
+}
+
+#[test]
 fn compaction_after_the_index_is_built_keeps_positions_and_epoch() {
     let dir = tempfile::tempdir().unwrap();
     let ids = seed(dir.path(), 4, 3, 64);

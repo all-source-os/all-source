@@ -38,15 +38,25 @@ impl ParquetStorage {
         for path in self.list_complete_tenant_archive(tenant_id, budget)? {
             budget.check()?;
             let file = File::open(&path).map_err(|error| unreadable(&path, error))?;
-            budget.compressed(
+            budget.file_size(
                 file.metadata()
                     .map_err(|error| unreadable(&path, error))?
                     .len(),
             )?;
             let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
+            let mut read_bytes = 0_u64;
             for group in builder.metadata().row_groups() {
                 budget.rows(group.num_rows())?;
+                for column in 0..3 {
+                    read_bytes = u64::try_from(group.column(column).compressed_size())
+                        .ok()
+                        .and_then(|bytes| read_bytes.checked_add(bytes))
+                        .ok_or_else(|| {
+                            AllSourceError::StorageError("Invalid column chunk size".into())
+                        })?;
+                }
             }
+            budget.compressed(read_bytes)?;
             let mask = ProjectionMask::roots(builder.parquet_schema(), [0, 1, 2]);
             let path = Arc::new(path);
             let mut row = 0_u64;
