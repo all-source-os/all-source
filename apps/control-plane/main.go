@@ -58,6 +58,9 @@ func NewPooledHTTPClient() *http.Client {
 		MaxIdleConns:        MaxIdleConns,
 		MaxIdleConnsPerHost: MaxIdleConnsPerHost,
 		IdleConnTimeout:     IdleConnTimeout,
+		// Internal hops bill no bytes; a forwarded client Accept-Encoding still
+		// reaches Core and its encoded body passes through undecoded.
+		DisableCompression: true,
 	}
 	return &http.Client{
 		Transport: transport,
