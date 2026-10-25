@@ -3325,7 +3325,7 @@ impl EventStoreConfig {
     /// Returns `(config, description)` where description is a human-readable
     /// summary of the persistence mode for logging.
     pub fn from_env() -> (Self, &'static str) {
-        Self::from_env_vars(
+        let (config, mode) = Self::from_env_vars(
             std::env::var("ALLSOURCE_DATA_DIR")
                 .ok()
                 .filter(|s| !s.is_empty()),
@@ -3340,7 +3340,41 @@ impl EventStoreConfig {
             std::env::var("ALLSOURCE_SNAPSHOT_INTERVAL_SECONDS").ok(),
             std::env::var("ALLSOURCE_RETENTION_SYSTEM_DAYS").ok(),
             std::env::var("ALLSOURCE_CHECKPOINT_INTERVAL_SECONDS").ok(),
-        )
+        );
+        let config = config.with_strict_archive_overrides(
+            std::env::var("ALLSOURCE_STRICT_ARCHIVE_MAX_DECODED_BYTES").ok(),
+            std::env::var("ALLSOURCE_STRICT_ARCHIVE_TIMEOUT_SECONDS").ok(),
+        );
+        (config, mode)
+    }
+
+    /// Strict whole-tenant reads (the event feed and read models) refuse a
+    /// tenant whose decoded archive exceeds `max_uncompressed_bytes`, so its
+    /// feed and read models fail on every request. The default was measured
+    /// on a 4 GiB machine; a larger machine raises it here. Unparseable or
+    /// zero values keep the default.
+    pub fn with_strict_archive_overrides(
+        mut self,
+        max_decoded_bytes: Option<String>,
+        timeout_seconds: Option<String>,
+    ) -> Self {
+        if let Some(bytes) = positive_override(
+            "ALLSOURCE_STRICT_ARCHIVE_MAX_DECODED_BYTES",
+            max_decoded_bytes,
+        ) {
+            self.strict_archive_limits.max_uncompressed_bytes = bytes;
+        }
+        if let Some(seconds) =
+            positive_override("ALLSOURCE_STRICT_ARCHIVE_TIMEOUT_SECONDS", timeout_seconds)
+        {
+            self.strict_archive_limits.timeout = std::time::Duration::from_secs(seconds);
+        }
+        tracing::info!(
+            max_decoded_bytes = self.strict_archive_limits.max_uncompressed_bytes,
+            timeout_seconds = self.strict_archive_limits.timeout.as_secs(),
+            "strict archive read limits"
+        );
+        self
     }
 
     /// Build config from explicit env-var values (testable without mutating process env).
@@ -3429,6 +3463,17 @@ impl EventStoreConfig {
             _ => "in-memory",
         };
         (config, mode)
+    }
+}
+
+fn positive_override(name: &str, value: Option<String>) -> Option<u64> {
+    let value = value.filter(|s| !s.is_empty())?;
+    match value.parse::<u64>() {
+        Ok(parsed) if parsed > 0 => Some(parsed),
+        _ => {
+            tracing::warn!("{name}={value:?} is not a positive integer; keeping the default");
+            None
+        }
     }
 }
 

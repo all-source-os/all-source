@@ -96,7 +96,7 @@ fn verified_archive_does_not_certify_another_tenant() {
     let mut subscriber = store.subscribe_events();
     assert!(matches!(
         store.ingest_with_expected_version(&event(other, "other-entity", 0), Some(9)),
-        Err(AllSourceError::StorageError(_))
+        Err(AllSourceError::ArchiveBudgetExceeded { .. })
     ));
     assert!(!store.version_index_tenants.contains_key(other));
     assert!(subscriber.try_recv().is_err());
@@ -129,7 +129,7 @@ fn tolerant_hydration_does_not_certify_the_version_index() {
     store.strict_archive_limits.timeout = Duration::ZERO;
     assert!(matches!(
         store.ingest_with_expected_version(&event(TENANT, ENTITY, 0), Some(3)),
-        Err(AllSourceError::StorageError(_))
+        Err(AllSourceError::ArchiveBudgetExceeded { .. })
     ));
 }
 

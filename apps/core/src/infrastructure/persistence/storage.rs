@@ -1518,6 +1518,9 @@ impl ParquetStorage {
                         if let Some(budget) = budget.as_deref() {
                             budget.check()?;
                         }
+                        if is_budget_exhaustion(&e) {
+                            return Err(e);
+                        }
                         return Err(AllSourceError::StorageError(format!(
                             "Cannot verify conditional version from incomplete archive: {e}"
                         )));
@@ -1766,8 +1769,7 @@ fn manifest_key(tenant_dir: &Path, file: &Path) -> Option<String> {
 /// Whether an error is the budget refusing more work rather than the archive
 /// being unreadable. Only the former is worth retrying.
 fn is_budget_exhaustion(error: &AllSourceError) -> bool {
-    matches!(error, AllSourceError::StorageError(message)
-        if message.contains("Strict archive read budget exceeded"))
+    matches!(error, AllSourceError::ArchiveBudgetExceeded { .. })
 }
 
 /// Resolve the directory a flush should write into for `(tenant, when)`.

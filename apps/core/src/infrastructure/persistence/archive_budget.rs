@@ -184,7 +184,9 @@ fn charge(total: &mut u64, amount: u64, limit: u64, dimension: &str) -> Result<(
 }
 
 fn exceeded(dimension: &str) -> AllSourceError {
-    AllSourceError::StorageError(format!("Strict archive read budget exceeded: {dimension}"))
+    AllSourceError::ArchiveBudgetExceeded {
+        dimension: dimension.to_owned(),
+    }
 }
 
 #[cfg(test)]

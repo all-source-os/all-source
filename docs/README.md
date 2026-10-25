@@ -136,6 +136,7 @@ For DevOps and platform engineers.
 | [Bandwidth alerts](./runbooks/BANDWIDTH_ALERTS.md) | Production edge-output thresholds, private email delivery, and operator checks | Active; firing and recovery verified |
 | [Production traffic report (2026-10-24)](./reports/2026-10-24-production-traffic.html) | Measured bandwidth by app, region and tenant; animated system diagram; six bottlenecks with charts from raw Fly and service metrics | ✅ |
 | [Control-plane egress root cause (2026-10-24)](./reports/2026-10-24-control-plane-egress-rca.md) | 66 GB/day alert: Longhand control-plane polling over the public edge, egress-guard throttling since 15:40Z, fix sites | ✅ |
+| [Control-plane tenant outage (2026-10-25)](./reports/2026-10-25-control-plane-tenant-outage.md) | WAL replay outage fixed; strict whole-history reads return in ~16 days and ordinary reads in ~170 at 14 MB/day growth; what removes each limit | ✅ |
 | [Fly image promotion](./runbooks/FLY_IMAGE_PROMOTION.md) | Copy tested private CI images into app-scoped Fly registries before deployment | Operator runbook |
 | [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
 | [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |
