@@ -561,7 +561,9 @@ pub async fn serve_v1(
         }
     };
 
-    let app = app.layer(middleware::from_fn(super::response_limit::bounded));
+    let app = app
+        .layer(middleware::from_fn(super::response_limit::bounded))
+        .layer(super::response_limit::compression());
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     // Graceful shutdown on SIGTERM (required for serverless platforms)

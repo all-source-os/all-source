@@ -1,7 +1,7 @@
 ---
 title: "Tenant polling defence and incremental read paths"
 status: CURRENT
-last_updated: 2026-10-24
+last_updated: 2026-10-25
 ---
 
 # Tenant polling defence and incremental read paths
@@ -155,3 +155,97 @@ for one to four machines), and reading the bindings once per pass in P1 removes
 5. Whether Core's `/events*` routes are reachable only through the control
    plane's private network, which the Core limiter's trust in `tenant_id`
    depends on.
+
+## Addendum 2026-10-25: cost must scale with changes, not with requests
+
+### State after #350
+
+Control-plane `/metrics`, 2026-10-24 21:35Z to 2026-10-25 00:11Z (9,372 s since
+the #350 deploy):
+
+| | Report, 10-24 15:40–19:50Z | After #350 |
+|---|---|---|
+| Successful queries per second | 23.3 | 0.86 |
+| Queries refused | 13% | 44.8% (2,389 × 429, 4,124 × 503, 35 × 504) |
+| Writes refused | 81.8% | 0% (664 × 200, 1 × 502) |
+| Query body bytes | 447 KB/s | 58 KB/s |
+| Share of bytes in time-bounded filtered prefix reads | 63% | 69.6% |
+
+The drop in bytes is Core refusing, not a reduction in demand: Core logs
+`503 Service Unavailable` at 0 ms latency continuously through 00:11Z, which
+#351 attributes to the egress ledger invalidated on WAL replay. When that is
+fixed, query traffic and bytes return towards the report's rates, because
+nothing on the Longhand side has changed yet.
+
+### The test every remaining fix is judged by
+
+Three problems remain after #351, and each one grows with the same product:
+requests multiplied by the history each request re-reads.
+
+| Problem | What it is proportional to today |
+|---|---|
+| Longhand re-reads (69.6% of bytes) | polls × window size |
+| System-log growth in Core | 2 × billed responses (reserve and complete) |
+| Control-plane headroom (256 MB, shared CPU) | responses buffered at once × response size |
+
+A fix that lowers the multiplier (a larger VM, a longer poll interval, more
+slots) moves the limit and fails again when traffic grows. A fix that removes
+the proportionality holds. **Accept a change into this plan only if, after it,
+the cost grows with the number of changes and tenants rather than with the
+number of requests and the size of history.** The data path must also stay
+cheap enough to be a gateway: no synchronous ledger call, durable write or full
+buffering per request.
+
+### Changes to the plan
+
+| Problem | Stopgap | Structural fix | Confidence |
+|---|---|---|---|
+| Re-reads | ETag and 304 (P6): still one request per poll, and needs prefix heads in Core | Longhand reads forward from #345 positions and keeps the window locally, then pulls on a doorbell instead of a timer. Bytes become proportional to new events | forward reads `rock`, doorbell `sand` |
+| System log | Checkpoint the system store | Remove the per-response reserve and complete calls. A per-tenant prepaid lease and one usage aggregate per tenant per minute replace them, so durable writes grow with tenants × minutes. The checkpoint is still needed, as housekeeping | `sand` |
+| Control-plane headroom | Raise `memory_mb` | Take the control plane off the data path: the gateway in `data` mode streams responses and holds leases. The admin role then fits its current VM | `sand` |
+
+The second and third rows are one change. Removing per-response buffering and
+ledger calls is what frees the control plane's memory and CPU, and it is also
+what stops the system log growing with traffic. P4 (ledger lease) and the
+gateway split ship together.
+
+**Compression moves from the control plane to Core.** The Layers table puts
+gzip in the control plane after buffering. That spends the control plane's
+6.25% CPU baseline on every response, and the gateway will not buffer at all.
+Core already buffers each response in `response_limit::bounded`, so it
+compresses there once. The control plane forwards `Accept-Encoding` and passes
+the encoded body through (#351), and charges what it delivers, which is the
+compressed length. Owner decision 2 is unchanged.
+
+**ETag and 304 become conditional.** P6's pre-scan ETag still costs a request
+per poll and a prefix-heads index in Core. Build it only if, after forward
+reads land, polls that find nothing new still dominate the per-tenant byte
+metrics.
+
+### Bet order
+
+Ordered by bytes removed per unit of new permanent state:
+
+| Order | Bet | Repo | New state | Confidence |
+|---|---|---|---|---|
+| 1 | P3a: Core gzips responses for clients that send `Accept-Encoding: gzip`; Longhand enables the `gzip` feature of `allsource` 0.25 on every transport | AllSource Core, Longhand | none | `rock` |
+| 2 | P1 as written: governor, bindings and teams once per pass | Longhand | none | `rock` |
+| 3 | Gateway `data` mode with ledger lease and aggregated metering (P4 with the gateway split) | AllSource control plane | per-tenant lease | `sand` |
+| 4 | Forward reads on #345 positions, then the doorbell (P7–P9) | Longhand | a position per window | `sand` |
+
+What would move the order: a measured gzip ratio below 3× on real
+event-query bodies puts bet 1 behind bet 2. The per-tenant byte metrics from
+#351, scraped for 48 hours, give the denominators for bets 2 and 4.
+
+### P3a acceptance
+
+- A response to a request with `Accept-Encoding: gzip` carries
+  `Content-Encoding: gzip` and decompresses to the bytes an unencoded request
+  receives.
+- A request without `Accept-Encoding` receives the identity encoding.
+- The response bound still measures uncompressed bytes: a body over
+  `MAX_RESPONSE_BYTES` is refused with 413 even when it would compress below
+  the bound.
+- After deploy, the production ratio is measured by sending the same sampled
+  event queries (one per shape in `control_plane_event_query_body_bytes_by_shape_total`)
+  with and without `Accept-Encoding: gzip`, and recorded here.

@@ -9,9 +9,16 @@ use axum::{
 use serde_json::json;
 use std::time::Duration;
 use tokio::sync::Semaphore;
+use tower_http::compression::CompressionLayer;
 
 static RESPONSES: Semaphore = Semaphore::const_new(16);
 static WAITING: Semaphore = Semaphore::const_new(64);
+
+/// Gzip for clients that send `Accept-Encoding: gzip`. Layer it outside
+/// [`bounded`], so the response bound keeps measuring uncompressed bytes.
+pub fn compression() -> CompressionLayer {
+    CompressionLayer::new()
+}
 
 pub async fn bounded(request: Request, next: Next) -> Response {
     let Ok(waiting) = WAITING.try_acquire() else {
