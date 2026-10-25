@@ -132,7 +132,131 @@ impl AllsourceAuthAdapter {
             .filter(|u| pred(u))
             .min_by_key(|u| u.created_at))
     }
+
+    /// The newest entity created under `created_type` whose creation payload
+    /// matches `filter` and that `keep` accepts, read back at its current
+    /// state so an update is seen and a tombstone hides it.
+    async fn find_live_created<T, F>(
+        &self,
+        created_type: &str,
+        filter: &[(&str, &str)],
+        entity: fn(&str) -> String,
+        keep: F,
+    ) -> AuthResult<Option<T>>
+    where
+        T: serde::de::DeserializeOwned,
+        F: Fn(&T) -> bool,
+    {
+        let events = self
+            .client
+            .find_recent_matching(created_type, filter, MATCH_CANDIDATES)
+            .await
+            .map_err(AuthError::from)?;
+        let mut seen = std::collections::HashSet::new();
+        for event in events {
+            let Some(id) = event.payload.get("id").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if !seen.insert(id.to_string()) {
+                continue;
+            }
+            let current: Option<T> = self
+                .client
+                .get_latest_windowed(&entity(id), ENTITY_WINDOW)
+                .await
+                .map_err(AuthError::from)?;
+            if let Some(current) = current.filter(|c| keep(c)) {
+                return Ok(Some(current));
+            }
+        }
+        Ok(None)
+    }
+
+    /// The newest live, unexpired verification for `identifier` that `keep`
+    /// accepts, in one filtered read: a verification issued by this version
+    /// carries its identifier in its tombstone too, so the same query returns
+    /// it ahead of the creation event it hides. Only a verification created
+    /// before that (an id without `#`) costs a second read of its entity.
+    async fn find_live_verification<F>(
+        &self,
+        identifier: &str,
+        keep: F,
+    ) -> AuthResult<Option<Verification>>
+    where
+        F: Fn(&Verification) -> bool,
+    {
+        let events = self
+            .client
+            .find_recent_matching(
+                "auth.verification.",
+                &[("identifier", identifier)],
+                MATCH_CANDIDATES,
+            )
+            .await
+            .map_err(AuthError::from)?;
+        let now = Utc::now();
+        let mut dead = std::collections::HashSet::new();
+        for event in events {
+            if event.payload.get("_deleted").and_then(|v| v.as_bool()) == Some(true) {
+                if let Some(id) = event.payload.get("id").and_then(|v| v.as_str()) {
+                    dead.insert(id.to_string());
+                }
+                continue;
+            }
+            let Ok(v) = serde_json::from_value::<Verification>(event.payload) else {
+                continue;
+            };
+            if dead.contains(&v.id) || v.expires_at <= now || !keep(&v) {
+                continue;
+            }
+            if identifier_of(&v.id).is_some() {
+                return Ok(Some(v));
+            }
+            let current: Option<Verification> = self
+                .client
+                .get_latest_windowed(&verification_entity(&v.id), ENTITY_WINDOW)
+                .await
+                .map_err(AuthError::from)?;
+            if current.is_some() {
+                return Ok(current);
+            }
+            dead.insert(v.id);
+        }
+        Ok(None)
+    }
+
+    /// Tombstone a verification. One issued by this version names its
+    /// identifier, which is what lets [`Self::find_live_verification`] see
+    /// the tombstone in its single filtered read.
+    async fn tombstone_verification(&self, id: &str, event_type: &str) -> AuthResult<()> {
+        let mut payload = serde_json::json!({ "_deleted": true, "id": id });
+        if let Some(identifier) = identifier_of(id) {
+            payload["identifier"] = serde_json::Value::String(identifier.to_string());
+        }
+        self.client
+            .append_event(&verification_entity(id), event_type, payload)
+            .await
+            .map_err(AuthError::from)
+    }
 }
+
+/// A verification id is `<identifier>#<uuid>`; ids issued before that, or
+/// too long to tag, are a bare uuid and name no identifier.
+fn identifier_of(id: &str) -> Option<&str> {
+    id.rsplit_once('#').map(|(identifier, _)| identifier)
+}
+
+/// Core refuses a longer entity id. A verification whose tagged id would not
+/// fit keeps a bare uuid and the two-read lookup.
+const MAX_ENTITY_ID_LEN: usize = 128;
+
+/// How many matching events a filtered lookup reads. Several only when one
+/// identifier was issued more than once.
+const MATCH_CANDIDATES: usize = 16;
+
+/// The first window for reading one auth entity's current state; a full
+/// window is re-read at the client's whole-history limit.
+const ENTITY_WINDOW: usize = 16;
 
 // Entity ID helpers
 fn user_entity(id: &str) -> String {
@@ -557,16 +681,37 @@ impl AccountOps for AllsourceAuthAdapter {
         provider: &str,
         provider_account_id: &str,
     ) -> AuthResult<Option<Account>> {
-        // Need to scan accounts matching provider + account_id
-        let all: Vec<Account> = self
+        // Created and updated events both carry the full account, and a
+        // tombstone written by `delete_account` names the same pair, so the
+        // newest match is the account's current state in one read.
+        let events = self
             .client
-            .query_all("auth.account.created", 10000)
+            .find_recent_matching(
+                "auth.account.",
+                &[("providerId", provider), ("accountId", provider_account_id)],
+                MATCH_CANDIDATES,
+            )
             .await
             .map_err(AuthError::from)?;
-
-        Ok(all
-            .into_iter()
-            .find(|a| a.provider_id == provider && a.account_id == provider_account_id))
+        let mut seen = std::collections::HashSet::new();
+        for event in events {
+            let id = event
+                .payload
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            if event.payload.get("_deleted").and_then(|v| v.as_bool()) == Some(true) {
+                seen.extend(id);
+                continue;
+            }
+            let Ok(account) = serde_json::from_value::<Account>(event.payload) else {
+                continue;
+            };
+            if seen.insert(account.id.clone()) {
+                return Ok(Some(account));
+            }
+        }
+        Ok(None)
     }
 
     async fn get_user_accounts(&self, user_id: &str) -> AuthResult<Vec<Account>> {
@@ -617,8 +762,18 @@ impl AccountOps for AllsourceAuthAdapter {
     }
 
     async fn delete_account(&self, id: &str) -> AuthResult<()> {
+        let current: Option<Account> = self
+            .client
+            .get_latest_windowed(&account_entity(id), ENTITY_WINDOW)
+            .await
+            .map_err(AuthError::from)?;
+        let mut payload = serde_json::json!({ "_deleted": true, "id": id });
+        if let Some(account) = current {
+            payload["providerId"] = serde_json::Value::String(account.provider_id);
+            payload["accountId"] = serde_json::Value::String(account.account_id);
+        }
         self.client
-            .append_delete(&account_entity(id), "auth.account.deleted")
+            .append_event(&account_entity(id), "auth.account.deleted", payload)
             .await
             .map_err(AuthError::from)
     }
@@ -631,7 +786,13 @@ impl VerificationOps for AllsourceAuthAdapter {
     type Verification = Verification;
 
     async fn create_verification(&self, input: CreateVerification) -> AuthResult<Verification> {
-        let id = Uuid::new_v4().to_string();
+        let uuid = Uuid::new_v4().to_string();
+        let tagged = format!("{}#{uuid}", input.identifier);
+        let id = if verification_entity(&tagged).len() <= MAX_ENTITY_ID_LEN {
+            tagged
+        } else {
+            uuid
+        };
         let now = Utc::now();
 
         let verification = Verification {
@@ -661,45 +822,26 @@ impl VerificationOps for AllsourceAuthAdapter {
         identifier: &str,
         value: &str,
     ) -> AuthResult<Option<Verification>> {
-        let all: Vec<Verification> = self
-            .client
-            .query_all("auth.verification.created", 10000)
+        self.find_live_verification(identifier, |v| v.value == value)
             .await
-            .map_err(AuthError::from)?;
-
-        let now = Utc::now();
-        Ok(all
-            .into_iter()
-            .find(|v| v.identifier == identifier && v.value == value && v.expires_at > now))
     }
 
     async fn get_verification_by_value(&self, value: &str) -> AuthResult<Option<Verification>> {
-        let all: Vec<Verification> = self
-            .client
-            .query_all("auth.verification.created", 10000)
-            .await
-            .map_err(AuthError::from)?;
-
         let now = Utc::now();
-        Ok(all
-            .into_iter()
-            .find(|v| v.value == value && v.expires_at > now))
+        self.find_live_created(
+            "auth.verification.created",
+            &[("value", value)],
+            verification_entity,
+            |v: &Verification| v.value == value && v.expires_at > now,
+        )
+        .await
     }
 
     async fn get_verification_by_identifier(
         &self,
         identifier: &str,
     ) -> AuthResult<Option<Verification>> {
-        let all: Vec<Verification> = self
-            .client
-            .query_all("auth.verification.created", 10000)
-            .await
-            .map_err(AuthError::from)?;
-
-        let now = Utc::now();
-        Ok(all
-            .into_iter()
-            .find(|v| v.identifier == identifier && v.expires_at > now))
+        self.find_live_verification(identifier, |_| true).await
     }
 
     async fn consume_verification(
@@ -709,19 +851,15 @@ impl VerificationOps for AllsourceAuthAdapter {
     ) -> AuthResult<Option<Verification>> {
         let verification = self.get_verification(identifier, value).await?;
         if let Some(ref v) = verification {
-            self.client
-                .append_delete(&verification_entity(&v.id), "auth.verification.consumed")
-                .await
-                .map_err(AuthError::from)?;
+            self.tombstone_verification(&v.id, "auth.verification.consumed")
+                .await?;
         }
         Ok(verification)
     }
 
     async fn delete_verification(&self, id: &str) -> AuthResult<()> {
-        self.client
-            .append_delete(&verification_entity(id), "auth.verification.deleted")
+        self.tombstone_verification(id, "auth.verification.deleted")
             .await
-            .map_err(AuthError::from)
     }
 
     async fn delete_expired_verifications(&self) -> AuthResult<usize> {

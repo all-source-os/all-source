@@ -58,13 +58,20 @@ fn payload_field_str<'a>(payload: &'a serde_json::Value, field: &str) -> Option<
 /// HTTP 400/422, not on 200-with-empty, so `find_by_field` always returned
 /// `None` — duplicating users on every signin (issue #187).
 fn build_payload_filter(field: &str, value: &str) -> String {
+    build_payload_filter_all(&[(field, value)])
+}
+
+fn build_payload_filter_all(pairs: &[(&str, &str)]) -> String {
     serde_json::Value::Object(
-        [(
-            field.to_string(),
-            serde_json::Value::String(value.to_string()),
-        )]
-        .into_iter()
-        .collect(),
+        pairs
+            .iter()
+            .map(|(field, value)| {
+                (
+                    (*field).to_string(),
+                    serde_json::Value::String((*value).to_string()),
+                )
+            })
+            .collect(),
     )
     .to_string()
 }
@@ -217,7 +224,10 @@ impl AllsourceClient {
             .and_then(|s| s.as_str())
             .map(str::to_string);
         if status == 429 || (status == 503 && scope.is_some()) {
-            if let Some(wait) = retry_after {
+            // Only an admission refusal names a scope. An unscoped 429 is a
+            // momentarily full concurrency pool that frees in milliseconds,
+            // whatever its Retry-After says, and must not block every read.
+            if let (Some(wait), Some(_)) = (retry_after, scope.as_ref()) {
                 *self
                     .not_before
                     .lock()
@@ -402,6 +412,47 @@ impl AllsourceClient {
         }
 
         Ok(results)
+    }
+
+    /// The newest `limit` events under `event_type_prefix` whose payload
+    /// equals every `(field, value)` pair, filtered by Core before its window,
+    /// so the response is bounded by `limit` rather than by the history.
+    pub async fn find_recent_matching(
+        &self,
+        event_type_prefix: &str,
+        filter: &[(&str, &str)],
+        limit: usize,
+    ) -> Result<Vec<StoredEvent>, AllsourceAuthError> {
+        let url = format!("{}/api/v1/events/query", self.query_url);
+        let filter = build_payload_filter_all(filter);
+
+        self.fail_fast()?;
+        let resp = self
+            .http
+            .get(&url)
+            .query(&self.tenant_query())
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .query(&[
+                ("event_type_prefix", event_type_prefix),
+                ("payload_filter", &filter),
+                ("limit", &limit.to_string()),
+                ("order", "desc"),
+            ])
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(self.error_from(resp).await);
+        }
+
+        let mut events = resp.json::<QueryResponse>().await?.events;
+        events.sort_by(|a, b| {
+            b.timestamp
+                .cmp(&a.timestamp)
+                .then_with(|| b.version.cmp(&a.version))
+        });
+        Ok(events)
     }
 
     /// Search for entities matching a field value using payload filtering.

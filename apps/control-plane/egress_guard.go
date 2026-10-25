@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -43,7 +44,15 @@ type egressAdmission struct {
 	} `json:"admission"`
 }
 
-type egressError struct{ status int }
+type egressError struct {
+	status int
+	reason string
+}
+
+const (
+	egressReasonPoolFull    = "pool_full"
+	egressReasonUnavailable = "ledger_unavailable"
+)
 
 func (e egressError) Error() string { return "egress admission denied" }
 
@@ -71,7 +80,13 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 			continue
 		}
 		if !response.IsSuccess() {
-			return result, egressError{status: response.StatusCode()}
+			var denial struct {
+				Reason string `json:"reason"`
+			}
+			if json.Unmarshal(response.Body(), &denial) != nil {
+				denial.Reason = ""
+			}
+			return result, egressError{status: response.StatusCode(), reason: denial.Reason}
 		}
 		if result.Protocol != fundedEgressProtocol {
 			return result, errors.New("unsupported egress ledger")
@@ -120,7 +135,7 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 		defer func() { <-egressResponseSlots }()
 	default:
 		admissionRefused.WithLabelValues(lane, admissionScopeGlobal, tenantLabel(tenant)).Inc()
-		rejectEgress(c, egressError{status: http.StatusTooManyRequests})
+		rejectEgress(c, egressError{status: http.StatusTooManyRequests, reason: egressReasonPoolFull})
 		return
 	}
 	operation := uuid.NewString()
@@ -218,18 +233,33 @@ func billableEgressPath(path string) bool {
 	return true
 }
 
-// Global-pool and ledger refusals answer the same in every admission mode;
-// only per-tenant refusals carry a computed Retry-After.
+// Global-pool and ledger refusals answer the same in every admission mode.
+// A 429 here means a full concurrency pool, whose slots free as soon as an
+// in-flight response settles, so it asks for a one-second wait; only
+// per-tenant admission refusals carry a computed Retry-After.
 func rejectEgress(c *gin.Context, err error) {
 	status := http.StatusServiceUnavailable
+	reason := egressReasonUnavailable
 	var refusal egressError
 	if errors.As(err, &refusal) && (refusal.status == http.StatusPaymentRequired || refusal.status == http.StatusTooManyRequests) {
 		status = refusal.status
+		if refusal.reason != "" {
+			reason = refusal.reason
+		}
 	}
-	if status != http.StatusPaymentRequired {
+	body := gin.H{"error": "egress_budget_unavailable", "reason": reason}
+	switch status {
+	case http.StatusPaymentRequired:
+		body["message"] = "Included allowance and prepaid credit must cover this response. Inspect billing usage or purchase prepaid credit."
+	case http.StatusTooManyRequests:
+		c.Header("Retry-After", "1")
+		body["message"] = "Too many responses are in flight; retry shortly."
+	default:
 		c.Header("Retry-After", "30")
+		body["message"] = "The egress ledger is unavailable; retry later."
 	}
-	c.AbortWithStatusJSON(status, gin.H{"error": "egress_budget_unavailable", "message": "Included allowance and prepaid credit must cover this response. Inspect billing usage or purchase prepaid credit."})
+	log.Printf("egress refused status=%d reason=%s path=%s", status, reason, c.Request.URL.Path) //nolint:gosec // G706: reason is from a fixed set or Core's own denial enum.
+	c.AbortWithStatusJSON(status, body)
 }
 
 type egressWriter struct {

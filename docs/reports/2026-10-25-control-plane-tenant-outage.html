@@ -57,12 +57,12 @@ ol.fixes > li { margin: 10px 0; }
 <body>
 <main>
 <h1>Control-plane tenant outage</h1>
-<p class="muted">AllSource Core and Longhand, 2026-10-24/25. Every figure here was measured between <strong>11:53Z and 12:25Z on 2026-10-25</strong>, with the time on each. This page replaces the earlier Markdown report and every figure quoted in chat before 11:53Z.</p>
+<p class="muted">AllSource Core and Longhand, 2026-10-24/25. Every figure here was measured between <strong>11:53Z and 20:49Z on 2026-10-25</strong>, with the time on each. This page replaces the earlier Markdown report and every figure quoted in chat before 11:53Z.</p>
 
 <div class="cards">
   <div class="card bad"><div class="v">~9%</div><div class="k">of Longhand event reads refused with 429 right now (0.96/s refused vs 9.4/s served, 12:00–12:05Z)</div></div>
   <div class="card bad"><div class="v">9</div><div class="k">times the sign-in health probe failed, 11:19–12:02Z (each recovered within ~1 min)</div></div>
-  <div class="card warn"><div class="v">1 / 5 min</div><div class="k">background projector read failing with 500, backing off since 11:41Z</div></div>
+  <div class="card ok"><div class="v">86 × 200</div><div class="k">background projector reads succeeding since Core #355 went live at 13:03Z (80 change-feed, 6 board reads by 13:16Z; 0 failures after the first)</div></div>
   <div class="card ok"><div class="v">0</div><div class="k">full outages since Core restarted at 10:02:28Z (the 21:51Z–10:02Z one is fixed)</div></div>
 </div>
 
@@ -104,9 +104,10 @@ ol.fixes > li { margin: 10px 0; }
 <h3>Read refusals and sign-in failures, ongoing <span class="tag bad">user-facing</span></h3>
 <p>Sections 3 and 4. The egress guard refuses about one Longhand read in ten with 429, mostly when its concurrency slots are full, and sign-in reads every verification ever written in one request.</p>
 </div>
-<div class="problem warn">
-<h3>Projector reads of the control-plane tenant, ongoing <span class="tag warn">background only</span></h3>
-<p>Longhand's shared queue projector is a background job that pre-builds the team queue board. Its reads ask Core for the tenant's whole history, which is larger than Core's 128 MiB limit for such reads, so each one fails with 500. The board it builds is not shown to users (<code>LONGHAND_SHARED_QUEUE_PROJECTION=false</code>). Since Longhand #1702 (11:41:17Z) it retries every 1, 2, 4 … minutes, capped at 5.</p>
+<div class="problem ok">
+<h3>Projector reads of the control-plane tenant <span class="tag ok">fixed 13:09Z by deploying #355</span></h3>
+<p><strong>Update 13:15Z.</strong> Core <code>05466bca</code> (#355) went live at 13:03:07Z with the 768 MiB limit (<code>strict archive read limits max_decoded_bytes=805306368</code> at boot). The tenant's full history loaded in 8.5 s (139,859 events, no files skipped). The projector's first board read returned 200 at 13:09:57Z; its first change-feed call got a 502 because that 8.5 s load ran past the control plane's wait; every call after that succeeded (80 change-feed and 6 board reads with 200 by 13:16:00Z). Core memory after the load: 6.55 GB, 9.3 GB free.</p>
+<p>Before that: Longhand's shared queue projector is a background job that pre-builds the team queue board. Its reads ask Core for the tenant's whole history, which was larger than Core's 128 MiB limit for such reads, so each one failed with 500. The board it builds is not shown to users (<code>LONGHAND_SHARED_QUEUE_PROJECTION=false</code>). From Longhand #1702 (11:41:17Z) it retried every 1, 2, 4 … minutes, capped at 5.</p>
 </div>
 
 <h2 id="signin">3. Sign-in failures</h2>
@@ -206,15 +207,20 @@ ol.fixes > li { margin: 10px 0; }
 <tr><td>#352 / #353 gzip responses, fastest level</td><td><span class="tag ok">in production</span></td></tr>
 <tr><td>Longhand #1702 projector backs off on errors</td><td><span class="tag ok">in production</span> 11:41:17Z</td></tr>
 <tr><td>#354 Docker Build rebuilds only changed images</td><td><span class="tag ok">merged</span> CI only</td></tr>
-<tr><td>#355 projector reads up to 768 MiB, 503 instead of 500, read models without whole history</td><td><span class="tag warn">merged, not deployed</span> image <code>sha-05466bca</code> pulled and tagged; blocked only by the speed check in section 5</td></tr>
-<tr><td>#357 change feed without whole history</td><td><span class="tag info">PR open</span></td></tr>
+<tr><td>#355 projector reads up to 768 MiB, 503 instead of 500, read models without whole history</td><td><span class="tag ok">in production</span> Core <code>sha-05466bca</code>, 13:03:07Z</td></tr>
+<tr><td>#357 change feed without whole history (with a follow-up charging the index for the columns it reads)</td><td><span class="tag warn">merged, not deployed</span> main <code>897623e8</code></td></tr>
 </table>
 </div>
 
 <h2 id="actions">10. What to do, in order</h2>
 <ol class="fixes">
-<li><strong>Stop the 429s on sign-in and reads.</strong> Find which caller fills the egress guard's 16 slots and Core's 4-per-tenant reservations at the moments of refusal, and give sign-in reads a path that cannot be starved. Also bound the verification lookup in time instead of reading all 10,000.</li>
-<li><strong>Deploy #355</strong> (safe per section 5), then #357 after review. Fix the release check to compare gzip with gzip.</li>
+<li><strong>Stop the 429s on sign-in and reads.</strong> <span class="tag warn">AllSource half in this PR, not released</span> Re-measured 20:46:45–20:49:20Z: 1,615 event reads served and 149 refused with 429 (8.4%), unchanged since midday. The refusals are bursts, not slow reads. The mean read takes 20 ms, and 32,390 requests finished in under 5 ms against 32,755 refusals in total. That fits Core's limit of 4 reads in flight per tenant (<code>egress.rs:217</code>) being hit by Longhand's parallel reads: seat usage and step cost each issue up to 16 at once, and the queue page up to 12. Nothing in Longhand caps the total.
+<ul>
+<li>better-auth-allsource 0.14.14: the verification and account lookups on sign-in ask Core for at most 16 matching events with a <code>payload_filter</code> instead of reading 10,000, still one read each. A verification's id now starts with its identifier and its tombstone repeats it, and an account's tombstone names its provider and account id, so the same filtered read returns the tombstone ahead of what it hides. A sign-in for an existing user stays at two guarded reads. Verifications created before the upgrade take a second read until they expire (OAuth state lives minutes). A consumed or deleted verification no longer counts as valid. Before, the lookup only read <code>auth.verification.created</code> events and never saw the tombstone, so a used sign-in state stayed valid until it expired. A 429 that names no admission scope fails that one read and no longer stops every auth read for its Retry-After.</li>
+<li>Control plane: a full slot pool or Core's per-tenant limit answers 429 with <code>Retry-After: 1</code> instead of 30, because a slot frees within milliseconds. Each refusal body carries a <code>reason</code> (<code>pool_full</code>, Core's <code>busy</code>, <code>capacity</code> or <code>exhausted</code>, or <code>ledger_unavailable</code>), and every refusal is logged with that reason, so the two sources can now be told apart.</li>
+<li>Still to do, in Longhand: upgrade to better-auth-allsource 0.14.14 once it is published, cap the parallel reads, and label the probe from <code>reason</code>.</li>
+</ul></li>
+<li><strong>Deploy #357</strong> (merged as <code>f29cc526</code> + <code>897623e8</code>) before the ~16 days of room that #355 gives run out (#355 deployed 13:03Z). Fix the release check to compare gzip with gzip.</li>
 <li><strong>Stop <code>team_queue.snapshot.chunk</code> from accumulating</strong> (Longhand): keep only the latest snapshot, or move snapshots out of the event history. This removes ~81% of the bytes and ~88% of the growth.</li>
 <li><strong>Export memory per tenant from Core</strong>, so the limit on ordinary reads has a number.</li>
 <li><strong>Fix the sign-in probe label</strong>, so a 429 is not reported as an exhausted allowance.</li>
@@ -225,7 +231,7 @@ ol.fixes > li { margin: 10px 0; }
 <table>
 <tr><th>Unknown</th><th>Would settle it</th></tr>
 <tr><td>Exact status behind the 10:11:43Z sign-in read</td><td>Access to <code>longhand-control-plane-api</code> logs (401 for this account)</td></tr>
-<tr><td>Which caller fills the egress slots during 429s; refusals before vs after 10:02Z</td><td>A fresh read-only Fly metrics token (the one used here expired)</td></tr>
+<tr><td>Whether the 429s come from the control plane's 16 slots or Core's 4 per tenant; refusals before vs after 10:02Z</td><td>The refusal log line this PR adds, once deployed. No other source exists: the running control plane (<code>sha-300f852c</code>, built 2026-10-24 21:21Z) was deployed with a config that has no <code>[metrics]</code> section, so Fly's Prometheus holds only its own <code>fly_*</code> series for the app (checked 21:36Z), and the image has no shell to read port 9091 directly. Deploying with the repo's <code>fly.toml</code> restores the scrape.</td></tr>
 <tr><td>This tenant's memory and whether it is loaded now</td><td>A Core gauge per tenant (code change)</td></tr>
 <tr><td>Exact bytes per event type (sampled here)</td><td>A server-side sum by type in Core or its MCP tool</td></tr>
 <tr><td>The speed check against the exact CI baseline image</td><td>A GitHub token with <code>read:packages</code></td></tr>
