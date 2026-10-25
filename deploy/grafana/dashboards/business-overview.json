@@ -1,0 +1,256 @@
+{
+  "uid": "allsource-business",
+  "title": "AllSource — Business Questions",
+  "description": "Each section answers one business question about AllSource on Fly. Source: deploy/grafana/dashboards/business-overview.json in all-source-os/all-source.",
+  "tags": ["allsource", "business", "cost"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "5m",
+  "links": [
+    { "title": "Availability & incidents", "type": "link", "url": "/d/allsource-availability", "keepTime": true, "icon": "dashboard" },
+    { "title": "Engineering detail", "type": "link", "url": "/d/allsource-engineering", "keepTime": true, "icon": "dashboard" },
+    { "title": "How this dashboard is built", "type": "link", "url": "https://github.com/all-source-os/all-source/blob/main/docs/runbooks/BUSINESS_DASHBOARD.md", "targetBlank": true, "icon": "doc" }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "tenant", "label": "Tenant", "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+        "query": { "query": "label_values(control_plane_tenant_requests_total, tenant)", "refId": "tenant" },
+        "definition": "label_values(control_plane_tenant_requests_total, tenant)",
+        "multi": true, "includeAll": true, "allValue": ".*",
+        "current": { "text": ["All"], "value": ["$__all"] }, "refresh": 2, "sort": 1
+      },
+      {
+        "name": "dedicated_usd", "label": "Dedicated stack $/month (assumption)", "type": "textbox",
+        "description": "What one dedicated AllSource stack (Core plus control plane) costs per month. Replace with the figure from the Fly invoice or fly.io/calculator.",
+        "query": "100", "current": { "text": "100", "value": "100" }
+      },
+      {
+        "name": "share_limit", "label": "Fleet share that makes a noisy neighbour", "type": "custom",
+        "query": "0.1,0.25,0.5", "current": { "text": "0.25", "value": "0.25" },
+        "options": [ { "text": "0.1", "value": "0.1", "selected": false }, { "text": "0.25", "value": "0.25", "selected": true }, { "text": "0.5", "value": "0.5", "selected": false } ]
+      },
+      {
+        "name": "refused_limit", "label": "Refused share that means shared limits block them", "type": "custom",
+        "query": "0.01,0.05,0.1", "current": { "text": "0.05", "value": "0.05" },
+        "options": [ { "text": "0.01", "value": "0.01", "selected": false }, { "text": "0.05", "value": "0.05", "selected": true }, { "text": "0.1", "value": "0.1", "selected": false } ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
+      "options": { "mode": "markdown", "content": "**Each section is a question; the first panel in it is the answer.** The time picker sets the window (default 7 days). Tenant panels need the control plane's per-tenant metrics, which arrive with its next deploy; until then they read *No data*, which means *not measured*, never *zero*. Dollar figures use Fly's published egress rates (docs.fly.io/about/pricing, read 2026-10-25): $0.02/GB North America and Europe, $0.04/GB Asia Pacific, Oceania and South America, $0.12/GB Africa and India. Plan prices come from the control plane's billing price list; enterprise is negotiated and reads $0. Raw traffic, capacity and Core internals live on **Engineering detail**; outages on **Availability & incidents** (links top right)." }
+    },
+
+    { "id": 100, "type": "row", "title": "Are customers getting their data right now?", "collapsed": false, "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 101, "type": "stat", "title": "Reads answered (last 15 min)",
+      "description": "Share of control-plane responses that were 2xx or 304. Green at 99% or more. The 2026-10-24/25 outage held this near 0% for 12 hours.",
+      "gridPos": { "x": 0, "y": 5, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0.9 }, { "color": "green", "value": 0.99 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[15m]))" } ]
+    },
+    {
+      "id": 102, "type": "stat", "title": "Served vs same time yesterday",
+      "description": "Successful responses in the last 15 minutes divided by the same 15 minutes a day earlier. Under 5% means traffic collapsed, not that demand fell.",
+      "gridPos": { "x": 6, "y": 5, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "green", "value": 0.5 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m] offset 1d))" } ]
+    },
+    {
+      "id": 103, "type": "timeseries", "title": "Control-plane responses by outcome",
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 40, "lineWidth": 0 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "answered" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "refused (429)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } } ] },
+          { "matcher": { "id": "byName", "options": "failed (5xx)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "legendFormat": "answered", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "refused (429)", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=\"429\"}[$__rate_interval]))" },
+        { "refId": "C", "legendFormat": "failed (5xx)", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"5..\"}[$__rate_interval]))" }
+      ]
+    },
+
+    { "id": 200, "type": "row", "title": "Which tenants can't read their data back?", "collapsed": false, "gridPos": { "x": 0, "y": 10, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 201, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 11, "w": 24, "h": 2 },
+      "options": { "mode": "markdown", "content": "**Answer:** any tenant listed in either table had reads fail in the window. Left: the control plane's per-tenant view (failed and refused requests). Right: Core refusing to load a tenant into memory, read from Core's logs. That is how one tenant lost reads for about 9 hours on 2026-10-24 while the fleet looked healthy." }
+    },
+    {
+      "id": 202, "type": "table", "title": "Failed or refused reads by tenant (window)",
+      "gridPos": { "x": 0, "y": 13, "w": 14, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Reads" }, { "id": "unit", "value": "short" } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Failed (5xx)" }, { "id": "unit", "value": "short" } ] },
+          { "matcher": { "id": "byName", "options": "Value #C" }, "properties": [ { "id": "displayName", "value": "Failed share" }, { "id": "unit", "value": "percentunit" }, { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.001 }, { "color": "red", "value": 0.01 } ] } } ] },
+          { "matcher": { "id": "byName", "options": "Value #D" }, "properties": [ { "id": "displayName", "value": "Refused by admission" }, { "id": "unit", "value": "short" } ] }
+        ] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Failed (5xx)", "desc": true } ] },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\", method=\"GET\"}[$__range]))" },
+        { "refId": "B", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\", method=\"GET\", status_class=\"5xx\"}[$__range]))" },
+        { "refId": "C", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\", method=\"GET\", status_class=\"5xx\"}[$__range])) / sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\", method=\"GET\"}[$__range]))" },
+        { "refId": "D", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(admission_refused_total{tenant=~\"$tenant\"}[$__range]))" }
+      ]
+    },
+    {
+      "id": 203, "type": "table", "title": "Tenants Core refused to load (window)",
+      "description": "Core logs 'refusing to hydrate tenant' when the tenant's archive needs more memory than is free. Every read for that tenant fails until there is room.",
+      "gridPos": { "x": 14, "y": 13, "w": 10, "h": 8 },
+      "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+      "fieldConfig": { "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "needed" }, "properties": [ { "id": "displayName", "value": "Needed" }, { "id": "unit", "value": "bytes" } ] },
+          { "matcher": { "id": "byName", "options": "available" }, "properties": [ { "id": "displayName", "value": "Free" }, { "id": "unit", "value": "bytes" } ] },
+          { "matcher": { "id": "byName", "options": "refusals" }, "properties": [ { "id": "displayName", "value": "Refusals" }, { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Refusals", "desc": true } ] },
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "merge", "options": {} },
+        { "id": "groupingToMatrix", "options": { "rowField": "tenant", "columnField": "__name__", "valueField": "Value" } },
+        { "id": "organize", "options": { "renameByName": { "tenant\\__name__": "Tenant" }, "indexByName": { "tenant\\__name__": 0, "refusals": 1, "needed": 2, "available": 3 } } }
+      ],
+      "targets": [ { "refId": "A", "editorMode": "code", "queryType": "stats", "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+        "expr": "fly.app.name:\"allsource-core\" \"refusing to hydrate tenant\" | extract_regexp \"tenant_id\\\\S*?\\\"(?P<tenant>[^\\\"]+)\\\"\" | extract_regexp \"needed_bytes\\\\S*?(?P<needed>[0-9]{4,})\" | extract_regexp \"available_bytes\\\\S*?(?P<available>[0-9]{4,})\" | stats by (tenant) count() as refusals, max(needed) as needed, min(available) as available" } ]
+    },
+
+    { "id": 300, "type": "row", "title": "Which tenants cost more than they pay?", "collapsed": false, "gridPos": { "x": 0, "y": 21, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 301, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 2 },
+      "options": { "mode": "markdown", "content": "**Answer:** rows in red. *Monthly egress cost* is the tenant's response bytes in the window, scaled to 30 days and priced at $0.02/GB. *Margin* is plan price minus that cost. Egress is the only cost metered per tenant; machines and storage are shared and not allocated here, so a green margin is an upper bound. Enterprise plans read $0 because the price is negotiated: compare their cost with the contract." }
+    },
+    {
+      "id": 302, "type": "table", "title": "Plan price vs metered cost by tenant",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Plan $/month" }, { "id": "unit", "value": "currencyUSD" } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Egress cost $/month (projected)" }, { "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 2 } ] },
+          { "matcher": { "id": "byName", "options": "Value #C" }, "properties": [ { "id": "displayName", "value": "Margin $/month" }, { "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 2 }, { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0 }, { "color": "green", "value": 5 } ] } } ] },
+          { "matcher": { "id": "byName", "options": "Value #D" }, "properties": [ { "id": "displayName", "value": "Response bytes (window)" }, { "id": "unit", "value": "decbytes" } ] }
+        ] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Margin $/month", "desc": false } ] },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "max by (tenant, tier, status) (control_plane_tenant_plan_monthly_usd{tenant=~\"$tenant\"})" },
+        { "refId": "B", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / 1e9 * 0.02 * 2592000 / $__range_s" },
+        { "refId": "C", "instant": true, "format": "table", "expr": "max by (tenant) (control_plane_tenant_plan_monthly_usd{tenant=~\"$tenant\"}) - on (tenant) (sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / 1e9 * 0.02 * 2592000 / $__range_s)" },
+        { "refId": "D", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range]))" }
+      ]
+    },
+
+    { "id": 400, "type": "row", "title": "Which tenants should run their own deployment?", "collapsed": false, "gridPos": { "x": 0, "y": 33, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 401, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 4 },
+      "options": { "mode": "markdown", "content": "**Answer:** the *Verdict* column. A tenant scores one point for each test it meets over the window:\n1. **It would pay for its own stack:** projected egress cost ≥ *Dedicated stack $/month* (filter above).\n2. **It is a noisy neighbour:** its share of all tenant response bytes ≥ *Fleet share* (filter above).\n3. **Shared limits hold it back:** its refused requests ÷ its requests ≥ *Refused share* (filter above).\n\n**0 = stay on shared · 1 = watch · 2 or 3 = recommend a dedicated deployment, or Community Edition on their own servers.** Self-hosted Community Edition fits when test 1 dominates: the bytes then leave their network, not ours, and the egress bill disappears. A dedicated managed deployment fits when tests 2 or 3 dominate and they want us to operate it." }
+    },
+    {
+      "id": 402, "type": "table", "title": "Deployment fit by tenant",
+      "gridPos": { "x": 0, "y": 38, "w": 24, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Egress cost $/month (projected)" }, { "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 2 } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Share of fleet bytes" }, { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 1 } ] },
+          { "matcher": { "id": "byName", "options": "Value #C" }, "properties": [ { "id": "displayName", "value": "Refused share" }, { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 1 } ] },
+          { "matcher": { "id": "byName", "options": "Value #D" }, "properties": [ { "id": "displayName", "value": "Verdict" }, { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "mappings", "value": [ { "type": "value", "options": { "0": { "text": "Stay on shared", "color": "green", "index": 0 }, "1": { "text": "Watch", "color": "yellow", "index": 1 }, "2": { "text": "Recommend own deployment", "color": "red", "index": 2 }, "3": { "text": "Recommend own deployment", "color": "red", "index": 3 } } } ] } ] }
+        ] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Verdict", "desc": true } ] },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "targets": [
+        { "refId": "A", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / 1e9 * 0.02 * 2592000 / $__range_s" },
+        { "refId": "B", "instant": true, "format": "table", "expr": "sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / scalar(sum(increase(control_plane_tenant_response_bytes_total[$__range])))" },
+        { "refId": "C", "instant": true, "format": "table", "expr": "(sum by (tenant) (increase(admission_refused_total{tenant=~\"$tenant\"}[$__range])) / sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__range]))) or on (tenant) (0 * sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__range])))" },
+        { "refId": "D", "instant": true, "format": "table", "expr": "(sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / 1e9 * 0.02 * 2592000 / $__range_s >= bool $dedicated_usd) + on (tenant) (sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range])) / scalar(sum(increase(control_plane_tenant_response_bytes_total[$__range]))) >= bool $share_limit) + on (tenant) (((sum by (tenant) (increase(admission_refused_total{tenant=~\"$tenant\"}[$__range])) / sum by (tenant) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__range]))) >= bool $refused_limit) or on (tenant) (0 * sum by (tenant) (increase(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__range]))))" }
+      ]
+    },
+
+    { "id": 500, "type": "row", "title": "What does traffic cost us, and where is it heading?", "collapsed": false, "gridPos": { "x": 0, "y": 47, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 501, "type": "stat", "title": "Egress cost in window",
+      "gridPos": { "x": 0, "y": 48, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "(\n  (sum(increase(fly_edge_data_out{region!~\"jnb|bom|gru|gig|scl|eze|bog|nrt|hkg|sin|syd\"}[$__range])) or vector(0)) * 0.02\n+ (sum(increase(fly_edge_data_out{region=~\"gru|gig|scl|eze|bog|nrt|hkg|sin|syd\"}[$__range])) or vector(0)) * 0.04\n+ (sum(increase(fly_edge_data_out{region=~\"jnb|bom\"}[$__range])) or vector(0)) * 0.12\n) / 1e9" } ]
+    },
+    {
+      "id": 502, "type": "stat", "title": "Projected 30-day egress cost",
+      "gridPos": { "x": 6, "y": 48, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 200 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "(\n  (sum(increase(fly_edge_data_out{region!~\"jnb|bom|gru|gig|scl|eze|bog|nrt|hkg|sin|syd\"}[$__range])) or vector(0)) * 0.02\n+ (sum(increase(fly_edge_data_out{region=~\"gru|gig|scl|eze|bog|nrt|hkg|sin|syd\"}[$__range])) or vector(0)) * 0.04\n+ (sum(increase(fly_edge_data_out{region=~\"jnb|bom\"}[$__range])) or vector(0)) * 0.12\n) / 1e9 * 2592000 / $__range_s" } ]
+    },
+    {
+      "id": 503, "type": "stat", "title": "Plan revenue $/month (list price)",
+      "description": "Sum of every tenant's plan list price. Enterprise contracts are not included.",
+      "gridPos": { "x": 12, "y": 48, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "sum(control_plane_tenant_plan_monthly_usd{status=~\"active|past_due|trialing\"})" } ]
+    },
+    {
+      "id": 504, "type": "timeseries", "title": "Egress cost per day by app",
+      "gridPos": { "x": 18, "y": 48, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "interval": "1h",
+      "targets": [ { "refId": "A", "legendFormat": "{{app}}", "expr": "sum by (app) (increase(fly_edge_data_out[1d])) / 1e9 * 0.02 > 0.001" } ]
+    },
+
+    { "id": 600, "type": "row", "title": "Can Core hold every tenant it has to serve?", "collapsed": false, "gridPos": { "x": 0, "y": 53, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 601, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 54, "w": 24, "h": 2 },
+      "options": { "mode": "markdown", "content": "**Answer:** yes while *Free memory* stays above *Largest tenant needs*. When it doesn't, Core refuses to load that tenant and its reads fail (the first half of the 2026-10-24 outage). Resizing restarts Core, so resize before the lines cross, not after." }
+    },
+    {
+      "id": 602, "type": "timeseries", "title": "Core free memory vs largest tenant needs",
+      "gridPos": { "x": 0, "y": 56, "w": 16, "h": 7 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [ { "matcher": { "id": "byName", "options": "Largest tenant needs" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }, { "id": "custom.drawStyle", "value": "points" }, { "id": "custom.pointSize", "value": 8 } ] } ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" }, "legendFormat": "Free memory", "expr": "sum(fly_instance_memory_mem_available{app=\"allsource-core\"})" },
+        { "refId": "B", "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" }, "editorMode": "code", "queryType": "statsRange", "legendFormat": "Largest tenant needs",
+          "expr": "fly.app.name:\"allsource-core\" \"refusing to hydrate tenant\" | extract_regexp \"needed_bytes\\\\S*?(?P<needed>[0-9]{4,})\" | stats max(needed) as needed" }
+      ]
+    },
+    {
+      "id": 603, "type": "stat", "title": "Core restarts in window",
+      "description": "Each restart replays the write-ahead log. The 2026-10-24 21:51Z restart is what turned one tenant's problem into a 12-hour outage for all.",
+      "gridPos": { "x": 16, "y": 56, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "sum(resets(fly_instance_cpu{app=\"allsource-core\", mode=\"idle\", cpu_id=\"0\"}[$__range]))" } ]
+    }
+  ]
+}

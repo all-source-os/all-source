@@ -1,0 +1,1300 @@
+{
+  "uid": "allsource-engineering",
+  "title": "AllSource — Engineering Detail",
+  "description": "Raw traffic, query shapes, gzip, admission, capacity and Core internals behind the business questions. Source: deploy/grafana/dashboards/engineering-detail.json in all-source-os/all-source.",
+  "tags": [
+    "allsource",
+    "engineering"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "5m",
+  "links": [
+    {
+      "title": "Business questions",
+      "type": "link",
+      "url": "/d/allsource-business",
+      "keepTime": true,
+      "icon": "dashboard"
+    },
+    {
+      "title": "Availability & incidents",
+      "type": "link",
+      "url": "/d/allsource-availability",
+      "keepTime": true,
+      "icon": "dashboard"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus on Fly",
+          "value": "prometheus_on_fly"
+        },
+        "hide": 2
+      },
+      {
+        "name": "app",
+        "label": "App",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(fly_instance_memory_mem_total, app)",
+          "refId": "app"
+        },
+        "definition": "label_values(fly_instance_memory_mem_total, app)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "region",
+        "label": "Edge region",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(fly_edge_data_out{app=~\"$app\"}, region)",
+          "refId": "region"
+        },
+        "definition": "label_values(fly_edge_data_out{app=~\"$app\"}, region)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "status",
+        "label": "HTTP status",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(fly_edge_http_responses_count{app=~\"$app\"}, status)",
+          "refId": "status"
+        },
+        "definition": "label_values(fly_edge_http_responses_count{app=~\"$app\"}, status)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 3
+      },
+      {
+        "name": "tenant",
+        "label": "Tenant",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(control_plane_tenant_requests_total, tenant)",
+          "refId": "tenant"
+        },
+        "definition": "label_values(control_plane_tenant_requests_total, tenant)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "selector",
+        "label": "Query shape",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(control_plane_tenant_event_queries_total, selector)",
+          "refId": "selector"
+        },
+        "definition": "label_values(control_plane_tenant_event_queries_total, selector)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Traffic by app and region",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 105,
+      "type": "stat",
+      "title": "Ingress in window",
+      "description": "Bytes clients sent to Fly's edge. Fly does not bill inbound traffic; shown for upload-heavy tenants.",
+      "gridPos": {
+        "x": 18,
+        "y": 10,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_data_in{app=~\"$app\", region=~\"$region\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "type": "timeseries",
+      "title": "Egress rate by app",
+      "description": "Bytes per second leaving Fly's edge, by app.",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{app}}",
+          "expr": "sum by (app) (rate(fly_edge_data_out{app=~\"$app\", region=~\"$region\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "type": "bargauge",
+      "title": "Egress by app and edge region (window)",
+      "description": "Where the bytes went. Regions outside NA and EU cost 2x to 6x more per GB.",
+      "gridPos": {
+        "x": 14,
+        "y": 14,
+        "w": 10,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{app}} · {{region}}",
+          "expr": "sort_desc(topk(15, sum by (app, region) (increase(fly_edge_data_out{app=~\"$app\", region=~\"$region\"}[$__range])) > 0))"
+        }
+      ]
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Tenant traffic",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 204,
+      "type": "bargauge",
+      "title": "Requests by tenant and route (window)",
+      "gridPos": {
+        "x": 16,
+        "y": 26,
+        "w": 8,
+        "h": 9
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{tenant}} · {{method}} {{route}}",
+          "expr": "sort_desc(topk(20, sum by (tenant, method, route) (increase(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__range]))))"
+        }
+      ]
+    },
+    {
+      "id": 205,
+      "type": "timeseries",
+      "title": "Requests per second by tenant",
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{tenant}}",
+          "expr": "topk(10, sum by (tenant) (rate(control_plane_tenant_requests_total{tenant=~\"$tenant\"}[$__rate_interval])))"
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "type": "timeseries",
+      "title": "Response bytes per second by tenant",
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{tenant}}",
+          "expr": "topk(10, sum by (tenant) (rate(control_plane_tenant_response_bytes_total{tenant=~\"$tenant\"}[$__rate_interval])))"
+        }
+      ]
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "3 · What drives the bytes",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 301,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Shows:** event-query bytes split by query shape (selector, whether it is time-bounded, whether payloads are filtered), how many polls were answered with 304 Not Modified, and how much gzip saves. **Healthy:** bytes per query stays flat as history grows; the 304 share rises as clients send `If-None-Match`; wire/raw sits well under 100%. **Act when:** an unbounded or unfiltered shape dominates. That client re-reads history it already has. The gzip ratio counts every event-query response, including clients that did not ask for gzip."
+      }
+    },
+    {
+      "id": 302,
+      "type": "timeseries",
+      "title": "Event-query bytes by shape",
+      "gridPos": {
+        "x": 0,
+        "y": 47,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{selector}} · bounded={{time_bounded}} · filtered={{payload_filtered}}",
+          "expr": "sum by (selector, time_bounded, payload_filtered) (rate(control_plane_tenant_event_query_body_bytes_total{tenant=~\"$tenant\", selector=~\"$selector\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 303,
+      "type": "stat",
+      "title": "Bytes per event query",
+      "gridPos": {
+        "x": 12,
+        "y": 47,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(control_plane_tenant_event_query_body_bytes_total{tenant=~\"$tenant\", selector=~\"$selector\"}[$__range])) / sum(increase(control_plane_tenant_event_queries_total{tenant=~\"$tenant\", selector=~\"$selector\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 304,
+      "type": "stat",
+      "title": "Polls answered 304",
+      "description": "Share of event queries that returned 304 Not Modified, with no body.",
+      "gridPos": {
+        "x": 16,
+        "y": 47,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(control_plane_tenant_event_query_conditional_total{tenant=~\"$tenant\"}[$__range])) / (sum(increase(control_plane_tenant_event_query_conditional_total{tenant=~\"$tenant\"}[$__range])) + sum(increase(control_plane_tenant_event_queries_total{tenant=~\"$tenant\"}[$__range])))"
+        }
+      ]
+    },
+    {
+      "id": 305,
+      "type": "stat",
+      "title": "Event-query bytes on the wire vs raw",
+      "description": "Control-plane response bytes for /api/v1/events/query divided by Core's uncompressed bytes for the same route. 100% means no compression.",
+      "gridPos": {
+        "x": 20,
+        "y": 47,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(control_plane_tenant_response_bytes_total{route=\"/api/v1/events/query\", status_class=\"2xx\"}[$__range])) / sum(increase(allsource_http_response_bytes_total{endpoint=\"/api/v1/events/query\", status=~\"2..\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 306,
+      "type": "timeseries",
+      "title": "Core response bytes by endpoint (before gzip)",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "right"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{endpoint}}",
+          "expr": "topk(8, sum by (endpoint) (rate(allsource_http_response_bytes_total[$__rate_interval])))"
+        }
+      ]
+    },
+    {
+      "id": 400,
+      "type": "row",
+      "title": "4 · Refusals — are we turning customers away?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 55,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 402,
+      "type": "timeseries",
+      "title": "Edge responses by status",
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{status}}",
+          "expr": "sum by (status) (rate(fly_edge_http_responses_count{app=~\"$app\", region=~\"$region\", status=~\"$status\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 403,
+      "type": "stat",
+      "title": "Refused share (429, 503, 504)",
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_http_responses_count{app=~\"$app\", region=~\"$region\", status=~\"429|503|504\"}[$__range])) / sum(increase(fly_edge_http_responses_count{app=~\"$app\", region=~\"$region\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 404,
+      "type": "stat",
+      "title": "Server errors (5xx)",
+      "gridPos": {
+        "x": 16,
+        "y": 59,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.005
+              },
+              {
+                "color": "red",
+                "value": 0.02
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_http_responses_count{app=~\"$app\", region=~\"$region\", status=~\"5..\"}[$__range])) / sum(increase(fly_edge_http_responses_count{app=~\"$app\", region=~\"$region\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 405,
+      "type": "stat",
+      "title": "Responses in window",
+      "gridPos": {
+        "x": 20,
+        "y": 59,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "expr": "sum(increase(fly_edge_http_responses_count{app=~\"$app\", region=~\"$region\", status=~\"$status\"}[$__range]))"
+        }
+      ]
+    },
+    {
+      "id": 406,
+      "type": "bargauge",
+      "title": "Admission refusals by tenant and lane (window)",
+      "gridPos": {
+        "x": 12,
+        "y": 63,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{tenant}} · {{lane}}",
+          "expr": "sort_desc(topk(10, sum by (tenant, lane) (increase(admission_refused_total{tenant=~\"$tenant\"}[$__range])) > 0))"
+        }
+      ]
+    },
+    {
+      "id": 407,
+      "type": "bargauge",
+      "title": "Would refuse in shadow mode (window)",
+      "description": "Requests admission would refuse if enforcement were on. Use it to size limits before enforcing them.",
+      "gridPos": {
+        "x": 18,
+        "y": 63,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{tenant}} · {{lane}}",
+          "expr": "sort_desc(topk(10, sum by (tenant, lane) (increase(admission_would_refuse_total{tenant=~\"$tenant\"}[$__range])) > 0))"
+        }
+      ]
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "5 · Capacity — are we paying for the right machines?",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 501,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Shows:** CPU and memory use per app against the machine it runs on, shared-CPU throttling, and machine count. **Healthy:** CPU busy under the app's baseline and memory under 80%. **Act when:** throttling is non-zero (the machine is out of burst credit, so latency rises), memory sits above 85% (the next spike OOM-kills it), or an app idles near 0% on a large machine (a smaller size would cost less)."
+      }
+    },
+    {
+      "id": 502,
+      "type": "timeseries",
+      "title": "CPU busy by app",
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{app}}",
+          "expr": "1 - sum by (app) (rate(fly_instance_cpu{app=~\"$app\", mode=\"idle\"}[$__rate_interval])) / sum by (app) (rate(fly_instance_cpu{app=~\"$app\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 503,
+      "type": "timeseries",
+      "title": "Memory used by app",
+      "gridPos": {
+        "x": 8,
+        "y": 71,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.85
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{app}}",
+          "expr": "1 - sum by (app) (fly_instance_memory_mem_available{app=~\"$app\"}) / sum by (app) (fly_instance_memory_mem_total{app=~\"$app\"})"
+        }
+      ]
+    },
+    {
+      "id": 504,
+      "type": "timeseries",
+      "title": "Shared-CPU throttling by app",
+      "description": "Time the machine was held to its shared-CPU baseline because its burst balance ran out. Any non-zero value means requests waited for CPU.",
+      "gridPos": {
+        "x": 16,
+        "y": 71,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{app}}",
+          "expr": "sum by (app) (rate(fly_instance_cpu_throttle{app=~\"$app\"}[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 505,
+      "type": "bargauge",
+      "title": "Machines running by app",
+      "gridPos": {
+        "x": 0,
+        "y": 79,
+        "w": 24,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "basic",
+        "orientation": "vertical",
+        "showUnfilled": false,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{app}}",
+          "expr": "count by (app) (fly_instance_memory_mem_total{app=~\"$app\"})"
+        }
+      ]
+    },
+    {
+      "id": 600,
+      "type": "row",
+      "title": "6 · Core workload — what the event store is doing",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 83,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 601,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 84,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Shows:** Core's own counters: events written, queries served, stored bytes and HTTP traffic by endpoint. Core has no tenant label; per-tenant usage is in section 2. **Act when:** queries climb while events written stay flat. That is polling, and section 3 says which shape."
+      }
+    },
+    {
+      "id": 602,
+      "type": "timeseries",
+      "title": "Events ingested per second",
+      "gridPos": {
+        "x": 0,
+        "y": 86,
+        "w": 6,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "ingested",
+          "expr": "sum(rate(allsource_events_ingested_total[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 603,
+      "type": "timeseries",
+      "title": "Queries per second by type",
+      "gridPos": {
+        "x": 6,
+        "y": 86,
+        "w": 6,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{query_type}}",
+          "expr": "sum by (query_type) (rate(allsource_queries_total[$__rate_interval]))"
+        }
+      ]
+    },
+    {
+      "id": 604,
+      "type": "timeseries",
+      "title": "Core requests by endpoint and status",
+      "gridPos": {
+        "x": 12,
+        "y": 86,
+        "w": 6,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "legendFormat": "{{status}} {{endpoint}}",
+          "expr": "topk(8, sum by (endpoint, status) (rate(allsource_http_requests_total[$__rate_interval])))"
+        }
+      ]
+    },
+    {
+      "id": 605,
+      "type": "stat",
+      "title": "Stored bytes",
+      "gridPos": {
+        "x": 18,
+        "y": 86,
+        "w": 6,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "none",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(allsource_storage_size_bytes)"
+        }
+      ]
+    }
+  ]
+}

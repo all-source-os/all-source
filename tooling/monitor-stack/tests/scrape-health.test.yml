@@ -1,0 +1,65 @@
+rule_files:
+  - ../rules/scrape-health.yml
+evaluation_interval: 1m
+tests:
+  - name: every app reporting stays quiet
+    interval: 1m
+    input_series:
+      - series: 'allsource_http_requests_total{app="allsource-core", endpoint="/health", method="GET", status="200"}'
+        values: '0+2x60'
+      - series: 'control_plane_http_requests_total{app="allsource-control-plane", method="GET", path="/livez", status="200"}'
+        values: '0+2x60'
+      - series: 'vm_memory_total{app="allsource-query"}'
+        values: '100000000x60'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: CoreMetricsMissing
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: ControlPlaneMetricsMissing
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: QueryServiceMetricsMissing
+        exp_alerts: []
+  - name: an app that stops reporting raises its own warning only
+    interval: 1m
+    input_series:
+      - series: 'allsource_http_requests_total{app="allsource-core", endpoint="/health", method="GET", status="200"}'
+        values: '0+2x10 stale _x30'
+      - series: 'control_plane_http_requests_total{app="allsource-control-plane", method="GET", path="/livez", status="200"}'
+        values: '0+2x40'
+      - series: 'vm_memory_total{app="allsource-query"}'
+        values: '100000000x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: CoreMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              app: allsource-core
+              severity: warning
+              service: allsource-core
+            exp_annotations:
+              summary: Core metrics are not reaching the Fly Prometheus
+              action: Check the [metrics] block in apps/core/fly.toml and that Core answers GET /metrics on 3900. The business dashboard shows no Core usage while this fires.
+      - eval_time: 35m
+        alertname: ControlPlaneMetricsMissing
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: QueryServiceMetricsMissing
+        exp_alerts: []
+  - name: a series from another app does not count
+    interval: 1m
+    input_series:
+      - series: 'vm_memory_total{app="allsource-prime"}'
+        values: '100000000x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: QueryServiceMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              app: allsource-query
+              severity: warning
+              service: allsource-query
+            exp_annotations:
+              summary: Query-service metrics are not reaching the Fly Prometheus
+              action: Check the [metrics] block in apps/query-service/fly.toml and that GET /api/metrics/prometheus answers on 3902.

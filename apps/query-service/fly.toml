@@ -74,6 +74,7 @@ primary_region = "iad"  # US East (Virginia)
   cpus = 1
   memory_mb = 512  # Increased for production workload
 
+# Phoenix serves Prometheus text on the app port; nothing listens on 9091.
 [metrics]
-  port = 9091
-  path = "/metrics"
+  port = 3902
+  path = "/api/metrics/prometheus"

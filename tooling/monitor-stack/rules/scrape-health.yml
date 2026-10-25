@@ -1,0 +1,30 @@
+groups:
+  - name: scrape-health
+    rules:
+      - alert: CoreMetricsMissing
+        expr: absent(allsource_http_requests_total{app="allsource-core"})
+        for: 15m
+        labels:
+          severity: warning
+          service: allsource-core
+        annotations:
+          summary: Core metrics are not reaching the Fly Prometheus
+          action: Check the [metrics] block in apps/core/fly.toml and that Core answers GET /metrics on 3900. The business dashboard shows no Core usage while this fires.
+      - alert: ControlPlaneMetricsMissing
+        expr: absent(control_plane_http_requests_total{app="allsource-control-plane"})
+        for: 15m
+        labels:
+          severity: warning
+          service: allsource-control-plane
+        annotations:
+          summary: Control-plane metrics are not reaching the Fly Prometheus
+          action: Check the [metrics] block in apps/control-plane/fly.toml and the private listener on 9091. Per-tenant usage and refusals are unknown while this fires.
+      - alert: QueryServiceMetricsMissing
+        expr: absent(vm_memory_total{app="allsource-query"})
+        for: 15m
+        labels:
+          severity: warning
+          service: allsource-query
+        annotations:
+          summary: Query-service metrics are not reaching the Fly Prometheus
+          action: Check the [metrics] block in apps/query-service/fly.toml and that GET /api/metrics/prometheus answers on 3902.

@@ -1,0 +1,154 @@
+{
+  "uid": "allsource-availability",
+  "title": "AllSource — Availability & Incidents",
+  "description": "Built from the 2026-10-24/25 outage: every panel here would have shown it within minutes. Source: deploy/grafana/dashboards/availability.json in all-source-os/all-source.",
+  "tags": ["allsource", "availability", "incident"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-48h", "to": "now" },
+  "refresh": "1m",
+  "links": [
+    { "title": "Replay the 2026-10-24/25 outage", "type": "link", "url": "/d/allsource-availability?from=1792800000000&to=1792926000000", "icon": "bolt" },
+    { "title": "Business questions", "type": "link", "url": "/d/allsource-business", "keepTime": true, "icon": "dashboard" },
+    { "title": "Engineering detail", "type": "link", "url": "/d/allsource-engineering", "keepTime": true, "icon": "dashboard" }
+  ],
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 4 },
+      "options": { "mode": "markdown", "content": "**On 2026-10-24 one tenant could not read for about 9 hours, then every tenant could not read for 12.** Core ran out of memory to load the largest tenants (first refusals 00:59Z, continuous from about 13:00Z); a manual resize at 21:51Z restarted Core, and a write-ahead-log ordering bug then made Core refuse every egress reservation until a fixed build shipped at 10:05Z on the 25th. Nothing alerted. Each section below is a question that would have exposed it, with the answer first. Use **Replay the 2026-10-24/25 outage** (top right) to see it." }
+    },
+
+    { "id": 100, "type": "row", "title": "Are callers getting answers?", "collapsed": false, "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 101, "type": "stat", "title": "Answered (last 15 min)",
+      "gridPos": { "x": 0, "y": 5, "w": 4, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0.9 }, { "color": "green", "value": 0.99 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[15m]))" } ]
+    },
+    {
+      "id": 102, "type": "stat", "title": "Served vs same time yesterday",
+      "gridPos": { "x": 4, "y": 5, "w": 4, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "green", "value": 0.5 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m])) / sum(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m] offset 1d))" } ]
+    },
+    {
+      "id": 103, "type": "timeseries", "title": "Control-plane responses by outcome",
+      "description": "The red band is the outage. Retry-After made callers back off, so total volume falls too: a drop in traffic is not a drop in demand.",
+      "gridPos": { "x": 8, "y": 5, "w": 16, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 40, "lineWidth": 0 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "answered" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "refused (429)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } } ] },
+          { "matcher": { "id": "byName", "options": "unavailable (503/504)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "server error (500/502)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } } ] }
+        ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "legendFormat": "answered", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "refused (429)", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=\"429\"}[$__rate_interval]))" },
+        { "refId": "C", "legendFormat": "unavailable (503/504)", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"503|504\"}[$__rate_interval]))" },
+        { "refId": "D", "legendFormat": "server error (500/502)", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"500|502\"}[$__rate_interval]))" }
+      ]
+    },
+    {
+      "id": 104, "type": "stat", "title": "Would page: 5xx over half of responses for 10 min",
+      "description": "Mirrors the ControlPlaneServingFailures alert in tooling/monitor-stack. On 2026-10-24 it would have fired by 22:25Z.",
+      "gridPos": { "x": 0, "y": 10, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "Quiet", "color": "green" }, "1": { "text": "FIRING", "color": "red" } } } ] }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "(min_over_time((sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"5..\"}[10m])) / sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[10m])))[10m:1m]) >= bool 0.5) or vector(0)" } ]
+    },
+    {
+      "id": 105, "type": "stat", "title": "Would page: served under 5% of yesterday for 15 min",
+      "description": "Mirrors the ControlPlaneSuccessCollapsed alert in tooling/monitor-stack. A 20% threshold would have fired on the throttling the evening before, so 5% is the line.",
+      "gridPos": { "x": 4, "y": 10, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "Quiet", "color": "green" }, "1": { "text": "FIRING", "color": "red" } } } ] }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "instant": true, "expr": "(max_over_time((sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m])) / sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"2..|304\"}[15m] offset 1d)))[15m:1m]) < bool 0.05) or vector(0)" } ]
+    },
+
+    { "id": 200, "type": "row", "title": "Is Core refusing work, and for whom?", "collapsed": false, "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 201, "type": "timeseries", "title": "Core 503 refusals (from Core's logs)",
+      "description": "Core logs every 5xx it returns. Overnight on 2026-10-24/25 it refused about 6,000 requests every 2 hours, each in 0 ms: a gate, not an overload.",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 8 },
+      "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60 }, "color": { "mode": "fixed", "fixedColor": "red" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "refId": "A", "editorMode": "code", "queryType": "statsRange", "legendFormat": "503 refusals", "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+        "expr": "fly.app.name:\"allsource-core\" \"503 Service Unavailable\" | stats count() as refusals" } ]
+    },
+    {
+      "id": 202, "type": "timeseries", "title": "Tenants Core refused to load, by tenant",
+      "description": "Core logs 'refusing to hydrate tenant' when a tenant's archive needs more memory than is free; every read for that tenant fails.",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 8 },
+      "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "refId": "A", "editorMode": "code", "queryType": "statsRange", "legendFormat": "{{tenant}}", "datasource": { "type": "victoriametrics-logs-datasource", "uid": "application_logs_vlog" },
+        "expr": "fly.app.name:\"allsource-core\" \"refusing to hydrate tenant\" | extract_regexp \"tenant_id\\\\S*?\\\"(?P<tenant>[^\\\"]+)\\\"\" | stats by (tenant) count() as refusals" } ]
+    },
+
+    { "id": 300, "type": "row", "title": "Did a restart or deploy come first?", "collapsed": false, "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 301, "type": "timeseries", "title": "Machine restarts by app",
+      "description": "A restart replays the write-ahead log. Read a new failure band against the restart just before it.",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "custom": { "drawStyle": "bars", "fillOpacity": 80 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "interval": "10m",
+      "targets": [ { "refId": "A", "legendFormat": "{{app}}", "expr": "sum by (app) (resets(fly_instance_cpu{mode=\"idle\", cpu_id=\"0\"}[$__interval])) > 0" } ]
+    },
+    {
+      "id": 302, "type": "timeseries", "title": "Core machine memory size",
+      "description": "A step here is a resize, which restarts Core.",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineInterpolation": "stepAfter" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [ { "refId": "A", "legendFormat": "total", "expr": "sum(fly_instance_memory_mem_total{app=\"allsource-core\"})" }, { "refId": "B", "legendFormat": "free", "expr": "sum(fly_instance_memory_mem_available{app=\"allsource-core\"})" } ]
+    },
+
+    { "id": 400, "type": "row", "title": "Is Core busy, or idle while callers fail?", "collapsed": false, "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 401, "type": "timeseries", "title": "Core CPU busy vs control-plane failures",
+      "description": "Failures with Core busy point to load. Failures with Core idle point to a gate refusing work: that was 2026-10-24/25, with Core at 0% CPU for 12 hours.",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Core CPU busy" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "custom.axisPlacement", "value": "left" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] },
+          { "matcher": { "id": "byName", "options": "control-plane 5xx/s" }, "properties": [ { "id": "unit", "value": "reqps" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "legendFormat": "Core CPU busy", "expr": "1 - sum(rate(fly_instance_cpu{app=\"allsource-core\", mode=\"idle\"}[$__rate_interval])) / sum(rate(fly_instance_cpu{app=\"allsource-core\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "control-plane 5xx/s", "expr": "sum(rate(fly_edge_http_responses_count{app=\"allsource-control-plane\", status=~\"5..\"}[$__rate_interval]))" }
+      ]
+    },
+
+    { "id": 500, "type": "row", "title": "Which tenants were hit?", "collapsed": false, "gridPos": { "x": 0, "y": 40, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "id": 501, "type": "timeseries", "title": "Failed reads per tenant",
+      "description": "Control-plane per-tenant metrics; empty until the control plane runs a build with its private metrics listener.",
+      "gridPos": { "x": 0, "y": 41, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus_on_fly" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum", "max"] } },
+      "targets": [ { "refId": "A", "legendFormat": "{{tenant}}", "expr": "topk(10, sum by (tenant) (rate(control_plane_tenant_requests_total{method=\"GET\", status_class=\"5xx\"}[$__rate_interval])) > 0)" } ]
+    }
+  ]
+}

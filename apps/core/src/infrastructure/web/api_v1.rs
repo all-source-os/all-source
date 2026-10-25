@@ -162,6 +162,7 @@ pub async fn serve_v1(
     cluster_manager: Option<Arc<ClusterManager>>,
     geo_replication: Option<Arc<GeoReplicationManager>>,
 ) -> anyhow::Result<()> {
+    let http_metrics = store.metrics();
     let app_state = AppState {
         store,
         auth_manager: auth_manager.clone(),
@@ -563,6 +564,10 @@ pub async fn serve_v1(
 
     let app = app
         .layer(middleware::from_fn(super::response_limit::bounded))
+        .layer(middleware::from_fn_with_state(
+            http_metrics,
+            super::http_metrics::record,
+        ))
         .layer(super::response_limit::compression());
     let listener = tokio::net::TcpListener::bind(addr).await?;
 

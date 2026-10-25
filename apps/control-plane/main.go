@@ -1213,6 +1213,9 @@ func main() {
 
 	metricsSrv := newPrivateMetricsServer(os.Getenv)
 	startPrivateMetricsServer(metricsSrv)
+	if cp.container != nil && cp.container.TenantRepo != nil {
+		startTenantPlanMetrics(ctx, cp.container.TenantRepo.FindAll)
+	}
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)

@@ -30,6 +30,7 @@ h2 { font-size: 20px; margin: 40px 0 8px; padding-top: 8px; border-top: 1px soli
 h3 { font-size: 16px; margin: 20px 0 6px; }
 p { margin: 6px 0 10px; max-width: 78ch; }
 .muted { color: var(--muted); }
+a { color: var(--accent); }
 .small { font-size: 13px; }
 code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: color-mix(in srgb, var(--line) 45%, transparent); padding: 1px 4px; border-radius: 4px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
@@ -84,6 +85,7 @@ ol.fixes > li { margin: 10px 0; }
 <div class="cards" id="cards"></div>
 
 <div class="panel toc">
+<a href="#outage"><b>The 2026-10-24/25 outage</b></a><br>
 <a href="#diagram-s">System diagram</a><br>
 <a href="#who">Who uses the bandwidth</a><br>
 <a href="#timeline">Timeline</a><br>
@@ -98,6 +100,65 @@ ol.fixes > li { margin: 10px 0; }
 <a href="#fixes">What to fix, in order</a><br>
 <a href="#sources">Sources</a>
 </div>
+
+<h2 id="outage">The 2026-10-24/25 outage</h2>
+<p class="muted small">Added 2026-10-25, read between 10:30Z and 11:45Z from the <code>allsource</code> org's Fly Prometheus and Core's logs (the <i>Application Logs</i> datasource on fly-metrics.net). The charts in this section read <code>data/2026-10-25-outage.js</code>. Everything below this section is the report as read on 2026-10-24.</p>
+<p>Two hours after the rest of this report was read, problems <a href="#p4">4</a> and <a href="#p3">3</a> combined into an outage. Core had been refusing to load one tenant for about 9 hours because it lacked the memory (<a href="#p4">4</a>). Core was resized by hand at 21:51Z to make room, and the resize restarted it. On that restart, a write-ahead-log ordering defect in the system store (<a href="#p3">3</a>) made Core refuse every egress reservation, so every read through the control plane failed for 12 hours and 7 minutes, until a fixed Core build started at 10:05Z on the 25th. No alert fired at any point.</p>
+<div class="cards">
+<div class="card bad"><div class="v">12 h 7 min</div><div class="k">every tenant's reads failed, 21:58Z to 10:05Z</div></div>
+<div class="card bad"><div class="v">1,765</div><div class="k">successful control-plane responses in that window, against 1,652,412 in the same hours a day earlier</div></div>
+<div class="card bad"><div class="v">19,082</div><div class="k">responses answered 503 in that window; callers then backed off on <code>Retry-After</code></div></div>
+<div class="card warn"><div class="v">~9 h</div><div class="k">one tenant could not read before the outage began (continuous refusals from about 13:00Z)</div></div>
+<div class="card bad"><div class="v">0</div><div class="k">alerts fired: the only alerts watched for too much bandwidth, and refusals lower bandwidth</div></div>
+<div class="card ok"><div class="v">22:25Z</div><div class="k">when the alert added afterwards would have paged, replayed against the same data</div></div>
+</div>
+<div class="panel chart" id="outage-share-chart"></div>
+<div class="panel chart" id="outage-status-chart"></div>
+
+<h3>Timeline</h3>
+<div class="panel">
+<table>
+<tr><th>UTC</th><th>What happened</th><th>Evidence</th></tr>
+<tr><td>10-24 00:59</td><td>Core first refuses to load <code>decebal-dobrica-at-gmail-com</code>: it needs 2,943,809,744 B and has 1,881,874,432 B free. Six refusals by 01:59.</td><td>Core log <code>refusing to hydrate tenant</code></td></tr>
+<tr><td>01:15, 14:00, 15:40, 17:10</td><td>Core restarts four times. From 14:00 the tenant is refused continuously, 142 to 231 times an hour, so none of its reads succeed.</td><td>restarts: <code>resets(fly_instance_cpu{app="allsource-core", mode="idle"})</code>; refusals: Core log</td></tr>
+<tr><td>15:40</td><td>Control plane v120 starts with the egress guard; 429s begin (<a href="#p2">2</a>).</td><td><code>fly_edge_http_responses_count</code></td></tr>
+<tr><td>19:56</td><td>The rest of this report is read. Problem <a href="#p4">4</a> records the refusals.</td><td>this report</td></tr>
+<tr><td>20:17</td><td>Core also refuses <code>onboard-control-plane-at-technical-leaders-com</code>, the Longhand control plane's tenant (needs 2,475,612,384 B): 625 refusals in the next hour.</td><td>Core log</td></tr>
+<tr><td>21:51</td><td>Core is resized by hand from 8 GB to 16 GB (<code>fly scale vm</code>), which restarts the machine.</td><td><code>fly_instance_memory_mem_total</code> steps from 7,942 MiB to 15,993 MiB</td></tr>
+<tr><td>21:55</td><td>Core is back with 9.4 GB free and 0.3% CPU, and answers every egress reservation with 503 in 0 ms. Control-plane successful responses fall from about 8,400 per 15 minutes to between 0 and 16.</td><td>Core log <code>503 Service Unavailable latency=0 ms</code>, about 6,000 every 2 hours; edge status counts</td></tr>
+<tr><td>22:25</td><td>The <code>ControlPlaneServingFailures</code> alert added afterwards would have fired here.</td><td>rule replayed against Fly Prometheus</td></tr>
+<tr><td>10-25 10:05</td><td>Core v56 (<code>fe6be49</code>) starts with the write-ahead-log fix (#351). The 503s stop and successful responses return to 5,600–8,300 per 15 minutes.</td><td><code>fly releases -a allsource-core</code>; edge status counts</td></tr>
+<tr><td>10:05–11:15</td><td>The control plane returns 949 HTTP 500s, peaking at 256 per 5 minutes at 10:20 and down to 1 by 11:10. Its source is not identified (see below).</td><td><code>fly_app_http_responses_count{status="500"}</code></td></tr>
+</table>
+</div>
+<div class="panel chart" id="outage-refusal-chart"></div>
+<div class="panel chart" id="outage-hydration-chart"></div>
+<div class="panel chart" id="outage-core-chart"></div>
+
+<h3>Why every read failed</h3>
+<p>The control plane reserves egress bytes in Core's ledger before it returns a read, and completes the reservation after. The ledger lives in Core's system store, which is write-ahead-log only and never checkpointed (<a href="#p3">3</a>). On every boot the log writer reopened the <i>oldest</i> segment and appended there. Recovery replays segments in name order, so the first entries written after a restart were replayed near the start of history, out of order. An egress Reserve or Complete replayed out of order fails, which invalidates that tenant's ledger account, and every later Reserve for it answers 503. This could happen on any restart; the 21:51Z restart is the one where it did.</p>
+<p>The Core build <code>fe6be49</code> (#351) recovers the system store in sequence order and moves the writer to a new segment after the highest recovered sequence. Its commit message records the mechanism.</p>
+
+<h3>Why nobody noticed for 12 hours</h3>
+<ul>
+<li>The only production alerts watched for <i>too many</i> bytes leaving the control plane. An outage that refuses reads lowers bytes, so the bandwidth alert went quiet. The outage looked like the bandwidth problem in this report fixing itself.</li>
+<li>Core logged each refusal as <code>503 Service Unavailable latency=0 ms</code>, with no reason, tenant or route. The control plane logs no request lines.</li>
+<li>Fly did not scrape any AllSource metric (<a href="#p6">6</a>), so there was no success-rate series to look at, only Fly's own edge counters.</li>
+</ul>
+
+<h3>What is fixed, and what is still open</h3>
+<table>
+<tr><th>Item</th><th>State</th></tr>
+<tr><td>Write-ahead-log append order in the system store</td><td>Fixed in Core <code>fe6be49</code> (#351), deployed 10-25 10:05Z</td></tr>
+<tr><td>Core sized at 16 GB in <code>fly.toml</code>, so the next deploy does not shrink it back</td><td>Fixed (#351)</td></tr>
+<tr><td>Alerts on failed reads and collapsed success, plus metrics-missing alerts</td><td>Added in #356: <code>ControlPlaneServingFailures</code> (fires 22:25Z on this data), <code>ControlPlaneSuccessCollapsed</code>; tested with <code>promtool</code>. Live once <code>allsource-bandwidth-alerts</code> is redeployed</td></tr>
+<tr><td>Dashboards that answer "is anyone failing to read, and why"</td><td>Added in #356: <i>Availability &amp; Incidents</i> and <i>Business Questions</i> on fly-metrics.net, both of which show this outage</td></tr>
+<tr><td>The system store is still never checkpointed</td><td><b>Open.</b> #351 fixed the order, not the growth: every boot still replays the whole log (<a href="#p3">3</a>)</td></tr>
+<tr><td>Core refuses a whole tenant when its archive does not fit, instead of serving bounded reads</td><td><b>Open.</b> 16 GB moves the limit; it does not remove it</td></tr>
+<tr><td>The control plane still runs <code>300f852</code></td><td><b>Open.</b> No per-tenant metrics yet, and it still asks Core for gzip on internal calls</td></tr>
+<tr><td>The 949 HTTP 500s after recovery</td><td><b>Open.</b> Not attributable: the running control plane neither logs requests nor labels status by route. #351's per-tenant metrics carry route and status class once deployed</td></tr>
+<tr><td>Core's 503 log line carries no reason or route</td><td><b>Open</b></td></tr>
+</table>
 
 <h2 id="diagram-s">System diagram</h2>
 <p>Line widths scale with the bytes per second each hop carried on average over the last three days. Moving dashes show direction. Red markers are the bottlenecks in this report; select one to jump to its evidence.</p>
@@ -188,6 +249,7 @@ ol.fixes > li { margin: 10px 0; }
 </table>
 <p>Consequences: the system log is now 283 MB on disk across 46 segments and is replayed in full on every boot (151,329 events at the 13:58Z boot; the health check now reports 252,539 system events). The same events stay resident in Core's memory, which <a href="#p4">4</a> shows is already tight.</p>
 <p class="evidence">Sources: <code>ls -la /app/data/__system/wal</code> on the Core machine at 19:52Z (segment names are sequence numbers); Core health check; code on <code>main</code>.</p>
+<p><b>What happened next:</b> at the 21:51Z restart, this log's append order made Core refuse every egress reservation for 12 hours. See <a href="#outage">the outage</a>.</p>
 </div>
 
 <div class="problem" id="p4">
@@ -195,6 +257,7 @@ ol.fixes > li { margin: 10px 0; }
 <div class="chart" id="mem-chart"></div>
 <p>Core uses 5.9 GB of 8.3 GB on average over three days, peaking at 6.7 GB. Its tenant cache accounts for 633 MB (<code>allsource_core_cache_bytes</code>), so most of the resident memory is something else, and the system store in <a href="#p3">3</a> is one measured contributor. With about 2.4 GB available, Core refuses to hydrate <code>decebal-dobrica-at-gmail-com</code>, which needs 2.94 GB (16 × its 116.9 MB archive + 1 GiB reserve). That tenant's usage sync fails every five minutes and its quota meters stop reconciling.</p>
 <p class="evidence">Sources: <code>fly_instance_memory_mem_total - fly_instance_memory_mem_available</code>; Core <code>/metrics</code>; control-plane log <code>archive_hydration_refused</code> with <code>needed_bytes=2943581248</code>; <code>hydration_admission.rs</code>.</p>
+<p><b>What happened next:</b> the refusals were not limited to usage sync. Every read for that tenant failed from about 13:00Z, the Longhand control plane's tenant was refused from 20:17Z, and the resize meant to fix it triggered <a href="#outage">the outage</a>.</p>
 </div>
 
 <div class="problem warn" id="p5">
@@ -251,6 +314,7 @@ ol.fixes > li { margin: 10px 0; }
 </main>
 
 <script src="./data/2026-10-24-production-traffic.js"></script>
+<script src="./data/2026-10-25-outage.js"></script>
 <script>
 (function () {
   const D = window.REPORT_DATA;
@@ -592,6 +656,67 @@ ol.fixes > li { margin: 10px 0; }
     ],
     annotations: ANN,
   });
+
+  // The 2026-10-24/25 outage
+  const O = window.OUTAGE_DATA;
+  if (O) {
+    const at = (arr, step, f) => arr.map((v, i) => [O.start + i * step, f ? f(v) : v]);
+    const ts = (s) => Date.parse(s + "Z") / 1000;
+    const OANN = [
+      ...O.restarts.filter((r) => r !== "2026-10-24T21:55" && r !== "2026-10-25T10:05").map((r) => ({ t: ts(r), label: "Core restart" })),
+      { t: ts("2026-10-24T21:51"), label: "Core resized 8→16 GB" },
+      { t: ts("2026-10-24T22:25"), label: "new alert would fire" },
+      { t: ts("2026-10-25T10:05"), label: "fixed Core starts" },
+    ];
+    const hh = (t) => iso(t).slice(8, 16).replace("T", " ");
+    chart("outage-share-chart", {
+      title: "Share of control-plane responses that answered (2xx or 304), per 15 minutes",
+      height: 220, xticks: 9, xfmt: hh, ymax: 100, yfmt: (y) => y.toFixed(0) + "%",
+      series: [{ label: "answered", values: O.answered.map((a, i) => {
+        const all = a + O.r429[i] + O.r503[i] + O.r500[i];
+        return [O.start + i * O.step15, all ? (100 * a) / all : 0];
+      }), color: "--a3", width: 2.4 }],
+      annotations: OANN,
+      note: "Same counts as the chart below. The 429 refusals from 15:40Z hold it at 80–95%; the outage takes it to 0–5% for 12 hours.",
+    });
+    chart("outage-status-chart", {
+      title: "Control-plane responses per 15 minutes, 10-24 00:00Z to 10-25 11:45Z",
+      height: 280, xticks: 9, xfmt: hh,
+      series: [
+        { label: "answered (2xx, 304)", values: at(O.answered, O.step15), color: "--a3" },
+        { label: "refused (429)", values: at(O.r429, O.step15), color: "--a5" },
+        { label: "unavailable (503, 504)", values: at(O.r503, O.step15), color: "--a2", width: 2.4 },
+        { label: "server error (500, 502)", values: at(O.r500, O.step15), color: "--a4" },
+      ],
+      annotations: OANN,
+      note: "Source: <code>sum by (status)(increase(fly_edge_http_responses_count{app=\"allsource-control-plane\"}[15m]))</code>. Total volume falls during the outage because callers back off on <code>Retry-After</code>: lower traffic is not lower demand.",
+    });
+    chart("outage-refusal-chart", {
+      title: "Core 503 responses logged per 30 minutes",
+      kind: "bar", height: 220, xticks: 9, xfmt: hh,
+      series: [{ label: "503 Service Unavailable", values: at(O.core503_30m, 1800) }],
+      annotations: OANN,
+      note: "Source: Core's logs, <code>fly.app.name:\"allsource-core\" \"503 Service Unavailable\" | stats count()</code>. Before 21:55Z these are the hydration refusals; after it, egress reservations refused in 0 ms.",
+    });
+    const hyd = Object.entries(O.hyd_1h);
+    chart("outage-hydration-chart", {
+      title: "Tenants Core refused to load, refusals per hour",
+      kind: "bar", stacked: true, height: 220, xticks: 9, xfmt: hh,
+      series: hyd.map(([tenant, vals]) => ({ label: tenant, values: at(vals, 3600) })),
+      note: "Source: Core's logs, <code>\"refusing to hydrate tenant\"</code> grouped by <code>tenant_id</code>. Every read for a refused tenant fails until Core has room to load it.",
+    });
+    chart("outage-core-chart", {
+      title: "Core: free memory and machine size (GB), CPU busy (%)",
+      height: 240, xticks: 9, xfmt: hh,
+      series: [
+        { label: "machine memory (GB)", values: at(O.total_mb, O.step15, (v) => v / 1024), color: "--a5", dash: "5 4" },
+        { label: "free memory (GB)", values: at(O.free_mb, O.step15, (v) => v / 1024), color: "--a1" },
+        { label: "CPU busy (%)", values: at(O.cpu_pm, O.step15, (v) => v / 10), color: "--a2", width: 2.4 },
+      ],
+      annotations: OANN,
+      note: "Sources: <code>fly_instance_memory_mem_total</code>, <code>fly_instance_memory_mem_available</code>, and <code>1 - rate(idle) / rate(all)</code> of <code>fly_instance_cpu</code>. During the outage Core had 9.4 GB free and ran at 0.3–0.4% CPU: it was refusing work, not overloaded.",
+    });
+  }
 })();
 </script>
 </body>

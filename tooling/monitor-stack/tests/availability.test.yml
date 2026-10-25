@@ -1,0 +1,63 @@
+rule_files:
+  - ../rules/availability.yml
+evaluation_interval: 1m
+tests:
+  - name: a day of healthy traffic stays quiet
+    interval: 1m
+    input_series:
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="200"}'
+        values: '0+600x2940'
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="429"}'
+        values: '0+30x2940'
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="503"}'
+        values: '0+1x2940'
+    alert_rule_test:
+      - eval_time: 49h
+        alertname: ControlPlaneServingFailures
+        exp_alerts: []
+      - eval_time: 49h
+        alertname: ControlPlaneSuccessCollapsed
+        exp_alerts: []
+  - name: every read answered 503 after a restart pages within half an hour
+    interval: 1m
+    input_series:
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="200"}'
+        values: '0+600x1440 864000+0x60'
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="503"}'
+        values: '0+0x1440 0+30x60'
+    alert_rule_test:
+      - eval_time: 1445m
+        alertname: ControlPlaneServingFailures
+        exp_alerts: []
+      - eval_time: 1470m
+        alertname: ControlPlaneServingFailures
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: allsource-control-plane
+            exp_annotations:
+              summary: Half of control-plane responses are server errors
+              action: Open the Availability & Incidents dashboard. If Core is idle while callers fail, a gate is refusing work; check Core's 503 refusals and the last restart.
+      - eval_time: 1480m
+        alertname: ControlPlaneSuccessCollapsed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: allsource-control-plane
+            exp_annotations:
+              summary: Control-plane successful responses fell below 5% of the same time yesterday
+              action: Callers back off on Retry-After, so low traffic is not low demand. Check the response outcome chart and Core's refusals.
+  - name: throttling that keeps a sixth of yesterday's successes does not page
+    interval: 1m
+    input_series:
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="200"}'
+        values: '0+600x1440 864000+100x60'
+      - series: 'fly_edge_http_responses_count{app="allsource-control-plane", status="429"}'
+        values: '0+0x1440 0+500x60'
+    alert_rule_test:
+      - eval_time: 1495m
+        alertname: ControlPlaneSuccessCollapsed
+        exp_alerts: []
+      - eval_time: 1495m
+        alertname: ControlPlaneServingFailures
+        exp_alerts: []
