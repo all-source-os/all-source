@@ -211,12 +211,21 @@ jobs:
         run: |
           set -euo pipefail
           image="ghcr.io/${{ github.repository_owner }}/$PACKAGE:sha-${SOURCE_SHA:0:7}"
+          if ! inspect=$(timeout -k 15 60 docker manifest inspect "$image" 2>&1); then
+            if grep -qiE "manifest unknown|not found" <<< "$inspect"; then
+              echo "::notice::$PACKAGE was not rebuilt at this revision; its publishing commit was scanned."
+              exit 0
+            fi
+            echo "$inspect" >&2
+            exit 1
+          fi
           timeout -k 15 120 docker pull "$image"
           revision=$(docker image inspect "$image" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')
           test "$revision" = "$SOURCE_SHA"
           echo "image=$image" >> "$GITHUB_OUTPUT"
 
       - name: Run Trivy vulnerability scanner
+        if: steps.image.outputs.image != ''
         uses: aquasecurity/trivy-action@master
         timeout-minutes: 5
         with:
@@ -228,6 +237,7 @@ jobs:
           exit-code: '0'
 
       - name: Enforce fixed HIGH and CRITICAL vulnerabilities
+        if: steps.image.outputs.image != ''
         uses: aquasecurity/trivy-action@master
         timeout-minutes: 5
         with:
@@ -241,7 +251,7 @@ jobs:
       - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         timeout-minutes: 5
-        if: always()
+        if: always() && steps.image.outputs.image != ''
         with:
           sarif_file: trivy-results-${{ matrix.service.name }}.sarif
           category: container-${{ matrix.service.name }}
