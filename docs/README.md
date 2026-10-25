@@ -15,6 +15,7 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 - [Tenant polling defence](./plans/2026-10-24-tenant-polling-defense.md): per-tenant admission, conditional reads, change detection and caches on both sides, phased so Longhand is never starved.
 - [Bounded event-prefix reads](./plans/2026-10-24-bounded-prefix-auth-reads.md): authentication lookups without whole-tenant hydration.
 - [Shared tenant read model](./plans/2026-10-24-shared-tenant-read-model.md): bounded feeds, atomic checkpoints, conditional reads and rollout requirements.
+- [Event feed without whole-tenant history](./plans/2026-10-25-feed-without-whole-history.md): narrow feed index, then a durable per-tenant feed log, so feed and read-model commit cost stops growing with history.
 
 - [Bounded retained entity reads](./plans/2026-10-24-bounded-retained-entity.md): memory-bounded archive reads and verification requirements.
 - [JWT crypto backend](./plans/2026-10-24-jwt-crypto-backend.md): remove the vulnerable transitive dependency while preserving token compatibility.
@@ -137,7 +138,7 @@ For DevOps and platform engineers.
 | [Business dashboards](./runbooks/BUSINESS_DASHBOARD.md) | Business questions, availability, engineering detail and the traffic & outage report on fly-metrics.net: tenant cost vs plan, failed reads, deployment fit, outage signals, event markers, and the alerts behind them | ✅ |
 | [Production traffic report (2026-10-24)](./reports/2026-10-24-production-traffic.html) | Measured bandwidth by app, region and tenant; animated system diagram; six bottlenecks with charts from raw Fly and service metrics; the 2026-10-24/25 outage (12 h of failed reads) with timeline, cause and what is still open | ✅ |
 | [Control-plane egress root cause (2026-10-24)](./reports/2026-10-24-control-plane-egress-rca.md) | 66 GB/day alert: Longhand control-plane polling over the public edge, egress-guard throttling since 15:40Z, fix sites | ✅ |
-| [Control-plane tenant outage (2026-10-25)](./reports/2026-10-25-control-plane-tenant-outage.md) | WAL replay outage fixed; strict whole-history reads return in ~16 days and ordinary reads in ~170 at 14 MB/day growth; what removes each limit | ✅ |
+| [Control-plane tenant outage (2026-10-25)](./reports/2026-10-25-control-plane-tenant-outage.html) | Measured 11:53–12:25Z: ~9% of Longhand reads refused with 429 and sign-in failing intermittently; full outage fixed; #355 not slower (gzip skews the release check); `team_queue.snapshot.chunk` is 81% of the tenant's history | ✅ |
 | [Fly image promotion](./runbooks/FLY_IMAGE_PROMOTION.md) | Copy tested private CI images into app-scoped Fly registries before deployment | Operator runbook |
 | [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
 | [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |

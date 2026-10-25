@@ -341,7 +341,7 @@ fn read_model_restores_when_tenant_history_exceeds_strict_budget() {
     config.strict_archive_limits.max_uncompressed_bytes = 16 * 1024;
     let store = EventStore::with_config(config);
     assert!(
-        store.tenant_feed("alice", None, 0).is_err(),
+        store.tenant_feed("alice", None, 40).is_err(),
         "the tenant's history must exceed the strict budget for this test to mean anything"
     );
     let page = store
