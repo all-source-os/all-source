@@ -39,6 +39,64 @@ fn server_warmup_policy_is_explicit_and_preserves_strict_input_limits() {
     }
 }
 
+#[test]
+fn strict_archive_overrides_parse_and_ignore_invalid_values() {
+    let defaults = EventStoreConfig::default().strict_archive_limits;
+    let config = EventStoreConfig::default()
+        .with_strict_archive_overrides(Some("1073741824".into()), Some("60".into()));
+    assert_eq!(config.strict_archive_limits.max_uncompressed_bytes, 1 << 30);
+    assert_eq!(
+        config.strict_archive_limits.timeout,
+        Duration::from_secs(60)
+    );
+    for invalid in [
+        None,
+        Some(String::new()),
+        Some("0".into()),
+        Some("lots".into()),
+    ] {
+        let config =
+            EventStoreConfig::default().with_strict_archive_overrides(invalid.clone(), invalid);
+        assert_eq!(
+            config.strict_archive_limits.max_uncompressed_bytes,
+            defaults.max_uncompressed_bytes
+        );
+        assert_eq!(config.strict_archive_limits.timeout, defaults.timeout);
+    }
+}
+
+#[test]
+fn raised_decoded_limit_lets_an_oversized_tenant_serve_its_feed() {
+    let directory = TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for _ in 0..3 {
+            store.ingest(&event()).unwrap();
+        }
+        store.flush_storage().unwrap();
+    }
+    let cold_store = |config: EventStoreConfig| EventStore::with_config(config);
+    let mut tight = EventStoreConfig::with_persistence(directory.path());
+    tight.strict_archive_limits.max_uncompressed_bytes = 16;
+    let refused = cold_store(tight).tenant_feed(TENANT, None, 10).unwrap_err();
+    assert!(
+        matches!(&refused, AllSourceError::ArchiveBudgetExceeded { dimension } if dimension == "uncompressed bytes"),
+        "{refused}"
+    );
+    let response = axum::response::IntoResponse::into_response(refused);
+    assert_eq!(
+        response.status(),
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(response.headers()[axum::http::header::RETRY_AFTER], "300");
+
+    let mut raised = EventStoreConfig::with_persistence(directory.path());
+    raised.strict_archive_limits.max_uncompressed_bytes = 16;
+    let raised = raised.with_strict_archive_overrides(Some("1048576".into()), None);
+    let page = cold_store(raised).tenant_feed(TENANT, None, 10).unwrap();
+    assert_eq!(page.events.len(), 3);
+}
+
 fn event() -> Event {
     Event::from_strings(
         "synthetic.updated".into(),

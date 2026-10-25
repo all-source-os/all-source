@@ -305,3 +305,49 @@ fn same_model_name_has_independent_tenant_write_revisions() {
         );
     }
 }
+
+#[test]
+fn read_model_restores_when_tenant_history_exceeds_strict_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(dir.path()));
+        for index in 0..40 {
+            store
+                .ingest(
+                    &Event::from_strings(
+                        "item.changed".into(),
+                        format!("bulk-{index}"),
+                        "alice".into(),
+                        json!({"blob": "x".repeat(2048)}),
+                        None,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        commit(
+            &store,
+            0,
+            BTreeMap::from([("q/one".into(), Some(json!({"status":"queued"})))]),
+        );
+        commit(
+            &store,
+            1,
+            BTreeMap::from([("q/two".into(), Some(json!({"status":"done"})))]),
+        );
+        store.flush_storage().unwrap();
+    }
+    let mut config = EventStoreConfig::with_persistence(dir.path());
+    config.strict_archive_limits.max_uncompressed_bytes = 16 * 1024;
+    let store = EventStore::with_config(config);
+    assert!(
+        store.tenant_feed("alice", None, 0).is_err(),
+        "the tenant's history must exceed the strict budget for this test to mean anything"
+    );
+    let page = store
+        .read_model_page("alice", "board", "q/", None, 100, None)
+        .unwrap();
+    assert_eq!(page.revision, 2);
+    assert_eq!(page.rows["q/one"]["status"], "queued");
+    assert_eq!(page.rows["q/two"]["status"], "done");
+}

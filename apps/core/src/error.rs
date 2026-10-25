@@ -83,6 +83,11 @@ pub enum AllSourceError {
         available_bytes: u64,
     },
 
+    /// A strict archive read stopped at one of its limits. Retrying at once
+    /// repeats the same work and stops at the same limit.
+    #[error("Strict archive read budget exceeded: {dimension}")]
+    ArchiveBudgetExceeded { dimension: String },
+
     #[error("Internal error: {0}")]
     InternalError(String),
 
@@ -111,6 +116,7 @@ impl AllSourceError {
                 | AllSourceError::QueueFull(_)
                 | AllSourceError::ArchiveIndexIncomplete { .. }
                 | AllSourceError::ArchiveHydrationRefused { .. }
+                | AllSourceError::ArchiveBudgetExceeded { .. }
         )
     }
 }
@@ -213,6 +219,26 @@ mod axum_impl {
                     return (
                         StatusCode::SERVICE_UNAVAILABLE,
                         [(axum::http::header::RETRY_AFTER, "30")],
+                        axum::Json(body),
+                    )
+                        .into_response();
+                }
+                AllSourceError::ArchiveBudgetExceeded { ref dimension } => {
+                    // A size limit stops the same request at the same place
+                    // until compaction or a raised limit changes either side;
+                    // elapsed time depends on load and can clear quickly.
+                    let retry_after = if dimension == "elapsed time" {
+                        "5"
+                    } else {
+                        "300"
+                    };
+                    let body = serde_json::json!({
+                        "error": "archive_budget_exceeded",
+                        "dimension": dimension,
+                    });
+                    return (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        [(axum::http::header::RETRY_AFTER, retry_after)],
                         axum::Json(body),
                     )
                         .into_response();
