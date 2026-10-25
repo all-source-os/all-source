@@ -110,11 +110,19 @@ impl ArchiveReadBudget {
         Ok(())
     }
 
-    pub(crate) fn compressed(&mut self, bytes: u64) -> Result<()> {
+    /// Refuse a file larger than `max_file_bytes` without charging the
+    /// compressed total, for readers that charge only the column chunks they
+    /// read.
+    pub(crate) fn file_size(&self, bytes: u64) -> Result<()> {
         self.check()?;
         if bytes > self.limits.max_file_bytes {
             return Err(exceeded("file bytes"));
         }
+        Ok(())
+    }
+
+    pub(crate) fn compressed(&mut self, bytes: u64) -> Result<()> {
+        self.file_size(bytes)?;
         charge(
             &mut self.compressed_bytes,
             bytes,
