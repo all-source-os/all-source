@@ -9,15 +9,16 @@ use axum::{
 use serde_json::json;
 use std::time::Duration;
 use tokio::sync::Semaphore;
-use tower_http::compression::CompressionLayer;
+use tower_http::{CompressionLevel, compression::CompressionLayer};
 
 static RESPONSES: Semaphore = Semaphore::const_new(16);
 static WAITING: Semaphore = Semaphore::const_new(64);
 
 /// Gzip for clients that send `Accept-Encoding: gzip`. Layer it outside
 /// [`bounded`], so the response bound keeps measuring uncompressed bytes.
+/// Fastest level: the release read gate measures this cost on every read.
 pub fn compression() -> CompressionLayer {
-    CompressionLayer::new()
+    CompressionLayer::new().quality(CompressionLevel::Fastest)
 }
 
 pub async fn bounded(request: Request, next: Next) -> Response {

@@ -141,6 +141,30 @@ func TestCoreResponseHeadersPassThroughAllowlist(t *testing.T) {
 	}
 }
 
+func TestPooledClientAsksCoreForGzipOnlyWhenTheCallerDid(t *testing.T) {
+	core, server := newConditionalCore(t)
+	signer := func(userID, tenantID string, role entities.Role) (string, error) { return "token", nil }
+	delegation, err := newDelegationClient(server.URL, server.URL, server.URL, signer, NewPooledHTTPClient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp := newTestCP(t, server.URL, server.URL)
+	cp.delegation = delegation
+	for _, want := range []string{"", "gzip"} {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, queryEventsPath, http.NoBody)
+		if want != "" {
+			request.Header.Set("Accept-Encoding", want)
+		}
+		if response := callHandler(cp.ProxyEventsQuery, request, "pooled-tenant"); response.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", response.Code, response.Body.String())
+		}
+		if got := core.encoding.Load(); got != want {
+			t.Fatalf("caller Accept-Encoding %q reached Core as %q", want, got)
+		}
+	}
+	cp.queryMeter.flush(t.Context())
+}
+
 func TestCore2xxStillRunsMeterAndCompressedBodyKeepsEncoding(t *testing.T) {
 	var increments atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
