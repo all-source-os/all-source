@@ -1,0 +1,11 @@
+[
+  { "time": "2026-10-21T17:19:00Z", "text": "Bandwidth alert evaluator deployed", "tags": ["allsource-event", "deploy"] },
+  { "time": "2026-10-21T23:32:00Z", "text": "Longhand acd4952: replay cache shrinks responses", "tags": ["allsource-event", "longhand"] },
+  { "time": "2026-10-23T16:39:00Z", "text": "Control plane v118 with egress guard (rolled back 11 min later)", "tags": ["allsource-event", "deploy"] },
+  { "time": "2026-10-24T13:00:00Z", "timeEnd": "2026-10-24T21:50:00Z", "text": "Core refuses to load decebal-dobrica-at-gmail-com on every read (needs 2.94 GB, 1.88 GB free)", "tags": ["allsource-event", "incident"] },
+  { "time": "2026-10-24T15:40:36Z", "text": "Control plane v120: egress guard live, 429s begin", "tags": ["allsource-event", "deploy"] },
+  { "time": "2026-10-24T21:51:00Z", "text": "Core resized by hand from 8 GB to 16 GB; the machine restarts", "tags": ["allsource-event", "incident"] },
+  { "time": "2026-10-24T21:58:00Z", "timeEnd": "2026-10-25T10:05:00Z", "text": "Outage: Core refuses every egress reservation (write-ahead-log order); every read through the control plane fails", "tags": ["allsource-event", "incident"] },
+  { "time": "2026-10-24T22:25:00Z", "text": "ControlPlaneServingFailures would have fired here (alert added afterwards)", "tags": ["allsource-event", "alert"] },
+  { "time": "2026-10-25T10:05:00Z", "text": "Core v56 (fe6be49) with the write-ahead-log fix starts; reads recover", "tags": ["allsource-event", "deploy"] }
+]
