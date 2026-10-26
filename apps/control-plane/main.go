@@ -323,6 +323,19 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init delegation client: %w", err)
 	}
+	authClient.lifecycleCoreURL = func(tenantID string) string {
+		if len(delegation.coreByRegion) > 0 {
+			if delegation.homeRegion == nil {
+				return ""
+			}
+			u, ok := delegation.coreByRegion[delegation.homeRegion(tenantID)]
+			if !ok {
+				return ""
+			}
+			return u.String()
+		}
+		return delegation.coreForTenant(tenantID).String()
+	}
 
 	// Regional Core registration (Step 2 of REGIONAL_INDEPENDENCE.md).
 	// Reads CORE_SERVICE_URL_<REGION> for each region in the entity

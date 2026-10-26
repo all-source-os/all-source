@@ -92,7 +92,7 @@ func TestEgressRealCoreHardStopAndRestart(t *testing.T) {
 	funded.Use(AuthMiddleware(cp.authClient), cp.enforceEgress)
 	funded.GET("/api/v1/events/query", cp.ProxyEventsQuery)
 	for _, username := range []string{"client-key-1", "client-key-2"} {
-		token, err := cp.authClient.SignAPIKey("abusive", username, entities.RoleDeveloper)
+		token, err := cp.authClient.IssueManagedAPIKey(t.Context(), "abusive", username, entities.RoleDeveloper)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func TestEgressRealCoreHardStopAndRestart(t *testing.T) {
 		}
 	}
 	for range 2 {
-		token, err := cp.authClient.SignAPIKey("healthy", "rotated-reader", entities.RoleDeveloper)
+		token, err := cp.authClient.IssueManagedAPIKey(t.Context(), "healthy", "rotated-reader", entities.RoleDeveloper)
 		if err != nil {
 			t.Fatal(err)
 		}

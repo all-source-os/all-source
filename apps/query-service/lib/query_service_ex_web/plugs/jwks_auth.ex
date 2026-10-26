@@ -28,6 +28,7 @@ defmodule QueryServiceExWeb.Plugs.JwksAuth do
   import Plug.Conn
 
   alias QueryServiceEx.DevMode
+  alias QueryServiceExWeb.Plugs.ManagedKeyAccess
 
   require Logger
 
@@ -47,8 +48,10 @@ defmodule QueryServiceExWeb.Plugs.JwksAuth do
 
   defp authenticate(conn) do
     with {:ok, token} <- extract_bearer_token(conn),
-         {:ok, claims} <- verify_token(token) do
+         {:ok, claims} <- verify_token(token),
+         {:ok, conn} <- ManagedKeyAccess.claims(conn, claims) do
       assign_claims(conn, claims)
+      |> ManagedKeyAccess.guard_ingest()
     else
       {:error, message} ->
         reject(conn, message)

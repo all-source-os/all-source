@@ -3,14 +3,15 @@ defmodule QueryServiceExWeb.ApiKeyController do
   Controller for API key management.
 
   Provides CRUD operations for API keys. Keys are signed JWTs
-  with `is_api_key: true` that can be validated by any service
-  sharing the JWT_SECRET. Metadata is stored in ETS via ApiKeyStore.
+  with `is_api_key: true` and an authoritative Core lifecycle registration.
+  ETS holds only the dashboard metadata projection.
   """
 
   use Phoenix.Controller, formats: [:json]
 
   alias QueryServiceEx.ApiKeyStore
   alias QueryServiceEx.AuditLog
+  alias QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority
 
   require Logger
 
@@ -60,58 +61,64 @@ defmodule QueryServiceExWeb.ApiKeyController do
     key_id = generate_uuid()
     now = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    # Sign a JWT as the API key
-    case sign_api_key(key_id, tenant_id, name) do
-      {:ok, secret} ->
-        description = params["description"]
+    with true <- is_binary(name),
+         true <- ApiKeyAuthority.valid_scopes?(params["scopes"]),
+         {:ok, expires_at, exp} <- requested_expiration(params["expires_at"]),
+         {:ok, secret} <- sign_api_key(key_id, tenant_id, name, params["scopes"], exp) do
+      description = params["description"]
+      scopes = params["scopes"]
+      key_prefix = String.slice(secret, 0, 12)
 
-        scopes =
-          params["scopes"] ||
-            ["events:read", "events:write", "queries:execute", "projections:read"]
+      metadata = %{
+        "id" => key_id,
+        "name" => name,
+        "description" => description,
+        "key_prefix" => key_prefix,
+        "scopes" => scopes,
+        "tenant_id" => tenant_id,
+        "created_by" => user && (user[:id] || user["id"]),
+        "created_at" => now,
+        "expires_at" => expires_at,
+        "active" => true,
+        "last_used" => nil
+      }
 
-        expires_at = params["expires_at"]
-        key_prefix = String.slice(secret, 0, 12)
+      case ApiKeyStore.create_key(tenant_id, metadata) do
+        {:ok, _} ->
+          actor = (user && (user[:email] || user["email"])) || "unknown"
 
-        metadata = %{
-          "id" => key_id,
-          "name" => name,
-          "description" => description,
-          "key_prefix" => key_prefix,
-          "scopes" => scopes,
-          "tenant_id" => tenant_id,
-          "created_by" => user[:id] || user["id"],
-          "created_at" => now,
-          "expires_at" => expires_at,
-          "active" => true,
-          "last_used" => nil
-        }
+          Task.start(fn ->
+            AuditLog.record(tenant_id, "api_key.created", actor, %{
+              key_id: key_id,
+              name: name,
+              scopes: scopes
+            })
+          end)
 
-        {:ok, _} = ApiKeyStore.create_key(tenant_id, metadata)
-
-        actor = user[:email] || user["email"] || "unknown"
-
-        Task.start(fn ->
-          AuditLog.record(tenant_id, "api_key.created", actor, %{
-            key_id: key_id,
+          conn
+          |> put_status(:created)
+          |> json(%{
+            id: key_id,
             name: name,
-            scopes: scopes
+            description: description,
+            key: secret,
+            key_prefix: key_prefix,
+            scopes: scopes,
+            tenant_id: tenant_id,
+            created_at: now,
+            expires_at: expires_at,
+            last_used_at: nil
           })
-        end)
 
-        conn
-        |> put_status(:created)
-        |> json(%{
-          id: key_id,
-          name: name,
-          description: description,
-          key: secret,
-          key_prefix: key_prefix,
-          scopes: scopes,
-          tenant_id: tenant_id,
-          created_at: now,
-          expires_at: expires_at,
-          last_used_at: nil
-        })
+        {:error, _} ->
+          unavailable(conn)
+      end
+    else
+      false ->
+        invalid_request(conn)
+
+      {:error, :invalid_expiration} ->
+        invalid_request(conn)
 
       {:error, reason} ->
         Logger.error("[ApiKeyController] Failed to sign API key: #{inspect(reason)}")
@@ -147,6 +154,9 @@ defmodule QueryServiceExWeb.ApiKeyController do
         conn
         |> put_status(:not_found)
         |> json(%{error: %{code: "key_not_found", message: "API key not found"}})
+
+      {:error, _} ->
+        unavailable(conn)
     end
   end
 
@@ -171,15 +181,13 @@ defmodule QueryServiceExWeb.ApiKeyController do
          (conn.assigns[:current_user][:tenant_id] || conn.assigns[:current_user]["tenant_id"]))
   end
 
-  defp sign_api_key(key_id, tenant_id, name) do
+  defp sign_api_key(key_id, tenant_id, name, scopes, exp) do
     case System.get_env("JWT_SECRET") do
       nil ->
         {:error, "JWT_SECRET not configured"}
 
       secret ->
         now = System.system_time(:second)
-        # API keys expire in 365 days
-        exp = now + 365 * 24 * 3600
 
         claims = %{
           "sub" => key_id,
@@ -192,15 +200,13 @@ defmodule QueryServiceExWeb.ApiKeyController do
           # so every minted key silently 403s on read AND write.
           "role" => "serviceaccount",
           "is_api_key" => true,
-          # Core's JWT validator (auth.rs) decodes into a Claims struct with a
-          # required `iss` field and enforces `set_issuer("allsource")`. Without
-          # this, Core's /api/v1/auth/me rejects the key. The gateway now
-          # validates keys locally, but emitting `iss` keeps keys valid anywhere
-          # in the fleet (Core, Control Plane), not just at this gateway.
+          "credential_kind" => "managed_api_key",
+          "scopes" => scopes,
           "iss" => "allsource",
-          "iat" => now,
-          "exp" => exp
+          "iat" => now
         }
+
+        claims = if is_integer(exp), do: Map.put(claims, "exp", exp), else: claims
 
         jwk = JOSE.JWK.from_oct(secret)
         jws = %{"alg" => "HS256"}
@@ -210,4 +216,43 @@ defmodule QueryServiceExWeb.ApiKeyController do
         {:ok, token}
     end
   end
+
+  defp requested_expiration(nil) do
+    {:ok, nil, nil}
+  end
+
+  defp requested_expiration(value) when is_binary(value) do
+    with {:ok, expires, _} <- DateTime.from_iso8601(value),
+         true <- DateTime.to_unix(expires) > System.system_time(:second) do
+      expires = DateTime.truncate(expires, :second)
+      {:ok, DateTime.to_iso8601(expires), DateTime.to_unix(expires)}
+    else
+      _ -> {:error, :invalid_expiration}
+    end
+  end
+
+  defp requested_expiration(_), do: {:error, :invalid_expiration}
+
+  defp invalid_request(conn),
+    do:
+      conn
+      |> put_status(:bad_request)
+      |> json(%{
+        error: %{
+          code: "invalid_key_options",
+          message:
+            "Enter a text name, choose a supported permission and a future expiration or no expiration"
+        }
+      })
+
+  defp unavailable(conn),
+    do:
+      conn
+      |> put_status(:service_unavailable)
+      |> json(%{
+        error: %{
+          code: "key_store_unavailable",
+          message: "Credential state could not be persisted"
+        }
+      })
 end

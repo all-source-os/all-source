@@ -3,7 +3,8 @@ defmodule QueryServiceExWeb.Plugs.JwtAuth do
   Plug that validates shared-secret JWTs from the `Authorization: Bearer <token>` header.
 
   Uses HMAC-SHA256 with `JWT_SECRET` env var (shared with Core and Control Plane)
-  for pure local validation — no database round-trip required.
+  for local signature validation. Managed JWTs also require current Core
+  registration and permission for the requested operation.
 
   On success, sets:
   - `conn.assigns.tenant_id` — from the `tenant_id` claim
@@ -19,6 +20,8 @@ defmodule QueryServiceExWeb.Plugs.JwtAuth do
   import Plug.Conn
 
   alias QueryServiceEx.DevMode
+  alias QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority
+  alias QueryServiceExWeb.Plugs.ManagedKeyAccess
 
   require Logger
 
@@ -34,8 +37,10 @@ defmodule QueryServiceExWeb.Plugs.JwtAuth do
 
   defp authenticate(conn) do
     with {:ok, token} <- extract_bearer_token(conn),
-         {:ok, claims} <- verify_and_decode(token) do
+         {:ok, claims} <- verify_and_decode(token),
+         {:ok, conn} <- ManagedKeyAccess.claims(conn, claims) do
       assign_claims(conn, claims)
+      |> ManagedKeyAccess.guard_ingest()
     else
       {:error, message} ->
         reject(conn, message)
@@ -84,10 +89,10 @@ defmodule QueryServiceExWeb.Plugs.JwtAuth do
     now = System.system_time(:second)
 
     cond do
-      not is_integer(claims["exp"]) ->
+      not is_integer(claims["exp"]) and not ApiKeyAuthority.non_expiring_token?(claims) ->
         {:error, "missing exp claim"}
 
-      claims["exp"] <= now ->
+      is_integer(claims["exp"]) and claims["exp"] <= now ->
         {:error, "token has expired"}
 
       is_nil(claims["sub"]) ->

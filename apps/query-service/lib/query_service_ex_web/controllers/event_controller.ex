@@ -8,6 +8,8 @@ defmodule QueryServiceExWeb.EventController do
   """
 
   use Phoenix.Controller, formats: [:json]
+
+  plug(QueryServiceExWeb.Plugs.ManagedKeyAccess when action in [:create, :create_batch])
   use OpenApiSpex.ControllerSpecs
 
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient

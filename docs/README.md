@@ -247,3 +247,16 @@ Use relative paths for internal links:
 ---
 
 **Navigation**: [Repository Home](../README.md) | [Current Docs](./current/) | [Guides](./guides/) | [Roadmaps](./roadmaps/) | [Archive](./archive/)
+
+- [Hosted Prime native sync verification](plans/2026-10-26-hosted-prime-sync-verification.md)
+
+- [Hosted Prime sync verification report](reports/2026-10-26-hosted-prime-sync-verification.md)
+
+- [Hosted Prime sync acceptance request](reference/hosted-prime-sync-request.md)
+
+- [Hosted Prime sync verification runbook](runbooks/HOSTED_PRIME_SYNC.md)
+
+- [Dashboard API key lifecycle repair](plans/2026-10-26-api-key-lifecycle-repair.md)
+- [Managed API key lifecycle verification](reports/2026-10-26-managed-key-lifecycle-verification.md)
+
+- [Allstack delivery plan 568bfc54-0b16-4b1a-8043-af1d3d3a5a9e](plans/allstack-568bfc54-0b16-4b1a-8043-af1d3d3a5a9e.md)

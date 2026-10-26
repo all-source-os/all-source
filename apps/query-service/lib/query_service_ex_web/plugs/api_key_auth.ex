@@ -10,8 +10,7 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuth do
 
   On failure, returns 401 with a JSON error body.
 
-  Verified keys are cached in ETS (via `ApiKeyCache`) with a 120-second TTL
-  to avoid hitting PostgreSQL on every request.
+  Managed keys require current durable lifecycle metadata on every request.
 
   When `AUTH_DISABLED=true` (dev mode), this plug is bypassed — the upstream
   `AuthPipeline` + `TenantContext` plugs handle dev context injection.
@@ -19,9 +18,9 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuth do
 
   import Plug.Conn
 
-  alias QueryServiceEx.ApiKeyCache
   alias QueryServiceEx.DevMode
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
+  alias QueryServiceExWeb.Plugs.ManagedKeyAccess
 
   require Logger
 
@@ -49,7 +48,7 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuth do
   end
 
   defp verify_key(conn, raw_key) do
-    case ApiKeyCache.fetch(raw_key, fn -> RustCoreClient.verify_api_key(raw_key) end) do
+    case RustCoreClient.verify_api_key(raw_key) do
       {:ok, {tenant, api_key}} ->
         tid = tenant["id"] || tenant[:id]
 
@@ -60,6 +59,7 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuth do
           |> assign(:api_key, api_key)
           |> assign(:auth_method, :api_key)
           |> put_private(:allsource_tenant_id, tid)
+          |> ManagedKeyAccess.key(api_key)
         else
           reject_subscription(conn, tenant)
         end
@@ -67,14 +67,8 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuth do
       {:error, :invalid_key} ->
         reject(conn, "invalid API key")
 
-      {:error, :key_revoked} ->
-        reject(conn, "API key has been revoked")
-
       {:error, :key_expired} ->
         reject(conn, "API key has expired")
-
-      {:error, _reason} ->
-        reject(conn, "API key verification failed")
     end
   end
 

@@ -349,6 +349,15 @@ func (cp *ControlPlane) proxyIngest(
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request", "message": err.Error()})
 		return
 	}
+	var eventBody any
+	if err := json.Unmarshal(rewritten, &eventBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
+		return
+	}
+	if containsKeyLifecycle(eventBody) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "reserved credential lifecycle stream"})
+		return
+	}
 	bearer, ok := cp.mintBearer(c)
 	if !ok {
 		return

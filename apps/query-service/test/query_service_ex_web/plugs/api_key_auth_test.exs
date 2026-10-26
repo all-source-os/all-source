@@ -55,7 +55,7 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuthTest do
         else: System.delete_env("AUTH_DISABLED")
     end
 
-    test "sets assigns on successful verification via cache" do
+    test "cached identity cannot authenticate an invalid credential" do
       tenant = %{
         "id" => "tenant-abc",
         "name" => "Test Tenant",
@@ -84,15 +84,12 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuthTest do
         |> put_req_header("x-api-key", raw_key)
         |> ApiKeyAuth.call(ApiKeyAuth.init([]))
 
-      refute conn.halted
-      assert conn.assigns.tenant_id == "tenant-abc"
-      assert conn.assigns.current_tenant == tenant
-      assert conn.assigns.api_key == api_key
-      assert conn.assigns.auth_method == :api_key
-      assert conn.private[:allsource_tenant_id] == "tenant-abc"
+      assert conn.halted
+      assert conn.status == 401
+      refute conn.assigns[:api_key]
     end
 
-    test "returns 402 when tenant subscription is not active" do
+    test "cached subscription cannot bypass credential verification" do
       tenant = %{
         "id" => "tenant-suspended",
         "name" => "Suspended Tenant",
@@ -121,11 +118,10 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuthTest do
         |> ApiKeyAuth.call(ApiKeyAuth.init([]))
 
       assert conn.halted
-      assert conn.status == 402
+      assert conn.status == 401
 
-      body = json_response(conn, 402)
-      assert body["error"]["code"] == "subscription_required"
-      assert body["error"]["subscription_status"] == "cancelled"
+      body = json_response(conn, 401)
+      assert body["error"]["code"] == "unauthorized"
     end
 
     test "returns 401 for invalid key via ApiKeyCache error passthrough" do

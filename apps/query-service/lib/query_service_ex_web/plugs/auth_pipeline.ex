@@ -18,9 +18,10 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
 
   import Plug.Conn
 
-  alias QueryServiceEx.ApiKeyCache
   alias QueryServiceEx.DevMode
+  alias QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
+  alias QueryServiceExWeb.Plugs.ManagedKeyAccess
 
   require Logger
 
@@ -41,6 +42,7 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
           reject(conn, "missing authentication credentials")
       end
     end
+    |> ManagedKeyAccess.guard_ingest()
   end
 
   # -------------------------------------------------------------------
@@ -58,7 +60,7 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
   defp authenticate_api_key(conn) do
     raw_key = get_req_header(conn, "x-api-key") |> List.first()
 
-    case ApiKeyCache.fetch(raw_key, fn -> RustCoreClient.verify_api_key(raw_key) end) do
+    case RustCoreClient.verify_api_key(raw_key) do
       {:ok, {tenant, api_key}} ->
         tid = tenant["id"] || tenant[:id]
 
@@ -69,6 +71,7 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
           |> assign(:api_key, api_key)
           |> assign(:auth_method, :api_key)
           |> put_private(:allsource_tenant_id, tid)
+          |> ManagedKeyAccess.key(api_key)
         else
           reject_subscription(conn, tenant)
         end
@@ -100,7 +103,8 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
 
   defp authenticate_jwt(conn) do
     with {:ok, token} <- extract_bearer_token(conn),
-         {:ok, claims} <- verify_and_decode(token) do
+         {:ok, claims} <- verify_and_decode(token),
+         {:ok, conn} <- ManagedKeyAccess.claims(conn, claims) do
       user = %{
         id: claims["sub"],
         email: claims["email"],
@@ -108,7 +112,8 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
         tenant_id: claims["tenant_id"],
         role: claims["role"],
         provider: claims["provider"],
-        is_demo: claims["is_demo"] == true
+        is_demo: claims["is_demo"] == true,
+        is_api_key: claims["is_api_key"] == true
       }
 
       conn
@@ -166,10 +171,10 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
     now = System.system_time(:second)
 
     cond do
-      not is_integer(claims["exp"]) ->
+      not is_integer(claims["exp"]) and not ApiKeyAuthority.non_expiring_token?(claims) ->
         {:error, "missing exp claim"}
 
-      claims["exp"] <= now ->
+      is_integer(claims["exp"]) and claims["exp"] <= now ->
         {:error, "token has expired"}
 
       is_nil(claims["sub"]) ->
