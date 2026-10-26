@@ -1,0 +1,4 @@
+interface:
+  display_name: "AllSource Incident Status"
+  short_description: "Measured-only report of who is blocked, why, and current state"
+  default_prompt: "Use $allsource-incident-status to report who is blocked, why, and the current state of AllSource and the affected product, with timestamped measurements and an Unknowns list."
