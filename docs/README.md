@@ -112,6 +112,9 @@ How-to documentation for common tasks.
 | [MCP Quick Reference](./guides/mcp-server/QUICK_REFERENCE.md) | MCP tool reference card | ✅ |
 | [Claude Code Skills](./guides/CLAUDE_CODE_SKILLS.md) | Automated testing, release, and diagnostics skills | ✅ |
 | [Embedded Prime Integration](./guides/EMBEDDED_PRIME_INTEGRATION.md) | Use Prime as an embedded library in Tauri / Rust apps — graph, HNSW vectors, tiered recall | ✅ |
+| [Allstack CLI and recovery](./reference/allstack.md) | Repository setup and recovery for the local Allstack workflow: Core keeps its history, Chronis its tasks and claims, Prime its recall | ✅ |
+| [Allstack native skills](./reference/allstack-skills.md) | The `allstack-*` skills for Codex and Claude Code, and what each is for | ✅ |
+| [Allstack workflow catalog](./reference/allstack-catalog.md) | The `delivery` and `bugfix` workflows in `workflows/catalog.toml` and how to start one | ✅ |
 
 ---
 
@@ -147,6 +150,7 @@ For DevOps and platform engineers.
 | [Bounded archive repack](./runbooks/BOUNDED_ARCHIVE_REPACK.md) | Finalized output bounds, preserved originals, crash recovery and rollback commands | ✅ |
 | [Revoking legacy Core keys](./runbooks/REVOKE_LEGACY_CORE_KEYS.md) | Classifying, rotating and purging old API keys | ✅ |
 | [Prime multi-tenant ingest](./runbooks/PRIME_MULTI_TENANT_INGEST.md) | One writer, many readers; spotting an accidental second writer | ✅ |
+| [Prime sync interval verification (2026-10-26)](./reports/2026-10-26-prime-sync-interval-verification.md) | A zero sync interval is refused before the store opens; positive intervals still serve MCP tools and deliver events | ✅ |
 | [SEO evidence setup](./runbooks/SEO_EVIDENCE_SETUP.md) | Every measurement source behind `tooling/seo-evidence`, and the exact condition that unblocks each | ⚠️ |
 | [Docker Deployment](./deployment/DOCKER.md) | Container images and configuration | ✅ |
 | [Quality Gates](./current/QUALITY_GATES.md) | CI/CD enforcement standards | ✅ |
@@ -243,9 +247,3 @@ Use relative paths for internal links:
 ---
 
 **Navigation**: [Repository Home](../README.md) | [Current Docs](./current/) | [Guides](./guides/) | [Roadmaps](./roadmaps/) | [Archive](./archive/)
-- [Allstack native skills](reference/allstack-skills.md)
-- [Prime sync interval verification](reports/2026-10-26-prime-sync-interval-verification.md)
-- [Allstack CLI and recovery](reference/allstack.md)
-- [Allstack workflow catalog](reference/allstack-catalog.md)
-
-- [Allstack delivery plan b0142d4c-92d2-4e82-b3b2-ac6db49c8995](plans/allstack-b0142d4c-92d2-4e82-b3b2-ac6db49c8995.md)
