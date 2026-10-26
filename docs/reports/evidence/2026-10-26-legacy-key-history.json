@@ -1,0 +1,72 @@
+{
+  "observedAt": "2026-10-26T20:02:14Z",
+  "httpStatus": 200,
+  "elapsedMs": 2557,
+  "count": 10,
+  "totalCount": 10,
+  "hasMore": false,
+  "entityVersion": 10,
+  "protocol": "retained-entity-v1",
+  "events": [
+    {
+      "ordinal": 1,
+      "version": 1,
+      "type": "apikey.created",
+      "timestamp": "2026-06-12T20:59:31.204731Z"
+    },
+    {
+      "ordinal": 2,
+      "version": 1,
+      "type": "apikey.revoked",
+      "timestamp": "2026-06-14T23:27:37.656323Z"
+    },
+    {
+      "ordinal": 3,
+      "version": 1,
+      "type": "apikey.created",
+      "timestamp": "2026-06-14T23:27:53.164209Z"
+    },
+    {
+      "ordinal": 4,
+      "version": 1,
+      "type": "apikey.revoked",
+      "timestamp": "2026-06-23T09:52:12.689618Z"
+    },
+    {
+      "ordinal": 5,
+      "version": 1,
+      "type": "apikey.revoked",
+      "timestamp": "2026-06-23T09:52:16.027885Z"
+    },
+    {
+      "ordinal": 6,
+      "version": 1,
+      "type": "apikey.revoked",
+      "timestamp": "2026-06-26T19:49:25.105241Z"
+    },
+    {
+      "ordinal": 7,
+      "version": 1,
+      "type": "apikey.created",
+      "timestamp": "2026-08-13T14:03:43.331442Z"
+    },
+    {
+      "ordinal": 8,
+      "version": 1,
+      "type": "apikey.created",
+      "timestamp": "2026-08-13T14:09:10.147422Z"
+    },
+    {
+      "ordinal": 9,
+      "version": 1,
+      "type": "apikey.revoked",
+      "timestamp": "2026-08-13T14:10:26.319262Z"
+    },
+    {
+      "ordinal": 10,
+      "version": 10,
+      "type": "apikey.created",
+      "timestamp": "2026-09-28T19:19:52.879307Z"
+    }
+  ]
+}

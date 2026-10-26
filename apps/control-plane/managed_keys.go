@@ -195,13 +195,19 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 	seen := map[string]bool{}
 	var record *managedKeyRecord
 	var previous uint64
+	var numbered bool
+	var timestamp time.Time
 	revoked := false
 	for _, event := range page.Events {
-		if event.ID == "" || seen[event.ID] || event.TenantID != claims.TenantID || event.EntityID != entity || event.Timestamp.IsZero() || event.Version != previous+1 {
+		// Legacy Core events used version 1; complete retained counts cover this prefix.
+		legacy := !numbered && event.Version == 1
+		if event.ID == "" || seen[event.ID] || event.TenantID != claims.TenantID || event.EntityID != entity || event.Timestamp.IsZero() || event.Timestamp.Before(timestamp) || (!legacy && event.Version != previous+1) {
 			return nil, errors.New("invalid API key history")
 		}
 		seen[event.ID] = true
-		previous = event.Version
+		previous++
+		numbered = numbered || event.Version > 1
+		timestamp = event.Timestamp
 		switch event.EventType {
 		case "apikey.created":
 			key := event.Payload.Key
@@ -225,7 +231,7 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 			return nil, errors.New("invalid API key history")
 		}
 	}
-	if previous != *page.Version || record == nil || revoked {
+	if record == nil || revoked || len(page.Events) == 0 || page.Events[len(page.Events)-1].Version != *page.Version {
 		return nil, errors.New("unregistered or revoked API key")
 	}
 	if claims.ExpiresAt == 0 && record.ExpiresAt != nil {
@@ -366,6 +372,9 @@ func managedRolePermits(role entities.Role, scope string) bool {
 }
 
 func managedKeyAllows(c *gin.Context, key *managedKeyRecord, role entities.Role) bool {
+	if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/api/v1/auth/session" {
+		return RoleHasPermission(role, entities.PermissionRead)
+	}
 	scope := managedScope(c)
 	return hasKeyScope(key.Scopes, scope) && managedRolePermits(role, scope)
 }

@@ -27,9 +27,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
       assert {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
       assert Process.alive?(pid)
 
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      assert :ok = PipelineProcessor.stop(pid)
     end
 
     test "starts with a registered name", %{pipeline: pipeline} do
@@ -39,9 +37,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
       assert Process.whereis(:test_processor) == pid
       assert Process.alive?(pid)
 
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      assert :ok = PipelineProcessor.stop(pid)
     end
 
     test "accepts optional config", %{pipeline: pipeline} do
@@ -53,9 +49,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
       assert Process.alive?(pid)
 
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      assert :ok = PipelineProcessor.stop(pid)
     end
 
     test "rejects invalid pipeline" do
@@ -89,11 +83,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
   describe "process_event/2" do
     setup %{pipeline: pipeline} do
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       {:ok, pid: pid}
     end
@@ -124,11 +114,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
           ]
         )
 
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: error_pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: error_pipeline)
 
       event = %{id: 1}
       assert {:error, "Processing error"} = PipelineProcessor.process_event(pid, event)
@@ -157,11 +143,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
   describe "process_batch/2" do
     setup %{pipeline: pipeline} do
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       {:ok, pid: pid}
     end
@@ -224,11 +206,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
   describe "get_stats/1" do
     setup %{pipeline: pipeline} do
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       {:ok, pid: pid}
     end
@@ -270,11 +248,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
           ]
         )
 
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: error_pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: error_pipeline)
 
       events = [%{id: 1}, %{id: 2}, %{id: 3}, %{id: 4}]
       PipelineProcessor.process_batch(pid, events)
@@ -288,11 +262,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
   describe "reset_stats/1" do
     setup %{pipeline: pipeline} do
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       {:ok, pid: pid}
     end
@@ -324,11 +294,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
   describe "get_pipeline/1" do
     setup %{pipeline: pipeline} do
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       {:ok, pid: pid}
     end
@@ -344,11 +310,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
   describe "concurrent processing" do
     setup %{pipeline: pipeline} do
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       {:ok, pid: pid}
     end
@@ -394,11 +356,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
           ]
         )
 
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       events = [
         %{order_id: "ORD-1", amount: 100},
@@ -433,11 +391,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
           ]
         )
 
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
-
-      on_exit(fn ->
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
-      end)
+      pid = start_owned_processor(pipeline: pipeline)
 
       events = [
         %{id: 1, amount: 500},
@@ -477,13 +431,12 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
           operators: []
         )
 
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
+      start_owned_processor(pipeline: pipeline)
 
       assert_receive {:telemetry, %{count: 1}, %{pipeline: :telemetry_test, version: 1}}, 100
 
       on_exit(fn ->
         :telemetry.detach("test-processor-start")
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
       end)
     end
 
@@ -508,7 +461,7 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
           ]
         )
 
-      {:ok, pid} = PipelineProcessor.start_link(pipeline: pipeline)
+      pid = start_owned_processor(pipeline: pipeline)
       PipelineProcessor.process_event(pid, %{id: 1})
 
       assert_receive {:telemetry, measurements, %{pipeline: :telemetry_test}}, 100
@@ -517,8 +470,14 @@ defmodule QueryServiceEx.Application.UseCases.PipelineProcessorTest do
 
       on_exit(fn ->
         :telemetry.detach("test-event-processed")
-        if Process.alive?(pid), do: PipelineProcessor.stop(pid)
       end)
     end
+  end
+
+  defp start_owned_processor(options) do
+    spec =
+      Supervisor.child_spec({PipelineProcessor, options}, id: make_ref(), restart: :temporary)
+
+    start_supervised!(spec)
   end
 end

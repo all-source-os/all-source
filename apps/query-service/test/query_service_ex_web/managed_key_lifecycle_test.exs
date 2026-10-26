@@ -39,7 +39,12 @@ defmodule QueryServiceExWeb.ManagedKeyLifecycleTest do
                  "count" => length(events),
                  "total_count" => length(events),
                  "has_more" => s.truncated,
-                 "entity_version" => length(events),
+                 "entity_version" =>
+                   Map.get(
+                     s,
+                     :entity_version,
+                     Enum.max(Enum.map(events, & &1["version"]), fn -> 0 end)
+                   ),
                  "archive_integrity" => %{
                    "protocol" => "retained-entity-v1",
                    "tenant_id" => "managed-lifecycle-test",
@@ -252,6 +257,81 @@ defmodule QueryServiceExWeb.ManagedKeyLifecycleTest do
       )
 
     assert denied.status == 401
+  end
+
+  test "legacy version-one prefix retains admission and terminal revocation", %{state: state} do
+    for versions <- [[1, 1, 3], [1, 1, 1], List.duplicate(1, 9) ++ [10]] do
+      created =
+        create(%{"scopes" => ["events:read"]}) |> Map.fetch!(:resp_body) |> Jason.decode!()
+
+      original = Agent.get(state, &List.last(&1.events))
+      older = put_in(original, ["payload", "key", "id"], "older-key")
+
+      events =
+        versions
+        |> Enum.with_index(1)
+        |> Enum.map(fn {version, ordinal} ->
+          event = if ordinal == length(versions), do: original, else: older
+          day = if version == 1, do: 1, else: ordinal
+
+          Map.merge(event, %{
+            "id" => "legacy-#{ordinal}",
+            "version" => version,
+            "timestamp" => "2026-01-#{String.pad_leading(to_string(day), 2, "0")}T00:00:00Z"
+          })
+        end)
+
+      Agent.update(state, &%{&1 | events: events})
+
+      for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+        refute request(plug, created["key"]).halted
+      end
+
+      assert :ok = ApiKeyStore.revoke_key(@tenant, created["id"])
+
+      for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+        assert request(plug, created["key"]).status == 401
+      end
+    end
+  end
+
+  test "legacy prefix rejects incomplete, reordered and malformed authority", %{state: state} do
+    created = create(%{"scopes" => ["events:read"]}) |> Map.fetch!(:resp_body) |> Jason.decode!()
+    original = Agent.get(state, &hd(&1.events))
+
+    events =
+      Enum.map(1..3, fn ordinal ->
+        Map.merge(original, %{
+          "id" => "legacy-#{ordinal}",
+          "version" => if(ordinal == 3, do: 3, else: 1),
+          "timestamp" => "2026-01-0#{ordinal}T00:00:00Z"
+        })
+      end)
+
+    [first, second, third] = events
+
+    for malformed <- [
+          [first, third],
+          [first, second],
+          [second, first, third],
+          [first, %{second | "version" => 2}, %{third | "version" => 1}],
+          [first, second, %{third | "version" => 4}],
+          [first, second, %{third | "id" => first["id"]}],
+          [first, second, %{third | "tenant_id" => "other-tenant"}],
+          [first, second, %{third | "entity_id" => "apikey:other-tenant"}]
+        ] do
+      Agent.update(state, &Map.merge(&1, %{events: malformed, entity_version: 3}))
+
+      for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+        assert request(plug, created["key"]).status == 401
+      end
+    end
+
+    Agent.update(state, &Map.merge(&1, %{events: [first, second], entity_version: 1.0}))
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      assert request(plug, created["key"]).status == 401
+    end
   end
 
   defp create(params) do

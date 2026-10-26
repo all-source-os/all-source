@@ -1,5 +1,7 @@
 # Hosted Prime sync verification
 
+The synthetic sync observations in this report bind runtime source `f1ede26f`. The [current legacy-key compatibility report](2026-10-26-managed-key-lifecycle-verification.md#compatibility-production-readback-2d48fd16) records the subsequent deployed source, unchanged existing-key admission and independent hosted identity readbacks.
+
 ## Result
 
 Hosted sync and credential lifecycle passed through real authenticated Codex and Claude native skills after both repaired gateways deployed. Two fresh synthetic decisions reached the tenant, survived a local Prime process restart, and were read independently through hosted Core and hosted Prime. The dashboard displayed both exact entities. Old and new revoked credentials returned HTTP 401 through both deployed gateways.

@@ -79,20 +79,22 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
            }
          } <- page,
          true <- is_list(events) and length(events) == count and count <= 1000,
-         {:ok, {records, _ids, ^version}} <-
-           Enum.reduce_while(events, {:ok, {%{}, MapSet.new(), 0}}, fn event, {:ok, state} ->
+         {:ok, {records, _ids, ^count, numbered, _timestamp}} <-
+           Enum.reduce_while(events, {:ok, {%{}, MapSet.new(), 0, false, nil}}, fn event,
+                                                                                   {:ok, state} ->
              case fold_event(event, tenant, entity, state) do
                {:ok, next} -> {:cont, {:ok, next}}
                _ -> {:halt, {:error, :invalid_key}}
              end
-           end) do
+           end),
+         true <- version === if(numbered, do: count, else: min(count, 1)) do
       {:ok, records}
     else
       _ -> {:error, :invalid_key}
     end
   end
 
-  defp fold_event(event, tenant, entity, {records, ids, previous}) do
+  defp fold_event(event, tenant, entity, {records, ids, previous, numbered, last_timestamp}) do
     with %{
            "id" => id,
            "tenant_id" => ^tenant,
@@ -101,11 +103,13 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
            "timestamp" => timestamp
          } <- event,
          true <- is_binary(id) and id != "" and not MapSet.member?(ids, id),
-         true <- is_integer(version) and version == previous + 1,
+         true <-
+           is_integer(version) and (version == previous + 1 or (not numbered and version == 1)),
          true <- is_binary(timestamp),
-         {:ok, _, _} <- DateTime.from_iso8601(timestamp),
+         {:ok, parsed, _} <- DateTime.from_iso8601(timestamp),
+         true <- is_nil(last_timestamp) or DateTime.compare(parsed, last_timestamp) != :lt,
          {:ok, updated} <- apply_event(event, records, tenant) do
-      {:ok, {updated, MapSet.put(ids, id), version}}
+      {:ok, {updated, MapSet.put(ids, id), previous + 1, numbered or version > 1, parsed}}
     else
       _ -> {:error, :invalid_key}
     end

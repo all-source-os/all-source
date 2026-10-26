@@ -60,7 +60,11 @@ func TestTeamJoinAuthenticatedRealCore(t *testing.T) {
 		if err != nil {
 			t.Fatal("synthetic token signing failed")
 		}
-		request(token, string(body), 403)
+		want := http.StatusForbidden
+		if claims.IsAPIKey {
+			want = http.StatusUnauthorized
+		}
+		request(token, string(body), want)
 	}
 	request(login.Token, `{"token":"`+code+`","role":"admin"}`, 400)
 	request(login.Token, string(body)+`{}`, 400)

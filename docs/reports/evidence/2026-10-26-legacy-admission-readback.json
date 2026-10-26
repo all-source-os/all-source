@@ -1,0 +1,52 @@
+{
+  "runtimeSource": "2d48fd16e7af1e287132552887fc03827fbde1df",
+  "endpoint": "https://api.all-source.xyz/api/v1/auth/session",
+  "before": {
+    "observedAt": "2026-10-26T20:06:33Z",
+    "httpStatus": 401,
+    "elapsedMs": 596,
+    "error": "unauthorized",
+    "message": "invalid API key history"
+  },
+  "credentialSourceUnchanged": true,
+  "codex": {
+    "status": 200,
+    "elapsed_ms": 992,
+    "tenant_match": true,
+    "receipt": "243083b0-523b-4b14-8501-eaf98dac1df9"
+  },
+  "claude": {
+    "session": "81bbc681-4c6e-4905-87f9-5db5fef5604e",
+    "status": 200,
+    "elapsed_ms": 1449,
+    "tenant_match": true,
+    "receipt": "9b8ebe8c-d53c-495d-a830-cb55fd638324"
+  },
+  "queryService": {
+    "readOnlyEntityQuery": true,
+    "responses": [
+      {
+        "header": "none",
+        "status": 401
+      },
+      {
+        "header": "Bearer",
+        "status": 200
+      },
+      {
+        "header": "X-API-Key",
+        "status": 200
+      }
+    ],
+    "receipt": "6d54460d-8191-467e-b109-9683123cdf7a"
+  },
+  "images": {
+    "controlPlane": "sha256:1f7332268aef3dbd1cb2a4bf6d1c0c69dc0dff1ae0fc629686626cedcf827e0c",
+    "queryService": "sha256:2fe4b1ebd565761823c670cd99207479670a5c19c0b59e16f889928fe3fa7eca"
+  },
+  "initialPostRolloutObservation": {
+    "status": 401,
+    "cause": "undetermined",
+    "receipt": "480ff2c4-ffa4-4173-af6a-a5209855493d"
+  }
+}
