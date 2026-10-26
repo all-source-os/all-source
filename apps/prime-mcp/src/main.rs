@@ -124,8 +124,13 @@ struct Cli {
     #[arg(long, env = "PRIME_API_KEY")]
     api_key: Option<String>,
 
-    /// Sync flush interval in milliseconds (default: 1000ms).
-    #[arg(long, env = "PRIME_SYNC_INTERVAL_MS", default_value = "1000")]
+    /// Sync flush interval in milliseconds; at least 1 (default: 1000ms).
+    #[arg(
+        long,
+        env = "PRIME_SYNC_INTERVAL_MS",
+        default_value = "1000",
+        value_parser = clap::value_parser!(u64).range(1..)
+    )]
     sync_interval_ms: u64,
 
     /// Source tree to ingest in `--mode hound` (Tree-sitter code graph).

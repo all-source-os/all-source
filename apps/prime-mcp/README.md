@@ -85,6 +85,20 @@ In HTTP mode the binary also serves a self-contained, offline graph viewer at
 in a browser to see your local memory as a bubble graph + detail list, no
 account or network required.
 
+## Sync configuration
+
+Set `--sync-to` and `--api-key` together to sync local events to AllSource Core,
+or use `PRIME_SYNC_TO` and `PRIME_API_KEY`. Omit both to run locally without sync.
+
+`--sync-interval-ms` sets the flush interval in milliseconds. It defaults to
+`1000` and must be at least `1`. `PRIME_SYNC_INTERVAL_MS` supplies the same
+setting; an explicit CLI value takes precedence over the environment.
+
+Zero, negative, malformed, and overflowing interval values produce a CLI parse
+error (exit code `2`) before Prime opens its data store, in every mode. Zero
+does not disable sync. `--help` and `--version` exit without opening a store,
+including when `PRIME_SYNC_INTERVAL_MS` is invalid.
+
 ## Auto-Inject (zer0dex-style)
 
 Pre-inject a compressed knowledge index into every agent conversation:

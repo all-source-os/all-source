@@ -380,7 +380,7 @@ jobs:
 
       - name: Run tests
         working-directory: apps/prime-mcp
-        run: cargo test --bins --no-default-features
+        run: timeout -k 15 285 cargo test --locked --bins --tests --no-default-features
 
       - name: Check optional CPU profiler
         timeout-minutes: 5

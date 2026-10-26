@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Prime sync interval validation](./plans/2026-10-25-prime-sync-interval-validation.md): reject zero before store startup and qualify actual native-host MCP delivery.
+
 - [Tenant polling defence](./plans/2026-10-24-tenant-polling-defense.md): per-tenant admission, conditional reads, change detection and caches on both sides, phased so Longhand is never starved.
 - [Bounded event-prefix reads](./plans/2026-10-24-bounded-prefix-auth-reads.md): authentication lookups without whole-tenant hydration.
 - [Shared tenant read model](./plans/2026-10-24-shared-tenant-read-model.md): bounded feeds, atomic checkpoints, conditional reads and rollout requirements.
@@ -241,3 +243,9 @@ Use relative paths for internal links:
 ---
 
 **Navigation**: [Repository Home](../README.md) | [Current Docs](./current/) | [Guides](./guides/) | [Roadmaps](./roadmaps/) | [Archive](./archive/)
+- [Allstack native skills](reference/allstack-skills.md)
+- [Prime sync interval verification](reports/2026-10-26-prime-sync-interval-verification.md)
+- [Allstack CLI and recovery](reference/allstack.md)
+- [Allstack workflow catalog](reference/allstack-catalog.md)
+
+- [Allstack delivery plan b0142d4c-92d2-4e82-b3b2-ac6db49c8995](plans/allstack-b0142d4c-92d2-4e82-b3b2-ac6db49c8995.md)
