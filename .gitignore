@@ -135,3 +135,6 @@ tasks
 .npmrc
 .crush-loop/
 tooling/crush-loop/target/
+/.allstack/
+/.chronis/
+/.prime/

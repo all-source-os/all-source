@@ -1,0 +1,22 @@
+command_seconds = 235
+environment = ["PATH", "RUSTUP_TOOLCHAIN", "RUSTFLAGS", "RUSTC_WRAPPER", "CARGO_TARGET_DIR", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_BUILD_JOBS"]
+
+[[gates]]
+name = "format"
+argv = ["cargo", "fmt", "--manifest-path", "apps/prime-mcp/Cargo.toml", "--check"]
+
+[[gates]]
+name = "tests"
+argv = ["cargo", "test", "--locked", "--manifest-path", "apps/prime-mcp/Cargo.toml", "--no-default-features", "--bins", "--tests"]
+success_marker = "test result: ok."
+test = true
+compile = true
+
+[[gates]]
+name = "lint"
+argv = ["cargo", "clippy", "--locked", "--manifest-path", "apps/prime-mcp/Cargo.toml", "--no-default-features", "--all-targets", "--", "-D", "warnings"]
+compile = true
+
+[[gates]]
+name = "diff"
+argv = ["git", "diff", "--check", "origin/main", "HEAD"]

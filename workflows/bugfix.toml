@@ -1,0 +1,81 @@
+schema_version = 1
+id = "bugfix"
+version = "0.1.0-preview"
+status = "implementation-preview"
+description = "Diagnose an evidenced defect, repair its cause, verify regression coverage, and publish across sequential coding hosts."
+hosts = ["codex", "claude-code"]
+host_scope = "sequential-same-machine"
+stage_order = ["plan", "build", "verify", "ship"]
+dispositions = ["ready", "active", "awaiting_authority", "blocked", "outcome_unknown"]
+
+[methods]
+plan = "workflows/methods/diagnose.md"
+build = "workflows/methods/repair.md"
+
+[storage]
+run_authority = "allsource-core"
+task_authority = "chronis"
+recall = "prime"
+write_boundary = "single-local-coordinator"
+event_namespace = "allstack.workflow.v1"
+require_durable_acknowledgement = true
+require_expected_revision = true
+
+[handoff]
+mode = "immutable-snapshot-new-worktree"
+require_new_epoch = true
+require_artifact_readback = true
+require_task_claim_readback = true
+unresolved_action_policy = "reconcile-before-execute"
+
+[execution]
+language = "rust"
+max_command_seconds = 300
+build_concurrency = 1
+process_policy = "own-kill-reap"
+authority_source = "trusted-user-instruction-and-host-policy"
+
+[publication]
+destination = "feature-branch-and-open-pull-request"
+max_open_prs_per_run = 1
+max_open_prs_per_session_repository = 1
+commits_per_pr = 1
+require_live_branch = true
+require_explicit_branch_authority = true
+require_commit_authority = true
+require_publication_authority = true
+require_final_commit_verification = true
+require_clean_candidate = true
+require_remote_ref_readback = true
+require_pr_head_readback = true
+allow_trunk_push = false
+allow_hook_bypass = false
+merge = false
+deploy = false
+
+[[stages]]
+id = "plan"
+method = "recall-source-check-shape"
+requires = ["repository-policy", "request", "component-health"]
+produces = ["indexed-plan", "acceptance-map", "verification-policy", "task-reference", "authority-scope"]
+
+[[stages]]
+id = "build"
+method = "implement-complete-accepted-change"
+requires = ["indexed-plan", "task-claim-readback", "active-host-epoch", "prepared-worktree"]
+produces = ["candidate-snapshot", "change-manifest", "implementation-evidence"]
+
+[[stages]]
+id = "verify"
+method = "execute-required-checks-and-real-flow"
+requires = ["candidate-snapshot", "acceptance-map", "verification-policy", "applicable-commit-authority"]
+produces = ["final-commit", "bound-verification-receipts", "end-to-end-evidence"]
+zero_selected_tests = "inconclusive"
+candidate_change = "invalidate-affected-receipts"
+
+[[stages]]
+id = "ship"
+method = "publish-exact-verified-commit-and-reconcile"
+requires = ["final-commit", "bound-verification-receipts", "applicable-authority", "live-feature-branch"]
+produces = ["remote-commit-receipt", "pull-request-receipt", "task-completion-readback", "outcome-reference"]
+unknown_side_effect = "read-destination-before-retry"
