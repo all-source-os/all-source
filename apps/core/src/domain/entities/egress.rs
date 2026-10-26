@@ -4,6 +4,13 @@ use std::collections::BTreeMap;
 
 pub const MAX_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
 pub const RESERVATION_SECONDS: i64 = 30;
+/// Larger than the control plane's 16 response slots × 16 MiB, so a machine
+/// whose slots are all busy still has headroom and renews on its timer rather
+/// than once per response. Also the most a crashed control plane leaves unbilled.
+pub const MAX_LEASE_BYTES: u64 = 1024 * 1024 * 1024;
+pub const LEASE_SECONDS: i64 = 120;
+pub const MAX_LEASES: usize = 32;
+const SETTLE_RECEIPT_SECONDS: i64 = 3600;
 const MAX_RECEIPTS: usize = 4096;
 const MAX_PAYMENTS: usize = 10_000;
 
@@ -23,6 +30,15 @@ pub enum EgressCommand {
         id: String,
         bytes: u64,
     },
+    Lease {
+        id: String,
+        bytes: u64,
+    },
+    Settle {
+        id: String,
+        bytes: u64,
+        next: Option<LeaseRequest>,
+    },
     Credit {
         payment_id: String,
         bytes: u64,
@@ -38,6 +54,13 @@ pub enum EgressCommand {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct LeaseRequest {
+    pub id: String,
+    pub bytes: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EgressEvent {
     pub command: EgressCommand,
     pub at: i64,
@@ -46,6 +69,14 @@ pub struct EgressEvent {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Reservation {
+    period: u32,
+    included: u64,
+    prepaid: u64,
+    expires_at: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Lease {
     period: u32,
     included: u64,
     prepaid: u64,
@@ -76,6 +107,7 @@ pub struct EgressAccount {
     prepaid_used: u64,
     refunded_bytes: u64,
     reservations: BTreeMap<String, Reservation>,
+    leases: BTreeMap<String, Lease>,
     receipts: BTreeMap<String, Receipt>,
     payments: BTreeMap<String, Payment>,
 }
@@ -95,6 +127,22 @@ pub struct EgressAdmission {
     pub snapshot: EgressSnapshot,
     pub reserved_bytes: u64,
     pub replayed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_expires_at: Option<i64>,
+    /// The part of a lease grant drawn from the included allowance; the rest
+    /// of `reserved_bytes` is prepaid.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_included: Option<u64>,
+    /// Why a settle's `next` lease was not granted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_refused: Option<EgressDenial>,
+}
+
+struct LeaseGrant {
+    included: u64,
+    prepaid: u64,
+    expires_at: i64,
+    replayed: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -128,8 +176,19 @@ impl EgressAccount {
             .values()
             .filter(|r| r.period == self.period)
             .map(|r| r.included)
+            .chain(
+                self.leases
+                    .values()
+                    .filter(|l| l.period == self.period)
+                    .map(|l| l.included),
+            )
             .sum();
-        let held_prepaid: u64 = self.reservations.values().map(|r| r.prepaid).sum();
+        let held_prepaid: u64 = self
+            .reservations
+            .values()
+            .map(|r| r.prepaid)
+            .chain(self.leases.values().map(|l| l.prepaid))
+            .sum();
         EgressSnapshot {
             period: self.period,
             included_bytes: self.included_bytes,
@@ -143,7 +202,7 @@ impl EgressAccount {
                 .saturating_sub(self.refunded_bytes)
                 .saturating_sub(self.prepaid_used)
                 .saturating_sub(held_prepaid),
-            in_flight: self.reservations.len(),
+            in_flight: self.reservations.len() + self.leases.len(),
         }
     }
 
@@ -160,6 +219,7 @@ impl EgressAccount {
             return Err(Invalid);
         }
         self.reservations.retain(|_, r| r.expires_at > event.at);
+        self.leases.retain(|_, l| l.expires_at > event.at);
         self.receipts.retain(|_, r| r.expires_at > event.at);
         if event.period > self.period {
             self.period = event.period;
@@ -167,6 +227,9 @@ impl EgressAccount {
         }
         let mut reserved_bytes = 0;
         let mut replayed = false;
+        let mut lease_expires_at = None;
+        let mut lease_included = None;
+        let mut next_refused = None;
         match &event.command {
             EgressCommand::Payment {
                 payment_id,
@@ -279,6 +342,41 @@ impl EgressAccount {
                     );
                 }
             }
+            EgressCommand::Lease { id, bytes } => {
+                let grant = self.grant_lease(id, *bytes, event.at)?;
+                reserved_bytes = grant.included + grant.prepaid;
+                lease_expires_at = Some(grant.expires_at);
+                lease_included = Some(grant.included);
+                replayed = grant.replayed;
+            }
+            EgressCommand::Settle { id, bytes, next } => {
+                valid_operation(id)?;
+                let mut settle_replayed = true;
+                if let Some(r) = self.receipts.get(id) {
+                    if r.bytes != *bytes {
+                        return Err(Conflict);
+                    }
+                } else {
+                    settle_replayed = false;
+                    self.charge_lease(id, *bytes, event.at)?;
+                }
+                let mut next_replayed = true;
+                if let Some(next) = next {
+                    match self.grant_lease(&next.id, next.bytes, event.at) {
+                        Ok(grant) => {
+                            reserved_bytes = grant.included + grant.prepaid;
+                            lease_expires_at = Some(grant.expires_at);
+                            lease_included = Some(grant.included);
+                            next_replayed = grant.replayed;
+                        }
+                        Err(denial @ (EgressDenial::Exhausted | EgressDenial::Busy)) => {
+                            next_refused = Some(denial);
+                        }
+                        Err(denial) => return Err(denial),
+                    }
+                }
+                replayed = settle_replayed && next_replayed;
+            }
             EgressCommand::Credit { payment_id, bytes } => {
                 valid_payment(payment_id)?;
                 if *bytes == 0 || *bytes > 100_000_000_000_000 {
@@ -321,7 +419,117 @@ impl EgressAccount {
             snapshot: self.snapshot(),
             reserved_bytes,
             replayed,
+            lease_expires_at,
+            lease_included,
+            next_refused,
         })
+    }
+
+    /// Under 2 GiB a grant takes half the balance, or one full response when
+    /// half is smaller, so a second holder (a second machine, or a restart while
+    /// the dead process's lease runs out) can still be served.
+    fn grant_lease(&mut self, id: &str, bytes: u64, at: i64) -> Result<LeaseGrant, EgressDenial> {
+        valid_operation(id)?;
+        if !self.configured {
+            return Err(EgressDenial::Unconfigured);
+        }
+        if self.receipts.contains_key(id) {
+            return Err(EgressDenial::Conflict);
+        }
+        if let Some(lease) = self.leases.get(id) {
+            return Ok(LeaseGrant {
+                included: lease.included,
+                prepaid: lease.prepaid,
+                expires_at: lease.expires_at,
+                replayed: true,
+            });
+        }
+        if self.leases.len() >= MAX_LEASES
+            || self.receipts.len() + self.reservations.len() + self.leases.len() >= MAX_RECEIPTS
+        {
+            return Err(EgressDenial::Capacity);
+        }
+        let snapshot = self.snapshot();
+        let available = snapshot
+            .included_available
+            .saturating_add(snapshot.prepaid_available);
+        let share = available.div_ceil(2).max(available.min(MAX_RESPONSE_BYTES));
+        let granted = bytes.min(MAX_LEASE_BYTES).min(share);
+        let included = granted.min(snapshot.included_available);
+        let prepaid = (granted - included).min(snapshot.prepaid_available);
+        if included + prepaid == 0 {
+            return Err(if self.leases.is_empty() && self.reservations.is_empty() {
+                EgressDenial::Exhausted
+            } else {
+                EgressDenial::Busy
+            });
+        }
+        let expires_at = at.checked_add(LEASE_SECONDS).ok_or(EgressDenial::Invalid)?;
+        self.leases.insert(
+            id.to_owned(),
+            Lease {
+                period: self.period,
+                included,
+                prepaid,
+                expires_at,
+            },
+        );
+        Ok(LeaseGrant {
+            included,
+            prepaid,
+            expires_at,
+            replayed: false,
+        })
+    }
+
+    /// Charges a settle against its lease, or as a late settle when the lease has
+    /// expired and no receipt exists. Charges are capped at what is available, so
+    /// a settle never fails for lack of balance.
+    fn charge_lease(&mut self, id: &str, bytes: u64, at: i64) -> Result<(), EgressDenial> {
+        let (cap_included, cap_prepaid, counts_included, total) = match self.leases.get(id) {
+            Some(lease) => {
+                if bytes > lease.included + lease.prepaid {
+                    return Err(EgressDenial::Invalid);
+                }
+                (
+                    lease.included,
+                    lease.prepaid,
+                    lease.period == self.period,
+                    bytes,
+                )
+            }
+            None => (u64::MAX, u64::MAX, true, bytes.min(MAX_LEASE_BYTES)),
+        };
+        self.leases.remove(id);
+        let available = self.snapshot();
+        let included = if counts_included {
+            total.min(cap_included).min(available.included_available)
+        } else {
+            total.min(cap_included)
+        };
+        let prepaid = (total - included)
+            .min(cap_prepaid)
+            .min(available.prepaid_available);
+        if counts_included {
+            self.used_bytes = self
+                .used_bytes
+                .checked_add(included)
+                .ok_or(EgressDenial::Invalid)?;
+        }
+        self.prepaid_used = self
+            .prepaid_used
+            .checked_add(prepaid)
+            .ok_or(EgressDenial::Invalid)?;
+        self.receipts.insert(
+            id.to_owned(),
+            Receipt {
+                bytes,
+                expires_at: at
+                    .checked_add(SETTLE_RECEIPT_SECONDS)
+                    .ok_or(EgressDenial::Invalid)?,
+            },
+        );
+        Ok(())
     }
 }
 

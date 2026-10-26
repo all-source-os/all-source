@@ -83,8 +83,14 @@ impl EventSourcedTenantRepository {
         if tenant.is_none() && !financial {
             return Ok(None);
         }
+        let mut command = command;
         if tenant.as_ref().is_some_and(|tenant| !tenant.is_active()) && !financial {
-            return Ok(Some(Err(EgressDenial::Invalid)));
+            // A settle charges bytes already served; refusing it would leave
+            // them unbilled. It may not open a new lease.
+            let EgressCommand::Settle { next, .. } = &mut command else {
+                return Ok(Some(Err(EgressDenial::Invalid)));
+            };
+            *next = None;
         }
         let now = Utc::now();
         let at = now.timestamp();
@@ -95,7 +101,12 @@ impl EventSourcedTenantRepository {
             .map(|a| a.clone())
             .unwrap_or_default();
         if (!account.configured() || account.plan_managed())
-            && matches!(command, EgressCommand::Reserve { .. })
+            && matches!(
+                command,
+                EgressCommand::Reserve { .. }
+                    | EgressCommand::Lease { .. }
+                    | EgressCommand::Settle { next: Some(_), .. }
+            )
         {
             let Some(tenant) = tenant.as_ref() else {
                 return Ok(None);
@@ -108,15 +119,22 @@ impl EventSourcedTenantRepository {
             } else {
                 ""
             };
-            let Some(included_bytes) = included_egress_bytes(tier) else {
-                return Ok(Some(Err(EgressDenial::Unconfigured)));
-            };
-            let configured = EgressEvent {
-                command: EgressCommand::ConfigurePlan { included_bytes },
-                at,
-                period,
-            };
-            if !account.configured() || account.snapshot().included_bytes != included_bytes {
+            let included_bytes = included_egress_bytes(tier);
+            if included_bytes.is_none() {
+                // A lapsed plan still owes for bytes served under its last lease.
+                let EgressCommand::Settle { next, .. } = &mut command else {
+                    return Ok(Some(Err(EgressDenial::Unconfigured)));
+                };
+                *next = None;
+            }
+            if let Some(included_bytes) = included_bytes
+                && (!account.configured() || account.snapshot().included_bytes != included_bytes)
+            {
+                let configured = EgressEvent {
+                    command: EgressCommand::ConfigurePlan { included_bytes },
+                    at,
+                    period,
+                };
                 if let Err(denial) = account.apply(&configured) {
                     return Ok(Some(Err(denial)));
                 }

@@ -21,23 +21,37 @@ import (
 
 const (
 	maxEgressResponse       = 16 * 1024 * 1024
+	egressOperationReserve  = "reserve"
 	egressOperationComplete = "complete"
+	egressOperationLease    = "lease"
+	egressOperationSettle   = "settle"
 	fundedEgressProtocol    = "funded-egress-v1"
 )
 
 var egressResponseSlots = make(chan struct{}, 16)
 
+var errInvalidEgressReservation = errors.New("invalid egress reservation")
+
 type egressCommand struct {
-	Operation string `json:"operation"`
-	ID        string `json:"id,omitempty"`
-	Bytes     uint64 `json:"bytes,omitempty"`
+	Operation string        `json:"operation"`
+	ID        string        `json:"id,omitempty"`
+	Bytes     uint64        `json:"bytes,omitempty"`
+	Next      *leaseRequest `json:"next,omitempty"`
+}
+
+type leaseRequest struct {
+	ID    string `json:"id"`
+	Bytes uint64 `json:"bytes"`
 }
 
 type egressAdmission struct {
 	Protocol  string `json:"protocol"`
 	Admission struct {
-		ReservedBytes uint64 `json:"reserved_bytes"`
-		Snapshot      struct {
+		ReservedBytes  uint64 `json:"reserved_bytes"`
+		LeaseExpiresAt *int64 `json:"lease_expires_at,omitempty"`
+		LeaseIncluded  uint64 `json:"lease_included,omitempty"`
+		NextRefused    string `json:"next_refused,omitempty"`
+		Snapshot       struct {
 			IncludedAvailable uint64 `json:"included_available"`
 			PrepaidAvailable  uint64 `json:"prepaid_available"`
 		} `json:"snapshot"`
@@ -45,12 +59,14 @@ type egressAdmission struct {
 }
 
 type egressError struct {
-	status int
-	reason string
+	status     int
+	reason     string
+	retryAfter string
 }
 
 const (
 	egressReasonPoolFull    = "pool_full"
+	egressReasonRateLimited = "rate_limited"
 	egressReasonUnavailable = "ledger_unavailable"
 )
 
@@ -65,8 +81,11 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 	target := *cp.delegation.coreForTenant(tenant)
 	target.Path = strings.TrimRight(target.Path, "/") + "/api/v1/tenants/" + url.PathEscape(tenant) + "/egress"
 	payload := map[string]any{"operation": command.Operation, "id": command.ID}
-	if command.Operation == egressOperationComplete {
+	if command.Operation != egressOperationReserve {
 		payload["bytes"] = command.Bytes
+	}
+	if command.Next != nil {
+		payload["next"] = command.Next
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		response, err := cp.client.R().SetContext(deadline).SetBody(payload).SetResult(&result).Post(target.String())
@@ -86,7 +105,13 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 			if json.Unmarshal(response.Body(), &denial) != nil {
 				denial.Reason = ""
 			}
-			return result, egressError{status: response.StatusCode(), reason: denial.Reason}
+			refusal := egressError{status: response.StatusCode(), reason: denial.Reason}
+			if refusal.status == http.StatusTooManyRequests && refusal.reason == "" {
+				// Core's per-credential limiter answers plain text, with no ledger reason.
+				refusal.reason = egressReasonRateLimited
+				refusal.retryAfter = response.Header().Get("Retry-After")
+			}
+			return result, refusal
 		}
 		if result.Protocol != fundedEgressProtocol {
 			return result, errors.New("unsupported egress ledger")
@@ -138,22 +163,21 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 		rejectEgress(c, egressError{status: http.StatusTooManyRequests, reason: egressReasonPoolFull})
 		return
 	}
-	operation := uuid.NewString()
-	reserved, err := cp.egressExchange(c.Request.Context(), tenant, egressCommand{Operation: "reserve", ID: operation})
+	hold, err := cp.reserveEgress(c.Request.Context(), tenant)
+	if errors.Is(err, errInvalidEgressReservation) {
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "invalid_egress_reservation"})
+		return
+	}
 	if err != nil {
 		rejectEgress(c, err)
 		return
 	}
-	capacity := reserved.Admission.ReservedBytes
-	if capacity == 0 || capacity > maxEgressResponse {
-		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "invalid_egress_reservation"})
-		return
-	}
+	capacity := hold.capacity
 	original := c.Writer
 	requestContext, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 	c.Request = c.Request.WithContext(requestContext)
-	buffer := &egressWriter{ResponseWriter: original, headers: original.Header().Clone(), capacity: int(capacity), cancel: cancel, status: http.StatusOK}
+	buffer := &egressWriter{ResponseWriter: original, headers: original.Header().Clone(), capacity: int(capacity), cancel: cancel, status: http.StatusOK} //nolint:gosec // A hold never exceeds maxEgressResponse.
 	c.Writer = buffer
 	defer func() { c.Writer = original }()
 	c.Next()
@@ -162,9 +186,7 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	if buffer.failed || requestContext.Err() != nil {
 		charge = 0
 	}
-	settlementContext, stop := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 3*time.Second)
-	defer stop()
-	settled, err := cp.egressExchange(settlementContext, tenant, egressCommand{Operation: egressOperationComplete, ID: operation, Bytes: charge})
+	included, prepaid, err := hold.settle(c.Request.Context(), charge)
 	if err != nil {
 		rejectEgress(c, err)
 		return
@@ -188,8 +210,8 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	if buffer.status != http.StatusNotModified && buffer.status != http.StatusNoContent {
 		original.Header().Set("Content-Length", strconv.Itoa(buffer.body.Len()))
 	}
-	original.Header().Set("X-Egress-Included-Remaining", strconv.FormatUint(settled.Admission.Snapshot.IncludedAvailable, 10))
-	original.Header().Set("X-Egress-Prepaid-Remaining", strconv.FormatUint(settled.Admission.Snapshot.PrepaidAvailable, 10))
+	original.Header().Set("X-Egress-Included-Remaining", strconv.FormatUint(included, 10))
+	original.Header().Set("X-Egress-Prepaid-Remaining", strconv.FormatUint(prepaid, 10))
 	status = buffer.status
 	original.WriteHeader(buffer.status)
 	if buffer.body.Len() == 0 {
@@ -198,6 +220,49 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	if _, err := original.Write(buffer.body.Bytes()); err != nil {
 		log.Printf("funded response delivery failed: %v", err)
 	}
+}
+
+// settle returns the remaining allowance for the response headers.
+type egressHold struct {
+	capacity uint64
+	settle   func(base context.Context, charge uint64) (included, prepaid uint64, err error)
+}
+
+func (cp *ControlPlane) reserveEgress(ctx context.Context, tenant string) (egressHold, error) {
+	if cp.leases != nil {
+		hold, err := cp.leases.acquire(ctx, tenant)
+		if err != nil {
+			return egressHold{}, err
+		}
+		return egressHold{
+			capacity: hold.bytes,
+			settle: func(_ context.Context, charge uint64) (uint64, uint64, error) {
+				included, prepaid := cp.leases.finish(hold, charge)
+				return included, prepaid, nil
+			},
+		}, nil
+	}
+	operation := uuid.NewString()
+	reserved, err := cp.egressExchange(ctx, tenant, egressCommand{Operation: egressOperationReserve, ID: operation})
+	if err != nil {
+		return egressHold{}, err
+	}
+	capacity := reserved.Admission.ReservedBytes
+	if capacity == 0 || capacity > maxEgressResponse {
+		return egressHold{}, errInvalidEgressReservation
+	}
+	return egressHold{
+		capacity: capacity,
+		settle: func(base context.Context, charge uint64) (uint64, uint64, error) {
+			settlementContext, stop := context.WithTimeout(context.WithoutCancel(base), 3*time.Second)
+			defer stop()
+			settled, err := cp.egressExchange(settlementContext, tenant, egressCommand{Operation: egressOperationComplete, ID: operation, Bytes: charge})
+			if err != nil {
+				return 0, 0, err
+			}
+			return settled.Admission.Snapshot.IncludedAvailable, settled.Admission.Snapshot.PrepaidAvailable, nil
+		},
+	}, nil
 }
 
 // Ingest writes and the empty event-feed position probe return no tenant data,
@@ -240,11 +305,17 @@ func billableEgressPath(path string) bool {
 func rejectEgress(c *gin.Context, err error) {
 	status := http.StatusServiceUnavailable
 	reason := egressReasonUnavailable
+	retryAfter := "1"
 	var refusal egressError
 	if errors.As(err, &refusal) && (refusal.status == http.StatusPaymentRequired || refusal.status == http.StatusTooManyRequests) {
 		status = refusal.status
 		if refusal.reason != "" {
 			reason = refusal.reason
+		}
+		if refusal.reason == egressReasonRateLimited {
+			if seconds, parseErr := strconv.Atoi(refusal.retryAfter); parseErr == nil && seconds > 0 {
+				retryAfter = strconv.Itoa(seconds)
+			}
 		}
 	}
 	body := gin.H{"error": "egress_budget_unavailable", "reason": reason}
@@ -252,7 +323,7 @@ func rejectEgress(c *gin.Context, err error) {
 	case http.StatusPaymentRequired:
 		body["message"] = "Included allowance and prepaid credit must cover this response. Inspect billing usage or purchase prepaid credit."
 	case http.StatusTooManyRequests:
-		c.Header("Retry-After", "1")
+		c.Header("Retry-After", retryAfter)
 		body["message"] = "Too many responses are in flight; retry shortly."
 	default:
 		c.Header("Retry-After", "30")
