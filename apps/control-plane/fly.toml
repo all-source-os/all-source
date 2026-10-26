@@ -3,6 +3,9 @@
 
 app = "allsource-control-plane"
 primary_region = "iad"
+# Shutdown drains requests (5 s), then settles egress leases (3 s). Fly's
+# default of 5 s would kill the machine before the settle is sent.
+kill_timeout = 15
 
 [build]
   dockerfile = "Dockerfile"

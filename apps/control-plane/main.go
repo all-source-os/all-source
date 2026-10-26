@@ -83,6 +83,8 @@ func NewPooledHTTPClient() *http.Client {
 type ControlPlane struct {
 	egressPrepaid   *usecases.EgressPrepaid
 	egressExchange  egressExchange
+	leases          *leaseBook
+	stopLeases      context.CancelFunc
 	admission       *tenantAdmission
 	client          *resty.Client
 	router          *gin.Engine
@@ -372,6 +374,12 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 	}
 
 	cp.egressExchange = cp.exchangeEgress
+	if egressLeaseEnabled(os.Getenv("EGRESS_LEASE")) {
+		cp.leases = newLeaseBook(cp.egressExchange)
+		var flusherCtx context.Context
+		flusherCtx, cp.stopLeases = context.WithCancel(ctx)
+		go cp.leases.run(flusherCtx)
+	}
 	cp.admission, err = newTenantAdmissionFromEnv(os.LookupEnv)
 	if err != nil {
 		return nil, err
@@ -1156,6 +1164,12 @@ func (cp *ControlPlane) Shutdown() {
 	// Stop scheduler first
 	if cp.container != nil && cp.container.Scheduler != nil {
 		cp.container.Scheduler.Stop()
+	}
+	if cp.leases != nil {
+		cp.stopLeases()
+		settleCtx, cancel := context.WithTimeout(context.Background(), leaseSettleOnExit)
+		cp.leases.settleAll(settleCtx)
+		cancel()
 	}
 	if cp.queryMeter != nil {
 		if err := cp.queryMeter.close(); err != nil {

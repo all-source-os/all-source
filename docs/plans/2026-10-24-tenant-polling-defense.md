@@ -237,6 +237,33 @@ What would move the order: a measured gzip ratio below 3× on real
 event-query bodies puts bet 1 behind bet 2. The per-tenant byte metrics from
 #351, scraped for 48 hours, give the denominators for bets 2 and 4.
 
+### Addendum 2026-10-26: the ledger lease ships ahead of the gateway split
+
+On 2026-10-26 (11:29–11:31Z) the control plane refused 96 reads in two
+minutes: 85 × 429 `busy` (Core's cap of four open reservations per tenant),
+10 × 429 from Core's 1,200-a-minute limiter on the ledger route, 1 × 503 and
+no 402. Both 429 sources are the per-response reserve and complete calls, so
+the lease ships on its own, before the gateway split.
+
+- Core gains `lease` and `settle` ledger commands. A lease holds up to 1 GiB
+  for 120 s and is not subject to the four-reservation cap; a settle charges
+  what was served and can open the next lease in the same durable event. A
+  settle of a lease that already expired is still charged (a late settle),
+  and a settle is still applied when the plan has lapsed or the tenant is
+  inactive; it just opens no next lease. `reserve` and `complete` still work.
+- The control plane serves responses from a per-tenant lease held in memory
+  and settles every 30 s, so durable ledger writes grow with tenants ×
+  machines × minutes, not with responses. `EGRESS_LEASE=off` restores the
+  per-response path.
+- The overrun bound is one lease per tenant per machine: a control plane that
+  dies with bytes unsettled leaves at most 1 GiB per tenant unbilled.
+- Below 2 GiB of balance a lease takes half of it (at least one 16 MiB
+  response), so a second holder, such as a second machine or a restart while
+  the dead process's lease runs out, is still served. When open leases hold
+  the whole balance, Core answers `busy` (429), never `exhausted` (402).
+- Still open from bet 3: the gateway split, streaming instead of buffering,
+  and the 16 global response slots.
+
 ### P3a acceptance
 
 - A response to a request with `Accept-Encoding: gzip` carries
