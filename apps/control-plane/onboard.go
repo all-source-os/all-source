@@ -114,7 +114,7 @@ func (cp *ControlPlane) OnboardHandler(c *gin.Context) {
 	}
 
 	// Generate API key via shared signing function
-	apiKey, err := cp.authClient.SignAPIKey(tenantResp.ID, name, entities.RoleDeveloper)
+	apiKey, err := cp.authClient.IssueManagedAPIKey(c.Request.Context(), tenantResp.ID, name, entities.RoleDeveloper)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate API key"})
 		return

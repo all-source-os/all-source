@@ -23,6 +23,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   """
 
   alias QueryServiceEx.Domain.Entities.Query
+  alias QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority
   alias QueryServiceEx.Infrastructure.Adapters.CoreHealthChecker
 
   require Logger
@@ -888,21 +889,9 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   @doc """
   Verify a customer API key.
 
-  API keys are self-contained JWTs signed with the shared `JWT_SECRET` (the same
-  secret Core and the Control Plane hold). We validate them **locally** — HS256
-  signature plus expiry — exactly like the `Authorization: Bearer` path in
-  `AuthPipeline`/`JwtAuth`, then resolve the tenant from Core for the
-  subscription gate.
-
-  This deliberately does NOT round-trip to Core's `/api/v1/auth/me`. That handler
-  decodes into Core's `Claims` struct, which has a required `iss` field and
-  enforces `set_issuer("allsource")`. Keys minted by the Query Service
-  (`ApiKeyController.sign_api_key/3`) omitted `iss`, so every such key failed
-  Core's validation and the gateway returned 401 "invalid API key" on every data
-  endpoint — even though the key was valid and correctly signed. Local validation
-  also removes a network hop from the hot auth path and loses nothing: Core's
-  `/auth/me` validated the JWT statelessly anyway (it has no record of
-  gateway-minted keys), so there was no revocation check to preserve.
+  Check the local HS256 signature and expiry, then require a current managed-key
+  registration from the authoritative Core lifecycle stream. Tenant subscription
+  metadata also comes from the leader without identity caching.
 
   Returns `{:ok, {tenant_map, api_key_info}}` or `{:error, reason}`.
   """
@@ -911,21 +900,18 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
       {:ok, claims} ->
         tenant_id = claims["tenant_id"]
 
-        case get_tenant(tenant_id) do
-          {:ok, tenant} ->
-            api_key_info = %{
-              "id" => claims["sub"],
-              "name" => claims["name"],
-              "tenant_id" => tenant_id,
-              "role" => claims["role"] || "serviceaccount",
-              "scopes" => claims["scopes"] || []
-            }
+        with {:ok, key} <- ApiKeyAuthority.authorize(claims),
+             {:ok, tenant} <- get_tenant_for_authorization(tenant_id) do
+          api_key_info = %{
+            "id" => claims["sub"],
+            "name" => claims["name"],
+            "tenant_id" => tenant_id,
+            "role" => claims["role"],
+            "scopes" => key["scopes"]
+          }
 
-            {:ok, {tenant, api_key_info}}
-
-          {:error, :not_found} ->
-            {:error, :invalid_key}
-
+          {:ok, {tenant, api_key_info}}
+        else
           {:error, _reason} ->
             {:error, :invalid_key}
         end
@@ -972,11 +958,20 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
     now = System.system_time(:second)
 
     cond do
-      not is_integer(claims["exp"]) -> {:error, :invalid_key}
-      claims["exp"] <= now -> {:error, :key_expired}
-      not is_binary(claims["tenant_id"]) -> {:error, :invalid_key}
-      not is_binary(claims["sub"]) -> {:error, :invalid_key}
-      true -> {:ok, claims}
+      not is_integer(claims["exp"]) and not ApiKeyAuthority.non_expiring_token?(claims) ->
+        {:error, :invalid_key}
+
+      is_integer(claims["exp"]) and claims["exp"] <= now ->
+        {:error, :key_expired}
+
+      not is_binary(claims["tenant_id"]) ->
+        {:error, :invalid_key}
+
+      not is_binary(claims["sub"]) ->
+        {:error, :invalid_key}
+
+      true ->
+        {:ok, claims}
     end
   end
 
@@ -1163,6 +1158,33 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
         Application.get_env(:query_service_ex, :core_url, @default_base_url)
 
     build_client(url, timeout: 5_000, max_retries: 0)
+  end
+
+  @doc false
+  def key_history_for_authorization(tenant) do
+    query = [
+      tenant_id: tenant,
+      entity_id: "apikey:" <> tenant,
+      limit: 1001,
+      integrity: "retained-entity-v1"
+    ]
+
+    case Tesla.get(authorization_client(), "/api/v1/events/query", query: query) do
+      {:ok, %Tesla.Env{status: 200, body: body}} when is_map(body) -> {:ok, body}
+      _ -> {:error, :invalid_key}
+    end
+  end
+
+  @doc false
+  def append_key_lifecycle(tenant, event) do
+    case Tesla.post(authorization_client(), "/api/v1/events", Map.put(event, :tenant_id, tenant)) do
+      {:ok, %Tesla.Env{status: status, body: %{"event_id" => id}}}
+      when status in [200, 201] and is_binary(id) and id != "" ->
+        {:ok, id}
+
+      _ ->
+        {:error, :key_store_unavailable}
+    end
   end
 
   defp fetch_tenant(client, tenant_id) do

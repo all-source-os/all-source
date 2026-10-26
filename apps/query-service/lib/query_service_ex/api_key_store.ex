@@ -26,6 +26,7 @@ defmodule QueryServiceEx.ApiKeyStore do
 
   use GenServer
 
+  alias QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
 
   require Logger
@@ -50,9 +51,7 @@ defmodule QueryServiceEx.ApiKeyStore do
 
   @doc """
   Create an API key record. Writes a durable `apikey.created` event to Core, then
-  updates the ETS cache. If the durable write fails the cache is still updated so
-  the key works in-process, but a warning is logged — the durable event is what
-  survives a restart.
+  updates the ETS cache only after Core acknowledges persistence.
   """
   def create_key(tenant_id, key_metadata) do
     event = %{
@@ -61,20 +60,15 @@ defmodule QueryServiceEx.ApiKeyStore do
       payload: %{key: key_metadata}
     }
 
-    case RustCoreClient.create_event(tenant_id, event) do
+    case RustCoreClient.append_key_lifecycle(tenant_id, event) do
       {:ok, _} ->
-        :ok
+        keys = all_keys(tenant_id)
+        :ets.insert(@table, {{:keys, tenant_id}, [key_metadata | keys]})
+        {:ok, key_metadata}
 
       {:error, reason} ->
-        Logger.warning(
-          "[ApiKeyStore] durable create failed for tenant #{tenant_id}: #{inspect(reason)} " <>
-            "(key will be lost on restart)"
-        )
+        {:error, reason}
     end
-
-    keys = all_keys(tenant_id)
-    :ets.insert(@table, {{:keys, tenant_id}, [key_metadata | keys]})
-    {:ok, key_metadata}
   end
 
   @doc """
@@ -83,36 +77,30 @@ defmodule QueryServiceEx.ApiKeyStore do
   such key.
   """
   def revoke_key(tenant_id, key_id) do
-    keys = all_keys(tenant_id)
+    with {:ok, records} <- ApiKeyAuthority.records(tenant_id) do
+      keys = Map.values(records)
 
-    case Enum.find(keys, &(&1["id"] == key_id)) do
-      nil ->
-        {:error, :not_found}
+      case Enum.find(keys, &(&1["id"] == key_id)) ||
+             Enum.find(all_keys(tenant_id), &(&1["id"] == key_id)) do
+        nil ->
+          {:error, :not_found}
 
-      _key ->
-        event = %{
-          entity_id: "#{@entity_prefix}#{tenant_id}",
-          event_type: "apikey.revoked",
-          payload: %{key_id: key_id}
-        }
+        _key ->
+          event = %{
+            entity_id: "#{@entity_prefix}#{tenant_id}",
+            event_type: "apikey.revoked",
+            payload: %{key_id: key_id}
+          }
 
-        case RustCoreClient.create_event(tenant_id, event) do
-          {:ok, _} ->
-            :ok
+          case RustCoreClient.append_key_lifecycle(tenant_id, event) do
+            {:ok, _} ->
+              :ets.delete(@table, {:keys, tenant_id})
+              :ok
 
-          {:error, reason} ->
-            Logger.warning(
-              "[ApiKeyStore] durable revoke failed for tenant #{tenant_id}: #{inspect(reason)}"
-            )
-        end
-
-        updated =
-          Enum.map(keys, fn k ->
-            if k["id"] == key_id, do: Map.put(k, "active", false), else: k
-          end)
-
-        :ets.insert(@table, {{:keys, tenant_id}, updated})
-        :ok
+            {:error, reason} ->
+              {:error, reason}
+          end
+      end
     end
   end
 
@@ -259,11 +247,13 @@ defmodule QueryServiceEx.ApiKeyStore do
     }
   end
 
-  # Flip a tracked key's `active` to false; no-op if it isn't in the accumulator.
-  defp deactivate_key(acc, id) do
+  # Tombstones prevent legacy audit backfill from reactivating revoked IDs.
+  defp deactivate_key(acc, id) when is_binary(id) do
     case Map.get(acc, id) do
-      nil -> acc
+      nil -> Map.put(acc, id, %{"id" => id, "active" => false})
       key -> Map.put(acc, id, Map.put(key, "active", false))
     end
   end
+
+  defp deactivate_key(acc, _), do: acc
 end

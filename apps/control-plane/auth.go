@@ -25,16 +25,18 @@ import (
 
 // Claims represents JWT claims
 type Claims struct {
-	UserID        string        `json:"sub"`
-	Username      string        `json:"username"`
-	Email         string        `json:"email,omitempty"`
-	EmailVerified bool          `json:"email_verified,omitempty"`
-	Name          string        `json:"name,omitempty"`
-	TenantID      string        `json:"tenant_id"`
-	Role          entities.Role `json:"role"`
-	Provider      string        `json:"provider,omitempty"`
-	IsAPIKey      bool          `json:"is_api_key,omitempty"`
-	IsDemo        bool          `json:"is_demo,omitempty"`
+	expPresent     bool
+	UserID         string        `json:"sub"`
+	Username       string        `json:"username"`
+	Email          string        `json:"email,omitempty"`
+	EmailVerified  bool          `json:"email_verified,omitempty"`
+	Name           string        `json:"name,omitempty"`
+	TenantID       string        `json:"tenant_id"`
+	Role           entities.Role `json:"role"`
+	Provider       string        `json:"provider,omitempty"`
+	IsAPIKey       bool          `json:"is_api_key,omitempty"`
+	CredentialKind string        `json:"credential_kind,omitempty"`
+	IsDemo         bool          `json:"is_demo,omitempty"`
 	// ViewAs marks a read-only "view as tenant" impersonation token minted by
 	// SignViewAsJWT. It is the defense-in-depth marker the write-refusal
 	// middleware (ViewAsWriteRefusal) hard-rejects on any mutating method, in
@@ -87,9 +89,10 @@ func roleForEmail(email string) entities.Role {
 // TODO: Migrate to RS256 with a JWKS endpoint on CP so other services can verify
 // tokens without possessing the signing key.
 type AuthClient struct {
-	jwtSecret string
-	coreURL   string
-	http      *http.Client
+	lifecycleCoreURL func(string) string
+	jwtSecret        string
+	coreURL          string
+	http             *http.Client
 
 	apiKeyCache   map[string]apiKeyCacheEntry
 	apiKeyCacheMu sync.RWMutex
@@ -138,10 +141,11 @@ func NewAuthClient(jwtSecret, coreURL string) *AuthClient {
 func (a *AuthClient) SignDelegationJWT(userID, tenantID string, role entities.Role) (string, error) {
 	now := time.Now()
 	claims := &Claims{
-		UserID:   userID,
-		TenantID: tenantID,
-		Role:     role,
-		IsAPIKey: true,
+		UserID:         userID,
+		TenantID:       tenantID,
+		Role:           role,
+		IsAPIKey:       true,
+		CredentialKind: delegationKind,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: now.Add(60 * time.Second).Unix(),
 			IssuedAt:  now.Unix(),
@@ -188,8 +192,8 @@ func (a *AuthClient) SignViewAsJWT(adminUserID, targetTenantID string) (string, 
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(a.jwtSecret))
 }
 
-// SignAPIKey generates a long-lived JWT API key for a given tenant and role.
-// Used by agent registration, onboarding, and demo flows.
+// SignAPIKey is a legacy signer for trusted Core clients. Public gateways
+// require an independently registered key identity.
 func (a *AuthClient) SignAPIKey(tenantID, username string, role entities.Role) (string, error) {
 	now := time.Now()
 	claims := &Claims{
@@ -231,7 +235,8 @@ func (a *AuthClient) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	// Check expiration
-	if claims.ExpiresAt < time.Now().Unix() {
+	noExpiry := claims.IsAPIKey && claims.CredentialKind == managedKeyKind && !claims.expPresent && claims.ExpiresAt == 0
+	if claims.ExpiresAt <= time.Now().Unix() && !noExpiry {
 		return nil, errors.New("token expired")
 	}
 
@@ -404,6 +409,18 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 			claims, err = authClient.ValidateAPIKey(c.Request.Context(), token)
 		} else {
 			claims, err = authClient.ValidateToken(token)
+			if err == nil {
+				var kind string
+				kind, err = credentialType(claims)
+				if err == nil && kind == managedKeyKind {
+					var key *managedKeyRecord
+					key, err = authClient.managedKey(c.Request.Context(), claims)
+					if err == nil && !managedKeyAllows(c, key, claims.Role) {
+						c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient API key scope"})
+						return
+					}
+				}
+			}
 		}
 		if err != nil {
 			c.JSON(401, gin.H{"error": "unauthorized", "message": err.Error()})

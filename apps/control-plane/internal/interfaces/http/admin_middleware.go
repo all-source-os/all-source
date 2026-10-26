@@ -16,15 +16,16 @@ import (
 // AdminClaims represents JWT claims for admin authentication.
 // Mirrors the main Claims struct but lives in the http package to avoid circular imports.
 type AdminClaims struct {
-	UserID   string        `json:"sub"`
-	Username string        `json:"username"`
-	Email    string        `json:"email,omitempty"`
-	Name     string        `json:"name,omitempty"`
-	TenantID string        `json:"tenant_id"`
-	Role     entities.Role `json:"role"`
-	Provider string        `json:"provider,omitempty"`
-	IsAPIKey bool          `json:"is_api_key,omitempty"`
-	IsDemo   bool          `json:"is_demo,omitempty"`
+	UserID         string        `json:"sub"`
+	Username       string        `json:"username"`
+	Email          string        `json:"email,omitempty"`
+	Name           string        `json:"name,omitempty"`
+	TenantID       string        `json:"tenant_id"`
+	Role           entities.Role `json:"role"`
+	Provider       string        `json:"provider,omitempty"`
+	IsAPIKey       bool          `json:"is_api_key,omitempty"`
+	CredentialKind string        `json:"credential_kind,omitempty"`
+	IsDemo         bool          `json:"is_demo,omitempty"`
 	// ViewAs/ActAs mirror the main Claims fields so a view_as token is fully
 	// decoded here too. A view_as token carries role:readonly, so it is ALWAYS
 	// rejected by the admin-role check below before reaching any admin handler —
@@ -73,7 +74,11 @@ func AdminAuthMiddleware(jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
-		// Check admin role
+		if claims.IsAPIKey || claims.CredentialKind != "" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden", "message": "API credentials cannot access administrative routes"})
+			return
+		}
+
 		if claims.Role != entities.RoleAdmin {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":   "forbidden",
@@ -136,7 +141,7 @@ func validateAdminToken(tokenString, jwtSecret string) (*AdminClaims, error) {
 		return nil, errors.New("invalid token")
 	}
 
-	if claims.ExpiresAt < time.Now().Unix() {
+	if claims.ExpiresAt <= time.Now().Unix() {
 		return nil, errors.New("token expired")
 	}
 

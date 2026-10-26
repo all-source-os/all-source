@@ -39,6 +39,22 @@ func setupAdminRouter() *gin.Engine {
 	return r
 }
 
+func TestAdminAuthMiddleware_RejectsAPICredentials(t *testing.T) {
+	router := setupAdminRouter()
+	for _, kind := range []string{"", "managed_api_key", "service_delegation"} {
+		claims := &AdminClaims{UserID: "synthetic-api-key", TenantID: "system", Role: entities.RoleAdmin,
+			IsAPIKey: true, CredentialKind: kind, StandardClaims: jwt.StandardClaims{
+				ExpiresAt: time.Now().Add(time.Hour).Unix(), IssuedAt: time.Now().Unix(), Issuer: "allsource"}}
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/admin/health", http.NoBody)
+		req.Header.Set("Authorization", "Bearer "+signTestToken(t, claims))
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, req)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("API credential %q reached admin: %d", kind, response.Code)
+		}
+	}
+}
+
 func TestAdminAuthMiddleware_ValidAdminJWT(t *testing.T) {
 	router := setupAdminRouter()
 
