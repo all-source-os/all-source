@@ -1,0 +1,22 @@
+{
+  "name": "read_model_commit",
+  "description": "readModel(\"skills\").commit(...) at expected_revision 7. A null change deletes the row and must be serialised as JSON null, not omitted. The SDK returns the new revision 8.",
+  "request": {
+    "method": "PUT",
+    "path": "/api/v1/read-models/skills",
+    "query": {},
+    "headers": {},
+    "body": {
+      "expected_revision": 7,
+      "checkpoint": { "epoch": 41, "position": 3 },
+      "ready": true,
+      "reset": false,
+      "changes": { "skill:abc": { "status": "retired" }, "skill:old": null }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": { "revision": 8 }
+  }
+}

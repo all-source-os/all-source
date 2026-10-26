@@ -140,15 +140,20 @@ jobs:
           const parse = path => new Map([...fs.readFileSync(path, 'utf8').matchAll(/^test (.+?) \.\.\. bench:\s*([\d,]+) ns\/iter/gm)].map(m => [m[1], Number(m[2].replaceAll(',', ''))]));
           const baseline = parse('/tmp/base-bench.txt');
           const candidate = parse('/tmp/pr-bench.txt');
-          if (!baseline.size || candidate.size !== baseline.size) throw Error('benchmark cases missing');
+          const shared = [...candidate.keys()].filter(name => baseline.has(name));
+          if (!shared.length) throw Error('no benchmark case present in both base and PR');
           const lines = ['| Case | Base ns | PR ns | Change |', '|---|---:|---:|---:|'];
-          for (const [name, current] of candidate) {
+          for (const name of shared) {
             const previous = baseline.get(name);
-            if (!previous) throw Error(`baseline missing: ${name}`);
+            const current = candidate.get(name);
             const change = (current / previous - 1) * 100;
             lines.push(`| ${name} | ${previous} | ${current} | ${change.toFixed(1)}% |`);
             if (change > 15) console.log(`::warning::Advisory benchmark ${name}: ${change.toFixed(1)}% slower`);
           }
+          const removed = [...baseline.keys()].filter(name => !candidate.has(name));
+          const added = [...candidate.keys()].filter(name => !baseline.has(name));
+          if (removed.length) lines.push('', `Removed in this PR: ${removed.join(', ')}`);
+          if (added.length) lines.push('', `Added in this PR: ${added.join(', ')}`);
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
           NODE
 

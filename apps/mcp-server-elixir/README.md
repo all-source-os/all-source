@@ -109,6 +109,9 @@ Tools follow a guided workflow from discovery to deep analysis. Each phase build
 | Tool | Description |
 |------|-------------|
 | `get_snapshot` | Fast current state retrieval |
+| `get_latest_state` | Latest state of one row of a view |
+| `list_latest` | Page through a view's rows by key prefix |
+| `list_changes` | View rows written after a revision |
 | `reconstruct_state` | Time-travel state reconstruction at any timestamp |
 | `analyze_changes` | Temporal diff between two points in time |
 | `event_timeline` | Chronological event timeline for an entity |

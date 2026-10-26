@@ -1,0 +1,20 @@
+{
+  "name": "view_define_invalid",
+  "description": "defineView(\"ops_status\", definition) with an empty ops array. Core rejects it with 400 invalid_view; the SDK returns a typed invalid-view error carrying detail.",
+  "request": {
+    "method": "PUT",
+    "path": "/api/v1/views/ops_status",
+    "query": {},
+    "headers": {},
+    "body": {
+      "source": { "prefixes": ["ops.probe."] },
+      "key": "{payload.probe}:{day:timestamp}",
+      "ops": []
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {},
+    "body": { "error": "invalid_view", "detail": "ops must contain 1..64 operations" }
+  }
+}

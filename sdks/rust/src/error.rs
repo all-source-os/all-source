@@ -74,6 +74,21 @@ pub enum Error {
     #[error("not modified (etag: {})", etag.as_deref().unwrap_or("none"))]
     NotModified { etag: Option<String> },
 
+    /// A view `changes` cursor is older than the view's last reset. Re-read
+    /// the entity pages; [`crate::ViewSync`] does this itself.
+    #[error("view was reset (generation {generation}); re-read its entity pages")]
+    ViewReset { generation: u64 },
+
+    /// Core rejected a view definition (`400 invalid_view`).
+    #[error("invalid view definition: {detail}")]
+    InvalidView { detail: String },
+
+    /// The event feed was renumbered (Core restarted or evicted the tenant's
+    /// feed). Rebuild from position 0 of epoch `current` and commit with
+    /// `reset: true`.
+    #[error("event feed epoch changed from {expected} to {current}; rebuild from position 0")]
+    FeedEpochChanged { expected: u64, current: u64 },
+
     /// WebSocket transport error.
     #[cfg(feature = "ws")]
     #[error("WebSocket error: {0}")]
@@ -104,7 +119,10 @@ impl Error {
 
     /// Returns true if this is a 400 Bad Request error (e.g., invalid event type format).
     pub fn is_bad_request(&self) -> bool {
-        matches!(self, Error::Api { status: 400, .. })
+        matches!(
+            self,
+            Error::Api { status: 400, .. } | Error::InvalidView { .. }
+        )
     }
 
     /// Returns true if this is a 404 Not Found error.

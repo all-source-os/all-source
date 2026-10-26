@@ -143,6 +143,8 @@ jobs:
       mcp: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.mcp == 'true' }}
       prime: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.prime == 'true' }}
       better-auth: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.better-auth == 'true' }}
+      sdks: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.sdks == 'true' }}
+      allsource-mcp: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.allsource-mcp == 'true' }}
       workflows: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.workflows == 'true' }}
       # Container-related changes for downstream workflows
       core: ${{ steps.base.outputs.force == 'true' || steps.filter.outputs.rust == 'true' }}
@@ -201,6 +203,11 @@ jobs:
               - 'tooling/recall-bench/**'
             better-auth:
               - 'crates/better-auth-allsource/**'
+            sdks:
+              - 'sdks/**'
+            allsource-mcp:
+              - 'tooling/allsource-mcp/**'
+              - 'apps/core/**'
             workflows:
               - '.github/workflows/**'
 
@@ -467,6 +474,110 @@ jobs:
         run: cargo test --locked
 
   # ============================================================================
+  # SDK Quality Gates (Rust, Go, TypeScript, Python). Every SDK test suite
+  # loads every fixture in sdks/contract/fixtures, so a contract change that
+  # one SDK misses fails here.
+  # ============================================================================
+  sdk-quality:
+    name: SDK Quality Gates
+    needs: [workflow-lint, workflow-validate, changes]
+    if: needs.changes.outputs.sdks == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Rust SDK formatting
+        working-directory: sdks/rust
+        run: cargo fmt --check
+
+      - name: Rust SDK clippy
+        working-directory: sdks/rust
+        run: cargo clippy --locked -p allsource --all-targets -- -D warnings
+
+      - name: Rust SDK tests
+        working-directory: sdks/rust
+        run: cargo test --locked -p allsource
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: sdks/go/go.mod
+
+      - name: Go SDK vet and tests
+        working-directory: sdks/go
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race -count=1 ./...
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: TypeScript SDK type-check and tests
+        run: |
+          bun install --frozen-lockfile --filter @allsourcedev/client
+          bun --cwd sdks/typescript run type-check
+          bun --cwd sdks/typescript test
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Python SDK tests
+        working-directory: sdks/python-client
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m pytest
+
+  # ============================================================================
+  # allsource-mcp (standalone crate, embeds Core)
+  # ============================================================================
+  allsource-mcp-quality:
+    name: allsource-mcp Quality Gates
+    needs: [workflow-lint, workflow-validate, changes]
+    if: needs.changes.outputs.allsource-mcp == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "tooling/allsource-mcp -> target"
+          cache-on-failure: true
+
+      - name: Check formatting
+        working-directory: tooling/allsource-mcp
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: tooling/allsource-mcp
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        working-directory: tooling/allsource-mcp
+        run: cargo test --locked
+
+  # ============================================================================
   # Go Quality Gates (Control Plane)
   # ============================================================================
   go-quality:
@@ -713,6 +824,8 @@ jobs:
       - rust-quality
       - prime-quality
       - better-auth-quality
+      - sdk-quality
+      - allsource-mcp-quality
       - go-quality
       - elixir-query-quality
       - elixir-mcp-quality
@@ -761,6 +874,8 @@ jobs:
             check_job "Rust Quality" "${{ needs.rust-quality.result }}" "${{ needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Prime MCP Quality" "${{ needs.prime-quality.result }}" "${{ needs.changes.outputs.prime == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "better-auth-allsource Quality" "${{ needs.better-auth-quality.result }}" "${{ needs.changes.outputs.better-auth == 'true' || needs.changes.outputs.workflows == 'true' }}"
+            check_job "SDK Quality" "${{ needs.sdk-quality.result }}" "${{ needs.changes.outputs.sdks == 'true' || needs.changes.outputs.workflows == 'true' }}"
+            check_job "allsource-mcp Quality" "${{ needs.allsource-mcp-quality.result }}" "${{ needs.changes.outputs.allsource-mcp == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Go Quality" "${{ needs.go-quality.result }}" "${{ needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Elixir Query" "${{ needs.elixir-query-quality.result }}" "${{ needs.changes.outputs.elixir == 'true' || needs.changes.outputs.workflows == 'true' }}"
             check_job "Elixir MCP" "${{ needs.elixir-mcp-quality.result }}" "${{ needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' }}"

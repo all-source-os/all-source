@@ -86,6 +86,7 @@ defmodule QueryServiceExWeb.Router do
     get("/health/live", HealthController, :live)
     get("/health/ready", HealthController, :ready)
     get("/health/replay", HealthController, :replay)
+    get("/health/consumers", ConsumerAccessController, :show)
 
     # Metrics endpoints
     # GET /api/metrics - JSON format (default) or Prometheus (with Accept header/format param)
@@ -240,7 +241,6 @@ defmodule QueryServiceExWeb.Router do
     pipe_through([:tenant_scoped, :rate_limited, :queries_quota])
 
     post("/query", QueryController, :execute)
-    post("/query/projected", ProjectedQueryController, :execute)
   end
 
   # Per-tenant projections (QS-owned; enable/disable curated templates).
@@ -502,13 +502,6 @@ defmodule QueryServiceExWeb.Router do
 
     post("/events", EventController, :create)
     post("/events/batch", EventController, :create_batch)
-  end
-
-  # Snapshot endpoints (tenant-scoped)
-  scope "/api/v1", QueryServiceExWeb do
-    pipe_through([:tenant_scoped, :rate_limited])
-
-    get("/snapshots", SnapshotController, :index)
   end
 
   # Per-tenant projections (QS-owned), /api/v1 mirror of the /api routes.

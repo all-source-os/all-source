@@ -42,7 +42,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Ingested event: %s\n", event.ID)
+	fmt.Printf("Ingested event: %s\n", event.EventID)
 
 	// Query events
 	result, err := client.Query(ctx, allsource.QueryOptions{
@@ -53,47 +53,85 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Printf("Found %d events\n", result.Count)
-
-	// Get projections
-	projections, err := client.GetProjections(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, p := range projections {
-		fmt.Printf("Projection: %s (status: %s)\n", p.Name, p.Status)
-	}
-
-	// Get a single projection
-	proj, err := client.GetProjection(ctx, "user-count")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Projection %s version %d\n", proj.Name, proj.Version)
 }
 ```
 
-## Projection replay analysis
+## Latest state
 
-Preview impact through Query Service before starting an atomic rebuild:
+Read one entity's folded state without its history. Pass the `ETag` back as
+`IfNoneMatch`; an unchanged state returns `ErrNotModified` and no body.
 
 ```go
-analysis, err := client.AnalyzeProjectionReplay(ctx, "event-count")
-if err != nil {
-	log.Fatal(err)
-}
-
-if analysis.ReadyToReplay && analysis.TotalEvents > 0 {
-	run, err := client.StartProjectionReplay(ctx, analysis.ProjectionName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	progress, err := client.GetProjectionReplay(ctx, run.ReplayID)
-	fmt.Printf("%.1f%%\n", progress.ProgressPercentage)
+st, err := client.EntityState(ctx, "skill:abc", allsource.EntityStateOptions{})
+// later
+_, err = client.EntityState(ctx, "skill:abc", allsource.EntityStateOptions{IfNoneMatch: st.ETag})
+if errors.Is(err, allsource.ErrNotModified) {
+	// st is still current
 }
 ```
 
-`ListProjectionReplays` returns tenant run history.
-`CancelProjectionReplay` stops a rebuild without publishing partial state.
+`Query` results carry `EntityVersion` when the query filters by entity, and
+`QueryOptions.IfNoneMatch` makes a query conditional too.
+
+## Views
+
+A view is a declarative read model. You define it; the Query Service folds it
+from the event feed and AllSource stores the rows.
+
+```go
+_, err := client.DefineView(ctx, "ops_status", allsource.ViewDefinition{
+	Source: allsource.ViewSource{Prefixes: []string{"ops.probe."}},
+	Key:    "{payload.probe}:{day:timestamp}",
+	Ops: []allsource.ViewOp{
+		{On: "ops.probe.observed", When: map[string]any{"payload.ok": true}, Increment: map[string]int64{"ok": 1}},
+		{On: "ops.probe.observed", Max: map[string]any{"last_seen_at": "timestamp"}},
+	},
+})
+
+row, err := client.Latest(ctx, "ops_status", "probe-a:2026-10-27", allsource.LatestOptions{})
+
+for row, err := range client.LatestMany(ctx, "ops_status", allsource.LatestManyOptions{Prefix: "probe-a:"}) {
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(row.Key, row.State)
+}
+```
+
+`Sync` keeps a local copy current: a snapshot of every page, then a
+long-polled changes loop. Store `Checkpoint` after applying a batch whose
+`Snapshotting` is false, and pass it back to resume. A view reset re-runs the
+snapshot (that batch has `Reset` set), and a `429` or `503` with `Retry-After`
+is waited out. The HTTP client timeout must exceed `Wait`.
+
+```go
+err := client.Sync(ctx, "ops_status", allsource.SyncOptions{Checkpoint: stored, Wait: 20 * time.Second},
+	func(b allsource.SyncBatch) error {
+		if b.Reset {
+			clear(rows)
+		}
+		for _, r := range b.Upserts {
+			rows[r.Key] = r.State
+		}
+		for _, k := range b.Deletes {
+			delete(rows, k)
+		}
+		if !b.Snapshotting {
+			saveCheckpoint(b.Checkpoint)
+		}
+		return nil
+	})
+```
+
+`GetView`, `ListViews` and `DeleteView` manage definitions.
+
+## Event feed and read models
+
+`Feed` pages through the tenant's event feed; resume from `page.Next()`. An
+`*EpochChangedError` means the feed generation changed: rebuild from position
+0 of the new epoch and commit with `Reset`. `ReadModel(name).Page` and
+`.Commit` read and write a read model; a stale `ExpectedRevision` returns a
+`*VersionConflictError`.
 
 ## Error Handling
 

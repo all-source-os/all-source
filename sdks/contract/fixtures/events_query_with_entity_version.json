@@ -1,0 +1,33 @@
+{
+  "name": "events_query_with_entity_version",
+  "description": "queryEvents({entityId: \"skill:abc\", limit: 1}). Core sends entity_version because the query filters by entity_id; the SDK exposes it on the typed response together with the ETag.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/events/query",
+    "query": { "entity_id": "skill:abc", "limit": "1" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "ETag": "\"sha256:9b0c2e4d6f8a1b3c5d7e9f0a2b4c6d8e\"" },
+    "body": {
+      "events": [
+        {
+          "id": "0192f0a1-7c3e-7b10-9a2d-5e4f6a7b8c9d",
+          "event_type": "skill.created",
+          "entity_id": "skill:abc",
+          "tenant_id": "t1",
+          "payload": { "name": "x" },
+          "timestamp": "2026-10-20T09:00:00Z",
+          "metadata": null,
+          "version": 1
+        }
+      ],
+      "count": 1,
+      "total_count": 12,
+      "has_more": true,
+      "entity_version": 12
+    }
+  }
+}

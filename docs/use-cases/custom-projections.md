@@ -157,7 +157,7 @@ Key differences:
 - **Single-instance only.** Two workers with the same `name` running concurrently will thrash Core's cursor. Use different names (`"assets-shard-0"`, `"assets-shard-1"`) if you need sharding — but that requires partition-aware reducers.
 - **No back-pressure to Core.** If your reducer is slower than the live event rate, the worker will fall behind. Core's broadcast channel will eventually lag, triggering replay on reconnect. The SDK doesn't currently slow Core down; scale the reducer or shard.
 - **Reducer is sync.** If you need async work per event (e.g. enrichment from an external service), do it via a channel outside the reducer, or batch it. A future release may add an async reducer variant.
-- **State push-back reads through Core.** `ProjectionHandle::get_state` calls Core's `GET /api/v1/projections/:name/:entity_id/state`. Since Core v0.19.1 this falls back to the projection cache, so SDK-managed projections return their pushed state without needing a registered projection in Core. Against Core < 0.19.1 the endpoint returns 404 (surfaced as `Ok(None)`); read the in-memory `handle.state()` instead on those deployments.
+- **State push-back reads through Core.** `.state_flush_entities` upserts into the Core read model named after the worker (Rust SDK 0.26 and later). `ProjectionHandle::get_state` reads one row of it; other processes read it with `core.read_model(name).page(...)`. The worker name must be a valid read-model name (1..64 of `[A-Za-z0-9_-]`, not `view_*`).
 - **Api key on WebSocket.** The v0.19 WS client connects without auth. Core's `/events/stream` doesn't require a key today; when that changes, the worker will need to thread the API key through.
 
 ## Related docs

@@ -3,7 +3,7 @@ defmodule QueryServiceExWeb.ChannelBroadcaster do
   Helper module for broadcasting events and updates to WebSocket channels.
 
   This module provides functions to broadcast events from internal components
-  (like ProjectionSync, Broadway pipelines, etc.) to connected WebSocket clients.
+  (like TenantProjections, Broadway pipelines, etc.) to connected WebSocket clients.
 
   All topics are TENANT-SCOPED (`events:<tenant>:...`, `projections:<tenant>:...`)
   so a broadcast can only reach subscribers of the same tenant. The event/caller

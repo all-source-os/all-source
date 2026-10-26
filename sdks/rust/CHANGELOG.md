@@ -6,6 +6,58 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-10-27
+
+Implements the latest-state read contract
+(`docs/contracts/latest-state/README.md`). Every new call is on both
+`QueryClient` and `CoreClient`, and `tests/contract_fixtures.rs` runs the SDK
+against every shared fixture in `sdks/contract/fixtures/`.
+
+### Added
+
+- `entity_state(id, &EntityStateParams)`: current state of one entity without
+  its history (`history` is sent only when set), with `as_of` and
+  `if_none_match`. Returns `Conditional::Modified(EntityState)` carrying
+  `version` and `etag`, or `Conditional::NotModified { etag }` on a 304.
+- `QueryEventsResponse::entity_version`, sent by Core when the query filters by
+  `entity_id`.
+- `feed(&FeedParams)` for `GET /api/v1/event-feed`, with
+  `FeedPage::next_cursor`. A cursor from an older epoch fails with the new
+  `Error::FeedEpochChanged { expected, current }`.
+- `read_model(name)` returning a `ReadModel` handle with `page` and `commit`.
+  `ReadModelCommit::delete` sends the row as JSON `null`; a stale
+  `expected_revision` fails with `Error::VersionConflict` and is not retried.
+- Views: `define_view`, `get_view`, `delete_view`, `list_views`;
+  `latest(view, key, if_none_match)` returning `LatestRow::Found`,
+  `NotModified` or `NotFound { ready }`; `latest_many` (a
+  `LatestManyPaginator` over every page); `view_entities` and `view_changes`
+  for single calls.
+- `sync(view, SyncOptions)` returning a `ViewSync`: every entity page, then a
+  `changes` loop that long-polls with `wait` once caught up. It re-reads the
+  pages with `reset: true` on `view_reset`, waits out `Retry-After` on 429 and
+  503, and yields `SyncBatch` values of `SyncChange::Upsert` / `Delete` plus a
+  checkpoint to store and pass back through `SyncOptions::checkpoint`.
+- `Error::ViewReset { generation }` and `Error::InvalidView { detail }`.
+
+### Changed
+
+- `ProjectionWorker` state flush (`state_flush_entities`) commits to the Core
+  read model named after the worker instead of the retired projection-state
+  routes, at the feed head, resetting a model committed in an older epoch.
+  `ProjectionHandle::get_state` reads that read model. Worker names must now be
+  valid read-model names (1..64 of `[A-Za-z0-9_-]`).
+- `Error` has new variants, so exhaustive matches need updating.
+
+### Removed
+
+- `CoreClient::get_projection_state`, `get_projection_state_summary`,
+  `get_projection_state_summary_paged`, `bulk_get_projection_states`,
+  `put_projection_state`, `bulk_put_projection_state`, and
+  `ProjectionStateSummaryParams` / `ProjectionStateSummaryPage`. Core removed
+  `/api/v1/projections/{name}/state`, `/{name}/{entity_id}/state`, `/bulk` and
+  `/bulk/save` because their store carries no tenant key. Use a read model or
+  a view.
+
 ## [0.25.0] — 2026-10-24
 
 ### Added

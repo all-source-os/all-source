@@ -1,0 +1,31 @@
+{"at": "2026-10-27T17:06:14.142+00:00", "step": "signup ops@pr366.test", "passed": true, "status": 201, "tenant": "ws-a6a0e1c22a59e6f5360da6aa62f8c10b"}
+{"at": "2026-10-27T17:06:14.275+00:00", "step": "mint dashboard key", "passed": true, "status": 201, "scopes": ["events:read", "events:write", "projections:read", "projections:write"], "key_tenant": "ws-a6a0e1c22a59e6f5360da6aa62f8c10b"}
+{"at": "2026-10-27T17:06:14.276+00:00", "step": "dashboard key belongs to the signed-up tenant", "passed": true, "tenant": "ws-a6a0e1c22a59e6f5360da6aa62f8c10b", "key_tenant": "ws-a6a0e1c22a59e6f5360da6aa62f8c10b"}
+{"at": "2026-10-27T17:06:14.353+00:00", "step": "mint dashboard key", "passed": true, "status": 201, "scopes": ["events:read", "projections:read"], "key_tenant": "ws-a6a0e1c22a59e6f5360da6aa62f8c10b"}
+{"at": "2026-10-27T17:06:14.744+00:00", "step": "signup other@pr366.test", "passed": true, "status": 201, "tenant": "ws-2a891d85ad5be4f87527b367b838fc40"}
+{"at": "2026-10-27T17:06:14.815+00:00", "step": "mint dashboard key", "passed": true, "status": 201, "scopes": ["events:read", "events:write", "projections:read", "projections:write"], "key_tenant": "ws-2a891d85ad5be4f87527b367b838fc40"}
+{"at": "2026-10-27T17:06:17.419+00:00", "step": "define view through gateway", "passed": true, "generation": 1, "ready": false}
+{"at": "2026-10-27T17:06:17.468+00:00", "step": "ingested", "events": 5, "note": "4 ops.probe.observed + 1 billing event outside the view's prefix"}
+{"at": "2026-10-27T17:06:29.555+00:00", "step": "Query Service folded the view", "passed": true, "revision": 1, "checkpoint": "FeedCursor(epoch=3438269401613255, position=9)", "seconds": 12.1}
+{"at": "2026-10-27T17:06:29.558+00:00", "step": "latest probe-a", "passed": true, "state": {"day": "2026-10-27", "failed": 1, "last_seen_at": "2026-10-27T17:06:17.444280Z", "ok": 2, "probe": "probe-a", "status": "degraded"}, "etag": "\"sha256:b5394f2b5c7debb5d941fad2421ff65b\""}
+{"at": "2026-10-27T17:06:29.559+00:00", "step": "latest with If-None-Match is NotModified", "passed": true, "etag": "\"sha256:b5394f2b5c7debb5d941fad2421ff65b\""}
+{"at": "2026-10-27T17:06:29.561+00:00", "step": "gateway returns 304 with no body", "passed": true, "status": 304, "etag": "\"sha256:b5394f2b5c7debb5d941fad2421ff65b\"", "body_bytes": 0}
+{"at": "2026-10-27T17:06:29.563+00:00", "step": "latest_many returns both probes", "passed": true, "keys": ["probe-a:2026-10-27", "probe-b:2026-10-27"]}
+{"at": "2026-10-27T17:06:29.566+00:00", "step": "missing row is ViewNotFound", "passed": true, "ready": true}
+{"at": "2026-10-27T17:06:29.569+00:00", "step": "sync snapshot yields rows and a checkpoint", "passed": true, "upserts": 2, "checkpoint": "SyncCheckpoint(revision=1, generation=1)"}
+{"at": "2026-10-27T17:06:31.604+00:00", "step": "sync long-poll delivers a new row", "passed": true, "seconds_after_ingest": 0.03, "state": {"day": "2026-10-27", "last_seen_at": "2026-10-27T17:06:31.578286Z", "ok": 1, "probe": "probe-c", "status": "up"}, "items": ["SyncUpsert"]}
+{"at": "2026-10-27T17:06:31.609+00:00", "step": "entity_state has version and no history", "passed": true, "version": 3, "etag": "\"sha256:679dd1281b565f6a3015da162731292d\""}
+{"at": "2026-10-27T17:06:31.610+00:00", "step": "entity_state If-None-Match is NotModified", "passed": true}
+{"at": "2026-10-27T17:06:31.611+00:00", "step": "tenant cannot write a view's rows directly", "passed": true, "status": 403, "body": "{\"error\":\"reserved_read_model\"}"}
+{"at": "2026-10-27T17:06:31.639+00:00", "step": "read-only key defines a view (scope counted, not enforced)", "mode": "shadow", "status": 200, "body": "{\"view\":\"ro_probe\",\"definition\":{\"source\":{\"prefixes\":[\"ops.probe.\"]},\"key\":\"{payload.probe}:{day:timestamp}\",\"ops\":[{\"on\":\"ops.probe.observed\",\"set\":{\"probe\":\"payload.probe\",\"day\":\"day:timestamp\"}},{"}
+{"at": "2026-10-27T17:06:34.690+00:00", "step": "tenant B without the view gets view_not_found", "passed": true, "status": 404}
+{"at": "2026-10-27T17:06:59.195+00:00", "step": "tenant B's same-named view folds only B's events", "passed": true, "keys": ["probe-q:2026-10-27"], "seconds": 24.4}
+{"at": "2026-10-27T17:06:59.197+00:00", "step": "tenant B cannot read tenant A's row", "passed": true, "result": "ViewNotFound"}
+{"at": "2026-10-27T17:06:59.214+00:00", "step": "client tenant_id is stripped at the gateway", "passed": true, "status": 404, "body": "{\"error\":\"not_found\",\"ready\":true}"}
+{"at": "2026-10-27T17:07:48.380+00:00", "step": "view survives Core restart", "passed": true, "revision": 2, "ready": true}
+{"at": "2026-10-27T17:07:48.382+00:00", "step": "changes cursor from before the restart still answers", "passed": true, "keys": ["probe-c:2026-10-27"], "revision": 2}
+{"at": "2026-10-27T17:07:49.448+00:00", "step": "fold resumes after restart without double counting", "passed": true, "state": {"day": "2026-10-27", "failed": 1, "last_seen_at": "2026-10-27T17:07:48.383623Z", "ok": 3, "probe": "probe-a", "status": "up"}, "seconds": 1.0}
+{"at": "2026-10-27T17:08:02.295+00:00", "step": "signup canary-owner@pr366.test", "passed": true, "status": 201, "tenant": "ws-de6ef121afd56ba75ff2f44f9e2e51cf"}
+{"at": "2026-10-27T17:08:02.367+00:00", "step": "onboarding key", "passed": true, "status": 201}
+{"at": "2026-10-27T17:08:02.565+00:00", "step": "canary keys minted", "passed": true, "statuses": [201, 201, 201]}
+{"at": "2026-10-27T17:08:02.623+00:00", "step": "revoked one canary", "passed": true, "status": 200}

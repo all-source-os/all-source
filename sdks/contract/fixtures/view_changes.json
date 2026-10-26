@@ -1,0 +1,25 @@
+{
+  "name": "view_changes",
+  "description": "Changes after view_entities_page_2's revision 61. sync yields an upsert of probe-a:2026-10-27 and a deletion of probe-z:2026-10-20 (state null), then checkpoint 62.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/changes",
+    "query": { "after": "61" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "view": "ops_status",
+      "changes": [
+        { "key": "probe-a:2026-10-27", "version": 62, "state": { "ok": 1431, "failed": 2 } },
+        { "key": "probe-z:2026-10-20", "version": 62, "state": null }
+      ],
+      "revision": 62,
+      "caught_up": true,
+      "generation": 2
+    }
+  }
+}

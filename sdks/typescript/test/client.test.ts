@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import type { EventFolder } from "../src";
-import { AllSourceClient, AllSourceError, CircuitOpenError } from "../src";
+import {
+  AllSourceClient,
+  AllSourceError,
+  CircuitOpenError,
+  NotModified,
+  ViewRowNotFound,
+} from "../src";
 
 const MOCK_BASE_URL = "https://allsource-query.example.com";
 const MOCK_API_KEY = "test-api-key-123";
@@ -69,6 +75,20 @@ describe("getHealth", () => {
     expect(url).toBe(`${MOCK_BASE_URL}/health`);
     expect(options.method).toBe("GET");
     expect((options.headers as Record<string, string>)["X-API-Key"]).toBe(MOCK_API_KEY);
+  });
+
+  test("sends the key as a Bearer token, the only header the gateway reads", async () => {
+    const client = createClient();
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ status: "ok" }), { status: 200 }))
+    );
+
+    await client.getHealth();
+
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect((options.headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${MOCK_API_KEY}`
+    );
   });
 });
 
@@ -200,102 +220,6 @@ describe("queryEvents", () => {
     const parsed = new URL(url);
     expect(parsed.searchParams.get("entity_id")).toBe("user-123");
     expect(parsed.searchParams.has("limit")).toBe(false);
-  });
-});
-
-describe("listProjections", () => {
-  test("sends GET /api/v1/projections", async () => {
-    const client = createClient();
-    const response = {
-      projections: [{ name: "user-count", state: { count: 42 } }],
-      total: 1,
-    };
-
-    mockFetch.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify(response), { status: 200 }))
-    );
-
-    const result = await client.listProjections();
-
-    expect(result).toEqual(response);
-    expect(result.projections.length).toBe(1);
-    expect(result.total).toBe(1);
-
-    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${MOCK_BASE_URL}/api/v1/projections`);
-    expect(options.method).toBe("GET");
-  });
-});
-
-describe("projection replay workflow", () => {
-  const run = {
-    replay_id: "replay-1",
-    projection_name: "event-count",
-    status: "running",
-    started_at: "2026-08-14T10:00:00Z",
-    updated_at: "2026-08-14T10:00:00Z",
-    completed_at: null,
-    total_events: 42,
-    processed_events: 12,
-    failed_events: 0,
-    progress_percentage: 28.6,
-    events_per_second: 120,
-    error_message: null,
-  } as const;
-
-  test("analyzes replay impact without starting a run", async () => {
-    const client = createClient();
-    const analysis = {
-      projection_name: "event-count",
-      projection_title: "Event Count",
-      projection_kind: "counter",
-      projection_status: "ready",
-      current_entity_count: 1,
-      total_events: 42,
-      sampled_events: 42,
-      analysis_scope: "full",
-      event_type_distribution: [{ event_type: "order.created", count: 42, share: 100 }],
-      sampled_entity_count: 7,
-      sampled_entities: [{ entity_id: "order-1", event_count: 8 }],
-      first_event_at: "2026-08-01T00:00:00Z",
-      last_event_at: "2026-08-14T00:00:00Z",
-      analyzed_at: "2026-08-14T10:00:00Z",
-      ready_to_replay: true,
-      checks: [],
-      warnings: [],
-    } as const;
-
-    mockFetch.mockImplementation(() =>
-      Promise.resolve(new Response(JSON.stringify({ data: analysis }), { status: 200 }))
-    );
-
-    expect(await client.analyzeProjectionReplay("event-count")).toEqual(analysis);
-    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${MOCK_BASE_URL}/api/replay/preview`);
-    expect(options.method).toBe("POST");
-    expect(JSON.parse(options.body as string)).toEqual({ projection_name: "event-count" });
-  });
-
-  test("starts, lists, reads, and cancels replay runs", async () => {
-    const client = createClient();
-    mockFetch.mockImplementation((input, init) => {
-      const url = String(input);
-      const body = url.endsWith("/api/replay") && init?.method === "GET" ? [run] : run;
-      return Promise.resolve(new Response(JSON.stringify({ data: body }), { status: 200 }));
-    });
-
-    expect(await client.startProjectionReplay("event-count")).toEqual(run);
-    expect(await client.listProjectionReplays()).toEqual([run]);
-    expect(await client.getProjectionReplay("replay-1")).toEqual(run);
-    expect(await client.cancelProjectionReplay("replay-1")).toEqual(run);
-
-    const calls = mockFetch.mock.calls as unknown as [string, RequestInit][];
-    expect(calls.map(([url, options]) => [url, options.method])).toEqual([
-      [`${MOCK_BASE_URL}/api/replay`, "POST"],
-      [`${MOCK_BASE_URL}/api/replay`, "GET"],
-      [`${MOCK_BASE_URL}/api/replay/replay-1`, "GET"],
-      [`${MOCK_BASE_URL}/api/replay/replay-1/cancel`, "POST"],
-    ]);
   });
 });
 
@@ -644,6 +568,129 @@ describe("queryAndFold", () => {
 
     const result = await client.queryAndFold({ entity_id: "c1" }, folder);
     expect(result).toBe(6); // 5 + 3 - 2
+  });
+});
+
+describe("latest-state reads", () => {
+  function json(body: unknown, init: ResponseInit = {}): Promise<Response> {
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200, ...init }));
+  }
+
+  test("queryEvents without an ETag adds no etag field", async () => {
+    const client = createClient();
+    mockFetch.mockImplementation(() => json({ events: [], count: 0 }));
+
+    const result = await client.queryEvents({ entity_id: "e1" });
+
+    expect("etag" in result).toBe(false);
+  });
+
+  test("queryEvents sends If-None-Match and returns NotModified on 304", async () => {
+    const client = createClient();
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(new Response(null, { status: 304, headers: { ETag: '"sha256:aa"' } }))
+    );
+
+    const result = await client.queryEvents({ entity_id: "e1" }, { ifNoneMatch: '"sha256:aa"' });
+
+    expect(result).toBeInstanceOf(NotModified);
+    const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect((options.headers as Record<string, string>)["If-None-Match"]).toBe('"sha256:aa"');
+  });
+
+  test("entityState sends history=true and as_of only when asked", async () => {
+    const client = createClient();
+    mockFetch.mockImplementation(() =>
+      json({
+        entity_id: "e1",
+        current_state: {},
+        event_count: 0,
+        last_updated: null,
+        as_of: "2026-10-01T00:00:00Z",
+        version: 0,
+        history: [],
+      })
+    );
+
+    const state = await client.entityState("e1", { history: true, asOf: "2026-10-01T00:00:00Z" });
+
+    const [url] = mockFetch.mock.calls[0] as [string];
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get("history")).toBe("true");
+    expect(parsed.searchParams.get("as_of")).toBe("2026-10-01T00:00:00Z");
+    expect(state.history).toEqual([]);
+    expect(state.etag).toBeNull();
+  });
+
+  test("feed with no events keeps the request cursor as next", async () => {
+    const client = createClient();
+    mockFetch.mockImplementation(() =>
+      json({
+        tenant_id: "t1",
+        cursor: { epoch: 41, position: 9 },
+        head: { epoch: 41, position: 9 },
+        events: [],
+        positions: [],
+        caught_up: true,
+      })
+    );
+
+    const page = await client.feed({ cursor: { epoch: 41, position: 9 } });
+
+    expect(page.next).toEqual({ epoch: 41, position: 9 });
+  });
+
+  test("latest rejects a 404 that is not a missing row", async () => {
+    const client = createClient({ retry: { maxRetries: 0 } });
+    mockFetch.mockImplementation(() => json({ error: "route not found" }, { status: 404 }));
+
+    const error = await client.latest("ops_status", "k").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AllSourceError);
+    expect(error).not.toBeInstanceOf(ViewRowNotFound);
+  });
+
+  test("deleteView sends DELETE and accepts an empty body", async () => {
+    const client = createClient();
+    mockFetch.mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
+
+    await client.deleteView("ops_status");
+
+    const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${MOCK_BASE_URL}/api/v1/views/ops_status`);
+    expect(options.method).toBe("DELETE");
+  });
+
+  test("AllSourceError carries Retry-After in milliseconds", async () => {
+    const client = createClient({ retry: { maxRetries: 0 } });
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(new Response(null, { status: 503, headers: { "Retry-After": "2" } }))
+    );
+
+    const error = (await client.getHealth().catch((e: unknown) => e)) as AllSourceError;
+
+    expect(error.status).toBe(503);
+    expect(error.retryAfterMs).toBe(2000);
+  });
+
+  test("retries wait the server's Retry-After instead of the backoff", async () => {
+    let calls = 0;
+    const customFetch = mock(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(null, { status: 429, headers: { "Retry-After": "0" } })
+        );
+      }
+      return json({ status: "ok" });
+    }) as unknown as typeof globalThis.fetch;
+    const client = createClient({
+      fetch: customFetch,
+      retry: { maxRetries: 1, baseDelay: 60_000, backoffFactor: 1, maxDelay: 60_000 },
+    });
+
+    expect(await client.getHealth()).toEqual({ status: "ok" });
+    expect(calls).toBe(2);
   });
 });
 

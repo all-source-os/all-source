@@ -22,9 +22,9 @@ defmodule McpServerElixir.Protocol.McpToolsSchemaTest do
       assert "schema_diff" in tool_names
     end
 
-    test "returns 64 tools total (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read)" do
+    test "returns 67 tools total (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read + 3 view)" do
       tools = McpTools.list_tools(%{control_plane_enabled: true})
-      assert length(tools) == 64
+      assert length(tools) == 67
     end
   end
 

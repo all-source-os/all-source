@@ -253,7 +253,6 @@ Stateless API gateway. Routes to Core, delegates auth to Control Plane.
 
 - Fully stateless, no PostgreSQL dependency
 - Server-side projections with fold-on-read and continuous folding via PubSub
-- `POST /api/query/projected` — snapshot-aware fold endpoint
 - `AUTH_DISABLED` mode for local dev (fully bypasses all auth)
 - Tesla HTTP client with connection pooling, Broadway event processing
 - OpenAPI specification via `open_api_spex`

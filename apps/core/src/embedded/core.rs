@@ -14,7 +14,6 @@ use crate::{
         persistence::{
             backup::{BackupConfig, BackupManager, BackupMetadata},
             compaction::CompactionConfig,
-            snapshot::SnapshotConfig,
             wal::WALConfig,
         },
     },
@@ -1020,14 +1019,9 @@ impl EmbeddedCore {
                     fsync_interval_ms: config.wal_fsync_interval_ms(),
                     ..WALConfig::default()
                 };
-                let snapshot_config = SnapshotConfig {
-                    time_threshold_seconds: config.parquet_flush_interval_secs() as i64,
-                    ..SnapshotConfig::default()
-                };
                 let mut store_config = EventStoreConfig::production(
                     storage_dir,
                     wal_dir,
-                    snapshot_config,
                     wal_config,
                     CompactionConfig::default(),
                 );

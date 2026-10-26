@@ -5,7 +5,6 @@ defmodule QueryServiceEx.Application do
 
   use Application
 
-  alias QueryServiceEx.Application.Services.ProjectionSync
   alias QueryServiceEx.Cluster.Topology
   alias QueryServiceEx.Integrations.Kafka
   alias QueryServiceEx.Integrations.RabbitMQ
@@ -18,9 +17,6 @@ defmodule QueryServiceEx.Application do
 
     # Attach telemetry handlers for structured logging
     QueryServiceEx.Telemetry.attach_handlers()
-
-    # Initialize ETS cache for projections (legacy Core-state sync)
-    ProjectionSync.init_cache()
 
     # Initialize ETS tables for the per-tenant (QS-owned) projections feature
     TenantProjections.init_tables()
@@ -78,15 +74,15 @@ defmodule QueryServiceEx.Application do
         cluster_children ++
         integration_children() ++
         [
-          # Registry for projection sync processes (local fallback when clustering disabled)
+          # Registry naming per-tenant view folders
           {Registry, keys: :unique, name: QueryServiceEx.ProjectionRegistry},
 
-          # DynamicSupervisor for projection sync processes (local fallback)
+          # One ViewFolder per {tenant, view}, started by the ViewCatalog poller
           {DynamicSupervisor,
-           strategy: :one_for_one, name: QueryServiceEx.ProjectionSyncSupervisor},
+           strategy: :one_for_one, name: QueryServiceEx.Views.FolderSupervisor},
 
-          # DynamicSupervisor for server-side projection servers (Phase 2 continuous projections)
-          QueryServiceEx.Projections.ProjectionSupervisor,
+          # Polls Core's view definitions (ignored unless views_fold_enabled)
+          QueryServiceEx.Views.ViewCatalog,
 
           # Task supervisor for per-tenant projection background backfills
           {Task.Supervisor, name: QueryServiceEx.Projections.BackfillSupervisor},

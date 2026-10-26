@@ -74,4 +74,13 @@ Hosted base URL: https://api.all-source.xyz
 Health: `GET https://api.all-source.xyz/health`
 Authentication: `Authorization: Bearer <api_key>`
 
+Latest state without history, all served by the hosted gateway:
+
+- `GET /api/v1/entities/{entity_id}/state`: current state and `version` of one entity; history only with `history=true`.
+- `PUT /api/v1/views/{view}`: define a declarative view (source prefixes, row-key template, operations such as set, increment, max, status).
+- `GET /api/v1/views/{view}/entities/{key}` and `GET /api/v1/views/{view}/entities?prefix=`: latest state of one or many view rows.
+- `GET /api/v1/views/{view}/changes?after=<revision>&wait=<seconds>`: rows changed after a revision, including deletions.
+- `GET /api/v1/event-feed` and `GET|PUT /api/v1/read-models/{name}`: fold your own read model from the feed and commit its rows.
+- These routes return an `ETag` and answer `If-None-Match` with `304 Not Modified`.
+
 Never expose API keys in prompts, client bundles, screenshots, campaign URLs, or public event streams. Consult detailed reference for endpoints, release boundaries, pricing facts, and current connector limitations.

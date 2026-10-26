@@ -1,7 +1,7 @@
 use allsource_core::{
     QueryEventsRequest,
     domain::entities::Event,
-    infrastructure::persistence::{CompactionConfig, SnapshotConfig, SnapshotType, WALConfig},
+    infrastructure::persistence::{CompactionConfig, WALConfig},
     store::{EventStore, EventStoreConfig},
 };
 use chrono::Utc;
@@ -54,8 +54,6 @@ fn test_full_lifecycle_in_memory() {
     // Reconstruct state
     let state = store.reconstruct_state("user-1", None).unwrap();
     assert!(state["current_state"]["score"].is_number());
-    // Note: history array may be shorter if snapshot optimization is used
-    // Verify total events through stats instead
     assert!(
         !state["history"].as_array().unwrap().is_empty(),
         "Should have events in history"
@@ -176,25 +174,11 @@ fn test_wal_durability_and_recovery() {
 }
 
 #[test]
-fn test_snapshot_optimization() {
-    // Test 4: Snapshot performance optimization
+fn test_latest_state_without_history() {
+    // Test 4: Latest state folds every event and leaves history out on request
     let temp_dir = TempDir::new().unwrap();
+    let store = EventStore::with_config(EventStoreConfig::with_persistence(temp_dir.path()));
 
-    let snapshot_config = SnapshotConfig {
-        event_threshold: 10,
-        auto_snapshot: true,
-        ..Default::default()
-    };
-
-    let config = EventStoreConfig {
-        storage_dir: Some(temp_dir.path().to_path_buf()),
-        snapshot_config,
-        ..Default::default()
-    };
-
-    let store = EventStore::with_config(config);
-
-    // Ingest many events to trigger automatic snapshot
     for i in 0..50 {
         let event = create_test_event(
             "account-1",
@@ -204,25 +188,14 @@ fn test_snapshot_optimization() {
         store.ingest(&event).unwrap();
     }
 
-    // Verify snapshot was created
-    let snapshot_manager = store.snapshot_manager();
-    let latest = snapshot_manager.get_latest_snapshot("account-1");
-    assert!(
-        latest.is_some(),
-        "Snapshot should be created automatically after threshold"
-    );
+    let state = store
+        .entity_state("account-1", None, Some("default"), false)
+        .unwrap();
 
-    let snapshot = latest.unwrap();
-    assert!(snapshot.event_count >= 10);
-    // Snapshot could be Manual or Automatic depending on when check_auto_snapshot was triggered
-    assert!(
-        snapshot.metadata.snapshot_type == SnapshotType::Automatic
-            || snapshot.metadata.snapshot_type == SnapshotType::Manual
-    );
-
-    // Verify stats
-    let stats = snapshot_manager.stats();
-    assert!(stats.total_snapshots > 0);
+    assert_eq!(state["event_count"], 50);
+    assert_eq!(state["version"], 50);
+    assert_eq!(state["current_state"]["balance"], 1000 + 49 * 50);
+    assert!(state.get("history").is_none());
 }
 
 #[test]
@@ -453,12 +426,6 @@ fn test_full_production_config() {
     let storage_dir = TempDir::new().unwrap();
     let wal_dir = TempDir::new().unwrap();
 
-    let snapshot_config = SnapshotConfig {
-        event_threshold: 10,
-        auto_snapshot: true,
-        ..Default::default()
-    };
-
     let wal_config = WALConfig {
         sync_on_write: true,
         ..Default::default()
@@ -472,7 +439,6 @@ fn test_full_production_config() {
     let config = EventStoreConfig::production(
         storage_dir.path(),
         wal_dir.path(),
-        snapshot_config,
         wal_config,
         compaction_config,
     );
@@ -489,19 +455,11 @@ fn test_full_production_config() {
     let stats = store.stats();
     assert_eq!(stats.total_events, 100);
 
-    // Snapshot should exist
-    let snapshot_manager = store.snapshot_manager();
-    assert!(
-        snapshot_manager
-            .get_latest_snapshot("production-entity")
-            .is_some()
-    );
-
     // Flush storage
     store.flush_storage().unwrap();
 
-    // Create manual snapshot
-    store.create_snapshot("production-entity").unwrap();
+    let state = store.reconstruct_state("production-entity", None).unwrap();
+    assert_eq!(state["event_count"], 100);
 }
 
 #[test]
@@ -553,12 +511,11 @@ fn test_event_validation() {
 }
 
 #[test]
-fn test_snapshot_time_travel_optimization() {
-    // Test 14: Snapshots optimize time-travel queries
+fn test_reconstruct_state_replays_full_history() {
+    // Test 14: Every read folds the whole history; no cached base shortens it
     let store = EventStore::new();
 
-    // Ingest many events
-    for i in 0..100 {
+    for i in 0..110 {
         let event = create_test_event(
             "heavy-entity",
             "data.update",
@@ -567,42 +524,11 @@ fn test_snapshot_time_travel_optimization() {
         store.ingest(&event).unwrap();
     }
 
-    // Create snapshot manually
-    store.create_snapshot("heavy-entity").unwrap();
-
-    // Now reconstruct state - should use snapshot
-    let _state = store.reconstruct_state("heavy-entity", None).unwrap();
-    // When using snapshot, event_count reflects events after snapshot (optimization)
-    // Verify the snapshot was created by checking snapshot manager
-    let snapshot_manager = store.snapshot_manager();
-    let snapshot = snapshot_manager
-        .get_latest_snapshot("heavy-entity")
-        .unwrap();
-    assert_eq!(
-        snapshot.event_count, 100,
-        "Snapshot should contain 100 events"
-    );
-
-    // Ingest more events
-    for i in 100..110 {
-        let event = create_test_event("heavy-entity", "data.update", json!({"value": i}));
-        store.ingest(&event).unwrap();
-    }
-
-    // Reconstruct should now only replay events after snapshot (snapshot optimization)
     let state = store.reconstruct_state("heavy-entity", None).unwrap();
-    // History contains only events after the snapshot, not all 110 events
-    let history_len = state["history"].as_array().unwrap().len();
-    assert!(
-        history_len <= 11,
-        "With snapshot optimization, history should contain only events after snapshot, got {history_len}"
-    );
 
-    // Verify the final state is correct even though history is shortened
-    assert_eq!(
-        state["current_state"]["value"], 109,
-        "Final state should reflect all events"
-    );
+    assert_eq!(state["history"].as_array().unwrap().len(), 110);
+    assert_eq!(state["event_count"], 110);
+    assert_eq!(state["current_state"]["value"], 109);
 }
 
 #[test]

@@ -40,6 +40,9 @@ defmodule McpServerElixir.Protocol.McpTools do
     # Phase 3: Drill down (deep analysis)
     drill_down_tools = [
       tool_get_snapshot(),
+      tool_get_latest_state(),
+      tool_list_latest(),
+      tool_list_changes(),
       tool_reconstruct_state(),
       tool_analyze_changes(),
       tool_event_timeline(),
@@ -209,6 +212,9 @@ defmodule McpServerElixir.Protocol.McpTools do
     "query_events" => :handle_query_events,
     "reconstruct_state" => :handle_reconstruct_state,
     "get_snapshot" => :handle_get_snapshot,
+    "get_latest_state" => :handle_get_latest_state,
+    "list_latest" => :handle_list_latest,
+    "list_changes" => :handle_list_changes,
     "analyze_changes" => :handle_analyze_changes,
     "find_patterns" => :handle_find_patterns,
     "compare_entities" => :handle_compare_entities,
@@ -553,6 +559,9 @@ defmodule McpServerElixir.Protocol.McpTools do
   #
   # Phase 3 — DRILL DOWN (deep analysis)
   #   get_snapshot       → current state of entity (fastest)
+  #   get_latest_state   → one row of a view (declarative read model)
+  #   list_latest        → page through a view's rows
+  #   list_changes       → view rows written after a revision
   #   reconstruct_state  → state at any point in time (time-travel)
   #   analyze_changes    → diff between two points in time
   #   event_timeline     → chronological view of entity events
@@ -725,6 +734,117 @@ defmodule McpServerElixir.Protocol.McpTools do
           "entity_id" => %{type: "string", description: "The entity ID to get snapshot for"}
         },
         required: ["entity_id"]
+      }
+    }
+  end
+
+  defp tool_get_latest_state do
+    %{
+      name: "get_latest_state",
+      description: """
+      Get the latest state of one row of a view. A view is a declarative read model \
+      the tenant defined (PUT /api/v1/views/{view}); the Query Service folds it from \
+      the event feed and Core stores the rows, so this read costs one row, not a replay.
+
+      **When to use this tool:**
+      - Current status, counter or summary keyed by something other than one entity
+      - Checking one probe/day/customer row of a view you already know the key of
+
+      **Common patterns:**
+      - `view: "ops_status", key: "probe-a:2026-10-27"`
+
+      **Performance tips:**
+      - One row read; no events are transferred
+      - `ready: false` in a not-found error means the view is still building
+
+      **Decision guide:**
+      - Need one entity's own state? → get_snapshot
+      - Need many rows of a view? → list_latest
+      - Need what changed since a revision? → list_changes
+      """,
+      inputSchema: %{
+        type: "object",
+        properties: %{
+          "view" => %{type: "string", description: "View name ([a-z0-9_-], 1..48 chars)"},
+          "key" => %{type: "string", description: "Row key from the view's key template"}
+        },
+        required: ["view", "key"]
+      }
+    }
+  end
+
+  defp tool_list_latest do
+    %{
+      name: "list_latest",
+      description: """
+      List the latest state of a view's rows, one page at a time, ordered by key.
+
+      **When to use this tool:**
+      - Every row of a view, or every row under a key prefix
+      - Getting the `revision` watermark to start list_changes from
+
+      **Common patterns:**
+      - First page: `view: "ops_status", prefix: "probe-a:"`
+      - Next page: pass the previous page's `next` as `cursor`
+
+      **Performance tips:**
+      - `limit` 1..500 (default 100); a page is at most 128 KiB
+      - `next: null` means this was the last page
+
+      **Decision guide:**
+      - Know the exact key? → get_latest_state
+      - Only want rows changed since a revision? → list_changes
+      """,
+      inputSchema: %{
+        type: "object",
+        properties: %{
+          "view" => %{type: "string", description: "View name"},
+          "prefix" => %{type: "string", description: "Only rows whose key starts with this"},
+          "cursor" => %{
+            type: "string",
+            description: "The `next` value from the previous page (omit for the first page)"
+          },
+          "limit" => %{type: "number", description: "Rows per page, 1..500 (default 100)"}
+        },
+        required: ["view"]
+      }
+    }
+  end
+
+  defp tool_list_changes do
+    %{
+      name: "list_changes",
+      description: """
+      List a view's rows written after a revision, ordered by version then key. \
+      `state: null` is a deleted row. The response's `revision` is the cursor for the \
+      next call.
+
+      **When to use this tool:**
+      - "What changed in this view since I last looked?"
+      - Following a view after reading it with list_latest
+
+      **Common patterns:**
+      - `view: "ops_status", after: 61` with 61 from list_latest's `revision`
+
+      **Performance tips:**
+      - Returns immediately; it never waits for new writes
+      - `caught_up: true` means nothing newer exists yet
+
+      **Decision guide:**
+      - No revision yet? → list_latest first, then use its `revision`
+      - An error saying the view was rebuilt → list_latest again, then resume here
+      """,
+      inputSchema: %{
+        type: "object",
+        properties: %{
+          "view" => %{type: "string", description: "View name"},
+          "after" => %{
+            type: "number",
+            description: "Revision to read changes after (from list_latest or a prior call)"
+          },
+          "limit" => %{type: "number", description: "Maximum changes to return"}
+        },
+        required: ["view", "after"]
       }
     }
   end
@@ -2370,6 +2490,101 @@ defmodule McpServerElixir.Protocol.McpTools do
 
       {:error, reason} ->
         {:error, "Failed to get snapshot: #{inspect(reason)}"}
+    end
+  end
+
+  @doc false
+  def handle_get_latest_state(args, state, format) do
+    view = Map.fetch!(args, "view")
+    key = Map.fetch!(args, "key")
+
+    with :ok <- views_supported(state.backend, :get_latest_state),
+         {:ok, row} <- state.backend.get_latest_state(view, key) do
+      summary = """
+      📍 Latest state of "#{key}" in view "#{view}"
+      🔢 Version: #{Map.get(row, "version", "unknown")} \
+      (view revision #{Map.get(row, "revision", "unknown")})
+      ✅ Ready: #{Map.get(row, "ready", "unknown")}\
+      """
+
+      {:ok,
+       %{
+         content: [
+           %{type: "text", text: summary},
+           %{type: "text", text: ToonEncoder.format_response(row, format)}
+         ]
+       }}
+    else
+      {:error, reason} -> {:error, "Failed to get latest state: #{inspect(reason)}"}
+    end
+  end
+
+  @doc false
+  def handle_list_latest(args, state, format) do
+    view = Map.fetch!(args, "view")
+
+    params = %{
+      "prefix" => Map.get(args, "prefix"),
+      "after" => Map.get(args, "cursor"),
+      "limit" => Map.get(args, "limit")
+    }
+
+    with :ok <- views_supported(state.backend, :list_latest),
+         {:ok, page} <- state.backend.list_latest(view, params) do
+      rows = Map.get(page, "rows", [])
+      next = Map.get(page, "next")
+
+      summary = """
+      📋 #{length(rows)} rows from view "#{view}"
+      🔢 Revision: #{Map.get(page, "revision", "unknown")}
+      ➡️  Next cursor: #{if next, do: next, else: "none (last page)"}\
+      """
+
+      {:ok,
+       %{
+         content: [
+           %{type: "text", text: summary},
+           %{type: "text", text: ToonEncoder.format_response(page, format)}
+         ]
+       }}
+    else
+      {:error, reason} -> {:error, "Failed to list latest state: #{inspect(reason)}"}
+    end
+  end
+
+  @doc false
+  def handle_list_changes(args, state, format) do
+    view = Map.fetch!(args, "view")
+    params = %{"after" => Map.fetch!(args, "after"), "limit" => Map.get(args, "limit")}
+
+    with :ok <- views_supported(state.backend, :list_changes),
+         {:ok, page} <- state.backend.list_changes(view, params) do
+      changes = Map.get(page, "changes", [])
+
+      summary = """
+      🔁 #{length(changes)} changes in view "#{view}" after revision #{params["after"]}
+      🔢 Next revision: #{Map.get(page, "revision", "unknown")}
+      ✅ Caught up: #{Map.get(page, "caught_up", "unknown")}\
+      """
+
+      {:ok,
+       %{
+         content: [
+           %{type: "text", text: summary},
+           %{type: "text", text: ToonEncoder.format_response(page, format)}
+         ]
+       }}
+    else
+      {:error, reason} -> {:error, "Failed to list changes: #{inspect(reason)}"}
+    end
+  end
+
+  # Views are optional backend callbacks (the embedded NIF has none).
+  defp views_supported(backend, function) do
+    if Code.ensure_loaded?(backend) and function_exported?(backend, function, 2) do
+      :ok
+    else
+      {:error, "#{function} needs a Core that serves views; #{inspect(backend)} does not"}
     end
   end
 

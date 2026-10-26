@@ -1,0 +1,24 @@
+Same dashboard key (projections:read) within each run. Probes: harness/ts-sdk-probe.ts and
+harness/go-sdk-probe, 2026-10-27.
+
+== Before: SDKs at 27e9296c (send X-API-Key only), gateway and Core at 27e9296c ==
+{"sdk":"typescript","target":"gateway","ok":false,"status":401,"message":"AllSource API error: 401 Unauthorized"}
+{"sdk":"typescript","target":"core-direct","ok":false,"status":401,"message":"AllSource API error: 401 Unauthorized"}
+{"sdk":"typescript","call":"latestMany/sync","ok":false,"message":"AllSource API error: 401 Unauthorized"}
+{"raw":"X-API-Key only, gateway","status":401,"body":"{\"error\":\"unauthorized\",\"message\":\"no authorization header\"}"}
+{"raw":"Authorization Bearer, gateway","status":200}
+{"call":"Latest","error":"allsource: unauthorized (status 401): no authorization header","ok":false,"sdk":"go"}
+
+== After: SDKs, gateway and Core from the rebased tree (f912b50a7a), gateway in shadow ==
+{"sdk":"typescript","target":"gateway","ok":true,"result":{"view":"ops_status","key":"probe-a:2026-10-27","state":{"day":"2026-10-27","failed":1,"last_seen_at":"2026-10-27T17:07:48.383623Z","ok":3,"probe":"probe-a","status":"up"},"version":3,"revision":3,"generation":1,"ready":true,"etag":"\"sha256:4f640976b0cc091895cb0c648b39f9a8\""}}
+{"sdk":"typescript","target":"core-direct","ok":false,"status":401,"message":"AllSource API error: 401 Unauthorized"}
+{"sdk":"typescript","call":"latestMany","ok":true,"keys":["probe-a:2026-10-27","probe-b:2026-10-27","probe-c:2026-10-27"]}
+{"sdk":"typescript","call":"sync","ok":true,"snapshot_upserts":3,"checkpoint":{"revision":3,"generation":1}}
+{"raw":"X-API-Key only, gateway","status":401,"body":"{\"error\":\"unauthorized\",\"message\":\"no authorization header\"}"}
+{"raw":"Authorization Bearer, gateway","status":200}
+{"call":"Latest","etag":"\"sha256:4f640976b0cc091895cb0c648b39f9a8\"","ok":true,"sdk":"go","state":{"day":"2026-10-27","failed":1,"last_seen_at":"2026-10-27T17:07:48.383623Z","ok":3,"probe":"probe-a","status":"up"}}
+{"call":"LatestMany","keys":["probe-a:2026-10-27","probe-b:2026-10-27","probe-c:2026-10-27"],"ok":true,"sdk":"go"}
+{"call":"Sync","checkpoint":3,"ok":true,"sdk":"go","snapshot_upserts":3}
+
+The raw X-API-Key request is still 401 on the merged gateway: published SDK versions keep failing
+until upgraded. core-direct stays 401 by design: customer keys terminate at the gateway.

@@ -22,6 +22,7 @@ use tokio::{
 use crate::{
     client::CoreClient,
     error::Error,
+    latest::{read_model_row, upsert_read_model_rows},
     types::Event,
     ws::{EventStreamClient, StreamItem, StreamMode, StreamedEvent},
 };
@@ -107,12 +108,16 @@ impl<S: WorkerState> ProjectionWorkerBuilder<S> {
     /// Configure periodic state push-back to Core.
     ///
     /// The closure maps the worker's state to a list of `(entity_id, state)`
-    /// tuples that will be bulk-written to Core's projection KV. Called under
-    /// a read lock on state — keep it cheap and avoid nested awaits.
+    /// tuples that are upserted into the Core read model named after the
+    /// worker, so the name must be 1..64 of `[A-Za-z0-9_-]` and must not start
+    /// with `view_`. Called under a read lock on state — keep it cheap and
+    /// avoid nested awaits.
     ///
-    /// State push-back is off by default. Enabling it gives other consumers
-    /// (or the Query Service) a way to read projected state without running
-    /// the reducer themselves, at the cost of one bulk PUT per flush interval.
+    /// State push-back is off by default. Enabling it gives other consumers a
+    /// way to read projected state with [`CoreClient::read_model`] without
+    /// running the reducer themselves, at the cost of one feed read, one model
+    /// read and one commit per 500 entries per flush. Entries the closure stops
+    /// returning are not deleted.
     pub fn state_flush_entities<F>(mut self, f: F) -> Self
     where
         F: Fn(&S) -> Vec<(String, serde_json::Value)> + Send + Sync + 'static,
@@ -284,9 +289,10 @@ impl<S: WorkerState> ProjectionWorker<S> {
     }
 }
 
-/// Read state through `flusher` and bulk-write the entries to Core.
-/// Errors are logged, not propagated — the next flush retries, and the
-/// checkpoint stays behind a failed flush so nothing is silently lost.
+/// Read state through `flusher` and upsert the entries into the read model
+/// named after the worker. Errors are logged, not propagated — the next flush
+/// retries, and the checkpoint stays behind a failed flush so nothing is
+/// silently lost.
 async fn flush_state<S: WorkerState>(
     core: &CoreClient,
     name: &str,
@@ -300,7 +306,7 @@ async fn flush_state<S: WorkerState>(
     if entries.is_empty() {
         return;
     }
-    match core.bulk_put_projection_state(name, &entries).await {
+    match upsert_read_model_rows(core, name, &entries).await {
         Ok(()) => {
             tracing::debug!(worker = %name, entries = entries.len(), "state flushed to Core");
         }
@@ -635,24 +641,21 @@ pub struct ProjectionHandle<S: WorkerState> {
 }
 
 impl<S: WorkerState> ProjectionHandle<S> {
-    /// Read an entity's state from Core's projection KV.
-    ///
-    /// This calls `CoreClient::get_projection_state` under the hood.
-    ///
-    /// Core resolves the registered projection first, then falls back to the
-    /// projection state cache, so the state this worker flushes is readable
-    /// back even though the worker never registers a projection in Core's
-    /// manager. Requires Core ≥ 0.19.1; older versions had no cache fallback
-    /// and returned `Ok(None)` here.
+    /// Read one entity's flushed state from the Core read model named after
+    /// this worker. `Ok(None)` until a flush has written it; see
+    /// [`ProjectionWorkerBuilder::state_flush_entities`].
     ///
     /// [`Self::state`] reads the in-memory reduced state with no round-trip and
-    /// is the cheaper choice in-process; this method is what other processes
-    /// (or other nodes) use to read the same state from Core.
+    /// is the cheaper choice in-process; other processes read the same rows
+    /// with [`CoreClient::read_model`].
     pub async fn get_state<T: DeserializeOwned>(
         &self,
         entity_id: &str,
     ) -> Result<Option<T>, Error> {
-        self.core.get_projection_state(&self.name, entity_id).await
+        match read_model_row(&self.core, &self.name, entity_id).await? {
+            Some(state) => Ok(Some(serde_json::from_value(state)?)),
+            None => Ok(None),
+        }
     }
 
     /// Direct handle to the in-memory reduced state — the state the reducer
@@ -997,18 +1000,90 @@ mod tests {
         assert_eq!(first_after_reset, Duration::from_millis(100));
     }
 
+    /// Feed head, model read and commit for the `test-worker` read model.
+    /// Returns the number of commits.
     async fn mock_bulk_endpoint(server: &MockServer) -> Arc<std::sync::atomic::AtomicU64> {
+        Mock::given(method("GET"))
+            .and(path("/api/v1/event-feed"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "tenant_id": "t1",
+                "cursor": {"epoch": 3, "position": 0},
+                "head": {"epoch": 3, "position": 25},
+                "events": [],
+                "positions": [],
+                "caught_up": true
+            })))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/read-models/test-worker"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "revision": 0,
+                "content_revision": 0,
+                "checkpoint": null,
+                "ready": false,
+                "unchanged": false,
+                "rows": {},
+                "next": null
+            })))
+            .mount(server)
+            .await;
         let counter = Arc::new(std::sync::atomic::AtomicU64::new(0));
         let counter_clone = Arc::clone(&counter);
-        Mock::given(method("POST"))
-            .and(path("/api/v1/projections/test-worker/bulk/save"))
+        Mock::given(method("PUT"))
+            .and(path("/api/v1/read-models/test-worker"))
             .respond_with(move |_: &wiremock::Request| {
                 counter_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                ResponseTemplate::new(200).set_body_json(json!({"saved": 1}))
+                ResponseTemplate::new(200).set_body_json(json!({"revision": 1}))
             })
             .mount(server)
             .await;
         counter
+    }
+
+    #[tokio::test]
+    async fn state_flush_commits_every_entry_to_the_worker_read_model() {
+        let server = MockServer::start().await;
+        let _acks = mock_ack_endpoint(&server).await;
+        let flushes = mock_bulk_endpoint(&server).await;
+
+        let core = make_core(&server).await;
+        let mut worker = ProjectionWorker::<HashMap<String, u64>>::builder(core)
+            .name("test-worker")
+            .reducer(|state, event| {
+                *state.entry(event.entity_id.clone()).or_insert(0) += 1;
+                Ok(())
+            })
+            .checkpoint_interval(1000)
+            .state_flush_entities(|state| {
+                state.iter().map(|(k, v)| (k.clone(), json!(*v))).collect()
+            })
+            .build()
+            .unwrap();
+
+        let events = vec![
+            replay(1, sample_event("a", "x", 1)),
+            replay(2, sample_event("b", "x", 1)),
+        ];
+        worker.run_with_stream(stream::iter(events)).await.unwrap();
+
+        assert_eq!(flushes.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let requests = server.received_requests().await.unwrap();
+        let commit = requests
+            .iter()
+            .find(|r| r.method.as_str() == "PUT")
+            .expect("one commit");
+        let body: serde_json::Value = serde_json::from_slice(&commit.body).unwrap();
+        assert_eq!(
+            body,
+            json!({
+                "expected_revision": 0,
+                "checkpoint": {"epoch": 3, "position": 25},
+                "ready": true,
+                "reset": false,
+                "changes": {"a": 1, "b": 1}
+            })
+        );
     }
 
     #[tokio::test]
@@ -1101,7 +1176,7 @@ mod tests {
         let events = vec![replay(1, sample_event("a", "x", 1))];
         worker.run_with_stream(stream::iter(events)).await.unwrap();
 
-        // Reducer never populates state → flusher returns empty → no bulk PUT.
+        // Reducer never populates state → flusher returns empty → no commit.
         assert_eq!(flushes.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
@@ -1109,7 +1184,7 @@ mod tests {
     async fn flush_error_does_not_abort_worker() {
         let server = MockServer::start().await;
         let _acks = mock_ack_endpoint(&server).await;
-        // No mock for /bulk/save → 404, which the worker should swallow.
+        // No read-model mocks → 404, which the worker should swallow.
 
         let core = make_core(&server).await;
         let mut worker = ProjectionWorker::<HashMap<String, u64>>::builder(core)

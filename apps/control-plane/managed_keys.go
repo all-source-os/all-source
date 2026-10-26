@@ -291,7 +291,7 @@ func managedScope(c *gin.Context) string {
 		switch {
 		case path == queryEventsPath, path == "/api/v1/event-feed", strings.HasPrefix(path, "/api/v1/entities/"), path == statsAPIPath:
 			return managedScopeRead
-		case strings.HasPrefix(path, "/api/v1/read-models/"):
+		case strings.HasPrefix(path, "/api/v1/read-models/"), path == viewsPath, strings.HasPrefix(path, viewsPath+"/"):
 			return "projections:read"
 		case path == "/api/v1/schemas":
 			return managedSchemaRead
@@ -306,6 +306,9 @@ func managedScope(c *gin.Context) string {
 		return managedSchemaWrite
 	}
 	if strings.HasPrefix(path, "/api/v1/read-models/") && method == http.MethodPut {
+		return managedProjectionWrite
+	}
+	if strings.HasPrefix(path, viewsPath+"/") && (method == http.MethodPut || method == http.MethodDelete) {
 		return managedProjectionWrite
 	}
 	if method == http.MethodPost && (path == ingestEventsPath || path == ingestBatchPath) {

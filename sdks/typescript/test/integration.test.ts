@@ -9,7 +9,7 @@
  *     bun test test/integration.test.ts
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { AllSourceClient, AllSourceError } from "../src";
 
 const CORE_URL = process.env.ALLSOURCE_TEST_CORE_URL;
@@ -21,9 +21,7 @@ function uniqueEntity(prefix: string): string {
 
 function skipUnlessCore() {
   if (!CORE_URL) {
-    console.log(
-      "SKIPPED: set ALLSOURCE_TEST_CORE_URL to run integration tests",
-    );
+    console.log("SKIPPED: set ALLSOURCE_TEST_CORE_URL to run integration tests");
     return true;
   }
   return false;

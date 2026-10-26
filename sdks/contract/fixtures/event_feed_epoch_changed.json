@@ -1,0 +1,16 @@
+{
+  "name": "event_feed_epoch_changed",
+  "description": "feed({cursor: {epoch: 40, position: 17}}) after Core restarted. 409 version_conflict means the feed generation changed; the SDK returns a typed epoch-changed error carrying current_version 41 so the consumer rebuilds from position 0 of epoch 41 and commits with reset: true.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/event-feed",
+    "query": { "epoch": "40", "position": "17" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {},
+    "body": { "error": "version_conflict", "expected_version": 40, "current_version": 41 }
+  }
+}

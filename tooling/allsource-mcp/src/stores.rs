@@ -16,11 +16,22 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
+use crate::remote::RemoteStore;
+
 /// The name a request uses when it selects no store.
 pub const DEFAULT_STORE: &str = "default";
+/// The name `--remote` takes when `--data-dir` already holds `default`.
+pub const REMOTE_STORE: &str = "remote";
 
 pub struct StoreRegistry {
     stores: BTreeMap<String, Store>,
+    remotes: BTreeMap<String, RemoteStore>,
+}
+
+/// A selected store: an embedded data directory or a gateway.
+pub enum StoreRef<'a> {
+    Embedded(&'a Store),
+    Remote(&'a RemoteStore),
 }
 
 pub struct Store {
@@ -89,28 +100,45 @@ impl Store {
 impl StoreRegistry {
     /// Open every configured store read-only, `default` first.
     ///
-    /// A store that cannot be opened fails startup rather than disappearing from
-    /// the listing: a silently missing store reads as "this store holds nothing".
+    /// The remote store is `default` when there is no `--data-dir`, otherwise
+    /// `remote`. A store that cannot be opened fails startup rather than
+    /// disappearing from the listing: a silently missing store reads as "this
+    /// store holds nothing".
     pub async fn open(
-        default_dir: &Path,
+        default_dir: Option<&Path>,
         extra: &[(String, PathBuf)],
         refresh_every: Duration,
+        remote: Option<RemoteStore>,
     ) -> Result<Self> {
+        if default_dir.is_none() && remote.is_none() {
+            anyhow::bail!("--data-dir or --remote is required");
+        }
         let mut stores = BTreeMap::new();
-        stores.insert(
-            DEFAULT_STORE.to_string(),
-            Store::new(
-                default_dir.to_path_buf(),
-                open_read_only(default_dir).await?,
-                refresh_every,
-            ),
-        );
+        let mut remotes = BTreeMap::new();
+        if let Some(default_dir) = default_dir {
+            stores.insert(
+                DEFAULT_STORE.to_string(),
+                Store::new(
+                    default_dir.to_path_buf(),
+                    open_read_only(default_dir).await?,
+                    refresh_every,
+                ),
+            );
+        }
+        if let Some(remote) = remote {
+            let name = if stores.is_empty() {
+                DEFAULT_STORE
+            } else {
+                REMOTE_STORE
+            };
+            remotes.insert(name.to_string(), remote);
+        }
 
         for (name, path) in extra {
             if name == DEFAULT_STORE {
                 anyhow::bail!("store name '{DEFAULT_STORE}' is reserved for --data-dir");
             }
-            if stores.contains_key(name) {
+            if stores.contains_key(name) || remotes.contains_key(name) {
                 anyhow::bail!("store '{name}' is configured twice");
             }
             stores.insert(
@@ -119,7 +147,7 @@ impl StoreRegistry {
             );
         }
 
-        Ok(Self { stores })
+        Ok(Self { stores, remotes })
     }
 
     /// Build a registry around already-open cores, for tests.
@@ -139,20 +167,49 @@ impl StoreRegistry {
                     )
                 })
                 .collect(),
+            remotes: BTreeMap::new(),
         }
     }
 
-    /// Resolve the store a request selected, or the default when it selected none.
+    /// Add a gateway store, for tests.
+    #[cfg(test)]
+    pub fn with_remote(mut self, name: &str, remote: RemoteStore) -> Self {
+        self.remotes.insert(name.to_string(), remote);
+        self
+    }
+
+    /// Resolve the embedded store a request selected, or the default when it
+    /// selected none.
     pub fn get(&self, name: Option<&str>) -> Result<&Store> {
+        match self.resolve(name)? {
+            StoreRef::Embedded(store) => Ok(store),
+            StoreRef::Remote(_) => anyhow::bail!(
+                "unsupported: store '{}' is a --remote gateway; this tool reads an embedded data directory",
+                name.unwrap_or(DEFAULT_STORE)
+            ),
+        }
+    }
+
+    /// Resolve the store a request selected, of either kind.
+    pub fn resolve(&self, name: Option<&str>) -> Result<StoreRef<'_>> {
         let name = name.unwrap_or(DEFAULT_STORE);
-        self.stores
+        if let Some(store) = self.stores.get(name) {
+            return Ok(StoreRef::Embedded(store));
+        }
+        self.remotes
             .get(name)
+            .map(StoreRef::Remote)
             .ok_or_else(|| anyhow::anyhow!("not found: no store named '{name}' is configured"))
     }
 
-    /// Every configured store, for `list_stores`.
+    /// Every embedded store, for `list_stores` and `trace`.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Store)> {
         self.stores.iter()
+    }
+
+    /// Every gateway store, for `list_stores`.
+    pub fn remotes(&self) -> impl Iterator<Item = (&String, &RemoteStore)> {
+        self.remotes.iter()
     }
 }
 

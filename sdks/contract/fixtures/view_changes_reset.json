@@ -1,0 +1,16 @@
+{
+  "name": "view_changes_reset",
+  "description": "Changes after a stored checkpoint 12 that predates the last reset. 409 view_reset; sync discards its checkpoint and re-reads the snapshot from view_entities_page_1, while a direct changes call returns a typed view-reset error carrying generation 3.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/changes",
+    "query": { "after": "12" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {},
+    "body": { "error": "view_reset", "generation": 3 }
+  }
+}

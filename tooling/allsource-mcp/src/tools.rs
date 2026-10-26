@@ -15,11 +15,18 @@ use sha2::{Digest, Sha256};
 use crate::{
     diagnostics::DiagnosticPolicy,
     protocol::{ToolAnnotations, ToolDef, tool_error, tool_result},
-    stores::{DEFAULT_STORE, Store, StoreRegistry},
+    remote::{ViewReader, gateway_reply},
+    stores::{DEFAULT_STORE, Store, StoreRef, StoreRegistry},
 };
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 500;
+/// The view routes' own page default.
+const VIEW_DEFAULT_LIMIT: usize = 100;
+/// Longest `wait` Core honours on `changes`.
+const MAX_VIEW_WAIT_SECONDS: u64 = 20;
+const MAX_VIEW_NAME: usize = 48;
+const MAX_VIEW_KEY_BYTES: usize = 512;
 /// Events read per page while filtering by payload text, which the store cannot do itself.
 const SCAN_PAGE: usize = 500;
 const DEFAULT_MAX_SCAN: usize = 5_000;
@@ -163,6 +170,7 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                     "since": { "type": "string", "format": "date-time" },
                     "until": { "type": "string", "format": "date-time" },
                     "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT },
+                    "cursor": { "type": "string", "description": "Opaque page.nextCursor from a previous identical fold; pages through entities in id order" },
                     "max_scan": { "type": "integer", "minimum": 1, "maximum": MAX_SCAN, "default": DEFAULT_MAX_SCAN }
                 },
                 "required": ["event_type"]
@@ -264,9 +272,56 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                     "until": { "type": "string", "format": "date-time" },
                     "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": 100 },
                     "cursor": { "type": "string" },
-                    "payload_mode": { "type": "string", "enum": payload_modes }
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone() }
                 },
                 "required": ["entity_id"]
+            }),
+        ),
+        read_tool(
+            "get_latest_state",
+            "Get a view row",
+            "Read the latest state of one view row from the gateway, folded by the Query Service. Needs a --remote store. Pass a previous etag as if_none_match to learn the row is unchanged without its body.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "view": { "type": "string", "description": "View name, 1..48 of [a-z0-9_-]" },
+                    "key": { "type": "string", "description": "Row key the view's key template renders" },
+                    "if_none_match": { "type": "string", "description": "etag from a previous read of this row" },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone(), "description": "Applied to the row state" }
+                },
+                "required": ["view", "key"]
+            }),
+        ),
+        read_tool(
+            "list_latest",
+            "List view rows",
+            "Page through a view's rows in key order from the gateway. Needs a --remote store. The returned revision is where list_changes starts after the last page.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "view": { "type": "string", "description": "View name, 1..48 of [a-z0-9_-]" },
+                    "prefix": { "type": "string", "description": "Keep only keys starting with this" },
+                    "cursor": { "type": "string", "description": "page.nextCursor from the previous page" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": VIEW_DEFAULT_LIMIT },
+                    "payload_mode": { "type": "string", "enum": payload_modes.clone(), "description": "Applied to each row state" }
+                },
+                "required": ["view"]
+            }),
+        ),
+        read_tool(
+            "list_changes",
+            "List view changes",
+            "Return view rows written after a revision, deletions included, waiting up to wait_seconds for one. Needs a --remote store. The caller loops on the returned checkpoint; reset: true means re-read list_latest from the start.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "view": { "type": "string", "description": "View name, 1..48 of [a-z0-9_-]" },
+                    "after": { "type": "integer", "minimum": 0, "default": 0, "description": "revision from list_latest, or checkpoint from the previous call" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": VIEW_DEFAULT_LIMIT },
+                    "wait_seconds": { "type": "integer", "minimum": 0, "maximum": MAX_VIEW_WAIT_SECONDS, "default": 0 },
+                    "payload_mode": { "type": "string", "enum": payload_modes, "description": "Applied to each row state" }
+                },
+                "required": ["view"]
             }),
         ),
     ]
@@ -292,6 +347,8 @@ pub async fn execute_tool(
                 tool_error("NOT_FOUND", &detail, false, "SELECT_SOURCE")
             } else if detail.starts_with("access denied:") {
                 tool_error("ACCESS_DENIED", &detail, false, "CONTACT_OPERATOR")
+            } else if detail.starts_with("unsupported:") {
+                tool_error("UNSUPPORTED", &detail, false, "SELECT_SOURCE")
             } else {
                 tracing::error!(tool = name, error = %detail, "AllSource MCP tool failed");
                 tool_error(
@@ -318,6 +375,9 @@ async fn execute_tool_inner(
     match name {
         "list_stores" => return exec_list_stores(stores, policy).await,
         "trace" => return trace::exec_trace(stores, policy, args).await,
+        "get_latest_state" | "list_latest" | "list_changes" => {
+            return exec_view_tool(stores, policy, name, args).await;
+        }
         _ => {}
     }
 
@@ -363,11 +423,280 @@ fn selected_store<'a>(
     policy: &DiagnosticPolicy,
     args: &Value,
 ) -> Result<&'a Store> {
+    stores.get(requested_store(policy, args)?)
+}
+
+/// The store name a call asked for, refusing any but `default` for a hosted tenant.
+fn requested_store<'a>(policy: &DiagnosticPolicy, args: &'a Value) -> Result<Option<&'a str>> {
     let requested = args.get("store").and_then(Value::as_str);
     if requested.is_some_and(|name| name != DEFAULT_STORE) && policy.is_hosted_tenant() {
         anyhow::bail!("access denied: hosted tenant profiles read only their bound store");
     }
-    stores.get(requested)
+    Ok(requested)
+}
+
+/// Run a view tool against the selected store; only a gateway store answers.
+async fn exec_view_tool(
+    stores: &StoreRegistry,
+    policy: &DiagnosticPolicy,
+    name: &str,
+    args: &Value,
+) -> Result<Value> {
+    let (mut result, store_context) = match stores.resolve(requested_store(policy, args)?)? {
+        StoreRef::Embedded(store) => (
+            dispatch_view_tool(store, policy, name, args).await?,
+            json!({ "kind": "embedded" }),
+        ),
+        StoreRef::Remote(remote) => (
+            dispatch_view_tool(remote, policy, name, args).await?,
+            json!({ "kind": "remote", "url": remote.display_url() }),
+        ),
+    };
+    if let Some(context) = result.get_mut("context") {
+        context["store"] = store_context;
+    }
+    Ok(result)
+}
+
+async fn dispatch_view_tool<R: ViewReader>(
+    reader: &R,
+    policy: &DiagnosticPolicy,
+    name: &str,
+    args: &Value,
+) -> Result<Value> {
+    match name {
+        "get_latest_state" => exec_get_latest_state(reader, policy, args).await,
+        "list_latest" => exec_list_latest(reader, policy, args).await,
+        "list_changes" => exec_list_changes(reader, policy, args).await,
+        _ => anyhow::bail!("invalid argument: unknown tool '{name}'"),
+    }
+}
+
+/// Read and check a view name against Core's naming rule before it reaches a URL.
+fn view_arg(args: &Value) -> Result<&str> {
+    let view = args
+        .get("view")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("invalid argument: view is required"))?;
+    let valid = (1..=MAX_VIEW_NAME).contains(&view.len())
+        && view.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        });
+    if !valid {
+        anyhow::bail!(
+            "invalid argument: view must be 1..{MAX_VIEW_NAME} characters of [a-z0-9_-]; got '{view}'"
+        );
+    }
+    Ok(view)
+}
+
+/// A view row state under the caller's payload policy; a deletion stays null.
+fn view_state(state: &Value, mode: PayloadMode) -> Value {
+    if state.is_null() {
+        Value::Null
+    } else {
+        event_payload(state, mode)
+    }
+}
+
+/// One view row by key, or whether it is unchanged since `if_none_match`.
+async fn exec_get_latest_state<R: ViewReader>(
+    reader: &R,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let view = view_arg(args)?;
+    let key = args
+        .get("key")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("invalid argument: key is required"))?;
+    if key.is_empty() || key.len() > MAX_VIEW_KEY_BYTES {
+        anyhow::bail!("invalid argument: key must be 1..{MAX_VIEW_KEY_BYTES} bytes");
+    }
+    let mode = payload_mode(args, policy)?;
+    let if_none_match = args.get("if_none_match").and_then(Value::as_str);
+
+    let reply = gateway_reply(reader.latest_state(view, key, if_none_match).await?, &[404])?;
+    let found = reply.status == 200;
+    let not_modified = reply.status == 304;
+    let body = &reply.body;
+    Ok(json!({
+        "context": policy.context(None),
+        "view": view,
+        "key": key,
+        "found": found || not_modified,
+        "notModified": not_modified,
+        "etag": reply.etag,
+        "state": if found { view_state(&body["state"], mode) } else { Value::Null },
+        "version": body.get("version"),
+        "revision": body.get("revision"),
+        "generation": body.get("generation"),
+        "ready": body.get("ready"),
+        "completeness": {
+            "complete": true,
+            "reason": Value::Null,
+        }
+    }))
+}
+
+/// One page of a view's rows in key order.
+async fn exec_list_latest<R: ViewReader>(
+    reader: &R,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let view = view_arg(args)?;
+    let limit = limit_arg(args, "limit", VIEW_DEFAULT_LIMIT, MAX_LIMIT)?;
+    let mode = payload_mode(args, policy)?;
+    let prefix = args.get("prefix").and_then(Value::as_str);
+    let after = args.get("cursor").and_then(Value::as_str);
+
+    let reply = gateway_reply(reader.latest_page(view, prefix, after, limit).await?, &[])?;
+    let body = &reply.body;
+    let items: Vec<Value> = body["rows"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .map(|row| {
+                    json!({
+                        "key": row["key"],
+                        "version": row["version"],
+                        "state": view_state(&row["state"], mode),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let next = body.get("next").and_then(Value::as_str);
+    let ready = body["ready"].as_bool().unwrap_or(true);
+    let complete = next.is_none() && ready;
+    let reason = if next.is_some() {
+        json!("limit_reached")
+    } else if !ready {
+        json!("view_not_ready")
+    } else {
+        Value::Null
+    };
+    Ok(json!({
+        "context": policy.context(None),
+        "view": view,
+        "items": items,
+        "revision": body.get("revision"),
+        "contentRevision": body.get("content_revision"),
+        "generation": body.get("generation"),
+        "ready": body.get("ready"),
+        "page": {
+            "requestedLimit": limit,
+            "returned": items.len(),
+            "totalCount": Value::Null,
+            "nextCursor": next,
+        },
+        "completeness": {
+            "complete": complete,
+            "reason": reason,
+            "scanned": items.len(),
+            "matched": items.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    }))
+}
+
+/// View rows written after a revision; `reset` when the revision predates a rebuild.
+async fn exec_list_changes<R: ViewReader>(
+    reader: &R,
+    policy: &DiagnosticPolicy,
+    args: &Value,
+) -> Result<Value> {
+    let view = view_arg(args)?;
+    let after = match args.get("after") {
+        None | Some(Value::Null) => 0,
+        Some(value) => value.as_u64().ok_or_else(|| {
+            anyhow::anyhow!("invalid argument: after must be a non-negative integer revision")
+        })?,
+    };
+    let limit = limit_arg(args, "limit", VIEW_DEFAULT_LIMIT, MAX_LIMIT)?;
+    let mode = payload_mode(args, policy)?;
+    let wait = args
+        .get("wait_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        .min(MAX_VIEW_WAIT_SECONDS);
+
+    let reply = gateway_reply(reader.changes(view, after, limit, wait).await?, &[409])?;
+    let body = &reply.body;
+    if reply.status == 409 {
+        if body["error"] != "view_reset" {
+            anyhow::bail!("gateway answered 409: {}", body["error"]);
+        }
+        return Ok(json!({
+            "context": policy.context(None),
+            "view": view,
+            "items": [],
+            "reset": true,
+            "generation": body.get("generation"),
+            "checkpoint": Value::Null,
+            "caughtUp": false,
+            "completeness": {
+                "complete": false,
+                "reason": "view_reset",
+                "scanned": 0,
+                "matched": 0,
+                "omitted": 0,
+                "unparsedTimestamps": 0,
+                "sourcesRequested": 1,
+                "sourcesRead": 1,
+                "sourcesSkipped": [],
+            }
+        }));
+    }
+
+    let items: Vec<Value> = body["changes"]
+        .as_array()
+        .map(|changes| {
+            changes
+                .iter()
+                .map(|change| {
+                    json!({
+                        "key": change["key"],
+                        "version": change["version"],
+                        "deleted": change["state"].is_null(),
+                        "state": view_state(&change["state"], mode),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let caught_up = body["caught_up"].as_bool().unwrap_or(false);
+    Ok(json!({
+        "context": policy.context(None),
+        "view": view,
+        "items": items,
+        "reset": false,
+        "generation": body.get("generation"),
+        "checkpoint": body.get("revision"),
+        "caughtUp": caught_up,
+        "page": {
+            "requestedLimit": limit,
+            "returned": items.len(),
+            "totalCount": Value::Null,
+            "nextCursor": Value::Null,
+        },
+        "completeness": {
+            "complete": caught_up,
+            "reason": if caught_up { Value::Null } else { json!("limit_reached") },
+            "scanned": items.len(),
+            "matched": items.len(),
+            "omitted": 0,
+            "unparsedTimestamps": 0,
+            "sourcesRequested": 1,
+            "sourcesRead": 1,
+            "sourcesSkipped": [],
+        }
+    }))
 }
 
 /// List the stores this server may read, each caught up with its writer first.
@@ -381,10 +710,19 @@ async fn exec_list_stores(stores: &StoreRegistry, policy: &DiagnosticPolicy) -> 
         let refresh = store.refresh_context().await;
         items.push(json!({
             "store": name,
+            "kind": "embedded",
             "path": store.path.display().to_string(),
             "events": core.event_count(),
             "refreshedAt": refresh["refreshedAt"],
             "newEventsOnLastRefresh": refresh["newEventsOnLastRefresh"],
+        }));
+    }
+    for (name, remote) in stores.remotes() {
+        items.push(json!({
+            "store": name,
+            "kind": "remote",
+            "url": remote.display_url(),
+            "events": Value::Null,
         }));
     }
     Ok(json!({
@@ -964,6 +1302,8 @@ fn state_of(event_type: &str) -> &str {
 }
 
 /// Wrap folded items in the same evidence envelope every other tool returns.
+///
+/// `next_cursor` is reported only when `items` ran past `limit`.
 fn fold_result(
     policy: &DiagnosticPolicy,
     items: Vec<Value>,
@@ -971,6 +1311,7 @@ fn fold_result(
     scanned: usize,
     exhausted: bool,
     fresh_through: Option<DateTime<Utc>>,
+    next_cursor: Option<String>,
 ) -> Value {
     let truncated = items.len() > limit;
     let items: Vec<Value> = items.into_iter().take(limit).collect();
@@ -982,7 +1323,7 @@ fn fold_result(
             "requestedLimit": limit,
             "returned": items.len(),
             "totalCount": items.len(),
-            "nextCursor": Value::Null,
+            "nextCursor": next_cursor.filter(|_| truncated),
         },
         "completeness": {
             "complete": complete,
@@ -1014,9 +1355,17 @@ async fn exec_fold_entity_lifecycle(
     // keys `redact` exists to remove.
     let mode = payload_mode(args, policy)?;
     let wanted_state = args.get("state").and_then(Value::as_str);
+    let max_scan = limit_arg(args, "max_scan", DEFAULT_MAX_SCAN, MAX_SCAN)?;
+    let signature = fold_signature(policy, args, limit, max_scan);
+    let after = fold_cursor_after(args, &signature)?;
 
+    // `scoped_query` would read this tool's cursor as an event offset and refuse it.
+    let mut scan_args = args.clone();
+    if let Some(object) = scan_args.as_object_mut() {
+        object.remove("cursor");
+    }
     let (events, scanned, exhausted) =
-        scan_family(core, policy, args, "fold_entity_lifecycle").await?;
+        scan_family(core, policy, &scan_args, "fold_entity_lifecycle").await?;
     let fresh_through = events.iter().map(|event| event.timestamp).max();
 
     // Last writer by timestamp wins, which is how every reader of this store folds.
@@ -1039,11 +1388,18 @@ async fn exec_fold_entity_lifecycle(
             .or_insert(event);
     }
 
+    // One past `limit`, so `fold_result` can tell a full last page from a truncated one.
     let items: Vec<Value> = folded
         .iter()
+        .filter(|(entity_id, _)| {
+            after
+                .as_deref()
+                .is_none_or(|after| entity_id.as_str() > after)
+        })
         .filter(|(_, latest)| {
             wanted_state.is_none_or(|state| state_of(&latest.event_type) == state)
         })
+        .take(limit + 1)
         .map(|(entity_id, latest)| {
             json!({
                 "entity_id": entity_id,
@@ -1056,6 +1412,10 @@ async fn exec_fold_entity_lifecycle(
             })
         })
         .collect();
+    let next_cursor = items
+        .get(limit - 1)
+        .and_then(|item| item["entity_id"].as_str())
+        .map(|entity_id| fold_cursor(entity_id, &signature));
 
     Ok(fold_result(
         policy,
@@ -1064,7 +1424,71 @@ async fn exec_fold_entity_lifecycle(
         scanned,
         exhausted,
         fresh_through,
+        next_cursor,
     ))
+}
+
+/// Cursor identity for a lifecycle fold: the query shape plus what changes the
+/// entity set (`state`) or how much of the family was seen (`max_scan`).
+fn fold_signature(
+    policy: &DiagnosticPolicy,
+    args: &Value,
+    limit: usize,
+    max_scan: usize,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(query_signature(policy, "fold_entity_lifecycle", limit, args).as_bytes());
+    hasher.update([0]);
+    hasher.update(
+        args.get("state")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .as_bytes(),
+    );
+    hasher.update([0]);
+    hasher.update(max_scan.to_le_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// `e1:<hex entity id>:<signature>`. Keyed by the last entity rather than an
+/// offset, so an entity appearing earlier in id order cannot shift the next page.
+fn fold_cursor(entity_id: &str, signature: &str) -> String {
+    let hex = entity_id.bytes().fold(String::new(), |mut out, byte| {
+        let _ = write!(out, "{byte:02x}");
+        out
+    });
+    format!("e1:{hex}:{signature}")
+}
+
+/// The entity id a fold cursor resumes after, validated against this query.
+fn fold_cursor_after(args: &Value, signature: &str) -> Result<Option<String>> {
+    let Some(cursor) = args.get("cursor").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    let mut parts = cursor.split(':');
+    let version = parts.next();
+    let entity_id = parts.next().and_then(decode_hex);
+    let cursor_signature = parts.next();
+    match (version, entity_id, cursor_signature, parts.next()) {
+        (Some("e1"), Some(entity_id), Some(found), None) if found == signature => {
+            Ok(Some(entity_id))
+        }
+        _ => anyhow::bail!("invalid argument: cursor does not match this tenant-bound query"),
+    }
+}
+
+fn decode_hex(raw: &str) -> Option<String> {
+    if !raw.len().is_multiple_of(2) {
+        return None;
+    }
+    let bytes: Option<Vec<u8>> = (0..raw.len())
+        .step_by(2)
+        .map(|at| {
+            raw.get(at..at + 2)
+                .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+        })
+        .collect();
+    String::from_utf8(bytes?).ok()
 }
 
 /// The type suffixes that close an item, or the default set when none are given.
@@ -1184,6 +1608,7 @@ async fn exec_fold_steps(
         scanned,
         exhausted,
         fresh_through,
+        None,
     ))
 }
 
@@ -1657,11 +2082,12 @@ mod tests {
     use super::{
         EvidencePageOptions, evidence_page, exec_fold_entity_lifecycle, exec_fold_steps,
         exec_list_stores, exec_query_events, exec_reconstruct_state, exec_watch_events,
-        execute_tool_inner, payload_contains_all, payload_mode, project_fields, query_signature,
-        redact, selected_store, tool_definitions,
+        execute_tool, execute_tool_inner, fold_cursor, fold_cursor_after, payload_contains_all,
+        payload_mode, project_fields, query_signature, redact, selected_store, tool_definitions,
     };
     use crate::{
         diagnostics::{AccessProfile, DiagnosticPolicy},
+        remote::{RemoteStore, mock::serve_once},
         stores::{Store, StoreRegistry},
     };
 
@@ -2374,7 +2800,7 @@ mod tests {
         };
         ingest("run-1").await.expect("ingest");
 
-        let stores = StoreRegistry::open(dir.path(), &[], std::time::Duration::ZERO)
+        let stores = StoreRegistry::open(Some(dir.path()), &[], std::time::Duration::ZERO, None)
             .await
             .expect("open read-only registry");
         let policy =
@@ -2405,5 +2831,371 @@ mod tests {
         );
         assert_eq!(after["context"]["store"]["newEventsOnLastRefresh"], 1);
         assert_eq!(after["statistics"]["total_events"], 2);
+    }
+
+    fn local_policy() -> DiagnosticPolicy {
+        DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy")
+    }
+
+    fn entity_ids(result: &Value) -> Vec<String> {
+        result["items"]
+            .as_array()
+            .expect("items")
+            .iter()
+            .map(|item| item["entity_id"].as_str().expect("entity_id").to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_lifecycle_fold_pages_past_its_limit_with_a_bound_cursor() {
+        let core = core_with(&[
+            ("run-1", "workflow_run.started", json!({})),
+            ("run-2", "workflow_run.started", json!({})),
+            ("run-3", "workflow_run.started", json!({})),
+        ])
+        .await;
+        let policy = local_policy();
+
+        let first = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "limit": 2 }),
+        )
+        .await
+        .expect("fold");
+        assert_eq!(entity_ids(&first), vec!["run-1", "run-2"]);
+        assert_eq!(first["completeness"]["complete"], false);
+        let cursor = first["page"]["nextCursor"]
+            .as_str()
+            .expect("a truncated fold hands back a cursor")
+            .to_string();
+
+        let second = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "limit": 2, "cursor": cursor.clone() }),
+        )
+        .await
+        .expect("fold");
+        assert_eq!(entity_ids(&second), vec!["run-3"]);
+        assert_eq!(second["page"]["nextCursor"], Value::Null);
+        assert_eq!(second["completeness"]["complete"], true);
+
+        for other_shape in [
+            json!({ "event_type": "workflow_run", "limit": 2, "state": "started", "cursor": cursor.clone() }),
+            json!({ "event_type": "workflow_run", "limit": 3, "cursor": cursor.clone() }),
+            json!({ "event_type": "workflow_run", "limit": 2, "max_scan": 10, "cursor": cursor.clone() }),
+            json!({ "event_type": "workflow_run", "limit": 2, "cursor": "v1:2:abc" }),
+        ] {
+            let error = exec_fold_entity_lifecycle(&core, &policy, &other_shape)
+                .await
+                .expect_err("a cursor is bound to the fold that issued it");
+            assert!(error.to_string().starts_with("invalid argument:"));
+        }
+
+        let exact = exec_fold_entity_lifecycle(
+            &core,
+            &policy,
+            &json!({ "event_type": "workflow_run", "limit": 3 }),
+        )
+        .await
+        .expect("fold");
+        assert_eq!(
+            exact["page"]["nextCursor"],
+            Value::Null,
+            "a page that holds every entity has no next page"
+        );
+    }
+
+    #[test]
+    fn a_fold_cursor_round_trips_an_entity_id_that_contains_its_separator() {
+        let cursor = fold_cursor("skill:abc", "signature");
+
+        assert_eq!(
+            fold_cursor_after(&json!({ "cursor": cursor }), "signature").expect("valid"),
+            Some("skill:abc".to_string())
+        );
+        assert!(fold_cursor_after(&json!({ "cursor": cursor }), "other").is_err());
+        assert!(fold_cursor_after(&json!({ "cursor": "e1:zz:signature" }), "signature").is_err());
+    }
+
+    async fn registry_with_remote(base: &str) -> StoreRegistry {
+        let core = EmbeddedCore::open(Config::builder().build().expect("valid config"))
+            .await
+            .expect("in-memory core");
+        StoreRegistry::from_cores(vec![("default", core)]).with_remote(
+            "remote",
+            RemoteStore::new(base, Some("key-1".to_string())).expect("remote"),
+        )
+    }
+
+    #[tokio::test]
+    async fn a_view_tool_on_an_embedded_store_says_it_needs_remote() {
+        let stores = two_store_registry().await;
+
+        let result = execute_tool(
+            &stores,
+            &local_policy(),
+            "get_latest_state",
+            &json!({ "view": "ops_status", "key": "probe-a" }),
+        )
+        .await;
+
+        assert_eq!(result["isError"], true);
+        assert_eq!(result["structuredContent"]["error"]["code"], "UNSUPPORTED");
+        assert!(
+            result["structuredContent"]["error"]["message"]
+                .as_str()
+                .expect("message")
+                .contains("--remote")
+        );
+    }
+
+    #[tokio::test]
+    async fn an_event_tool_on_a_remote_store_is_unsupported_rather_than_empty() {
+        let stores = registry_with_remote("http://127.0.0.1:9").await;
+
+        let error = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "query_events",
+            &json!({ "store": "remote" }),
+        )
+        .await
+        .expect_err("a gateway store holds no local events");
+
+        assert!(error.to_string().starts_with("unsupported:"));
+    }
+
+    #[tokio::test]
+    async fn list_stores_names_a_remote_store_by_kind_and_url() {
+        let stores = registry_with_remote("http://127.0.0.1:9").await;
+
+        let result = exec_list_stores(&stores, &local_policy())
+            .await
+            .expect("list");
+        let remote = result["items"]
+            .as_array()
+            .expect("items")
+            .iter()
+            .find(|item| item["store"] == "remote")
+            .expect("remote listed")
+            .clone();
+
+        assert_eq!(remote["kind"], "remote");
+        assert_eq!(remote["url"], "http://127.0.0.1:9/");
+    }
+
+    #[tokio::test]
+    async fn a_hosted_tenant_cannot_select_a_remote_store_by_name() {
+        let stores = registry_with_remote("http://127.0.0.1:9").await;
+        let policy = DiagnosticPolicy::new(
+            AccessProfile::HostedTenant,
+            Some("tenant-a".to_string()),
+            "prod",
+        )
+        .expect("tenant policy");
+
+        let error = execute_tool_inner(
+            &stores,
+            &policy,
+            "list_latest",
+            &json!({ "store": "remote", "view": "ops_status" }),
+        )
+        .await
+        .expect_err("a hosted tenant is bound to one store");
+
+        assert!(error.to_string().starts_with("access denied:"));
+    }
+
+    #[tokio::test]
+    async fn a_view_name_outside_the_naming_rule_is_refused_before_any_request() {
+        let stores = two_store_registry().await;
+
+        let error = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "list_latest",
+            &json!({ "view": "Ops Status" }),
+        )
+        .await
+        .expect_err("view names are [a-z0-9_-]");
+
+        assert!(error.to_string().starts_with("invalid argument:"));
+    }
+
+    #[tokio::test]
+    async fn get_latest_state_reads_one_row_through_the_payload_policy() {
+        let (base, request) = serve_once(
+            "200 OK",
+            "etag: \"sha256:abc\"\r\n",
+            r#"{"view":"ops_status","key":"probe-a:2026-10-27","state":{"ok":1430,"api_key":"sk-1"},"version":57,"revision":61,"generation":2,"ready":true}"#,
+        )
+        .await;
+        let stores = registry_with_remote(&base).await;
+
+        let result = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "get_latest_state",
+            &json!({
+                "store": "remote",
+                "view": "ops_status",
+                "key": "probe-a:2026-10-27",
+                "payload_mode": "redacted",
+            }),
+        )
+        .await
+        .expect("read");
+        let head = request.await.expect("mock");
+
+        assert!(
+            head.starts_with("GET /api/v1/views/ops_status/entities/probe-a:2026-10-27 HTTP/1.1"),
+            "{head}"
+        );
+        assert_eq!(result["found"], true);
+        assert_eq!(result["notModified"], false);
+        assert_eq!(result["etag"], "\"sha256:abc\"");
+        assert_eq!(result["state"]["ok"], 1430);
+        assert_eq!(result["state"]["api_key"], "[REDACTED]");
+        assert_eq!(result["version"], 57);
+        assert_eq!(result["generation"], 2);
+        assert_eq!(result["context"]["store"]["kind"], "remote");
+    }
+
+    #[tokio::test]
+    async fn get_latest_state_reports_an_unchanged_row_without_its_state() {
+        let (base, _request) = serve_once("304 Not Modified", "etag: \"sha256:abc\"\r\n", "").await;
+        let stores = registry_with_remote(&base).await;
+
+        let result = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "get_latest_state",
+            &json!({
+                "store": "remote",
+                "view": "ops_status",
+                "key": "probe-a",
+                "if_none_match": "\"sha256:abc\"",
+            }),
+        )
+        .await
+        .expect("read");
+
+        assert_eq!(result["notModified"], true);
+        assert_eq!(result["found"], true);
+        assert_eq!(result["state"], Value::Null);
+        assert_eq!(result["etag"], "\"sha256:abc\"");
+    }
+
+    #[tokio::test]
+    async fn get_latest_state_reports_a_missing_row_as_not_found_with_readiness() {
+        let (base, _request) = serve_once(
+            "404 Not Found",
+            "",
+            r#"{"error":"not_found","ready":false}"#,
+        )
+        .await;
+        let stores = registry_with_remote(&base).await;
+
+        let result = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "get_latest_state",
+            &json!({ "store": "remote", "view": "ops_status", "key": "probe-z" }),
+        )
+        .await
+        .expect("a missing row is an answer, not a failure");
+
+        assert_eq!(result["found"], false);
+        assert_eq!(result["ready"], false);
+        assert_eq!(result["state"], Value::Null);
+    }
+
+    #[tokio::test]
+    async fn list_latest_turns_the_gateway_next_key_into_the_page_cursor() {
+        let (base, request) = serve_once(
+            "200 OK",
+            "",
+            r#"{"view":"ops_status","rows":[{"key":"probe-a:1","state":{"ok":1},"version":40}],"next":"probe-a:1","revision":61,"content_revision":61,"generation":2,"ready":true}"#,
+        )
+        .await;
+        let stores = registry_with_remote(&base).await;
+
+        let result = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "list_latest",
+            &json!({ "store": "remote", "view": "ops_status", "cursor": "probe-a:0", "limit": 1 }),
+        )
+        .await
+        .expect("page");
+        let head = request.await.expect("mock");
+
+        assert!(head.contains("limit=1"), "{head}");
+        assert!(head.contains("after=probe-a%3A0"), "{head}");
+        assert_eq!(result["items"][0]["key"], "probe-a:1");
+        assert_eq!(result["items"][0]["state"]["ok"], 1);
+        assert_eq!(result["page"]["nextCursor"], "probe-a:1");
+        assert_eq!(result["revision"], 61);
+        assert_eq!(result["completeness"]["complete"], false);
+        assert_eq!(result["completeness"]["reason"], "limit_reached");
+    }
+
+    #[tokio::test]
+    async fn list_changes_reports_deletions_and_the_next_checkpoint() {
+        let (base, request) = serve_once(
+            "200 OK",
+            "",
+            r#"{"view":"ops_status","changes":[{"key":"probe-a","version":62,"state":{"ok":2}},{"key":"probe-z","version":62,"state":null}],"revision":62,"caught_up":true,"generation":2}"#,
+        )
+        .await;
+        let stores = registry_with_remote(&base).await;
+
+        let result = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "list_changes",
+            &json!({ "store": "remote", "view": "ops_status", "after": 61, "wait_seconds": 99 }),
+        )
+        .await
+        .expect("changes");
+        let head = request.await.expect("mock");
+
+        assert!(head.contains("after=61"), "{head}");
+        assert!(
+            head.contains("wait=20"),
+            "wait is capped at Core's limit: {head}"
+        );
+        assert_eq!(result["items"][0]["deleted"], false);
+        assert_eq!(result["items"][1]["deleted"], true);
+        assert_eq!(result["items"][1]["state"], Value::Null);
+        assert_eq!(result["checkpoint"], 62);
+        assert_eq!(result["reset"], false);
+        assert_eq!(result["completeness"]["complete"], true);
+    }
+
+    #[tokio::test]
+    async fn list_changes_after_a_reset_tells_the_caller_to_re_read_the_rows() {
+        let (base, _request) = serve_once(
+            "409 Conflict",
+            "",
+            r#"{"error":"view_reset","generation":3}"#,
+        )
+        .await;
+        let stores = registry_with_remote(&base).await;
+
+        let result = execute_tool_inner(
+            &stores,
+            &local_policy(),
+            "list_changes",
+            &json!({ "store": "remote", "view": "ops_status", "after": 5 }),
+        )
+        .await
+        .expect("a reset is an answer, not a failure");
+
+        assert_eq!(result["reset"], true);
+        assert_eq!(result["generation"], 3);
+        assert_eq!(result["completeness"]["reason"], "view_reset");
     }
 }

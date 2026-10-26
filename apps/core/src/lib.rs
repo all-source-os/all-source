@@ -139,8 +139,7 @@ pub use infrastructure::security::{AuthManager, Permission, Role};
 pub use infrastructure::web::{WebSocketManager, serve};
 pub use infrastructure::{
     persistence::{
-        CompactionConfig, CompactionManager, EventIndex, ParquetStorage, SnapshotConfig,
-        SnapshotManager, WALConfig, WriteAheadLog,
+        CompactionConfig, CompactionManager, EventIndex, ParquetStorage, WALConfig, WriteAheadLog,
     },
     security::RateLimiter,
 };

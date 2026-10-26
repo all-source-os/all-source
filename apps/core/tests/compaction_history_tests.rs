@@ -9,9 +9,7 @@
 use allsource_core::{
     QueryEventsRequest,
     domain::entities::Event,
-    infrastructure::persistence::{
-        compaction::CompactionConfig, snapshot::SnapshotConfig, wal::WALConfig,
-    },
+    infrastructure::persistence::{compaction::CompactionConfig, wal::WALConfig},
     store::{EventStore, EventStoreConfig},
 };
 use std::path::Path;
@@ -24,7 +22,6 @@ fn config(data_dir: &Path) -> EventStoreConfig {
     EventStoreConfig::production(
         data_dir.join("storage"),
         data_dir.join("wal"),
-        SnapshotConfig::default(),
         WALConfig::default(),
         CompactionConfig::default(),
     )

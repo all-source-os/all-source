@@ -41,7 +41,15 @@ func (a *tenantAdmission) snapshot(tenant string, now time.Time) gin.H {
 		}
 	}
 	buckets := gin.H{"data": viewBucket(view.data), "meta": viewBucket(view.meta), "write": viewBucket(view.write), "bytes": viewBucket(view.bytes)}
+	longPollOccupied, longPollHeld := viewChangesLane.occupancy(tenant)
 	return gin.H{
+		"view_changes": gin.H{
+			"slots":          cap(viewChangesLane.slots),
+			"occupied":       longPollOccupied,
+			"held":           longPollHeld,
+			"max_per_tenant": viewChangesLane.perTenant,
+			"max_wait":       maxViewChangesWaitSec,
+		},
 		"mode":         mode,
 		"override":     override,
 		"limits":       limits,

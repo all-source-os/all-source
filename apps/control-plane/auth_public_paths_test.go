@@ -36,6 +36,7 @@ func TestAuthMiddleware_PublicPathAllowlist(t *testing.T) {
 		{"agent register stays auth-gated", http.MethodPost, "/api/v1/agents/register", false},
 		{"agents prefix is not blanket-public", http.MethodGet, "/api/v1/agents/me/payments", false},
 		{"health is public", http.MethodGet, pathHealth, true},
+		{"consumer access check is public", http.MethodGet, pathConsumerAccess, true},
 		{"onboard prefix is public", http.MethodPost, "/api/v1/onboard/start", true},
 		{"design partner application is public", http.MethodPost, "/api/v1/design-partners/applications", true},
 		{"design partner list is not public", http.MethodGet, "/api/v1/design-partners/applications", false},

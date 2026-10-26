@@ -131,6 +131,11 @@ const ENTITY_HISTORY_LIMIT: usize = 1000;
 /// [`ENTITY_HISTORY_LIMIT`].
 const SESSION_WINDOW: usize = 16;
 
+/// Page size for a filtered read of every match, and the page cap. One
+/// user's or one organisation's rows of one kind fit well inside the cap.
+const MATCH_PAGE: usize = 200;
+const MATCH_PAGES: usize = 10;
+
 /// True when an event payload carries the soft-delete tombstone written by
 /// `AllsourceClient::append_delete` (`{"_deleted": true, ...}`).
 fn is_deleted(payload: &serde_json::Value) -> bool {
@@ -598,39 +603,35 @@ impl AllsourceClient {
         Ok(None)
     }
 
-    /// Find all entities matching a field value.
+    /// Find all entities matching a field value. Core applies the match before
+    /// its window, so the read carries only the matching entities' events.
     pub async fn find_all_by_field<T: DeserializeOwned>(
         &self,
         event_type_prefix: &str,
         field: &str,
         value: &str,
     ) -> Result<Vec<T>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
-
-        self.fail_fast()?;
-        let resp = self
-            .http
-            .get(&url)
-            .query(&self.tenant_query())
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .query(&[
-                ("event_type_prefix", event_type_prefix),
-                ("limit", "10000"),
-                ("order", "desc"),
-            ])
-            .send()
+        // Payloads carry camelCase keys; a record written with the literal
+        // snake_case key matches only the second read.
+        let camel = to_camel_case(field);
+        let mut events = self
+            .find_all_matching(event_type_prefix, &[(&camel, value)])
             .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            return Err(self.error_from(resp).await);
+        if camel != field {
+            events.extend(
+                self.find_all_matching(event_type_prefix, &[(field, value)])
+                    .await?,
+            );
+            events.sort_by(|a, b| {
+                b.timestamp
+                    .cmp(&a.timestamp)
+                    .then_with(|| b.version.cmp(&a.version))
+            });
         }
-
-        let query_resp: QueryResponse = resp.json().await?;
         let mut results = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        for event in &query_resp.events {
+        for event in &events {
             let entity_id = event
                 .payload
                 .get("id")
@@ -655,6 +656,60 @@ impl AllsourceClient {
         }
 
         Ok(results)
+    }
+
+    /// Every event under `event_type_prefix` whose payload equals every
+    /// `(field, value)` pair, newest first, read in pages of
+    /// [`MATCH_PAGE`] up to [`MATCH_PAGES`] pages.
+    async fn find_all_matching(
+        &self,
+        event_type_prefix: &str,
+        filter: &[(&str, &str)],
+    ) -> Result<Vec<StoredEvent>, AllsourceAuthError> {
+        let url = format!("{}/api/v1/events/query", self.query_url);
+        let filter = build_payload_filter_all(filter);
+        let mut events = Vec::new();
+        for page in 0..MATCH_PAGES {
+            self.fail_fast()?;
+            let resp = self
+                .http
+                .get(&url)
+                .query(&self.tenant_query())
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .query(&[
+                    ("event_type_prefix", event_type_prefix),
+                    ("payload_filter", &filter),
+                    ("limit", &MATCH_PAGE.to_string()),
+                    ("offset", &(page * MATCH_PAGE).to_string()),
+                    ("order", "desc"),
+                ])
+                .send()
+                .await?;
+            let status = resp.status();
+            if !status.is_success() {
+                return Err(self.error_from(resp).await);
+            }
+            let batch = resp.json::<QueryResponse>().await?.events;
+            let last = batch.len() < MATCH_PAGE;
+            events.extend(batch);
+            if last {
+                break;
+            }
+            if page + 1 == MATCH_PAGES {
+                tracing::warn!(
+                    event_type_prefix,
+                    filter = %filter,
+                    matched = events.len(),
+                    "find_all_by_field stopped at its page cap; older matches are not returned"
+                );
+            }
+        }
+        events.sort_by(|a, b| {
+            b.timestamp
+                .cmp(&a.timestamp)
+                .then_with(|| b.version.cmp(&a.version))
+        });
+        Ok(events)
     }
 
     /// Append a deletion marker event.

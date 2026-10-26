@@ -1,0 +1,27 @@
+{
+  "name": "view_entities_page_1",
+  "description": "First snapshot page of latestMany(\"ops_status\", {limit: 2}) and of sync. next is the after cursor for view_entities_page_2.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/entities",
+    "query": { "limit": "2" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "view": "ops_status",
+      "rows": [
+        { "key": "probe-a:2026-10-26", "state": { "ok": 1440, "failed": 0 }, "version": 40 },
+        { "key": "probe-a:2026-10-27", "state": { "ok": 1430, "failed": 2 }, "version": 57 }
+      ],
+      "next": "probe-a:2026-10-27",
+      "revision": 61,
+      "content_revision": 61,
+      "generation": 2,
+      "ready": true
+    }
+  }
+}

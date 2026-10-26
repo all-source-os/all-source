@@ -63,6 +63,9 @@ func TestIngest(t *testing.T) {
 		if r.URL.Path != "/api/v1/events" {
 			t.Errorf("expected /api/v1/events, got %s", r.URL.Path)
 		}
+		if r.Header.Get("Authorization") != "Bearer test-api-key" {
+			t.Errorf("expected Authorization Bearer test-api-key, got %s", r.Header.Get("Authorization"))
+		}
 		if r.Header.Get("X-API-Key") != "test-api-key" {
 			t.Errorf("expected X-API-Key test-api-key, got %s", r.Header.Get("X-API-Key"))
 		}
@@ -140,111 +143,6 @@ func TestQuery(t *testing.T) {
 	}
 	if result.Events[0].ID != "evt-1" {
 		t.Errorf("expected event ID evt-1, got %s", result.Events[0].ID)
-	}
-}
-
-func TestGetProjections(t *testing.T) {
-	srv, client := setupTestServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/projections" {
-			t.Errorf("expected /api/v1/projections, got %s", r.URL.Path)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"projections": []map[string]any{
-				{
-					"id":            "proj-1",
-					"name":          "user-count",
-					"version":       1,
-					"status":        "running",
-					"initial_state": map[string]any{},
-					"definition":    "count(*)",
-					"created_at":    "2026-01-01T00:00:00Z",
-					"updated_at":    "2026-01-01T00:00:00Z",
-				},
-			},
-			"total": 1,
-		})
-	})
-	defer srv.Close()
-
-	result, err := client.GetProjections(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(result.Projections) != 1 {
-		t.Fatalf("expected 1 projection, got %d", len(result.Projections))
-	}
-	if result.Projections[0].Name != "user-count" {
-		t.Errorf("expected name user-count, got %s", result.Projections[0].Name)
-	}
-}
-
-func TestProjectionReplayWorkflow(t *testing.T) {
-	run := map[string]any{
-		"replay_id":           "replay-1",
-		"projection_name":     "event-count",
-		"status":              "running",
-		"started_at":          "2026-08-14T10:00:00Z",
-		"updated_at":          "2026-08-14T10:00:01Z",
-		"completed_at":        nil,
-		"total_events":        42,
-		"processed_events":    12,
-		"failed_events":       0,
-		"progress_percentage": 28.6,
-		"events_per_second":   120.0,
-		"error_message":       nil,
-	}
-
-	srv, client := setupTestServer(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/replay/preview":
-			if r.Method != http.MethodPost {
-				t.Errorf("expected POST preview, got %s", r.Method)
-			}
-			json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
-				"projection_name": "event-count", "projection_title": "Event Count",
-				"projection_kind": "counter", "projection_status": "ready",
-				"current_entity_count": 1, "total_events": 42, "sampled_events": 42,
-				"analysis_scope": "full", "event_type_distribution": []any{},
-				"sampled_entity_count": 7, "sampled_entities": []any{},
-				"first_event_at": nil, "last_event_at": nil,
-				"analyzed_at": "2026-08-14T10:00:00Z", "ready_to_replay": true,
-				"checks": []any{}, "warnings": []any{},
-			}})
-		case "/api/replay":
-			if r.Method == http.MethodGet {
-				json.NewEncoder(w).Encode(map[string]any{"data": []any{run}})
-			} else {
-				json.NewEncoder(w).Encode(map[string]any{"data": run})
-			}
-		case "/api/replay/replay-1", "/api/replay/replay-1/cancel":
-			json.NewEncoder(w).Encode(map[string]any{"data": run})
-		default:
-			t.Errorf("unexpected path %s", r.URL.Path)
-		}
-	})
-	defer srv.Close()
-
-	ctx := context.Background()
-	analysis, err := client.AnalyzeProjectionReplay(ctx, "event-count")
-	if err != nil || !analysis.ReadyToReplay || analysis.TotalEvents != 42 {
-		t.Fatalf("unexpected analysis: %#v, %v", analysis, err)
-	}
-	started, err := client.StartProjectionReplay(ctx, "event-count")
-	if err != nil || started.ReplayID != "replay-1" {
-		t.Fatalf("unexpected start: %#v, %v", started, err)
-	}
-	runs, err := client.ListProjectionReplays(ctx)
-	if err != nil || len(runs) != 1 {
-		t.Fatalf("unexpected list: %#v, %v", runs, err)
-	}
-	if _, err := client.GetProjectionReplay(ctx, "replay-1"); err != nil {
-		t.Fatalf("unexpected get: %v", err)
-	}
-	if _, err := client.CancelProjectionReplay(ctx, "replay-1"); err != nil {
-		t.Fatalf("unexpected cancel: %v", err)
 	}
 }
 

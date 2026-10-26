@@ -2,7 +2,7 @@
 
 TypeScript/JavaScript client for the [AllSource](https://all-source.xyz) event store API.
 
-Talks to the AllSource **Query Service** (the public gateway), not Core directly.
+Talks to the AllSource gateway (`https://api.all-source.xyz`), not Core directly.
 Ships compiled ESM + CJS with `.d.ts` types. Runs on Node 18+ and Bun. Zero
 runtime dependencies (uses the global `fetch`).
 
@@ -25,8 +25,8 @@ pnpm add @allsourcedev/client
 
 AllSource uses API keys (signed JWTs). Get one from your dashboard at
 [all-source.xyz](https://all-source.xyz) → **Settings → API Keys**. The key is
-sent in the `X-API-Key` header; the SDK does this for you when you pass `apiKey`
-to the constructor.
+sent as `Authorization: Bearer <key>`, which the gateway requires, and also as
+`X-API-Key`; the SDK does this for you when you pass `apiKey` to the constructor.
 
 Store the key in an env var rather than hard-coding it:
 
@@ -34,7 +34,7 @@ Store the key in an env var rather than hard-coding it:
 import { AllSourceClient } from "@allsourcedev/client";
 
 const client = new AllSourceClient({
-  baseUrl: "https://allsource-query.fly.dev", // your Query Service URL
+  baseUrl: "https://api.all-source.xyz", // or your self-hosted gateway
   apiKey: process.env.ALLSOURCE_API_KEY!,
 });
 ```
@@ -47,7 +47,7 @@ The tenant is taken from the key — there is no separate tenant argument.
 import { AllSourceClient } from "@allsourcedev/client";
 
 const client = new AllSourceClient({
-  baseUrl: "https://allsource-query.fly.dev",
+  baseUrl: "https://api.all-source.xyz",
   apiKey: process.env.ALLSOURCE_API_KEY!,
 });
 
@@ -78,8 +78,8 @@ console.log("Status:", health.status);
 
 | Option           | Type       | Required | Default | Description                          |
 |------------------|------------|----------|---------|--------------------------------------|
-| `baseUrl`        | `string`   | Yes      | —       | AllSource Query Service URL          |
-| `apiKey`         | `string`   | Yes      | —       | API key (sent as `X-API-Key`)        |
+| `baseUrl`        | `string`   | Yes      | —       | AllSource gateway URL                |
+| `apiKey`         | `string`   | Yes      | —       | API key (sent as Bearer and `X-API-Key`) |
 | `timeout`        | `number`   | No       | `30000` | Request timeout in milliseconds      |
 | `retry`          | `object`   | No       | —       | Retry/backoff overrides              |
 | `circuitBreaker` | `object`   | No       | —       | Circuit-breaker overrides            |
@@ -119,27 +119,96 @@ Query events with optional filters.
 
 Query events and fold them into a derived state with an `EventFolder<S>`.
 
-### `client.listProjections()` → `{ projections, total }`
+### Latest state without history
 
-List projections from Core.
+These calls follow the
+[latest-state read contract](../../docs/contracts/latest-state/README.md).
+Conditional reads take `ifNoneMatch` (an earlier result's `etag`) and return a
+`NotModified` instance when nothing changed, so an unchanged read costs no body.
 
-### Projection replay analysis
+```typescript
+import { NotModified, ViewRowNotFound } from "@allsourcedev/client";
 
-Replay operations run through Query Service and remain scoped to the API key's tenant:
-
-```ts
-const analysis = await client.analyzeProjectionReplay("event-count");
-
-if (analysis.ready_to_replay && analysis.total_events > 0) {
-  const run = await client.startProjectionReplay(analysis.projection_name);
-  const progress = await client.getProjectionReplay(run.replay_id);
-  console.log(progress.progress_percentage);
+const state = await client.entityState("skill:abc"); // no history[] unless { history: true }
+const again = await client.entityState("skill:abc", { ifNoneMatch: state.etag ?? undefined });
+if (again instanceof NotModified) {
+  // keep using `state`
 }
 ```
 
-Use `listProjectionReplays()` to inspect run history and
-`cancelProjectionReplay(id)` to stop a running rebuild without replacing the
-current read-model.
+`queryEvents(params, { ifNoneMatch })` works the same way, and its response
+carries `entity_version` when the query filters by `entity_id`.
+
+### Views
+
+A view is a declarative read model: you define it, AllSource folds it from your
+events, and you read rows by key.
+
+```typescript
+await client.defineView("ops_status", {
+  source: { prefixes: ["ops.probe."] },
+  key: "{payload.probe}:{day:timestamp}",
+  ops: [
+    { on: "ops.probe.observed", when: { "payload.ok": true }, increment: { ok: 1 } },
+    { on: "ops.probe.observed", max: { last_seen_at: "timestamp" } },
+  ],
+});
+
+const row = await client.latest("ops_status", "probe-a:2026-10-27");
+if (row instanceof ViewRowNotFound) console.log("no row yet; view ready:", row.ready);
+
+for await (const r of client.latestMany("ops_status", { prefix: "probe-a:" })) {
+  console.log(r.key, r.state);
+}
+```
+
+`getView(name)`, `listViews()` and `deleteView(name)` manage definitions.
+`defineView` throws `InvalidViewError` (with `detail`) for a rejected definition.
+
+### Keeping a local copy in sync
+
+`sync(view, { checkpoint, wait })` reads every snapshot page, then follows the
+view's changes. Store each `checkpoint` item and pass it back to resume without
+a snapshot. A `reset` item means the view was rebuilt: drop your local rows,
+because the snapshot that follows re-sends only live ones. `429`/`503` with
+`Retry-After` are waited out and the request repeated.
+
+```typescript
+const rows = new Map<string, unknown>();
+for await (const item of client.sync("ops_status", { checkpoint: saved, wait: 20 })) {
+  if (item.type === "reset") rows.clear();
+  if (item.type === "upsert") rows.set(item.key, item.state);
+  if (item.type === "delete") rows.delete(item.key);
+  if (item.type === "checkpoint") await save(item.checkpoint);
+}
+```
+
+`viewEntities(view, { prefix, after, limit })` and
+`viewChanges(view, { after, wait })` are the single-request calls underneath.
+
+### Event feed and read models
+
+For consumers that run their own fold:
+
+```typescript
+let cursor: FeedCursor | undefined; // import type { FeedCursor } from "@allsourcedev/client"
+const page = await client.feed({ cursor, prefixes: ["skill."], limit: 100 });
+cursor = page.next;
+
+const model = client.readModel("skills");
+const current = await model.page({ prefix: "skill:" });
+await model.commit({
+  expectedRevision: current.revision,
+  checkpoint: page.next,
+  ready: page.caught_up,
+  changes: { "skill:abc": { status: "retired" }, "skill:old": null }, // null deletes
+});
+```
+
+`feed` throws `EpochChangedError` when the feed generation changed: rebuild
+from position 0 of `error.currentEpoch` and commit with `reset: true`. A stale
+`expectedRevision` throws `VersionConflictError` and is not retried. Committing
+needs a key with `projections:write`.
 
 ### Prime projections
 

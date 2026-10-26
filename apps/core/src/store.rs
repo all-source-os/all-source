@@ -24,7 +24,6 @@ use crate::{
             archive_budget::{ArchiveReadBudget, ArchiveReadLimits, check_cancelled},
             compaction::{CompactionConfig, CompactionManager},
             index::{EventIndex, IndexEntry},
-            snapshot::{SnapshotConfig, SnapshotManager, SnapshotType},
             storage::ParquetStorage,
             tenant_loader::TenantLoader,
             version_manifest::ResolvedVersion,
@@ -41,6 +40,8 @@ use std::{path::PathBuf, sync::Arc};
 pub mod feed;
 #[path = "store_read_model.rs"]
 pub mod read_model;
+#[path = "store_view.rs"]
+pub mod view;
 #[cfg(feature = "server")]
 use tokio::sync::mpsc;
 
@@ -118,9 +119,6 @@ pub struct EventStore {
     #[cfg(feature = "server")]
     websocket_manager: Arc<WebSocketManager>,
 
-    /// Snapshot manager for fast state recovery (v0.2 feature)
-    snapshot_manager: Arc<SnapshotManager>,
-
     /// Write-Ahead Log for durability (v0.2 feature)
     wal: Option<Arc<WriteAheadLog>>,
 
@@ -143,11 +141,9 @@ pub struct EventStore {
     /// Total events ingested (for metrics)
     total_ingested: Arc<RwLock<u64>>,
 
-    /// Projection state cache for Query Service integration (v0.7 feature)
-    /// Key format: "{projection_name}:{entity_id}"
-    /// This DashMap provides O(1) access with ~11.9 μs latency
-    projection_state_cache: Arc<DashMap<String, serde_json::Value>>,
     feed_indexes: DashMap<String, feed::FeedIndex>,
+    /// `ALLSOURCE_FEED_DURABLE_LOG`; `None` when off.
+    feed_log: Option<Arc<crate::infrastructure::persistence::feed_log::FeedLog>>,
     read_models: parking_lot::Mutex<std::collections::HashMap<String, read_model::ReadModel>>,
 
     /// Projection status overrides (v0.13 feature)
@@ -346,10 +342,6 @@ impl EventStore {
             m
         };
 
-        // Initialize projection state cache (v0.7 feature)
-        let projection_state_cache = Arc::new(DashMap::new());
-        tracing::info!("✅ Projection state cache initialized");
-
         // Initialize webhook registry (v0.11 feature)
         #[cfg(feature = "server")]
         let webhook_registry = {
@@ -372,7 +364,6 @@ impl EventStore {
             storage,
             #[cfg(feature = "server")]
             websocket_manager: Arc::new(WebSocketManager::new()),
-            snapshot_manager: Arc::new(SnapshotManager::new(config.snapshot_config)),
             wal,
             compaction_manager,
             schema_registry,
@@ -381,8 +372,8 @@ impl EventStore {
             #[cfg(feature = "server")]
             metrics,
             total_ingested: Arc::new(RwLock::new(0)),
-            projection_state_cache,
             feed_indexes: DashMap::new(),
+            feed_log: feed::open_feed_log(config.wal_dir.as_deref(), config.read_only),
             read_models: parking_lot::Mutex::new(std::collections::HashMap::new()),
             projection_status: Arc::new(DashMap::new()),
             #[cfg(feature = "server")]
@@ -554,6 +545,11 @@ impl EventStore {
                             } else if buffered > 0 {
                                 if let Err(e) = store.flush_storage() {
                                     tracing::error!("Failed to checkpoint to Parquet: {}", e);
+                                } else if let Err(e) = store.sync_feed_log() {
+                                    tracing::error!(
+                                        "Failed to sync the feed log; leaving the WAL in place: {}",
+                                        e
+                                    );
                                 } else if let Err(e) = wal.truncate() {
                                     tracing::error!(
                                         "Failed to truncate WAL after checkpoint: {}",
@@ -755,9 +751,6 @@ impl EventStore {
         self.schema_evolution
             .analyze_event(event.event_type_str(), &event.payload);
 
-        // Check if automatic snapshot should be created
-        self.check_auto_snapshot(event.entity_id_str(), event);
-
         // Update metrics
         #[cfg(feature = "server")]
         {
@@ -906,9 +899,6 @@ impl EventStore {
         // Autonomous schema evolution (v2.0 feature)
         self.schema_evolution
             .analyze_event(event.event_type_str(), &event.payload);
-
-        // Check if automatic snapshot should be created (v0.2 feature)
-        self.check_auto_snapshot(event.entity_id_str(), event);
 
         // Update metrics (v0.6 feature)
         #[cfg(feature = "server")]
@@ -1192,11 +1182,6 @@ impl EventStore {
         Arc::clone(&self.websocket_manager)
     }
 
-    /// Get the snapshot manager for this store
-    pub fn snapshot_manager(&self) -> Arc<SnapshotManager> {
-        Arc::clone(&self.snapshot_manager)
-    }
-
     /// Get the compaction manager for this store
     pub fn compaction_manager(&self) -> Option<Arc<CompactionManager>> {
         self.compaction_manager.as_ref().map(Arc::clone)
@@ -1338,12 +1323,6 @@ impl EventStore {
             "🔄 hydrate_all_from_storage: in-memory pile reconstructed from Parquet"
         );
         Ok(applied)
-    }
-
-    /// Get the projection state cache for this store (v0.7 feature)
-    /// Used by Elixir Query Service for state synchronization
-    pub fn projection_state_cache(&self) -> Arc<DashMap<String, serde_json::Value>> {
-        Arc::clone(&self.projection_state_cache)
     }
 
     /// Get the projection status map (v0.13 feature)
@@ -1551,6 +1530,7 @@ impl EventStore {
             wal.seal()?
         };
         self.flush_storage()?;
+        self.sync_feed_log()?;
         wal.remove_sealed(&active)?;
         tracing::debug!("✅ Checkpoint complete: Parquet flushed, sealed WAL segments retired");
 
@@ -2262,74 +2242,6 @@ impl EventStore {
         true
     }
 
-    /// Manually create a snapshot for an entity
-    pub fn create_snapshot(&self, entity_id: &str) -> Result<()> {
-        // Get all events for this entity
-        let events = self.query(&QueryEventsRequest {
-            entity_id: Some(entity_id.to_string()),
-            event_type: None,
-            tenant_id: None,
-            as_of: None,
-            since: None,
-            until: None,
-            limit: None,
-            event_type_prefix: None,
-            exclude_event_type_prefix: None,
-            payload_filter: None,
-        })?;
-
-        if events.is_empty() {
-            return Err(AllSourceError::EntityNotFound(entity_id.to_string()));
-        }
-
-        // Build current state
-        let mut state = serde_json::json!({});
-        for event in &events {
-            if let serde_json::Value::Object(ref mut state_map) = state
-                && let serde_json::Value::Object(ref payload_map) = event.payload
-            {
-                for (key, value) in payload_map {
-                    state_map.insert(key.clone(), value.clone());
-                }
-            }
-        }
-
-        let last_event = events.last().unwrap();
-        self.snapshot_manager.create_snapshot(
-            entity_id,
-            state,
-            last_event.timestamp,
-            events.len(),
-            SnapshotType::Manual,
-        )?;
-
-        Ok(())
-    }
-
-    /// Check and create automatic snapshots if needed
-    fn check_auto_snapshot(&self, entity_id: &str, event: &Event) {
-        // Count events for this entity
-        let entity_event_count = self
-            .index
-            .get_by_entity(entity_id)
-            .map_or(0, |entries| entries.len());
-
-        if self.snapshot_manager.should_create_snapshot(
-            entity_id,
-            entity_event_count,
-            event.timestamp,
-        ) {
-            // Create snapshot in background (don't block ingestion)
-            if let Err(e) = self.create_snapshot(entity_id) {
-                tracing::warn!(
-                    "Failed to create automatic snapshot for {}: {}",
-                    entity_id,
-                    e
-                );
-            }
-        }
-    }
-
     /// Validate an event before ingestion
     fn validate_event(&self, event: &Event) -> Result<()> {
         // EntityId and EventType value objects already validate non-empty in their constructors
@@ -2366,18 +2278,6 @@ impl EventStore {
 
         // Clear existing state
         projection.clear();
-
-        // Clear cached state for this projection
-        let prefix = format!("{name}:");
-        let keys_to_remove: Vec<String> = self
-            .projection_state_cache
-            .iter()
-            .filter(|entry| entry.key().starts_with(&prefix))
-            .map(|entry| entry.key().clone())
-            .collect();
-        for key in keys_to_remove {
-            self.projection_state_cache.remove(&key);
-        }
 
         // Reprocess all events through this projection
         let events = self.events.read();
@@ -2815,52 +2715,33 @@ impl EventStore {
         true
     }
 
-    /// Reconstruct entity state as of a specific timestamp
-    /// v0.2: Now uses snapshots for fast reconstruction
+    /// Reconstruct entity state as of a specific timestamp, across every
+    /// tenant, with the folded events in `history`.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn reconstruct_state(
         &self,
         entity_id: &str,
         as_of: Option<DateTime<Utc>>,
     ) -> Result<serde_json::Value> {
-        // Try to find a snapshot to use as a base (v0.2 optimization)
-        let (merged_state, since_timestamp) = if let Some(as_of_time) = as_of {
-            // Get snapshot closest to requested time
-            if let Some(snapshot) = self
-                .snapshot_manager
-                .get_snapshot_as_of(entity_id, as_of_time)
-            {
-                tracing::debug!(
-                    "Using snapshot from {} for entity {} (saved {} events)",
-                    snapshot.as_of,
-                    entity_id,
-                    snapshot.event_count
-                );
-                (snapshot.state.clone(), Some(snapshot.as_of))
-            } else {
-                (serde_json::json!({}), None)
-            }
-        } else {
-            // Get latest snapshot for current state
-            if let Some(snapshot) = self.snapshot_manager.get_latest_snapshot(entity_id) {
-                tracing::debug!(
-                    "Using latest snapshot from {} for entity {}",
-                    snapshot.as_of,
-                    entity_id
-                );
-                (snapshot.state.clone(), Some(snapshot.as_of))
-            } else {
-                (serde_json::json!({}), None)
-            }
-        };
+        self.entity_state(entity_id, as_of, None, true)
+    }
 
-        // Query events after the snapshot (or all if no snapshot)
+    /// Fold an entity's events into its state. `tenant_id: None` folds every
+    /// tenant's events for that entity id. `version` equals `event_count`, the
+    /// number of events folded, so it is tenant-scoped whenever the fold is.
+    pub fn entity_state(
+        &self,
+        entity_id: &str,
+        as_of: Option<DateTime<Utc>>,
+        tenant_id: Option<&str>,
+        include_history: bool,
+    ) -> Result<serde_json::Value> {
         let events = self.query(&QueryEventsRequest {
             entity_id: Some(entity_id.to_string()),
             event_type: None,
-            tenant_id: None,
+            tenant_id: tenant_id.map(str::to_string),
             as_of,
-            since: since_timestamp,
+            since: None,
             until: None,
             limit: None,
             event_type_prefix: None,
@@ -2868,13 +2749,11 @@ impl EventStore {
             payload_filter: None,
         })?;
 
-        // If no events and no snapshot, entity not found
-        if events.is_empty() && since_timestamp.is_none() {
+        if events.is_empty() {
             return Err(AllSourceError::EntityNotFound(entity_id.to_string()));
         }
 
-        // Merge events on top of snapshot (or from scratch if no snapshot)
-        let mut merged_state = merged_state;
+        let mut merged_state = serde_json::json!({});
         for event in &events {
             if let serde_json::Value::Object(ref mut state_map) = merged_state
                 && let serde_json::Value::Object(ref payload_map) = event.payload
@@ -2885,22 +2764,29 @@ impl EventStore {
             }
         }
 
-        // Wrap with metadata
-        let state = serde_json::json!({
+        let mut state = serde_json::json!({
             "entity_id": entity_id,
             "last_updated": events.last().map(|e| e.timestamp),
             "event_count": events.len(),
             "as_of": as_of,
             "current_state": merged_state,
-            "history": events.iter().map(|e| {
-                serde_json::json!({
-                    "event_id": e.id,
-                    "type": e.event_type,
-                    "timestamp": e.timestamp,
-                    "payload": e.payload
-                })
-            }).collect::<Vec<_>>()
+            "version": events.len(),
         });
+        if include_history {
+            state["history"] = serde_json::Value::Array(
+                events
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "event_id": e.id,
+                            "type": e.event_type,
+                            "timestamp": e.timestamp,
+                            "payload": e.payload
+                        })
+                    })
+                    .collect(),
+            );
+        }
 
         Ok(state)
     }
@@ -3097,63 +2983,15 @@ impl EventStore {
         }
     }
 
-    /// Reconstruct entity state for ONE tenant.
-    ///
-    /// Deliberately does NOT use the snapshot fast path that
-    /// `reconstruct_state` takes: `Snapshot` carries no `tenant_id` and the
-    /// snapshot manager is keyed by `entity_id` alone, so seeding from a
-    /// snapshot could fold another tenant's state into this answer when two
-    /// tenants share an entity_id. Folding tenant-filtered events is slower and
-    /// fails closed (#230).
+    /// Reconstruct entity state for ONE tenant, folding only that tenant's
+    /// events (#230).
     pub fn reconstruct_state_for_tenant(
         &self,
         entity_id: &str,
         as_of: Option<DateTime<Utc>>,
         tenant_id: &str,
     ) -> Result<serde_json::Value> {
-        let events = self.query(&QueryEventsRequest {
-            entity_id: Some(entity_id.to_string()),
-            event_type: None,
-            tenant_id: Some(tenant_id.to_string()),
-            as_of,
-            since: None,
-            until: None,
-            limit: None,
-            event_type_prefix: None,
-            exclude_event_type_prefix: None,
-            payload_filter: None,
-        })?;
-
-        if events.is_empty() {
-            return Err(AllSourceError::EntityNotFound(entity_id.to_string()));
-        }
-
-        let mut merged_state = serde_json::json!({});
-        for event in &events {
-            if let serde_json::Value::Object(ref mut state_map) = merged_state
-                && let serde_json::Value::Object(ref payload_map) = event.payload
-            {
-                for (key, value) in payload_map {
-                    state_map.insert(key.clone(), value.clone());
-                }
-            }
-        }
-
-        Ok(serde_json::json!({
-            "entity_id": entity_id,
-            "last_updated": events.last().map(|e| e.timestamp),
-            "event_count": events.len(),
-            "as_of": as_of,
-            "current_state": merged_state,
-            "history": events.iter().map(|e| {
-                serde_json::json!({
-                    "event_id": e.id,
-                    "type": e.event_type,
-                    "timestamp": e.timestamp,
-                    "payload": e.payload
-                })
-            }).collect::<Vec<_>>()
-        }))
+        self.entity_state(entity_id, as_of, Some(tenant_id), true)
     }
 
     /// Attach a broadcast sender to the WAL for replication.
@@ -3199,9 +3037,6 @@ pub struct EventStoreConfig {
     pub http_archive_warmup_timeout: Option<std::time::Duration>,
     /// Optional directory for persistent Parquet storage (v0.2 feature)
     pub storage_dir: Option<PathBuf>,
-
-    /// Snapshot configuration (v0.2 feature)
-    pub snapshot_config: SnapshotConfig,
 
     /// Optional directory for WAL (Write-Ahead Log) (v0.2 feature)
     pub wal_dir: Option<PathBuf>,
@@ -3260,14 +3095,6 @@ impl EventStoreConfig {
         }
     }
 
-    /// Create config with custom snapshot settings
-    pub fn with_snapshots(snapshot_config: SnapshotConfig) -> Self {
-        Self {
-            snapshot_config,
-            ..Self::default()
-        }
-    }
-
     /// Create config with WAL enabled
     pub fn with_wal(wal_dir: impl Into<PathBuf>, wal_config: WALConfig) -> Self {
         Self {
@@ -3277,20 +3104,10 @@ impl EventStoreConfig {
         }
     }
 
-    /// Create config with both persistence and snapshots
-    pub fn with_all(storage_dir: impl Into<PathBuf>, snapshot_config: SnapshotConfig) -> Self {
-        Self {
-            storage_dir: Some(storage_dir.into()),
-            snapshot_config,
-            ..Self::default()
-        }
-    }
-
     /// Create production config with all features enabled
     pub fn production(
         storage_dir: impl Into<PathBuf>,
         wal_dir: impl Into<PathBuf>,
-        snapshot_config: SnapshotConfig,
         wal_config: WALConfig,
         compaction_config: CompactionConfig,
     ) -> Self {
@@ -3298,7 +3115,6 @@ impl EventStoreConfig {
         let system_data_dir = storage_dir.join("__system");
         Self {
             storage_dir: Some(storage_dir),
-            snapshot_config,
             wal_dir: Some(wal_dir.into()),
             wal_config,
             compaction_config,
@@ -3439,13 +3255,9 @@ impl EventStoreConfig {
         };
 
         let mut config = match (&storage_dir, &wal_dir) {
-            (Some(sd), Some(wd)) if wal_enabled => Self::production(
-                sd,
-                wd,
-                SnapshotConfig::default(),
-                WALConfig::default(),
-                compaction_config,
-            ),
+            (Some(sd), Some(wd)) if wal_enabled => {
+                Self::production(sd, wd, WALConfig::default(), compaction_config)
+            }
             (Some(sd), _) => Self::with_persistence(sd),
             (_, Some(wd)) if wal_enabled => Self::with_wal(wd, WALConfig::default()),
             _ => Self::default(),
@@ -4879,26 +4691,50 @@ mod tests {
     }
 
     #[test]
-    fn test_create_snapshot() {
+    fn entity_state_without_history_omits_history_and_reports_version() {
         let store = EventStore::new();
+        for _ in 0..3 {
+            store
+                .ingest(&create_test_event("entity-1", "user.updated"))
+                .unwrap();
+        }
 
-        store
-            .ingest(&create_test_event("entity-1", "user.created"))
-            .unwrap();
+        let state = store.entity_state("entity-1", None, None, false).unwrap();
 
-        store.create_snapshot("entity-1").unwrap();
-
-        // Verify snapshot was created
-        let snapshot = store.get_snapshot("entity-1").unwrap();
-        assert_ne!(snapshot, serde_json::json!(null));
+        assert!(state.get("history").is_none());
+        assert_eq!(state["event_count"], 3);
+        assert_eq!(state["version"], 3);
+        assert_eq!(state["current_state"]["name"], "Test");
     }
 
     #[test]
-    fn test_create_snapshot_entity_not_found() {
+    fn entity_state_with_history_lists_every_folded_event() {
         let store = EventStore::new();
+        for _ in 0..2 {
+            store
+                .ingest(&create_test_event("entity-1", "user.updated"))
+                .unwrap();
+        }
 
-        let result = store.create_snapshot("non-existent");
-        assert!(result.is_err());
+        let state = store.entity_state("entity-1", None, None, true).unwrap();
+
+        assert_eq!(state["history"].as_array().unwrap().len(), 2);
+        assert_eq!(state["version"], 2);
+    }
+
+    #[test]
+    fn reconstruct_state_folds_every_event_on_each_read() {
+        let store = EventStore::new();
+        for _ in 0..250 {
+            store
+                .ingest(&create_test_event("entity-1", "user.updated"))
+                .unwrap();
+        }
+
+        let state = store.reconstruct_state("entity-1", None).unwrap();
+
+        assert_eq!(state["event_count"], 250);
+        assert_eq!(state["history"].as_array().unwrap().len(), 250);
     }
 
     #[test]
@@ -4906,13 +4742,6 @@ mod tests {
         let store = EventStore::new();
         let manager = store.websocket_manager();
         // Manager should be accessible
-        assert!(Arc::strong_count(&manager) >= 1);
-    }
-
-    #[test]
-    fn test_snapshot_manager() {
-        let store = EventStore::new();
-        let manager = store.snapshot_manager();
         assert!(Arc::strong_count(&manager) >= 1);
     }
 
@@ -4951,18 +4780,6 @@ mod tests {
         // Built-in projections should be registered
         let projections = manager.list_projections();
         assert!(projections.len() >= 2); // entity_snapshots and event_counters
-    }
-
-    #[test]
-    fn test_projection_state_cache() {
-        let store = EventStore::new();
-        let cache = store.projection_state_cache();
-
-        cache.insert("test:key".to_string(), serde_json::json!({"value": 123}));
-        assert_eq!(cache.len(), 1);
-
-        let value = cache.get("test:key").unwrap();
-        assert_eq!(value["value"], 123);
     }
 
     #[test]
@@ -5016,21 +4833,12 @@ mod tests {
     }
 
     #[test]
-    fn test_event_store_config_with_all() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = EventStoreConfig::with_all(temp_dir.path(), SnapshotConfig::default());
-
-        assert!(config.storage_dir.is_some());
-    }
-
-    #[test]
     fn test_event_store_config_production() {
         let storage_dir = TempDir::new().unwrap();
         let wal_dir = TempDir::new().unwrap();
         let config = EventStoreConfig::production(
             storage_dir.path(),
             wal_dir.path(),
-            SnapshotConfig::default(),
             WALConfig::default(),
             CompactionConfig::default(),
         );
@@ -5759,7 +5567,6 @@ mod tests {
             let config = EventStoreConfig::production(
                 &storage_dir,
                 &wal_dir,
-                SnapshotConfig::default(),
                 WALConfig {
                     sync_on_write: true,
                     ..WALConfig::default()
@@ -5801,7 +5608,6 @@ mod tests {
             let config = EventStoreConfig::production(
                 &storage_dir,
                 &wal_dir,
-                SnapshotConfig::default(),
                 WALConfig {
                     sync_on_write: true,
                     ..WALConfig::default()
@@ -5833,7 +5639,6 @@ mod tests {
             let config = EventStoreConfig::production(
                 &storage_dir,
                 &wal_dir,
-                SnapshotConfig::default(),
                 WALConfig {
                     sync_on_write: true,
                     ..WALConfig::default()
@@ -5876,7 +5681,6 @@ mod tests {
             let config = EventStoreConfig::production(
                 &storage_dir,
                 &wal_dir,
-                SnapshotConfig::default(),
                 WALConfig {
                     sync_on_write: true,
                     ..WALConfig::default()
@@ -5924,7 +5728,6 @@ mod tests {
             let config = EventStoreConfig::production(
                 &storage_dir,
                 &wal_dir,
-                SnapshotConfig::default(),
                 WALConfig::default(),
                 CompactionConfig::default(),
             );
@@ -5984,7 +5787,6 @@ mod tests {
         let config = EventStoreConfig::production(
             &storage_dir,
             &wal_dir,
-            SnapshotConfig::default(),
             WALConfig {
                 sync_on_write: true,
                 ..WALConfig::default()
@@ -6039,7 +5841,6 @@ mod tests {
             EventStoreConfig::production(
                 &storage_dir,
                 &wal_dir,
-                SnapshotConfig::default(),
                 WALConfig {
                     sync_on_write: true,
                     ..WALConfig::default()
@@ -6132,7 +5933,6 @@ mod tests {
         let store = EventStore::with_config(EventStoreConfig::production(
             &storage_dir,
             &wal_dir,
-            SnapshotConfig::default(),
             WALConfig::default(),
             CompactionConfig::default(),
         ));

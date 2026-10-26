@@ -155,6 +155,14 @@ pub async fn create_tenant_handler(
     let quotas = resolve_create_quotas(req.quotas, req.quota_preset.as_deref());
 
     let tenant_id = TenantId::new(req.id).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    // `system` is the service principal's tenant and `_`-prefixed ids are
+    // Core's own streams (`_system`, `_views`); a customer tenant must not alias them.
+    if tenant_id.as_str() == "system" || tenant_id.as_str().starts_with('_') {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("tenant id '{}' is reserved", tenant_id.as_str()),
+        ));
+    }
 
     if let Some(metadata) = req.metadata {
         if !metadata.is_object() || metadata.to_string().len() > 32_768 {

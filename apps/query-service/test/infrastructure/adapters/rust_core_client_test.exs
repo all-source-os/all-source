@@ -268,25 +268,6 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTest do
     end
   end
 
-  describe "list_snapshots/0-1" do
-    test "lists all snapshots" do
-      result = RustCoreClient.list_snapshots()
-      assert_result(result)
-    end
-
-    test "lists snapshots for specific entity" do
-      result = RustCoreClient.list_snapshots("test-entity")
-      assert_result(result)
-    end
-  end
-
-  describe "create_snapshot/2" do
-    test "creates snapshot for entity" do
-      result = RustCoreClient.create_snapshot("test-entity", "manual")
-      assert_result(result)
-    end
-  end
-
   describe "get_metrics/0" do
     test "returns metrics or error" do
       result = RustCoreClient.get_metrics()
@@ -328,7 +309,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTest do
 
   describe "integration: complete workflow" do
     @tag :skip_unless_backend
-    test "creates event, queries it back, creates snapshot" do
+    test "creates event and queries it back" do
       # 1. Create an event
       event = %{
         entity_id: "integration-test-#{System.unique_integer([:positive])}",
@@ -337,7 +318,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTest do
       }
 
       case RustCoreClient.create_event(event) do
-        {:ok, created_event} ->
+        {:ok, _created_event} ->
           # 2. Query events by entity
           {:ok, events} = RustCoreClient.get_events_by_entity(event.entity_id)
           assert is_list(events)
@@ -345,13 +326,6 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTest do
           # 3. Query events by type
           {:ok, type_events} = RustCoreClient.get_events_by_type(event.event_type)
           assert is_list(type_events)
-
-          # 4. Create snapshot
-          case RustCoreClient.create_snapshot(event.entity_id, "test") do
-            {:ok, _snapshot} -> assert true
-            # Snapshots might not be fully implemented
-            {:error, _} -> assert true
-          end
 
         {:error, _reason} ->
           # Backend not available - skip test

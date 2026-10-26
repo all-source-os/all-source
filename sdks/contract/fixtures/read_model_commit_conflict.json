@@ -1,0 +1,22 @@
+{
+  "name": "read_model_commit_conflict",
+  "description": "readModel(\"skills\").commit(...) with a stale expected_revision 6 while the model is at 7. The SDK returns a typed version-conflict error carrying current_version 7 and does not retry the commit.",
+  "request": {
+    "method": "PUT",
+    "path": "/api/v1/read-models/skills",
+    "query": {},
+    "headers": {},
+    "body": {
+      "expected_revision": 6,
+      "checkpoint": { "epoch": 41, "position": 3 },
+      "ready": true,
+      "reset": false,
+      "changes": { "skill:abc": { "status": "retired" } }
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {},
+    "body": { "error": "version_conflict", "expected_version": 6, "current_version": 7 }
+  }
+}

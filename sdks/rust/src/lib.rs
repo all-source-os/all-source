@@ -15,6 +15,11 @@
 //! Both are cheap to construct and share their `reqwest` connection pool when
 //! cloned — don't wrap them in your own `Arc<Mutex<...>>`.
 //!
+//! For current state without folding history yourself, use
+//! [`QueryClient::entity_state`], or define a view and read its rows with
+//! [`QueryClient::latest`], [`QueryClient::latest_many`] and
+//! [`QueryClient::sync`].
+//!
 //! For custom projections, see [`ProjectionWorker`] — it handles WebSocket
 //! subscription, checkpoint, dedup, and reconnection so you only write the
 //! reducer. For folding events on demand, see the [`EventFolder`] trait.
@@ -83,6 +88,7 @@ mod circuit_breaker;
 mod client;
 mod error;
 mod fold;
+mod latest;
 mod normalize;
 mod paginate;
 mod projection_api;
@@ -97,9 +103,14 @@ pub use circuit_breaker::{CircuitBreaker, CircuitPermit, State as CircuitState};
 pub use client::{ClientConfig, CoreClient, QueryClient, RetryConfig};
 pub use error::Error;
 pub use fold::{fold_events, EventFolder};
+pub use latest::{
+    Conditional, EntityState, EntityStateParams, FeedCursor, FeedPage, FeedParams,
+    LatestManyPaginator, LatestRow, ReadModel, ReadModelCommit, ReadModelPage, ReadModelPageParams,
+    SyncBatch, SyncChange, SyncOptions, ViewChange, ViewChanges, ViewChangesParams,
+    ViewEntitiesPage, ViewEntitiesParams, ViewEntry, ViewInfo, ViewRow, ViewSummary, ViewSync,
+};
 pub use normalize::normalize_event_type;
 pub use paginate::{EntityPaginator, EventPaginator, DEFAULT_PAGE_SIZE};
-pub use projection_api::{ProjectionStateSummaryPage, ProjectionStateSummaryParams};
 pub use response_meta::{EventsQuery, ResponseMeta};
 pub use types::*;
 

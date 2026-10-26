@@ -43,7 +43,9 @@ console.log(`→ entity:  ${entityId}`);
 
 // 1. health (unauthenticated)
 const health = await client.getHealth().catch((e) => fail("getHealth", e));
-console.log(`✓ health: ${health.status} (version ${(health as Record<string, unknown>).version ?? "?"})`);
+console.log(
+  `✓ health: ${health.status} (version ${(health as Record<string, unknown>).version ?? "?"})`
+);
 
 // 2. ingest one event (POST /api/v1/events, X-API-Key auth, metadata)
 const stored = await client
@@ -64,7 +66,9 @@ for (let attempt = 0; attempt < 10; attempt++) {
     .catch((e) => fail("queryEvents", e));
   if (count > 0) {
     const e = events[0];
-    console.log(`✓ queried back ${count} event(s); type=${e.event_type} metadata=${JSON.stringify(e.metadata)}`);
+    console.log(
+      `✓ queried back ${count} event(s); type=${e.event_type} metadata=${JSON.stringify(e.metadata)}`
+    );
     found = true;
     break;
   }

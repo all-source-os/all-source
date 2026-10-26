@@ -4,11 +4,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 const eventFeedPath = "/api/v1/event-feed"
+
+// Only the Query Service writes view rows and definitions. A tenant admin's
+// delegated token carries the admin role, so Core's role check alone does not
+// keep these out of tenant hands.
+func reservedReadModel(name string) bool {
+	return name == "views_registry" || strings.HasPrefix(name, "view_")
+}
 
 func (cp *ControlPlane) ProxyReadModel(c *gin.Context) {
 	_, tenantID, _, ok := authIdentityFromContext(c)
@@ -22,6 +30,10 @@ func (cp *ControlPlane) ProxyReadModel(c *gin.Context) {
 	}
 	path := eventFeedPath
 	if name := c.Param("name"); name != "" {
+		if c.Request.Method == http.MethodPut && reservedReadModel(name) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "reserved_read_model"})
+			return
+		}
 		path = "/api/v1/read-models/" + url.PathEscape(name)
 	}
 	var body []byte

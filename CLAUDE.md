@@ -127,8 +127,10 @@ tokens are Fly secrets or runtime env. Unstoppable Domains DNS points the apex,
 All Core endpoints use the `/api/v1/` prefix. Key endpoints:
 - `POST /api/v1/events` — ingest event (returns 200, not 201)
 - `GET /api/v1/events/query` — query events (returns `{"events": [...], "count": N}`). Results are ordered by `(timestamp, version)`. Default order is ascending (oldest first); pass `order=desc` for newest first — e.g. `?entity_id=<id>&limit=1&order=desc` fetches the latest event for an entity.
+- `GET /api/v1/entities/{id}/state` — current state of one entity with a `version`; no history unless `history=true`. `ETag`/`304` on `If-None-Match`.
+- `GET /api/v1/event-feed`, `GET|PUT /api/v1/read-models/{name}` — tenant event feed and consumer-folded read-model rows (revision CAS).
+- `PUT|GET|DELETE /api/v1/views/{view}`, `GET /api/v1/views` — declarative view definitions; `GET /api/v1/views/{view}/entities[/{key}]` and `/changes?after&wait` — latest rows and changes. The Query Service folds the rows; Core stores and serves them (ADR-021, `docs/contracts/latest-state/README.md`).
 - `GET /api/v1/projections` — list projections (returns `{"projections": [...], "total": N}`)
-- `GET /api/v1/snapshots` — list snapshots
 - `GET /api/v1/schemas` — list schemas
 - `GET /health` — health check (note: root path, not /api/v1/health)
 - `GET /metrics` — Prometheus metrics

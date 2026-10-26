@@ -1,0 +1,24 @@
+{
+  "name": "view_latest",
+  "description": "latest(\"ops_status\", \"probe-a:2026-10-27\"). The key is one path segment. The SDK returns state, version and the ETag.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/entities/probe-a%3A2026-10-27",
+    "query": {},
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "ETag": "\"sha256:c4e2a7f91b3d5e60a8c2f4b6d8e0a1c3\"" },
+    "body": {
+      "view": "ops_status",
+      "key": "probe-a:2026-10-27",
+      "state": { "ok": 1430, "failed": 2 },
+      "version": 57,
+      "revision": 61,
+      "generation": 2,
+      "ready": true
+    }
+  }
+}

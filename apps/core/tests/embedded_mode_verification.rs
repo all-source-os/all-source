@@ -198,18 +198,17 @@ fn test_embedded_state_reconstruction() {
 }
 
 // =============================================================================
-// Test 5: Snapshot Management Without HTTP Server
+// Test 5: Latest State Without HTTP Server
 // =============================================================================
 
 #[test]
-fn test_embedded_snapshot_management() {
+fn test_embedded_latest_state() {
     let store = EventStore::new();
 
-    // Create multiple events for an entity
     for i in 0..10 {
         let event = Event::from_strings(
             "counter.incremented".to_string(),
-            "counter-snapshot-test".to_string(),
+            "counter-state-test".to_string(),
             "default".to_string(),
             json!({"count": i, "timestamp": i * 1000}),
             None,
@@ -218,21 +217,17 @@ fn test_embedded_snapshot_management() {
         store.ingest(&event).unwrap();
     }
 
-    // Manually create a snapshot
-    store
-        .create_snapshot("counter-snapshot-test")
-        .expect("Failed to create snapshot");
+    let state = store
+        .entity_state("counter-state-test", None, Some("default"), false)
+        .expect("Failed to fold entity state");
 
-    // Access snapshot manager
-    let snapshot_manager = store.snapshot_manager();
-    let snapshot = snapshot_manager.get_latest_snapshot("counter-snapshot-test");
+    assert_eq!(state["entity_id"], "counter-state-test");
+    assert_eq!(state["event_count"], 10);
+    assert_eq!(state["version"], 10);
+    assert_eq!(state["current_state"]["count"], 9);
+    assert!(state.get("history").is_none());
 
-    assert!(snapshot.is_some(), "Snapshot should exist");
-    let snapshot = snapshot.unwrap();
-    assert_eq!(snapshot.entity_id, "counter-snapshot-test");
-    assert_eq!(snapshot.event_count, 10);
-
-    println!("✅ Test 5: Embedded snapshot management successful");
+    println!("✅ Test 5: Embedded latest state successful");
 }
 
 // =============================================================================
@@ -556,34 +551,6 @@ fn test_embedded_metrics_registry() {
 }
 
 // =============================================================================
-// Test 15: Projection State Cache Without HTTP Server
-// =============================================================================
-
-#[test]
-fn test_embedded_projection_state_cache() {
-    let store = EventStore::new();
-
-    // Ingest events
-    let event = Event::from_strings(
-        "cache.test".to_string(),
-        "cache-entity".to_string(),
-        "default".to_string(),
-        json!({"cached": true}),
-        None,
-    )
-    .unwrap();
-    store.ingest(&event).unwrap();
-
-    // Access projection state cache
-    let cache = store.projection_state_cache();
-
-    // Cache should be accessible (may be empty, but accessible)
-    assert!(Arc::strong_count(&cache) >= 1);
-
-    println!("✅ Test 15: Embedded projection state cache access successful");
-}
-
-// =============================================================================
 // Test 16: Full Embedded Workflow Without HTTP Server
 // =============================================================================
 
@@ -693,10 +660,7 @@ async fn test_embedded_full_workflow() {
     assert_eq!(current["status"], "shipped");
     assert_eq!(current["tracking_number"], "TRACK-67890");
 
-    // 8. Create snapshot
-    store.create_snapshot("order-workflow-1").unwrap();
-
-    // 9. Verify store statistics
+    // 8. Verify store statistics
     let stats = store.stats();
     assert_eq!(stats.total_events, 3);
 

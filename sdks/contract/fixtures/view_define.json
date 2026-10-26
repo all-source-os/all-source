@@ -1,0 +1,54 @@
+{
+  "name": "view_define",
+  "description": "defineView(\"ops_status\", definition) for a view that did not exist. The definition is sent verbatim. The response has the getView shape: generation 1, no rows folded yet, not ready.",
+  "request": {
+    "method": "PUT",
+    "path": "/api/v1/views/ops_status",
+    "query": {},
+    "headers": {},
+    "body": {
+      "source": { "prefixes": ["ops.probe."] },
+      "key": "{payload.probe}:{day:timestamp}",
+      "ops": [
+        { "on": "ops.probe.observed", "set": { "probe": "payload.probe", "day": "day:timestamp" } },
+        { "on": "ops.probe.observed", "when": { "payload.ok": true }, "increment": { "ok": 1 } },
+        {
+          "on": "ops.probe.observed",
+          "when": { "payload.ok": false },
+          "increment": { "failed": 1 }
+        },
+        { "on": "ops.probe.observed", "max": { "last_seen_at": "timestamp" } },
+        { "on": "ops.probe.observed", "set": { "status": "payload.status" } }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "view": "ops_status",
+      "definition": {
+        "source": { "prefixes": ["ops.probe."] },
+        "key": "{payload.probe}:{day:timestamp}",
+        "ops": [
+          {
+            "on": "ops.probe.observed",
+            "set": { "probe": "payload.probe", "day": "day:timestamp" }
+          },
+          { "on": "ops.probe.observed", "when": { "payload.ok": true }, "increment": { "ok": 1 } },
+          {
+            "on": "ops.probe.observed",
+            "when": { "payload.ok": false },
+            "increment": { "failed": 1 }
+          },
+          { "on": "ops.probe.observed", "max": { "last_seen_at": "timestamp" } },
+          { "on": "ops.probe.observed", "set": { "status": "payload.status" } }
+        ]
+      },
+      "generation": 1,
+      "revision": 0,
+      "checkpoint": null,
+      "ready": false
+    }
+  }
+}

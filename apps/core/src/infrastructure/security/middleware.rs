@@ -27,22 +27,20 @@ pub const AUTH_SKIP_PATHS: &[&str] = &[
 /// - `/internal/` — sentinel failover endpoints; must not require API keys or
 ///   be rate-limited, otherwise failover can timeout or fail when credentials
 ///   are unavailable.
-/// - `/api/v1/events`, `/api/v1/projections`, `/api/v1/snapshots`,
-///   `/api/v1/schemas`, `/api/v1/consumers`, `/api/v1/stats`,
-///   `/api/v1/entities`, `/api/v1/duplicates`, `/api/v1/streams`,
-///   `/api/v1/replay`, `/api/v1/webhooks`, `/api/v1/compaction`,
-///   `/api/v1/pipelines`, `/api/v1/graphql` — data-plane routes. Core is
-///   internal-only (bead t-0ff8); the gateway (Control Plane's delegation
-///   layer) authenticates and scopes the caller before forwarding. Handlers
-///   read `tenant_id` from request body or query param — that's the
-///   authoritative source. Auth middleware running on these paths was legacy
-///   defense-in-depth that added no real protection once Core went behind
-///   Fly's private network.
+/// - `/api/v1/events`, `/api/v1/projections`, `/api/v1/schemas`,
+///   `/api/v1/consumers`, `/api/v1/stats`, `/api/v1/entities`,
+///   `/api/v1/duplicates`, `/api/v1/streams`, `/api/v1/replay`,
+///   `/api/v1/webhooks`, `/api/v1/compaction`, `/api/v1/pipelines`,
+///   `/api/v1/graphql` — data-plane routes. Core is internal-only; the gateway
+///   authenticates the caller and injects its `tenant_id` (query parameter, or
+///   the ingest body) before forwarding, so no auth context reaches these
+///   handlers and that injected `tenant_id` is the only tenant they see.
+///   `/api/v1/event-feed` and `/api/v1/read-models` are not listed: they
+///   authenticate here and take the tenant from the credential.
 pub const AUTH_SKIP_PREFIXES: &[&str] = &[
     "/internal/",
     "/api/v1/events",
     "/api/v1/projections",
-    "/api/v1/snapshots",
     "/api/v1/schemas",
     "/api/v1/consumers",
     "/api/v1/stats",
@@ -1315,7 +1313,9 @@ mod tests {
         assert!(should_skip_auth("/api/v1/events/query"));
         assert!(should_skip_auth("/api/v1/events/batch"));
         assert!(should_skip_auth("/api/v1/projections/foo/bar"));
-        assert!(should_skip_auth("/api/v1/snapshots"));
+        assert!(!should_skip_auth("/api/v1/snapshots"));
+        assert!(!should_skip_auth("/api/v1/read-models/foo"));
+        assert!(!should_skip_auth("/api/v1/event-feed"));
 
         // These still require auth — CP depends on them.
         assert!(!should_skip_auth("/api/v1/auth/me"));

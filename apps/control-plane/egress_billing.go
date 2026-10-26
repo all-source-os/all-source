@@ -10,6 +10,10 @@ import (
 	"github.com/allsource/control-plane/internal/application/usecases"
 )
 
+// egressChargeUnit names what enforceEgress settles: the buffered body exactly
+// as delivered, so a body Core compressed is charged at its encoded length.
+const egressChargeUnit = "response_body_bytes_as_sent_after_compression"
+
 func (cp *ControlPlane) egressUsage(c *gin.Context) {
 	tenant, ok := authTenantFromContext(c)
 	if !ok {
@@ -24,7 +28,7 @@ func (cp *ControlPlane) egressUsage(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "egress_usage_unavailable"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"usage": value, "prepaid_packs": usecases.EgressPacks, "automatic_top_up": false, "unit": "serialized_response_body_bytes_before_compression", "allowance_period": "UTC_calendar_month", "prepaid_status": "requires_verified_product_configuration"})
+	c.JSON(http.StatusOK, gin.H{"usage": value, "prepaid_packs": usecases.EgressPacks, "automatic_top_up": false, "unit": egressChargeUnit, "allowance_period": "UTC_calendar_month", "prepaid_status": "requires_verified_product_configuration"})
 }
 
 func (cp *ControlPlane) egressCheckout(c *gin.Context) {

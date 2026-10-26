@@ -82,11 +82,18 @@ Or use the environment variable instead of `--data-dir`:
 | `analyze_changes` | Paginated changes within a strict RFC 3339 window |
 | `list_stores` | Every configured store with its path, event count and last refresh |
 | `watch_events` | Long-poll for events newer than a checkpoint |
-| `fold_entity_lifecycle` | Latest state per entity for one event family |
+| `fold_entity_lifecycle` | Latest state per entity for one event family; `page.nextCursor` pages past `limit` in entity-id order |
 | `fold_steps` | Start/terminal pairs per payload key, with elapsed time |
 | `trace` | Follow one id across every store: events that reference it, then the ids they carry, up to `depth` hops |
+| `get_latest_state` | One view row from the gateway; `if_none_match` returns `notModified` without the state (needs `--remote`) |
+| `list_latest` | A page of view rows in key order, with the `revision` to start `list_changes` from (needs `--remote`) |
+| `list_changes` | View rows written after a revision, deletions included, long-polling up to 20 s (needs `--remote`) |
 
 Every successful result includes JSON `structuredContent`, tenant/source provenance, freshness, and completeness. Existing pretty-JSON text content remains for older clients.
+
+## Remote gateway
+
+`--remote <url>` binds a gateway store read over HTTP, with `ALLSOURCE_API_KEY` (or `--api-key`) sent as a bearer token. It is the `default` store when there is no `--data-dir`, otherwise it is named `remote`. Views are folded by the Query Service and stored in Core, so only a remote store answers the view tools; an embedded store answers them with `UNSUPPORTED`, and a remote store answers the event tools the same way. The routes are in [the latest-state contract](../../docs/contracts/latest-state/README.md). Row state goes through `payload_mode` like every event payload. `list_changes` returns `reset: true` when `after` predates the view's last rebuild: re-read `list_latest` from the start and resume from its `revision`.
 
 ## Freshness
 

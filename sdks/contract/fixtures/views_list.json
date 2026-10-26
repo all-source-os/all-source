@@ -1,0 +1,21 @@
+{
+  "name": "views_list",
+  "description": "listViews(). The SDK returns one entry per view with its generation, revision and readiness; definitions are fetched with getView.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views",
+    "query": {},
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "views": [
+        { "view": "ops_status", "generation": 2, "revision": 62, "ready": true },
+        { "view": "skill_catalog", "generation": 1, "revision": 0, "ready": false }
+      ]
+    }
+  }
+}

@@ -29,25 +29,20 @@ use crate::{
     },
     error::Result,
     infrastructure::{
-        persistence::{
-            compaction::CompactionResult,
-            snapshot::{
-                CreateSnapshotRequest, CreateSnapshotResponse, ListSnapshotsRequest,
-                ListSnapshotsResponse, SnapshotInfo,
-            },
-        },
+        persistence::compaction::CompactionResult,
         query::{
             geospatial::GeoQueryRequest,
             graphql::{GraphQLError, GraphQLRequest, GraphQLResponse},
         },
         security::middleware::OptionalAuth,
-        web::api_v1::AppState,
+        web::{api_v1::AppState, conditional::conditional_json},
     },
     store::{EventStore, EventTypeInfo, StreamInfo},
 };
 use axum::{
     Json, Router,
     extract::{Path, Query, State, WebSocketUpgrade},
+    http::HeaderMap,
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
@@ -136,13 +131,6 @@ pub async fn serve(store: SharedStore, addr: &str) -> anyhow::Result<()> {
         .route("/api/v1/analytics/frequency", get(analytics_frequency))
         .route("/api/v1/analytics/summary", get(analytics_summary))
         .route("/api/v1/analytics/correlation", get(analytics_correlation))
-        // v0.2: Snapshot management endpoints
-        .route("/api/v1/snapshots", post(create_snapshot))
-        .route("/api/v1/snapshots", get(list_snapshots))
-        .route(
-            "/api/v1/snapshots/{entity_id}/latest",
-            get(get_latest_snapshot),
-        )
         // v0.2: Compaction endpoints
         .route("/api/v1/compaction/trigger", post(trigger_compaction))
         .route("/api/v1/compaction/stats", get(compaction_stats))
@@ -189,31 +177,7 @@ pub async fn serve(store: SharedStore, addr: &str) -> anyhow::Result<()> {
             "/api/v1/projections/{name}",
             axum::routing::delete(delete_projection),
         )
-        .route(
-            "/api/v1/projections/{name}/state",
-            get(get_projection_state_summary),
-        )
         .route("/api/v1/projections/{name}/reset", post(reset_projection))
-        .route(
-            "/api/v1/projections/{name}/{entity_id}/state",
-            get(get_projection_state),
-        )
-        .route(
-            "/api/v1/projections/{name}/{entity_id}/state",
-            post(save_projection_state),
-        )
-        .route(
-            "/api/v1/projections/{name}/{entity_id}/state",
-            put(save_projection_state),
-        )
-        .route(
-            "/api/v1/projections/{name}/bulk",
-            post(bulk_get_projection_states),
-        )
-        .route(
-            "/api/v1/projections/{name}/bulk/save",
-            post(bulk_save_projection_states),
-        )
         // v0.11: Webhook management endpoints
         .route("/api/v1/webhooks", post(register_webhook))
         .route("/api/v1/webhooks", get(list_webhooks))
@@ -574,7 +538,23 @@ pub struct EventIntegrityParam {
     pub integrity: Option<String>,
 }
 
+/// `GET /api/v1/events/query`, conditional per the latest-state contract.
+/// The body carries no request-time field, so equal results share a tag.
 pub async fn query_events(
+    auth: OptionalAuth,
+    req: Query<QueryEventsRequest>,
+    order_param: Query<EventOrderParam>,
+    offset_param: Query<EventOffsetParam>,
+    integrity_param: Query<EventIntegrityParam>,
+    store: State<SharedStore>,
+    headers: HeaderMap,
+) -> Result<Response> {
+    let Json(body) =
+        query_events_json(auth, req, order_param, offset_param, integrity_param, store).await?;
+    conditional_json(&headers, &body)
+}
+
+pub async fn query_events_json(
     OptionalAuth(auth): OptionalAuth,
     Query(req): Query<QueryEventsRequest>,
     Query(order_param): Query<EventOrderParam>,
@@ -904,44 +884,39 @@ pub struct EntityStateParams {
     as_of: Option<chrono::DateTime<chrono::Utc>>,
     /// Tenant to scope to (the gateway injects the authenticated tenant).
     ///
-    /// When present, reconstruction folds only that tenant's events and skips
-    /// the snapshot fast path, which carries no tenant dimension (#230).
+    /// When present, reconstruction folds only that tenant's events (#230).
     tenant_id: Option<String>,
+    /// Include the folded events as `history[]`. Defaults to `false`.
+    #[serde(default)]
+    history: bool,
 }
 
 pub async fn get_entity_state(
     State(store): State<SharedStore>,
+    headers: HeaderMap,
     Path(entity_id): Path<String>,
     Query(params): Query<EntityStateParams>,
-) -> Result<Json<serde_json::Value>> {
-    let state = match params.tenant_id.as_deref() {
-        Some(tenant_id) => {
-            store.reconstruct_state_for_tenant(&entity_id, params.as_of, tenant_id)?
-        }
-        None => store.reconstruct_state(&entity_id, params.as_of)?,
-    };
+) -> Result<Response> {
+    let state = store.entity_state(
+        &entity_id,
+        params.as_of,
+        params.tenant_id.as_deref(),
+        params.history,
+    )?;
 
     tracing::info!("State reconstructed for entity: {}", entity_id);
 
-    Ok(Json(state))
+    conditional_json(&headers, &state)
 }
 
+/// The latest-state contract gives `/snapshot` the same body as `/state`.
 pub async fn get_entity_snapshot(
-    State(store): State<SharedStore>,
-    Path(entity_id): Path<String>,
-    Query(params): Query<EntityStateParams>,
-) -> Result<Json<serde_json::Value>> {
-    // Snapshots are keyed by entity_id with no tenant dimension, so a scoped
-    // caller cannot be served one safely — two tenants sharing an entity_id
-    // would see each other's state. Fold that tenant's events instead (#230).
-    let snapshot = match params.tenant_id.as_deref() {
-        Some(tenant_id) => store.reconstruct_state_for_tenant(&entity_id, None, tenant_id)?,
-        None => store.get_snapshot(&entity_id)?,
-    };
-
-    tracing::debug!("Snapshot retrieved for entity: {}", entity_id);
-
-    Ok(Json(snapshot))
+    state: State<SharedStore>,
+    headers: HeaderMap,
+    path: Path<String>,
+    params: Query<EntityStateParams>,
+) -> Result<Response> {
+    get_entity_state(state, headers, path, params).await
 }
 
 /// Query parameters for the stats endpoint.
@@ -1161,88 +1136,6 @@ pub async fn analytics_correlation(
     );
 
     Ok(Json(response))
-}
-
-// v0.2: Create a snapshot for an entity
-pub async fn create_snapshot(
-    State(store): State<SharedStore>,
-    Json(req): Json<CreateSnapshotRequest>,
-) -> Result<Json<CreateSnapshotResponse>> {
-    store.create_snapshot(&req.entity_id)?;
-
-    let snapshot_manager = store.snapshot_manager();
-    let snapshot = snapshot_manager
-        .get_latest_snapshot(&req.entity_id)
-        .ok_or_else(|| crate::error::AllSourceError::EntityNotFound(req.entity_id.clone()))?;
-
-    tracing::info!("📸 Created snapshot for entity: {}", req.entity_id);
-
-    Ok(Json(CreateSnapshotResponse {
-        snapshot_id: snapshot.id,
-        entity_id: snapshot.entity_id,
-        created_at: snapshot.created_at,
-        event_count: snapshot.event_count,
-        size_bytes: snapshot.metadata.size_bytes,
-    }))
-}
-
-// v0.2: List snapshots
-pub async fn list_snapshots(
-    State(store): State<SharedStore>,
-    Query(req): Query<ListSnapshotsRequest>,
-) -> Result<Json<ListSnapshotsResponse>> {
-    let snapshot_manager = store.snapshot_manager();
-
-    let snapshots: Vec<SnapshotInfo> = if let Some(entity_id) = req.entity_id {
-        snapshot_manager
-            .get_all_snapshots(&entity_id)
-            .into_iter()
-            .map(SnapshotInfo::from)
-            .collect()
-    } else {
-        // List all entities with snapshots
-        let entities = snapshot_manager.list_entities();
-        entities
-            .iter()
-            .flat_map(|entity_id| {
-                snapshot_manager
-                    .get_all_snapshots(entity_id)
-                    .into_iter()
-                    .map(SnapshotInfo::from)
-            })
-            .collect()
-    };
-
-    let total = snapshots.len();
-
-    tracing::debug!("Listed {} snapshots", total);
-
-    Ok(Json(ListSnapshotsResponse { snapshots, total }))
-}
-
-// v0.2: Get latest snapshot for an entity
-pub async fn get_latest_snapshot(
-    State(store): State<SharedStore>,
-    Path(entity_id): Path<String>,
-) -> Result<Json<serde_json::Value>> {
-    let snapshot_manager = store.snapshot_manager();
-
-    let snapshot = snapshot_manager
-        .get_latest_snapshot(&entity_id)
-        .ok_or_else(|| crate::error::AllSourceError::EntityNotFound(entity_id.clone()))?;
-
-    tracing::debug!("Retrieved latest snapshot for entity: {}", entity_id);
-
-    Ok(Json(serde_json::json!({
-        "snapshot_id": snapshot.id,
-        "entity_id": snapshot.entity_id,
-        "created_at": snapshot.created_at,
-        "as_of": snapshot.as_of,
-        "event_count": snapshot.event_count,
-        "size_bytes": snapshot.metadata.size_bytes,
-        "snapshot_type": snapshot.metadata.snapshot_type,
-        "state": snapshot.state
-    })))
 }
 
 // v0.2: Trigger manual compaction
@@ -1690,43 +1583,6 @@ pub async fn get_projection(
     })))
 }
 
-/// Get projection state for a specific entity.
-///
-/// Resolution order:
-/// 1. **Registered projection** — if `name` is registered with the projection
-///    manager, return the projection's own `get_state(entity_id)` output.
-/// 2. **Projection state cache** — otherwise fall back to whatever was written
-///    via `save_projection_state` / `bulk_save_projection_states`. This supports
-///    SDK-managed projections (e.g. the Rust SDK's `ProjectionWorker`) that
-///    compute state client-side and push it back without registering a
-///    projection in Core's manager.
-///
-/// Returns `found: false` with `state: null` when neither source has state.
-pub async fn get_projection_state(
-    State(store): State<SharedStore>,
-    Path((name, entity_id)): Path<(String, String)>,
-) -> Result<Json<serde_json::Value>> {
-    let state = store
-        .projection_manager()
-        .get_projection(&name)
-        .and_then(|p| p.get_state(&entity_id))
-        .or_else(|| {
-            store
-                .projection_state_cache()
-                .get(&format!("{name}:{entity_id}"))
-                .map(|entry| entry.value().clone())
-        });
-
-    tracing::debug!("Projection state retrieved: {} / {}", name, entity_id);
-
-    Ok(Json(serde_json::json!({
-        "projection": name,
-        "entity_id": entity_id,
-        "state": state,
-        "found": state.is_some()
-    })))
-}
-
 /// Delete (clear) a projection by name
 ///
 /// Removes all state from the projection. The projection definition remains
@@ -1743,123 +1599,11 @@ pub async fn delete_projection(
 
     projection.clear();
 
-    // Also clear any cached state for this projection
-    let cache = store.projection_state_cache();
-    let prefix = format!("{name}:");
-    let keys_to_remove: Vec<String> = cache
-        .iter()
-        .filter(|entry| entry.key().starts_with(&prefix))
-        .map(|entry| entry.key().clone())
-        .collect();
-    for key in keys_to_remove {
-        cache.remove(&key);
-    }
-
     tracing::info!("Projection deleted (cleared): {}", name);
 
     Ok(Json(serde_json::json!({
         "projection": name,
         "deleted": true
-    })))
-}
-
-/// Query parameters for `GET /api/v1/projections/{name}/state`.
-///
-/// All optional: with none of them set the endpoint keeps its historical
-/// behaviour of returning every cached entity for the projection, so existing
-/// callers (the Query Service's `ProjectionServer` hydration, the SDKs) are
-/// unaffected. Names match `ListEntitiesRequest` for consistency.
-#[derive(Debug, Default, Deserialize)]
-pub struct ProjectionStateSummaryParams {
-    /// Maximum number of entity states to return. Unbounded when absent.
-    pub limit: Option<usize>,
-    /// Number of matching states to skip before applying `limit`. Default 0.
-    pub offset: Option<usize>,
-    /// Return only entities whose id starts with this prefix — lets a caller
-    /// walk one shard of the keyspace without enumerating the whole projection.
-    pub entity_id_prefix: Option<String>,
-}
-
-/// Get aggregate projection state (all entities).
-///
-/// Returns the cached states written via `save_projection_state` /
-/// `bulk_save_projection_states`. The projection does NOT need to be
-/// registered with the projection manager — this supports SDK-managed
-/// projections that push state without server-side registration.
-///
-/// Supports `limit`, `offset` and `entity_id_prefix` (issue #249): this is the
-/// only endpoint that can *enumerate* a projection — `bulk_get_projection_states`
-/// needs the ids up front — so a projection with one entry per tenant needs a
-/// way to bound and resume a request. Entities are ordered by `entity_id` so
-/// offset paging is stable; `total` is the full match set and `has_more` tells
-/// a paginator when to stop.
-///
-/// Returns an empty list when no state has been written.
-pub async fn get_projection_state_summary(
-    State(store): State<SharedStore>,
-    Path(name): Path<String>,
-    Query(params): Query<ProjectionStateSummaryParams>,
-) -> Result<Json<serde_json::Value>> {
-    let cache = store.projection_state_cache();
-    let prefix = format!("{name}:");
-    let offset = params.offset.unwrap_or(0);
-
-    // Collect the matching keys first and sort them. DashMap iteration order is
-    // arbitrary, so offset paging is only coherent against a total order — and
-    // windowing ids instead of values means only the returned page's states are
-    // cloned, not the whole projection.
-    let mut entity_ids: Vec<String> = cache
-        .iter()
-        .filter_map(|entry| entry.key().strip_prefix(&prefix).map(ToString::to_string))
-        .filter(|entity_id| {
-            params
-                .entity_id_prefix
-                .as_ref()
-                .is_none_or(|p| entity_id.starts_with(p))
-        })
-        .collect();
-    entity_ids.sort_unstable();
-
-    let total = entity_ids.len();
-
-    let page = entity_ids.into_iter().skip(offset);
-    let page: Vec<String> = match params.limit {
-        Some(limit) => page.take(limit).collect(),
-        None => page.collect(),
-    };
-
-    let states: Vec<serde_json::Value> = page
-        .into_iter()
-        .filter_map(|entity_id| {
-            // Skip entries deleted between the key scan and the value read.
-            cache.get(&format!("{prefix}{entity_id}")).map(|entry| {
-                serde_json::json!({
-                    "entity_id": entity_id,
-                    "state": entry.value().clone()
-                })
-            })
-        })
-        .collect();
-
-    let count = states.len();
-    // Relative to the window actually served — a paginator that trusts a bare
-    // `count < total` never terminates once an offset is in play (cf. #250).
-    let has_more = offset + count < total;
-
-    tracing::debug!(
-        "Projection state summary: {} ({} of {} entities, offset {})",
-        name,
-        count,
-        total,
-        offset
-    );
-
-    Ok(Json(serde_json::json!({
-        "projection": name,
-        "states": states,
-        "count": count,
-        "total": total,
-        "has_more": has_more
     })))
 }
 
@@ -1934,131 +1678,6 @@ pub async fn start_projection(
     Ok(Json(serde_json::json!({
         "projection": name,
         "status": "running"
-    })))
-}
-
-/// Request body for saving projection state
-#[derive(Debug, Deserialize)]
-pub struct SaveProjectionStateRequest {
-    pub state: serde_json::Value,
-}
-
-/// Save/update projection state for an entity
-///
-/// This endpoint allows external services (like Elixir Query Service) to
-/// store computed projection state back to the Core for persistence.
-pub async fn save_projection_state(
-    State(store): State<SharedStore>,
-    Path((name, entity_id)): Path<(String, String)>,
-    Json(req): Json<SaveProjectionStateRequest>,
-) -> Result<Json<serde_json::Value>> {
-    let projection_cache = store.projection_state_cache();
-
-    // Store in the projection state cache
-    projection_cache.insert(format!("{name}:{entity_id}"), req.state.clone());
-
-    tracing::info!("Projection state saved: {} / {}", name, entity_id);
-
-    Ok(Json(serde_json::json!({
-        "projection": name,
-        "entity_id": entity_id,
-        "saved": true
-    })))
-}
-
-/// Bulk get projection states for multiple entities
-///
-/// Efficient endpoint for fetching multiple entity states in a single request.
-#[derive(Debug, Deserialize)]
-pub struct BulkGetStateRequest {
-    pub entity_ids: Vec<String>,
-}
-
-/// Bulk save projection states for multiple entities
-///
-/// Efficient endpoint for saving multiple entity states in a single request.
-#[derive(Debug, Deserialize)]
-pub struct BulkSaveStateRequest {
-    pub states: Vec<BulkSaveStateItem>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct BulkSaveStateItem {
-    pub entity_id: String,
-    pub state: serde_json::Value,
-}
-
-pub async fn bulk_get_projection_states(
-    State(store): State<SharedStore>,
-    Path(name): Path<String>,
-    Json(req): Json<BulkGetStateRequest>,
-) -> Result<Json<serde_json::Value>> {
-    // Same fallback rule as `get_projection_state`: registered projection
-    // wins, cache is the fallback. This lets SDK-managed projections read
-    // their pushed-back state without registering in Core's projection manager.
-    let projection = store.projection_manager().get_projection(&name);
-    let cache = store.projection_state_cache();
-
-    let states: Vec<serde_json::Value> = req
-        .entity_ids
-        .iter()
-        .map(|entity_id| {
-            let state = projection
-                .as_ref()
-                .and_then(|p| p.get_state(entity_id))
-                .or_else(|| {
-                    cache
-                        .get(&format!("{name}:{entity_id}"))
-                        .map(|entry| entry.value().clone())
-                });
-            serde_json::json!({
-                "entity_id": entity_id,
-                "state": state,
-                "found": state.is_some()
-            })
-        })
-        .collect();
-
-    tracing::debug!(
-        "Bulk projection state retrieved: {} entities from {}",
-        states.len(),
-        name
-    );
-
-    Ok(Json(serde_json::json!({
-        "projection": name,
-        "states": states,
-        "total": states.len()
-    })))
-}
-
-/// Bulk save projection states for multiple entities
-///
-/// This endpoint allows efficient batch saving of projection states,
-/// critical for high-throughput event processing pipelines.
-pub async fn bulk_save_projection_states(
-    State(store): State<SharedStore>,
-    Path(name): Path<String>,
-    Json(req): Json<BulkSaveStateRequest>,
-) -> Result<Json<serde_json::Value>> {
-    let projection_cache = store.projection_state_cache();
-
-    let mut saved_count = 0;
-    for item in &req.states {
-        projection_cache.insert(format!("{name}:{}", item.entity_id), item.state.clone());
-        saved_count += 1;
-    }
-
-    tracing::info!(
-        "Bulk projection state saved: {} entities for {}",
-        saved_count,
-        name
-    );
-
-    Ok(Json(serde_json::json!({
-        "projection": name,
-        "saved": saved_count,
-        "total": req.states.len()
     })))
 }
 
@@ -2664,7 +2283,7 @@ mod tests {
         let uri: axum::http::Uri = format!("/api/v1/events/query?tenant_id=test-stream&{query}")
             .parse()
             .unwrap();
-        query_events(
+        query_events_json(
             OptionalAuth(None),
             Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
@@ -2776,7 +2395,7 @@ mod tests {
             let order: Query<EventOrderParam> = Query::try_from_uri(&uri).unwrap();
             let off: Query<EventOffsetParam> = Query::try_from_uri(&uri).unwrap();
             assert_eq!(off.0.offset, Some(offset), "offset must deserialize");
-            query_events(
+            query_events_json(
                 OptionalAuth(None),
                 req,
                 order,
@@ -2826,118 +2445,186 @@ mod tests {
         assert!(!past.has_more, "offset beyond the match set is exhausted");
     }
 
-    // Regression guard for issue #249: `GET /api/v1/projections/{name}/state`
-    // must honour `limit`, `offset` and `entity_id_prefix`. The handler used to
-    // take only `Path(name)`, so query parameters were dropped on the floor and
-    // the response grew linearly with the number of cached entities — a caller
-    // with one entry per tenant had no way to bound a request or resume one.
-    // Driven through a real router so query-string deserialization is exercised:
-    // a test that hands the handler a DTO it built itself cannot fail on
-    // parameters the handler never declares.
-    #[tokio::test]
-    async fn projection_state_summary_honours_limit_offset_and_prefix() {
+    /// Router carrying the latest-state routes, driven end to end so query
+    /// parsing, headers and status codes are all exercised.
+    fn latest_state_app(store: &SharedStore) -> Router {
+        Router::new()
+            .route("/api/v1/entities/{entity_id}/state", get(get_entity_state))
+            .route(
+                "/api/v1/entities/{entity_id}/snapshot",
+                get(get_entity_snapshot),
+            )
+            .route("/api/v1/events/query", get(query_events))
+            .with_state(store.clone())
+    }
+
+    async fn send(
+        app: &Router,
+        uri: &str,
+        if_none_match: Option<&str>,
+    ) -> (axum::http::StatusCode, Option<String>, Vec<u8>) {
         use axum::{
             body::{Body, to_bytes},
-            http::Request,
+            http::{Request, header},
         };
-        use tower::ServiceExt; // for `oneshot`
+        use tower::ServiceExt;
 
+        let mut request = Request::builder().uri(uri);
+        if let Some(tag) = if_none_match {
+            request = request.header(header::IF_NONE_MATCH, tag);
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let etag = response
+            .headers()
+            .get(header::ETAG)
+            .map(|v| v.to_str().unwrap().to_string());
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, etag, body.to_vec())
+    }
+
+    fn json_body(body: &[u8]) -> serde_json::Value {
+        serde_json::from_slice(body).unwrap()
+    }
+
+    #[tokio::test]
+    async fn entity_state_omits_history_by_default_and_reports_version() {
         let store = create_test_store();
-        let cache = store.projection_state_cache();
-        for i in 0..25 {
-            cache.insert(
-                format!("demo:tenant-{i:02}"),
-                serde_json::json!({ "n": i as u64 }),
-            );
-        }
-        // A neighbouring projection and a same-prefix-looking key must not leak.
-        cache.insert(
-            "other:tenant-99".to_string(),
-            serde_json::json!({ "n": 99 }),
-        );
-
-        let app = Router::new()
-            .route(
-                "/api/v1/projections/{name}/state",
-                get(get_projection_state_summary),
-            )
-            .with_state(store.clone());
-
-        async fn fetch(app: &Router, uri: &str) -> serde_json::Value {
-            let resp = app
-                .clone()
-                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
-                .await
+        for _ in 0..3 {
+            store
+                .ingest(&create_test_event("user-1", "user.updated"))
                 .unwrap();
-            assert_eq!(resp.status(), axum::http::StatusCode::OK, "GET {uri}");
-            let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
-            serde_json::from_slice(&bytes).unwrap()
         }
+        let app = latest_state_app(&store);
 
-        let ids = |body: &serde_json::Value| -> Vec<String> {
-            body["states"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|s| s["entity_id"].as_str().unwrap().to_string())
-                .collect()
-        };
+        for route in ["state", "snapshot"] {
+            for tenant in ["", "?tenant_id=test-stream"] {
+                let uri = format!("/api/v1/entities/user-1/{route}{tenant}");
+                let (status, etag, body) = send(&app, &uri, None).await;
+                let body = json_body(&body);
 
-        // No params: unchanged behaviour — the whole projection, scoped to it.
-        let all = fetch(&app, "/api/v1/projections/demo/state").await;
-        assert_eq!(all["total"], 25);
-        assert_eq!(ids(&all).len(), 25);
+                assert_eq!(status, axum::http::StatusCode::OK, "GET {uri}");
+                assert!(etag.is_some(), "GET {uri} must carry an ETag");
+                assert!(body.get("history").is_none(), "GET {uri}");
+                assert_eq!(body["event_count"], 3, "GET {uri}");
+                assert_eq!(body["version"], 3, "GET {uri}");
+                assert_eq!(body["current_state"]["name"], "Test", "GET {uri}");
+            }
+        }
+    }
 
-        // limit bounds the body; total still reports the full match set.
-        let p1 = fetch(&app, "/api/v1/projections/demo/state?limit=10").await;
-        assert_eq!(ids(&p1).len(), 10, "limit must bound the response");
-        assert_eq!(p1["total"], 25);
-        assert_eq!(p1["count"], 10);
-        assert_eq!(p1["has_more"], true);
+    #[tokio::test]
+    async fn entity_state_history_true_restores_history() {
+        let store = create_test_store();
+        for _ in 0..2 {
+            store
+                .ingest(&create_test_event("user-1", "user.updated"))
+                .unwrap();
+        }
+        let app = latest_state_app(&store);
 
-        // offset resumes where the previous page stopped.
-        let p2 = fetch(&app, "/api/v1/projections/demo/state?limit=10&offset=10").await;
-        let p3 = fetch(&app, "/api/v1/projections/demo/state?limit=10&offset=20").await;
-        assert_eq!(ids(&p3).len(), 5, "last page returns the remainder");
-        assert_eq!(p3["has_more"], false, "offset + count == total → exhausted");
-        assert_ne!(ids(&p1), ids(&p2), "offset=10 must skip the first page");
+        let (_, _, body) = send(&app, "/api/v1/entities/user-1/state?history=true", None).await;
+        let body = json_body(&body);
 
-        let mut walked = ids(&p1);
-        walked.extend(ids(&p2));
-        walked.extend(ids(&p3));
-        let unique: std::collections::HashSet<_> = walked.iter().cloned().collect();
-        assert_eq!(
-            unique.len(),
-            25,
-            "paging the whole projection must yield 25 distinct entities"
-        );
+        assert_eq!(body["history"].as_array().unwrap().len(), 2);
+        assert_eq!(body["version"], 2);
+    }
 
-        // Paging is only meaningful over a stable order — DashMap iteration is not.
-        let mut sorted = walked.clone();
-        sorted.sort();
-        assert_eq!(walked, sorted, "pages must be ordered by entity_id");
+    #[tokio::test]
+    async fn entity_state_version_counts_only_the_scoped_tenant() {
+        let store = create_test_store();
+        store
+            .ingest(&create_test_event("shared-id", "user.updated"))
+            .unwrap();
+        for _ in 0..4 {
+            store
+                .ingest(
+                    &Event::from_strings(
+                        "user.updated".to_string(),
+                        "shared-id".to_string(),
+                        "other-tenant".to_string(),
+                        serde_json::json!({"name": "Other"}),
+                        None,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let app = latest_state_app(&store);
 
-        // Past the end: empty page, exhausted rather than "more".
-        let past = fetch(&app, "/api/v1/projections/demo/state?limit=10&offset=100").await;
-        assert_eq!(past["count"], 0);
-        assert_eq!(past["has_more"], false);
-        assert_eq!(past["total"], 25);
-
-        // entity_id_prefix narrows to one shard of the keyspace.
-        let shard = fetch(
+        let (_, _, body) = send(
             &app,
-            "/api/v1/projections/demo/state?entity_id_prefix=tenant-1",
+            "/api/v1/entities/shared-id/state?tenant_id=test-stream",
+            None,
         )
         .await;
-        assert_eq!(shard["total"], 10, "tenant-10..tenant-19");
-        assert!(
-            ids(&shard).iter().all(|id| id.starts_with("tenant-1")),
-            "entity_id_prefix must filter"
-        );
+        let body = json_body(&body);
 
-        // The projection scope itself still holds under paging.
-        let other = fetch(&app, "/api/v1/projections/other/state?limit=10").await;
-        assert_eq!(ids(&other), vec!["tenant-99".to_string()]);
+        assert_eq!(body["version"], 1);
+        assert_eq!(body["current_state"]["name"], "Test");
+    }
+
+    #[tokio::test]
+    async fn entity_state_answers_304_until_the_entity_changes() {
+        let store = create_test_store();
+        store
+            .ingest(&create_test_event("user-1", "user.updated"))
+            .unwrap();
+        let app = latest_state_app(&store);
+        let uri = "/api/v1/entities/user-1/state?tenant_id=test-stream";
+
+        let (_, etag, _) = send(&app, uri, None).await;
+        let etag = etag.unwrap();
+        let (status, again, body) = send(&app, uri, Some(&etag)).await;
+        assert_eq!(status, axum::http::StatusCode::NOT_MODIFIED);
+        assert_eq!(again.as_deref(), Some(etag.as_str()));
+        assert!(body.is_empty());
+
+        store
+            .ingest(&create_test_event("user-1", "user.updated"))
+            .unwrap();
+        let (status, changed, _) = send(&app, uri, Some(&etag)).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_ne!(changed.as_deref(), Some(etag.as_str()));
+    }
+
+    #[tokio::test]
+    async fn entity_state_for_unknown_entity_is_404_without_etag() {
+        let store = create_test_store();
+        let app = latest_state_app(&store);
+
+        let (status, etag, _) = send(&app, "/api/v1/entities/missing/state", None).await;
+
+        assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
+        assert!(etag.is_none());
+    }
+
+    #[tokio::test]
+    async fn events_query_is_conditional_and_its_tag_is_stable() {
+        let store = create_test_store();
+        store
+            .ingest(&create_test_event("user-1", "user.created"))
+            .unwrap();
+        let app = latest_state_app(&store);
+        let uri = "/api/v1/events/query?tenant_id=test-stream&entity_id=user-1";
+
+        let (status, first, body) = send(&app, uri, None).await;
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(json_body(&body)["count"], 1);
+        let (_, second, _) = send(&app, uri, None).await;
+        assert_eq!(first, second, "an unchanged result must keep its tag");
+
+        let first = first.unwrap();
+        let (status, _, body) = send(&app, uri, Some(&first)).await;
+        assert_eq!(status, axum::http::StatusCode::NOT_MODIFIED);
+        assert!(body.is_empty());
+
+        let (status, _, _) = send(&app, uri, Some("*")).await;
+        assert_eq!(status, axum::http::StatusCode::NOT_MODIFIED);
     }
 
     // Regression guard for issue #251: a bounded page must cost the page, not the
@@ -3003,7 +2690,7 @@ mod tests {
         let uri: axum::http::Uri = format!("/api/v1/events/query?tenant_id=test-stream&{query}")
             .parse()
             .unwrap();
-        query_events(
+        query_events_json(
             OptionalAuth(None),
             Query::try_from_uri(&uri).unwrap(),
             Query::try_from_uri(&uri).unwrap(),
@@ -3320,7 +3007,7 @@ mod tests {
                 .unwrap();
         }
 
-        let resp = query_events(
+        let resp = query_events_json(
             OptionalAuth(None),
             Query(QueryEventsRequest::default()),
             Query(EventOrderParam { order: None }),
@@ -3338,7 +3025,7 @@ mod tests {
 
         // The same query scoped to the events' tenant returns them.
         // (create_test_event stamps tenant "test-stream" — the 3rd from_strings arg.)
-        let scoped = query_events(
+        let scoped = query_events_json(
             OptionalAuth(None),
             Query(QueryEventsRequest {
                 tenant_id: Some("test-stream".to_string()),
@@ -3998,25 +3685,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_projection_state_cache() {
-        let store = create_test_store();
-
-        // Test cache insertion
-        let cache = store.projection_state_cache();
-        cache.insert(
-            "entity_snapshots:user-123".to_string(),
-            serde_json::json!({"name": "Test User", "age": 30}),
-        );
-
-        // Test cache retrieval
-        let state = cache.get("entity_snapshots:user-123");
-        assert!(state.is_some());
-        let state = state.unwrap();
-        assert_eq!(state["name"], "Test User");
-        assert_eq!(state["age"], 30);
-    }
-
-    #[tokio::test]
     async fn test_projection_manager_list_projections() {
         let store = create_test_store();
 
@@ -4054,53 +3722,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_projection_state_cache_multiple_entities() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Insert multiple entities
-        for i in 0..10 {
-            cache.insert(
-                format!("entity_snapshots:entity-{i}"),
-                serde_json::json!({"id": i, "status": "active"}),
-            );
-        }
-
-        // Verify all insertions
-        assert_eq!(cache.len(), 10);
-
-        // Verify each entity
-        for i in 0..10 {
-            let key = format!("entity_snapshots:entity-{i}");
-            let state = cache.get(&key);
-            assert!(state.is_some());
-            assert_eq!(state.unwrap()["id"], i);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_update() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Initial state
-        cache.insert(
-            "entity_snapshots:user-789".to_string(),
-            serde_json::json!({"balance": 100}),
-        );
-
-        // Update state
-        cache.insert(
-            "entity_snapshots:user-789".to_string(),
-            serde_json::json!({"balance": 150}),
-        );
-
-        // Verify update
-        let state = cache.get("entity_snapshots:user-789").unwrap();
-        assert_eq!(state["balance"], 150);
-    }
-
-    #[tokio::test]
     async fn test_event_counter_projection() {
         let store = create_test_store();
 
@@ -4130,36 +3751,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_projection_state_cache_key_format() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Test standard key format: {projection_name}:{entity_id}
-        let key = "orders:order-12345".to_string();
-        cache.insert(key.clone(), serde_json::json!({"total": 99.99}));
-
-        let state = cache.get(&key).unwrap();
-        assert_eq!(state["total"], 99.99);
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_cache_removal() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Insert and then remove
-        cache.insert(
-            "test:entity-1".to_string(),
-            serde_json::json!({"data": "value"}),
-        );
-        assert_eq!(cache.len(), 1);
-
-        cache.remove("test:entity-1");
-        assert_eq!(cache.len(), 0);
-        assert!(cache.get("test:entity-1").is_none());
-    }
-
-    #[tokio::test]
     async fn test_get_nonexistent_projection() {
         let store = create_test_store();
         let projection_manager = store.projection_manager();
@@ -4180,100 +3771,6 @@ mod tests {
             .unwrap();
         let state = snapshot_projection.get_state("nonexistent-entity-xyz");
         assert!(state.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_cache_concurrent_access() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Simulate concurrent writes
-        let handles: Vec<_> = (0..10)
-            .map(|i| {
-                let cache_clone = cache.clone();
-                tokio::spawn(async move {
-                    cache_clone.insert(
-                        format!("concurrent:entity-{i}"),
-                        serde_json::json!({"thread": i}),
-                    );
-                })
-            })
-            .collect();
-
-        for handle in handles {
-            handle.await.unwrap();
-        }
-
-        // All 10 entries should be present
-        assert_eq!(cache.len(), 10);
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_large_payload() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Create a large JSON payload (~10KB)
-        let large_array: Vec<serde_json::Value> = (0..1000)
-            .map(|i| serde_json::json!({"item": i, "description": "test item with some padding data to increase size"}))
-            .collect();
-
-        cache.insert(
-            "large:entity-1".to_string(),
-            serde_json::json!({"items": large_array}),
-        );
-
-        let state = cache.get("large:entity-1").unwrap();
-        let items = state["items"].as_array().unwrap();
-        assert_eq!(items.len(), 1000);
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_complex_json() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Complex nested JSON structure
-        let complex_state = serde_json::json!({
-            "user": {
-                "id": "user-123",
-                "profile": {
-                    "name": "John Doe",
-                    "email": "john@example.com",
-                    "settings": {
-                        "theme": "dark",
-                        "notifications": true
-                    }
-                },
-                "roles": ["admin", "user"],
-                "metadata": {
-                    "created_at": "2025-01-01T00:00:00Z",
-                    "last_login": null
-                }
-            }
-        });
-
-        cache.insert("complex:user-123".to_string(), complex_state);
-
-        let state = cache.get("complex:user-123").unwrap();
-        assert_eq!(state["user"]["profile"]["name"], "John Doe");
-        assert_eq!(state["user"]["roles"][0], "admin");
-        assert!(state["user"]["metadata"]["last_login"].is_null());
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_cache_iteration() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Insert entries
-        for i in 0..5 {
-            cache.insert(format!("iter:entity-{i}"), serde_json::json!({"index": i}));
-        }
-
-        // Iterate over all entries
-        let entries: Vec<_> = cache.iter().map(|entry| entry.key().clone()).collect();
-        assert_eq!(entries.len(), 5);
     }
 
     #[tokio::test]
@@ -4299,70 +3796,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_projection_state_cache_overwrite() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Initial value
-        cache.insert(
-            "overwrite:entity-1".to_string(),
-            serde_json::json!({"version": 1}),
-        );
-
-        // Overwrite with new value
-        cache.insert(
-            "overwrite:entity-1".to_string(),
-            serde_json::json!({"version": 2}),
-        );
-
-        // Overwrite again
-        cache.insert(
-            "overwrite:entity-1".to_string(),
-            serde_json::json!({"version": 3}),
-        );
-
-        let state = cache.get("overwrite:entity-1").unwrap();
-        assert_eq!(state["version"], 3);
-
-        // Should still be only 1 entry
-        assert_eq!(cache.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_projection_state_multiple_projections() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Store states for different projections
-        cache.insert(
-            "entity_snapshots:user-1".to_string(),
-            serde_json::json!({"name": "Alice"}),
-        );
-        cache.insert(
-            "event_counters:user.created".to_string(),
-            serde_json::json!({"count": 5}),
-        );
-        cache.insert(
-            "custom_projection:order-1".to_string(),
-            serde_json::json!({"total": 150.0}),
-        );
-
-        // Verify each projection's state
-        assert_eq!(
-            cache.get("entity_snapshots:user-1").unwrap()["name"],
-            "Alice"
-        );
-        assert_eq!(
-            cache.get("event_counters:user.created").unwrap()["count"],
-            5
-        );
-        assert_eq!(
-            cache.get("custom_projection:order-1").unwrap()["total"],
-            150.0
-        );
-    }
-
-    #[tokio::test]
     async fn test_bulk_projection_state_access() {
         let store = create_test_store();
 
@@ -4383,274 +3816,6 @@ mod tests {
             let state = snapshot_projection.get_state(&format!("bulk-user-{i}"));
             assert!(state.is_some(), "Entity bulk-user-{i} should have state");
         }
-    }
-
-    #[tokio::test]
-    async fn test_bulk_save_projection_states() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Simulate bulk save request
-        let states = vec![
-            BulkSaveStateItem {
-                entity_id: "bulk-entity-1".to_string(),
-                state: serde_json::json!({"name": "Entity 1", "value": 100}),
-            },
-            BulkSaveStateItem {
-                entity_id: "bulk-entity-2".to_string(),
-                state: serde_json::json!({"name": "Entity 2", "value": 200}),
-            },
-            BulkSaveStateItem {
-                entity_id: "bulk-entity-3".to_string(),
-                state: serde_json::json!({"name": "Entity 3", "value": 300}),
-            },
-        ];
-
-        let projection_name = "test_projection";
-
-        // Save states to cache (simulating bulk_save_projection_states handler)
-        for item in &states {
-            cache.insert(
-                format!("{projection_name}:{}", item.entity_id),
-                item.state.clone(),
-            );
-        }
-
-        // Verify all states were saved
-        assert_eq!(cache.len(), 3);
-
-        let state1 = cache.get("test_projection:bulk-entity-1").unwrap();
-        assert_eq!(state1["name"], "Entity 1");
-        assert_eq!(state1["value"], 100);
-
-        let state2 = cache.get("test_projection:bulk-entity-2").unwrap();
-        assert_eq!(state2["name"], "Entity 2");
-        assert_eq!(state2["value"], 200);
-
-        let state3 = cache.get("test_projection:bulk-entity-3").unwrap();
-        assert_eq!(state3["name"], "Entity 3");
-        assert_eq!(state3["value"], 300);
-    }
-
-    #[tokio::test]
-    async fn test_bulk_save_empty_states() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Clear cache
-        cache.clear();
-
-        // Empty states should work fine
-        let states: Vec<BulkSaveStateItem> = vec![];
-        assert_eq!(states.len(), 0);
-
-        // Cache should remain empty
-        assert_eq!(cache.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_bulk_save_overwrites_existing() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Insert initial state
-        cache.insert(
-            "test:entity-1".to_string(),
-            serde_json::json!({"version": 1, "data": "initial"}),
-        );
-
-        // Bulk save with updated state
-        let new_state = serde_json::json!({"version": 2, "data": "updated"});
-        cache.insert("test:entity-1".to_string(), new_state);
-
-        // Verify overwrite
-        let state = cache.get("test:entity-1").unwrap();
-        assert_eq!(state["version"], 2);
-        assert_eq!(state["data"], "updated");
-    }
-
-    #[tokio::test]
-    async fn test_bulk_save_high_volume() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Simulate high volume save (1000 entities)
-        for i in 0..1000 {
-            cache.insert(
-                format!("volume_test:entity-{i}"),
-                serde_json::json!({"index": i, "status": "active"}),
-            );
-        }
-
-        // Verify count
-        assert_eq!(cache.len(), 1000);
-
-        // Spot check some entries
-        assert_eq!(cache.get("volume_test:entity-0").unwrap()["index"], 0);
-        assert_eq!(cache.get("volume_test:entity-500").unwrap()["index"], 500);
-        assert_eq!(cache.get("volume_test:entity-999").unwrap()["index"], 999);
-    }
-
-    #[tokio::test]
-    async fn test_bulk_save_different_projections() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-
-        // Save to multiple projections in bulk
-        let projections = ["entity_snapshots", "event_counters", "custom_analytics"];
-
-        for proj in &projections {
-            for i in 0..5 {
-                cache.insert(
-                    format!("{proj}:entity-{i}"),
-                    serde_json::json!({"projection": proj, "id": i}),
-                );
-            }
-        }
-
-        // Verify total count (3 projections * 5 entities)
-        assert_eq!(cache.len(), 15);
-
-        // Verify each projection
-        for proj in &projections {
-            let state = cache.get(&format!("{proj}:entity-0")).unwrap();
-            assert_eq!(state["projection"], *proj);
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Cache-fallback tests for the projection-state read handlers (v0.19.1).
-    //
-    // SDK-managed projections write state via save_projection_state /
-    // bulk_save_projection_states without registering in projection_manager.
-    // These tests verify the read handlers fall back to the cache instead of
-    // 404-ing. Registered projection wins where both exist; cache fills the
-    // gap when not.
-    // -------------------------------------------------------------------------
-
-    #[tokio::test]
-    async fn get_projection_state_falls_back_to_cache_when_unregistered() {
-        let store = create_test_store();
-        store.projection_state_cache().insert(
-            "assets:BTC".to_string(),
-            serde_json::json!({"symbol": "BTC", "altname": "Bitcoin"}),
-        );
-
-        let resp = get_projection_state(
-            State(Arc::clone(&store)),
-            Path(("assets".to_string(), "BTC".to_string())),
-        )
-        .await
-        .expect("should not error when projection is not registered");
-
-        assert_eq!(resp.0["found"], serde_json::Value::Bool(true));
-        assert_eq!(resp.0["state"]["symbol"], "BTC");
-        assert_eq!(resp.0["state"]["altname"], "Bitcoin");
-    }
-
-    #[tokio::test]
-    async fn get_projection_state_returns_not_found_when_absent_everywhere() {
-        let store = create_test_store();
-
-        let resp = get_projection_state(
-            State(Arc::clone(&store)),
-            Path(("assets".to_string(), "UNKNOWN".to_string())),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(resp.0["found"], serde_json::Value::Bool(false));
-        assert_eq!(resp.0["state"], serde_json::Value::Null);
-    }
-
-    #[tokio::test]
-    async fn get_projection_state_registered_wins_over_cache() {
-        let store = create_test_store();
-
-        // Ingest an event so entity_snapshots (a registered projection) has state.
-        let event = create_test_event("user-777", "user.created");
-        store.ingest(&event).unwrap();
-
-        // Plant a conflicting cache entry for the same (projection, entity).
-        store.projection_state_cache().insert(
-            "entity_snapshots:user-777".to_string(),
-            serde_json::json!({"stolen": "value"}),
-        );
-
-        let resp = get_projection_state(
-            State(Arc::clone(&store)),
-            Path(("entity_snapshots".to_string(), "user-777".to_string())),
-        )
-        .await
-        .unwrap();
-
-        // Registered projection wins — cache fallback is only consulted when
-        // the registered projection has no state for this entity.
-        assert_eq!(resp.0["found"], serde_json::Value::Bool(true));
-        assert!(
-            resp.0["state"].get("stolen").is_none(),
-            "cache entry must not shadow registered projection state: got {:?}",
-            resp.0["state"]
-        );
-    }
-
-    #[tokio::test]
-    async fn get_projection_state_summary_returns_cache_without_registration() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-        cache.insert("assets:BTC".into(), serde_json::json!({"symbol": "BTC"}));
-        cache.insert("assets:ETH".into(), serde_json::json!({"symbol": "ETH"}));
-        // Different projection name — must not appear in the summary.
-        cache.insert("trades:t-1".into(), serde_json::json!({"x": 1}));
-
-        let resp = get_projection_state_summary(
-            State(Arc::clone(&store)),
-            Path("assets".to_string()),
-            Query(ProjectionStateSummaryParams::default()),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(resp.0["total"], 2);
-        let states = resp.0["states"].as_array().unwrap();
-        let entity_ids: Vec<&str> = states
-            .iter()
-            .map(|s| s["entity_id"].as_str().unwrap())
-            .collect();
-        assert!(entity_ids.contains(&"BTC"));
-        assert!(entity_ids.contains(&"ETH"));
-    }
-
-    #[tokio::test]
-    async fn bulk_get_projection_states_falls_back_to_cache() {
-        let store = create_test_store();
-        let cache = store.projection_state_cache();
-        cache.insert("assets:BTC".into(), serde_json::json!({"symbol": "BTC"}));
-        cache.insert("assets:ETH".into(), serde_json::json!({"symbol": "ETH"}));
-
-        let req = BulkGetStateRequest {
-            entity_ids: vec!["BTC".into(), "ETH".into(), "MISSING".into()],
-        };
-
-        let resp = bulk_get_projection_states(
-            State(Arc::clone(&store)),
-            Path("assets".to_string()),
-            Json(req),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(resp.0["total"], 3);
-        let states = resp.0["states"].as_array().unwrap();
-        let by_id: std::collections::HashMap<&str, &serde_json::Value> = states
-            .iter()
-            .map(|s| (s["entity_id"].as_str().unwrap(), s))
-            .collect();
-
-        assert_eq!(by_id["BTC"]["found"], serde_json::Value::Bool(true));
-        assert_eq!(by_id["BTC"]["state"]["symbol"], "BTC");
-        assert_eq!(by_id["ETH"]["found"], serde_json::Value::Bool(true));
-        assert_eq!(by_id["MISSING"]["found"], serde_json::Value::Bool(false));
     }
 
     /// Pins the poll wire shape the Rust SDK's `poll_consumer_events` decodes:

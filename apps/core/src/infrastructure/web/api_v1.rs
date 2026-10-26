@@ -310,13 +310,6 @@ pub async fn serve_v1(
             "/api/v1/analytics/correlation",
             get(super::api::analytics_correlation),
         )
-        // Snapshots
-        .route("/api/v1/snapshots", post(super::api::create_snapshot))
-        .route("/api/v1/snapshots", get(super::api::list_snapshots))
-        .route(
-            "/api/v1/snapshots/{entity_id}/latest",
-            get(super::api::get_latest_snapshot),
-        )
         // Compaction
         .route(
             "/api/v1/compaction/trigger",
@@ -380,7 +373,7 @@ pub async fn serve_v1(
             "/api/v1/pipelines/{pipeline_id}/reset",
             put(super::api::reset_pipeline),
         )
-        // v0.7: Projection State API for Query Service integration
+        // Core's internal projections; tenant read models are under /read-models
         .route("/api/v1/projections", get(super::api::list_projections))
         .route(
             "/api/v1/projections/{name}",
@@ -389,10 +382,6 @@ pub async fn serve_v1(
         .route(
             "/api/v1/projections/{name}",
             delete(super::api::delete_projection),
-        )
-        .route(
-            "/api/v1/projections/{name}/state",
-            get(super::api::get_projection_state_summary),
         )
         .route(
             "/api/v1/projections/{name}/reset",
@@ -405,26 +394,6 @@ pub async fn serve_v1(
         .route(
             "/api/v1/projections/{name}/start",
             post(super::api::start_projection),
-        )
-        .route(
-            "/api/v1/projections/{name}/{entity_id}/state",
-            get(super::api::get_projection_state),
-        )
-        .route(
-            "/api/v1/projections/{name}/{entity_id}/state",
-            post(super::api::save_projection_state),
-        )
-        .route(
-            "/api/v1/projections/{name}/{entity_id}/state",
-            put(super::api::save_projection_state),
-        )
-        .route(
-            "/api/v1/projections/{name}/bulk",
-            post(super::api::bulk_get_projection_states),
-        )
-        .route(
-            "/api/v1/projections/{name}/bulk/save",
-            post(super::api::bulk_save_projection_states),
         )
         // v0.11: Webhook management
         .route("/api/v1/webhooks", post(super::api::register_webhook))
@@ -450,6 +419,26 @@ pub async fn serve_v1(
             "/api/v1/read-models/{name}",
             get(super::read_model_api::read).put(super::read_model_api::commit),
         )
+        .route("/api/v1/views", get(super::view_api::list_views))
+        .route(
+            "/api/v1/views/{view}",
+            get(super::view_api::get_view)
+                .put(super::view_api::put_view)
+                .delete(super::view_api::delete_view),
+        )
+        .route(
+            "/api/v1/views/{view}/entities",
+            get(super::view_api::list_entities),
+        )
+        .route(
+            "/api/v1/views/{view}/entities/{key}",
+            get(super::view_api::get_entity),
+        )
+        .route(
+            "/api/v1/views/{view}/changes",
+            get(super::view_api::changes),
+        )
+        .route("/api/v1/admin/views", get(super::view_api::admin_views))
         // v0.14: Durable consumer subscriptions
         .route("/api/v1/consumers", post(super::api::register_consumer))
         .route(
@@ -584,9 +573,9 @@ pub async fn serve_v1(
 const WRITE_PATHS: &[&str] = &[
     "/api/v1/events",
     "/api/v1/events/batch",
-    "/api/v1/snapshots",
     "/api/v1/projections/",
     "/api/v1/read-models/",
+    "/api/v1/views",
     "/api/v1/schemas",
     "/api/v1/replay",
     "/api/v1/pipelines",

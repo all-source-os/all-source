@@ -4,7 +4,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use allsource_core::{
     QueryEventsRequest,
     domain::entities::Event,
-    infrastructure::persistence::{SnapshotConfig, WALConfig},
+    infrastructure::persistence::WALConfig,
     store::{EventStore, EventStoreConfig},
 };
 use chrono::Utc;
@@ -99,11 +99,10 @@ fn bench_query_performance(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark 3: State reconstruction with and without snapshots
+/// Benchmark 3: State reconstruction
 fn bench_state_reconstruction(c: &mut Criterion) {
     let mut group = c.benchmark_group("state_reconstruction");
 
-    // Without snapshots
     {
         let store = EventStore::new();
         for i in 0..1_000 {
@@ -115,47 +114,11 @@ fn bench_state_reconstruction(c: &mut Criterion) {
             store.ingest(&event).unwrap();
         }
 
-        group.bench_function("without_snapshot_1000_events", |b| {
+        group.bench_function("full_fold_1000_events", |b| {
             b.iter(|| {
                 black_box(
                     store
                         .reconstruct_state("reconstruction-entity", None)
-                        .unwrap(),
-                );
-            });
-        });
-    }
-
-    // With snapshots
-    {
-        let snapshot_config = SnapshotConfig {
-            event_threshold: 100,
-            auto_snapshot: true,
-            ..Default::default()
-        };
-
-        let config = EventStoreConfig {
-            snapshot_config,
-            ..Default::default()
-        };
-
-        let store = EventStore::with_config(config);
-
-        // Ingest 1000 events (will create snapshots automatically)
-        for i in 0..1_000 {
-            let event = create_event(
-                "reconstruction-entity-snap",
-                "state.update",
-                json!({"value": i}),
-            );
-            store.ingest(&event).unwrap();
-        }
-
-        group.bench_function("with_snapshots_1000_events", |b| {
-            b.iter(|| {
-                black_box(
-                    store
-                        .reconstruct_state("reconstruction-entity-snap", None)
                         .unwrap(),
                 );
             });
@@ -283,31 +246,6 @@ fn bench_parquet_writes(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark 7: Snapshot creation performance
-fn bench_snapshot_operations(c: &mut Criterion) {
-    let mut group = c.benchmark_group("snapshot_operations");
-
-    // Setup store with events
-    let store = EventStore::new();
-    for i in 0..500 {
-        let event = create_event(
-            "snapshot-entity",
-            "data.update",
-            json!({"value": i, "data": format!("Event {}", i)}),
-        );
-        store.ingest(&event).unwrap();
-    }
-
-    group.bench_function("create_snapshot", |b| {
-        b.iter(|| {
-            store.create_snapshot("snapshot-entity").unwrap();
-            black_box(());
-        });
-    });
-
-    group.finish();
-}
-
 /// Benchmark 8: WAL write performance
 fn bench_wal_writes(c: &mut Criterion) {
     let mut group = c.benchmark_group("wal_writes");
@@ -408,7 +346,6 @@ criterion_group!(
     bench_concurrent_writes,
     bench_index_lookups,
     bench_parquet_writes,
-    bench_snapshot_operations,
     bench_wal_writes,
     bench_memory_scaling,
     bench_time_travel,

@@ -1,7 +1,7 @@
 defmodule QueryServiceEx.Projections.FoldEngineTest do
   @moduledoc """
-  Unit tests for the fold, filter, and paginate logic used by
-  ProjectedQueryController. Tests the projection pipeline in isolation
+  Unit tests for fold, filter, and paginate logic over a projection module.
+  Tests the projection pipeline in isolation
   without needing Core or auth.
   """
   use ExUnit.Case, async: true

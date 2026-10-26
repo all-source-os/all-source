@@ -6,7 +6,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   - Event ingestion
   - Event querying
   - Schema management
-  - Snapshot operations
+  - Event feed and read models (view folding)
 
   Uses Tesla for HTTP client with connection pooling via Hackney.
 
@@ -582,23 +582,6 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
     end
   end
 
-  @doc "Get aggregate projection state (all entities)"
-  def get_projection_state_summary(name) do
-    case Tesla.get(read_client(), "/api/v1/projections/#{name}/state") do
-      {:ok, %Tesla.Env{status: 200, body: body}} ->
-        {:ok, body}
-
-      {:ok, %Tesla.Env{status: 404}} ->
-        {:error, :not_found}
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
   @doc "Reset a projection to initial state and reprocess events"
   def reset_projection(name) do
     case Tesla.post(write_client(), "/api/v1/projections/#{name}/reset", %{}) do
@@ -734,73 +717,38 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
     end
   end
 
-  ## Snapshots
+  ## Event Feed and Read Models
+  ##
+  ## The Query Service folds views for every tenant with its one admin Core
+  ## credential, so each call names the tenant it acts for. Core honours
+  ## `tenant_id` on these routes only for an admin principal. All calls go to
+  ## the leader: feed epochs and positions are local to the node that issued them.
 
-  @doc "List snapshots"
-  def list_snapshots(entity_id \\ nil) do
-    path =
-      if entity_id do
-        "/api/v1/snapshots?entity_id=#{entity_id}"
-      else
-        "/api/v1/snapshots"
-      end
+  @doc """
+  Read one page of a tenant's event feed.
 
-    case Tesla.get(read_client(), path) do
-      {:ok, %Tesla.Env{status: 200, body: body}} ->
+  `cursor` is `nil` (start of the current epoch) or `%{"epoch" => e, "position" => p}`.
+  Returns `{:error, {:epoch_changed, current_epoch}}` when Core answers 409: the feed
+  generation changed and the consumer must rebuild from position 0.
+  """
+  @spec event_feed(String.t(), map() | nil, [String.t()], non_neg_integer()) ::
+          {:ok, map()} | {:error, term()}
+  def event_feed(tenant_id, cursor, prefixes, limit)
+      when is_binary(tenant_id) and is_list(prefixes) and is_integer(limit) do
+    query =
+      [tenant_id: tenant_id, limit: limit]
+      |> maybe_kw(:prefixes, Enum.join(prefixes, ","))
+      |> put_cursor(cursor)
+
+    case Tesla.get(write_client(), "/api/v1/event-feed", query: query) do
+      {:ok, %Tesla.Env{status: 200, body: %{"events" => events} = body}} when is_list(events) ->
         {:ok, body}
 
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "Create a snapshot"
-  def create_snapshot(entity_id, snapshot_type) do
-    case Tesla.post(write_client(), "/api/v1/snapshots", %{
-           entity_id: entity_id,
-           snapshot_type: snapshot_type
-         }) do
-      {:ok, %Tesla.Env{status: 201, body: body}} ->
-        {:ok, body}
+      {:ok, %Tesla.Env{status: 409, body: %{"current_version" => current}}} ->
+        {:error, {:epoch_changed, current}}
 
       {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  ## Projection State (v0.7 Core Integration)
-
-  @doc """
-  Get projection state for an entity from Core's DashMap.
-
-  ## Parameters
-    * `projection_name` - Name of the projection (e.g., "entity_snapshots")
-    * `entity_id` - Entity identifier
-
-  ## Returns
-    * `{:ok, state}` - Projection state as map
-    * `{:error, :not_found}` - No state found
-    * `{:error, reason}` - Error details
-  """
-  def get_projection_state(projection_name, entity_id) do
-    case Tesla.get(read_client(), "/api/v1/projections/#{projection_name}/#{entity_id}/state") do
-      {:ok, %Tesla.Env{status: 200, body: %{"found" => true, "state" => state}}} ->
-        {:ok, state}
-
-      {:ok, %Tesla.Env{status: 200, body: %{"found" => false}}} ->
-        {:error, :not_found}
-
-      {:ok, %Tesla.Env{status: 404}} ->
-        {:error, :not_found}
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
+        {:error, {:http, status, body}}
 
       {:error, reason} ->
         {:error, reason}
@@ -808,81 +756,97 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   end
 
   @doc """
-  Save projection state for an entity to Core's DashMap.
+  Read one page of a tenant's read model.
 
-  ## Parameters
-    * `projection_name` - Name of the projection
-    * `entity_id` - Entity identifier
-    * `state` - State to save (map)
-
-  ## Returns
-    * `:ok` - State saved successfully
-    * `{:error, reason}` - Error details
+  Options: `:prefix`, `:after`, `:limit` (1..500) and `:revision`.
   """
-  def save_projection_state(projection_name, entity_id, state) when is_map(state) do
-    case Tesla.put(write_client(), "/api/v1/projections/#{projection_name}/#{entity_id}/state", %{
-           state: state
-         }) do
-      {:ok, %Tesla.Env{status: 200, body: %{"saved" => true}}} ->
-        :ok
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Bulk get projection states for multiple entities.
-
-  ## Parameters
-    * `projection_name` - Name of the projection
-    * `entity_ids` - List of entity identifiers
-
-  ## Returns
-    * `{:ok, states}` - List of %{entity_id, state, found}
-    * `{:error, reason}` - Error details
-  """
-  def bulk_get_projection_states(projection_name, entity_ids) when is_list(entity_ids) do
-    case Tesla.post(read_client(), "/api/v1/projections/#{projection_name}/bulk", %{
-           entity_ids: entity_ids
-         }) do
-      {:ok, %Tesla.Env{status: 200, body: %{"states" => states}}} ->
-        {:ok, states}
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Bulk save projection states for multiple entities.
-
-  ## Parameters
-    * `states` - List of %{projection_name, entity_id, state}
-
-  ## Returns
-    * `:ok` - All states saved
-    * `{:error, reason}` - Error details
-  """
-  def bulk_save_projection_states(states) when is_list(states) do
-    # Save states sequentially (could be parallelized with Task.async_stream)
-    results =
-      Enum.map(states, fn %{projection_name: name, entity_id: id, state: state} ->
-        save_projection_state(name, id, state)
+  @spec read_model_page(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def read_model_page(tenant_id, name, opts \\ [])
+      when is_binary(tenant_id) and is_binary(name) do
+    query =
+      Enum.reduce([:prefix, :after, :limit, :revision], [tenant_id: tenant_id], fn key, acc ->
+        maybe_kw(acc, key, Keyword.get(opts, key))
       end)
 
-    if Enum.all?(results, &(&1 == :ok)) do
-      :ok
-    else
-      {:error, {:partial_failure, results}}
+    case Tesla.get(write_client(), read_model_path(name), query: query) do
+      {:ok, %Tesla.Env{status: 200, body: body}} when is_map(body) ->
+        {:ok, body}
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, {:http, status, body}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
+
+  @doc """
+  Commit changes to a tenant's read model with compare-and-set on `expected_revision`.
+
+  Returns `{:ok, revision}`, or `{:error, {:version_conflict, current_revision}}` when the
+  model moved since the caller read it.
+  """
+  @spec commit_read_model(String.t(), String.t(), map()) ::
+          {:ok, non_neg_integer()} | {:error, term()}
+  def commit_read_model(tenant_id, name, commit)
+      when is_binary(tenant_id) and is_binary(name) and is_map(commit) do
+    path = read_model_path(name)
+
+    case Tesla.put(write_client(), path, commit, query: [tenant_id: tenant_id]) do
+      {:ok, %Tesla.Env{status: 200, body: %{"revision" => revision}}} when is_integer(revision) ->
+        {:ok, revision}
+
+      {:ok, %Tesla.Env{status: 409, body: %{"current_version" => current}}} ->
+        {:error, {:version_conflict, current}}
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, {:http, status, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @max_view_listing_pages 100
+
+  @doc """
+  Every tenant's view definitions, for the admin principal.
+
+  Each entry carries `"tenant_id"`, `"view"`, `"generation"` and `"definition"`.
+  Follows `"next"` when Core pages the listing.
+  """
+  @spec list_all_views() :: {:ok, [map()]} | {:error, term()}
+  def list_all_views, do: list_all_views(nil, [], 0)
+
+  defp list_all_views(_after, _acc, @max_view_listing_pages), do: {:error, :too_many_pages}
+
+  defp list_all_views(after_key, acc, page) do
+    query = maybe_kw([], :after, after_key)
+
+    case Tesla.get(write_client(), "/api/v1/admin/views", query: query) do
+      {:ok, %Tesla.Env{status: 200, body: %{"views" => views} = body}} when is_list(views) ->
+        case Map.get(body, "next") do
+          next when is_binary(next) and next != "" -> list_all_views(next, acc ++ views, page + 1)
+          _ -> {:ok, acc ++ views}
+        end
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, {:http, status, body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp read_model_path(name), do: "/api/v1/read-models/" <> URI.encode_www_form(name)
+
+  defp put_cursor(query, %{"epoch" => epoch, "position" => position}),
+    do: query ++ [epoch: epoch, position: position]
+
+  defp put_cursor(query, %{epoch: epoch, position: position}),
+    do: query ++ [epoch: epoch, position: position]
+
+  defp put_cursor(query, _cursor), do: query
 
   ## API Key Verification
 
