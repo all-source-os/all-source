@@ -73,6 +73,25 @@ kill_timeout = 15
   port = 9091
   path = "/metrics"
 
+# A new machine takes traffic only after every credential kind customers
+# already hold reads through it. Bluegreen waits for the top-level check below;
+# rolling would swap the only machine first. The check does not affect routing,
+# so a Core outage does not pull a running machine out of service.
+# docs/runbooks/CONSUMER_ACCESS_GATE.md
+[deploy]
+  strategy = "bluegreen"
+  wait_timeout = "5m"
+
+[checks]
+  [checks.consumer_access]
+    type = "http"
+    port = 3901
+    path = "/readyz/consumers"
+    method = "GET"
+    grace_period = "20s"
+    interval = "60s"
+    timeout = "25s"
+
 [[vm]]
   cpu_kind = "shared"
   cpus = 1

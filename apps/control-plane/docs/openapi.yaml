@@ -237,6 +237,111 @@ components:
             role:
               type: string
 
+    EntityState:
+      type: object
+      required: [entity_id, current_state, event_count, version]
+      properties:
+        entity_id:
+          type: string
+        current_state:
+          type: object
+        event_count:
+          type: integer
+        last_updated:
+          type: string
+          format: date-time
+          nullable: true
+        as_of:
+          type: string
+          format: date-time
+          nullable: true
+        version:
+          type: integer
+          description: Number of this tenant's events folded into the state
+        history:
+          type: array
+          description: Present only with history=true
+          items:
+            type: object
+
+    ViewDefinition:
+      type: object
+      required: [source, key, ops]
+      properties:
+        source:
+          type: object
+          required: [prefixes]
+          properties:
+            prefixes:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: string
+                maxLength: 128
+        key:
+          type: string
+          description: "Row-key template: literal text, {entity_id}, {event_type}, {payload.<path>}, {day:timestamp}"
+        ops:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            required: [on]
+            description: One of set, unset, delete, increment, max, min, append, remove, status, with optional when
+            properties:
+              "on":
+                type: string
+              when:
+                type: object
+
+  parameters:
+    EntityId:
+      name: entity_id
+      in: path
+      required: true
+      schema:
+        type: string
+    AsOf:
+      name: as_of
+      in: query
+      schema:
+        type: string
+        format: date-time
+    History:
+      name: history
+      in: query
+      description: true restores the history[] array
+      schema:
+        type: boolean
+        default: false
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      schema:
+        type: string
+    View:
+      name: view
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9_-]{1,48}$"
+
+  headers:
+    ETag:
+      description: 'Strong tag, "sha256:<first 32 hex of sha256(body)>"'
+      schema:
+        type: string
+
+  responses:
+    NotModified:
+      description: Body unchanged; no body, metered as zero bytes
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+
 security:
   - bearer_auth: []
 
@@ -265,6 +370,14 @@ tags:
     description: User management (admin only)
   - name: Cluster
     description: Cluster status and health
+  - name: Latest state
+    description: |
+      Entity state, event feed, read models and views, forwarded to the
+      tenant's Core with the tenant forced from the credential. A client
+      `tenant_id` query parameter is removed (event feed, read models, views)
+      or overwritten (entity state). Every 200 carries a strong `ETag`;
+      `If-None-Match` is forwarded and a `304` is metered as zero bytes.
+      Contract: docs/contracts/latest-state/README.md.
 
 paths:
   /health:
@@ -591,6 +704,216 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WebhookResponse"
+
+  # --- Latest state ---
+
+  /api/v1/entities/{entity_id}/state:
+    parameters:
+      - $ref: "#/components/parameters/EntityId"
+      - $ref: "#/components/parameters/AsOf"
+      - $ref: "#/components/parameters/History"
+      - $ref: "#/components/parameters/IfNoneMatch"
+    get:
+      tags: [Latest state]
+      summary: Current state of one entity (events:read)
+      responses:
+        "200":
+          description: State without history unless history=true
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityState"
+        "304":
+          $ref: "#/components/responses/NotModified"
+
+  /api/v1/entities/{entity_id}/snapshot:
+    parameters:
+      - $ref: "#/components/parameters/EntityId"
+      - $ref: "#/components/parameters/AsOf"
+      - $ref: "#/components/parameters/History"
+      - $ref: "#/components/parameters/IfNoneMatch"
+    get:
+      tags: [Latest state]
+      summary: Same body as /state (events:read)
+      responses:
+        "200":
+          description: State without history unless history=true
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityState"
+        "304":
+          $ref: "#/components/responses/NotModified"
+
+  /api/v1/event-feed:
+    get:
+      tags: [Latest state]
+      summary: Page of the tenant's event feed (events:read)
+      parameters:
+        - { name: epoch, in: query, schema: { type: integer } }
+        - { name: position, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, default: 100 } }
+        - { name: prefixes, in: query, description: "Comma separated, at most 8, each at most 128 bytes", schema: { type: string } }
+        - { name: entity_id, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Events with aligned positions, cursor, head and caught_up
+        "409":
+          description: version_conflict; the feed epoch changed, rebuild from position 0
+
+  /api/v1/read-models/{name}:
+    parameters:
+      - { name: name, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Latest state]
+      summary: Page of read-model rows (projections:read)
+      parameters:
+        - { name: prefix, in: query, schema: { type: string } }
+        - { name: after, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - { name: revision, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Rows, revision, content_revision, checkpoint, ready, unchanged, next
+    put:
+      tags: [Latest state]
+      summary: Commit read-model changes (projections:write)
+      description: |
+        `view_*` and `views_registry` are reserved for the Query Service and
+        answer 403 reserved_read_model. Body at most 240 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expected_revision, changes]
+              properties:
+                expected_revision: { type: integer }
+                checkpoint: { type: object }
+                ready: { type: boolean }
+                reset: { type: boolean }
+                changes:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: "{revision}"
+        "403":
+          description: reserved_read_model
+        "409":
+          description: version_conflict
+
+  /api/v1/views:
+    get:
+      tags: [Latest state]
+      summary: List the tenant's views (projections:read)
+      responses:
+        "200":
+          description: Views
+
+  /api/v1/views/{view}:
+    parameters:
+      - $ref: "#/components/parameters/View"
+    get:
+      tags: [Latest state]
+      summary: View definition and progress (projections:read)
+      responses:
+        "200":
+          description: "{view, definition, generation, revision, checkpoint, ready}"
+        "404":
+          description: not_found
+    put:
+      tags: [Latest state]
+      summary: Define or replace a view (projections:write)
+      description: A new definition increments generation; the Query Service rebuilds the rows. Body at most 64 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewDefinition"
+      responses:
+        "200":
+          description: Stored definition
+        "400":
+          description: invalid_view
+        "413":
+          description: view_definition_too_large
+    delete:
+      tags: [Latest state]
+      summary: Remove a view and its rows (projections:write)
+      responses:
+        "200":
+          description: Removed
+
+  /api/v1/views/{view}/entities:
+    parameters:
+      - $ref: "#/components/parameters/View"
+      - $ref: "#/components/parameters/IfNoneMatch"
+      - { name: prefix, in: query, schema: { type: string } }
+      - { name: after, in: query, schema: { type: string } }
+      - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+    get:
+      tags: [Latest state]
+      summary: Latest state of many rows (projections:read)
+      responses:
+        "200":
+          description: "{view, rows[{key, state, version}], next, revision, content_revision, generation, ready}"
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+        "304":
+          $ref: "#/components/responses/NotModified"
+
+  /api/v1/views/{view}/entities/{key}:
+    parameters:
+      - $ref: "#/components/parameters/View"
+      - { name: key, in: path, required: true, schema: { type: string, maxLength: 512 } }
+      - $ref: "#/components/parameters/IfNoneMatch"
+    get:
+      tags: [Latest state]
+      summary: Latest state of one row (projections:read)
+      responses:
+        "200":
+          description: "{view, key, state, version, revision, generation, ready}"
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "404":
+          description: "{error: not_found, ready}"
+
+  /api/v1/views/{view}/changes:
+    parameters:
+      - $ref: "#/components/parameters/View"
+      - { name: after, in: query, required: true, schema: { type: integer } }
+      - { name: limit, in: query, schema: { type: integer } }
+      - name: wait
+        in: query
+        description: |
+          Seconds Core may hold the request when nothing changed after `after`.
+          Clamped to 0..20. A held request runs in its own gateway lane (64
+          slots, 8 per tenant) with a deadline of wait + 5 s, and is still
+          buffered and billed.
+        schema: { type: integer, minimum: 0, maximum: 20, default: 0 }
+    get:
+      tags: [Latest state]
+      summary: Rows changed after a revision, long-poll (projections:read)
+      responses:
+        "200":
+          description: "{view, changes[{key, version, state}], revision, caught_up, generation}; state null is a deletion"
+        "409":
+          description: "{error: view_reset, generation}; re-read the entity pages"
+        "429":
+          description: The view changes lane is full for this tenant or overall; honour Retry-After
 
   # --- Audit ---
 

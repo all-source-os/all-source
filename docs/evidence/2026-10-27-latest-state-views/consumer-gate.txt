@@ -1,0 +1,29 @@
+PR #366 rebased onto main 3f6d95ca (code tree of f912b50a7a). Responses captured 2026-10-27 from the
+locally built gateways (control plane :4901 with ALLSOURCE_KEY_AUTHORITY_MODE=shadow, Query Service
+:3902 in its dev default, enforce) against a local Core built with enterprise,analytics.
+
+== No CONSUMER_CANARY_CREDENTIALS ==
+GET :4901/readyz/consumers
+{"ok":false,"reason":"no canary credentials configured","checked_at":"2026-10-27T17:06:09.844703Z","kinds":[]}
+HTTP 503
+GET :3902/api/health/consumers
+{"ok":false,"reason":"no canary credentials configured","checked_at":"2026-10-27T17:06:10.475827Z","kinds":[]}
+HTTP 503
+
+== Three live kinds: onboarding key, managed key without expiry, managed key with expiry ==
+GET :4901/readyz/consumers
+{"ok":true,"checked_at":"2026-10-27T17:08:26.860319Z","kinds":[{"kind":"onboarding_key","status":200,"ok":true},{"kind":"managed_no_expiry","status":200,"ok":true},{"kind":"managed_with_expiry","status":200,"ok":true}]}
+HTTP 200
+GET :3902/api/health/consumers
+{"ok":true,"reason":null,"checked_at":"2026-10-27T17:08:28.846958Z","kinds":[{"ok":true,"status":200,"kind":"onboarding_key"},{"ok":true,"status":200,"kind":"managed_no_expiry"},{"ok":true,"status":200,"kind":"managed_with_expiry"}]}
+HTTP 200
+
+== Same three plus a revoked managed key ==
+GET :4901/readyz/consumers
+{"ok":false,"reason":"an existing credential kind cannot read through this machine","checked_at":"2026-10-27T17:08:46.370677Z","kinds":[{"kind":"onboarding_key","status":200,"ok":true},{"kind":"managed_no_expiry","status":200,"ok":true},{"kind":"managed_with_expiry","status":200,"ok":true},{"kind":"revoked_managed_key","status":401,"ok":false}]}
+HTTP 503
+GET :3902/api/health/consumers
+{"ok":false,"reason":"an existing credential kind cannot read through this machine","checked_at":"2026-10-27T17:08:46.866951Z","kinds":[{"ok":true,"status":200,"kind":"onboarding_key"},{"ok":true,"status":200,"kind":"managed_no_expiry"},{"ok":true,"status":200,"kind":"managed_with_expiry"},{"ok":false,"status":401,"kind":"revoked_managed_key"}]}
+HTTP 503
+GET :4901/livez (same moment)
+HTTP 200

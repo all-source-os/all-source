@@ -1,6 +1,6 @@
 use allsource_core::{
     domain::entities::Event,
-    infrastructure::{security::middleware::OptionalAuth, web::api::query_events},
+    infrastructure::{security::middleware::OptionalAuth, web::api::query_events_json},
     store::{EventStore, EventStoreConfig},
 };
 use axum::{
@@ -57,7 +57,7 @@ async fn query(store: &Arc<EventStore>, parameters: &str) -> allsource_core::err
     let uri: Uri = format!("/api/v1/events/query?{parameters}")
         .parse()
         .unwrap();
-    let result = query_events(
+    let result = query_events_json(
         OptionalAuth(None),
         Query::try_from_uri(&uri).unwrap(),
         Query::try_from_uri(&uri).unwrap(),

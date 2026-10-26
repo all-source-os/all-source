@@ -92,6 +92,39 @@ defmodule QueryServiceExWeb.ProjectionChannelTest do
       ref = push(socket, "get_state", %{"entity_id" => "user-999"})
       assert_reply(ref, :error, %{reason: "not_found", entity_id: "user-999"}, 1_000)
     end
+
+    test "returns the tenant's folded projection state", %{socket: socket} do
+      projection = "channel_state_#{System.unique_integer([:positive])}"
+      put_folded(@tenant, projection, "user-1", %{"count" => 3})
+
+      {:ok, _reply, socket} =
+        subscribe_and_join(socket, ProjectionChannel, "projections:" <> projection)
+
+      ref = push(socket, "get_state", %{"entity_id" => "user-1"})
+      assert_reply(ref, :ok, %{"count" => 3}, 1_000)
+    end
+
+    test "never returns another tenant's state", %{socket: socket} do
+      projection = "channel_state_#{System.unique_integer([:positive])}"
+      put_folded("other-tenant", projection, "user-1", %{"count" => 9})
+
+      {:ok, _reply, socket} =
+        subscribe_and_join(socket, ProjectionChannel, "projections:" <> projection)
+
+      ref = push(socket, "get_state", %{"entity_id" => "user-1"})
+      assert_reply(ref, :error, %{reason: "not_found"}, 1_000)
+    end
+  end
+
+  defp put_folded(tenant, projection, entity_id, state) do
+    generation = make_ref()
+    :ets.insert(:tenant_projection_generation, {{tenant, projection}, generation})
+    :ets.insert(:tenant_projection_state, {{tenant, projection, generation, entity_id}, state})
+
+    on_exit(fn ->
+      :ets.delete(:tenant_projection_generation, {tenant, projection})
+      :ets.delete(:tenant_projection_state, {tenant, projection, generation, entity_id})
+    end)
   end
 
   describe "presence tracking" do

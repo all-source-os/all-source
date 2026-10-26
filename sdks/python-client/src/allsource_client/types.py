@@ -2,17 +2,97 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 
 class AllSourceError(Exception):
     """Error returned by the AllSource API."""
 
-    def __init__(self, code: str, message: str, status_code: int = 0) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 0,
+        body: Optional[Any] = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+        self.body = body
+
+
+class VersionConflictError(AllSourceError):
+    """`409 version_conflict`: a read-model commit raced another writer."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        expected_version: int,
+        current_version: int,
+        body: Optional[Any] = None,
+    ) -> None:
+        super().__init__("version_conflict", message, status_code, body)
+        self.expected_version = expected_version
+        self.current_version = current_version
+
+
+class EpochChangedError(VersionConflictError):
+    """The event-feed generation changed.
+
+    Rebuild from position 0 of `current_version` and commit with `reset=True`.
+    """
+
+
+class ViewResetError(AllSourceError):
+    """`409 view_reset`: the `after` revision predates the view's last reset."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        generation: int,
+        body: Optional[Any] = None,
+    ) -> None:
+        super().__init__("view_reset", message, status_code, body)
+        self.generation = generation
+
+
+class InvalidViewError(AllSourceError):
+    """`400 invalid_view`: Core rejected a view definition."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        detail: str,
+        body: Optional[Any] = None,
+    ) -> None:
+        super().__init__("invalid_view", message, status_code, body)
+        self.detail = detail
+
+
+class RateLimitedError(AllSourceError):
+    """`429` or `503`; `retry_after` is in seconds when the server sent one."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int,
+        retry_after: Optional[float],
+        body: Optional[Any] = None,
+    ) -> None:
+        super().__init__(code, message, status_code, body)
+        self.retry_after = retry_after
+
+
+@dataclass(frozen=True)
+class NotModified:
+    """`304 Not Modified`: the state behind `etag` is unchanged."""
+
+    etag: Optional[str]
 
 
 @dataclass
@@ -25,6 +105,8 @@ class Event:
     payload: Dict[str, Any]
     timestamp: str
     version: int
+    tenant_id: Optional[str] = None
+    metadata: Optional[Any] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> Event:
@@ -35,213 +117,332 @@ class Event:
             payload=data.get("payload", {}),
             timestamp=data["timestamp"],
             version=data.get("version", 0),
+            tenant_id=data.get("tenant_id"),
+            metadata=data.get("metadata"),
         )
 
 
 @dataclass
 class EventList:
-    """A list of events with count."""
+    """A page of events from `GET /api/v1/events/query`."""
 
     events: List[Event]
     count: int
+    total_count: Optional[int] = None
+    has_more: bool = False
+    entity_version: Optional[int] = None
+    etag: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> EventList:
+    def from_dict(cls, data: Dict[str, Any], etag: Optional[str] = None) -> EventList:
         events_data = data.get("events", data.get("data", []))
         return cls(
             events=[Event.from_dict(e) for e in events_data],
             count=data.get("count", len(events_data)),
+            total_count=data.get("total_count"),
+            has_more=bool(data.get("has_more", False)),
+            entity_version=data.get("entity_version"),
+            etag=etag,
         )
 
 
 @dataclass
-class Projection:
-    """A projection in the AllSource event store."""
-
-    id: str
-    name: str
-    version: int
-    status: str
-    initial_state: Dict[str, Any]
-    definition: str
-    created_at: str
-    updated_at: str
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Projection:
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            version=data.get("version", 0),
-            status=data.get("status", "unknown"),
-            initial_state=data.get("initial_state", {}),
-            definition=data.get("definition", ""),
-            created_at=data.get("created_at", ""),
-            updated_at=data.get("updated_at", ""),
-        )
-
-
-@dataclass
-class ProjectionReplayEventType:
-    """One event-type bucket from replay impact analysis."""
-
-    event_type: str
-    count: int
-    share: float
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ProjectionReplayEventType:
-        return cls(
-            event_type=data.get("event_type", "unknown"),
-            count=data.get("count", 0),
-            share=data.get("share", 0.0),
-        )
-
-
-@dataclass
-class ProjectionReplayEntity:
-    """One frequently affected entity from replay analysis."""
+class EntityState:
+    """Folded state of one entity, `GET /api/v1/entities/{id}/state`."""
 
     entity_id: str
+    current_state: Dict[str, Any]
     event_count: int
+    last_updated: Optional[str]
+    as_of: Optional[str]
+    version: int
+    etag: Optional[str] = None
+    history: Optional[List[Dict[str, Any]]] = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ProjectionReplayEntity:
+    def from_dict(cls, data: Dict[str, Any], etag: Optional[str] = None) -> EntityState:
+        event_count = data.get("event_count", 0)
         return cls(
             entity_id=data.get("entity_id", ""),
-            event_count=data.get("event_count", 0),
+            current_state=data.get("current_state") or {},
+            event_count=event_count,
+            last_updated=data.get("last_updated"),
+            as_of=data.get("as_of"),
+            version=data.get("version", event_count),
+            etag=etag,
+            history=data.get("history"),
+        )
+
+
+@dataclass(frozen=True)
+class FeedCursor:
+    """A position in the tenant's event feed."""
+
+    epoch: int
+    position: int
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> FeedCursor:
+        return cls(epoch=data["epoch"], position=data["position"])
+
+    def to_dict(self) -> Dict[str, int]:
+        return {"epoch": self.epoch, "position": self.position}
+
+
+@dataclass
+class FeedPage:
+    """One page of `GET /api/v1/event-feed`."""
+
+    tenant_id: str
+    cursor: FeedCursor
+    head: FeedCursor
+    events: List[Event]
+    positions: List[int]
+    caught_up: bool
+
+    @property
+    def next_cursor(self) -> FeedCursor:
+        """Cursor to resume from: the last element of `positions`."""
+        if not self.positions:
+            return self.cursor
+        return FeedCursor(epoch=self.cursor.epoch, position=self.positions[-1])
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> FeedPage:
+        return cls(
+            tenant_id=data.get("tenant_id", ""),
+            cursor=FeedCursor.from_dict(data["cursor"]),
+            head=FeedCursor.from_dict(data["head"]),
+            events=[Event.from_dict(e) for e in data.get("events", [])],
+            positions=list(data.get("positions", [])),
+            caught_up=bool(data.get("caught_up", False)),
         )
 
 
 @dataclass
-class ProjectionReplayCheck:
-    """Server-asserted replay safety invariant."""
+class ReadModelPage:
+    """One page of `GET /api/v1/read-models/{name}`.
+
+    With `unchanged` true, `rows` is empty and says nothing about deletions.
+    """
+
+    revision: int
+    content_revision: int
+    checkpoint: Optional[FeedCursor]
+    ready: bool
+    unchanged: bool
+    rows: Dict[str, Any]
+    next: Optional[str]
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ReadModelPage:
+        checkpoint = data.get("checkpoint")
+        return cls(
+            revision=data.get("revision", 0),
+            content_revision=data.get("content_revision", 0),
+            checkpoint=FeedCursor.from_dict(checkpoint) if checkpoint else None,
+            ready=bool(data.get("ready", False)),
+            unchanged=bool(data.get("unchanged", False)),
+            rows=data.get("rows") or {},
+            next=data.get("next"),
+        )
+
+
+@dataclass
+class ReadModelCommit:
+    """Body of `PUT /api/v1/read-models/{name}`. A `None` change deletes the row."""
+
+    expected_revision: int
+    checkpoint: FeedCursor
+    changes: Dict[str, Optional[Any]]
+    ready: bool = True
+    reset: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "expected_revision": self.expected_revision,
+            "checkpoint": self.checkpoint.to_dict(),
+            "ready": self.ready,
+            "reset": self.reset,
+            "changes": dict(self.changes),
+        }
+
+
+@dataclass
+class ViewInfo:
+    """A view definition and its fold progress."""
+
+    view: str
+    definition: Dict[str, Any]
+    generation: int
+    revision: int
+    checkpoint: Optional[FeedCursor]
+    ready: bool
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ViewInfo:
+        checkpoint = data.get("checkpoint")
+        return cls(
+            view=data.get("view", ""),
+            definition=data.get("definition") or {},
+            generation=data.get("generation", 0),
+            revision=data.get("revision", 0),
+            checkpoint=FeedCursor.from_dict(checkpoint) if checkpoint else None,
+            ready=bool(data.get("ready", False)),
+        )
+
+
+@dataclass
+class ViewSummary:
+    """One entry of `GET /api/v1/views`."""
+
+    view: str
+    generation: int
+    revision: int
+    ready: bool
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ViewSummary:
+        return cls(
+            view=data.get("view", ""),
+            generation=data.get("generation", 0),
+            revision=data.get("revision", 0),
+            ready=bool(data.get("ready", False)),
+        )
+
+
+@dataclass
+class ViewRow:
+    """One row of a view. `state` is `None` for a deletion in a changes page."""
 
     key: str
-    label: str
-    status: str
-    detail: str
+    state: Optional[Dict[str, Any]]
+    version: int
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ProjectionReplayCheck:
+    def from_dict(cls, data: Dict[str, Any]) -> ViewRow:
         return cls(
+            key=data["key"],
+            state=data.get("state"),
+            version=data.get("version", 0),
+        )
+
+
+@dataclass
+class ViewLatest:
+    """Latest state of one view row."""
+
+    view: str
+    key: str
+    state: Dict[str, Any]
+    version: int
+    revision: int
+    generation: int
+    ready: bool
+    etag: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], etag: Optional[str] = None) -> ViewLatest:
+        return cls(
+            view=data.get("view", ""),
             key=data.get("key", ""),
-            label=data.get("label", ""),
-            status=data.get("status", "warn"),
-            detail=data.get("detail", ""),
+            state=data.get("state") or {},
+            version=data.get("version", 0),
+            revision=data.get("revision", 0),
+            generation=data.get("generation", 0),
+            ready=bool(data.get("ready", False)),
+            etag=etag,
+        )
+
+
+@dataclass(frozen=True)
+class ViewNotFound:
+    """No row for `key`. `ready` false means the view may still be rebuilding."""
+
+    view: str
+    key: str
+    ready: bool
+
+
+@dataclass
+class ViewEntitiesPage:
+    """One page of `GET /api/v1/views/{view}/entities`."""
+
+    view: str
+    rows: List[ViewRow]
+    next: Optional[str]
+    revision: int
+    content_revision: int
+    generation: int
+    ready: bool
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> ViewEntitiesPage:
+        return cls(
+            view=data.get("view", ""),
+            rows=[ViewRow.from_dict(r) for r in data.get("rows", [])],
+            next=data.get("next"),
+            revision=data.get("revision", 0),
+            content_revision=data.get("content_revision", 0),
+            generation=data.get("generation", 0),
+            ready=bool(data.get("ready", False)),
         )
 
 
 @dataclass
-class ProjectionReplayAnalysis:
-    """Read-only impact analysis for one tenant projection replay."""
+class ViewChanges:
+    """One page of `GET /api/v1/views/{view}/changes`."""
 
-    projection_name: str
-    projection_title: str
-    projection_kind: str
-    projection_status: str
-    current_entity_count: int
-    total_events: int
-    sampled_events: int
-    analysis_scope: str
-    event_type_distribution: List[ProjectionReplayEventType]
-    sampled_entity_count: int
-    sampled_entities: List[ProjectionReplayEntity]
-    first_event_at: Optional[str]
-    last_event_at: Optional[str]
-    analyzed_at: str
-    ready_to_replay: bool
-    checks: List[ProjectionReplayCheck]
-    warnings: List[str]
+    view: str
+    changes: List[ViewRow]
+    revision: int
+    caught_up: bool
+    generation: int
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ProjectionReplayAnalysis:
+    def from_dict(cls, data: Dict[str, Any]) -> ViewChanges:
         return cls(
-            projection_name=data.get("projection_name", ""),
-            projection_title=data.get("projection_title", ""),
-            projection_kind=data.get("projection_kind", ""),
-            projection_status=data.get("projection_status", "unknown"),
-            current_entity_count=data.get("current_entity_count", 0),
-            total_events=data.get("total_events", 0),
-            sampled_events=data.get("sampled_events", 0),
-            analysis_scope=data.get("analysis_scope", "full"),
-            event_type_distribution=[
-                ProjectionReplayEventType.from_dict(item)
-                for item in data.get("event_type_distribution", [])
-            ],
-            sampled_entity_count=data.get("sampled_entity_count", 0),
-            sampled_entities=[
-                ProjectionReplayEntity.from_dict(item)
-                for item in data.get("sampled_entities", [])
-            ],
-            first_event_at=data.get("first_event_at"),
-            last_event_at=data.get("last_event_at"),
-            analyzed_at=data.get("analyzed_at", ""),
-            ready_to_replay=data.get("ready_to_replay", False),
-            checks=[
-                ProjectionReplayCheck.from_dict(item)
-                for item in data.get("checks", [])
-            ],
-            warnings=data.get("warnings", []),
+            view=data.get("view", ""),
+            changes=[ViewRow.from_dict(r) for r in data.get("changes", [])],
+            revision=data.get("revision", 0),
+            caught_up=bool(data.get("caught_up", False)),
+            generation=data.get("generation", 0),
         )
 
 
-@dataclass
-class ProjectionReplayRun:
-    """Tenant-scoped projection replay run."""
+@dataclass(frozen=True)
+class SyncUpsert:
+    """A row to create or replace in the caller's copy of the view."""
 
-    replay_id: str
-    projection_name: str
-    status: str
-    started_at: str
-    updated_at: str
-    completed_at: Optional[str]
-    total_events: int
-    processed_events: int
-    failed_events: int
-    progress_percentage: float
-    events_per_second: float
-    error_message: Optional[str]
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ProjectionReplayRun:
-        return cls(
-            replay_id=data.get("replay_id", ""),
-            projection_name=data.get("projection_name", ""),
-            status=data.get("status", "unknown"),
-            started_at=data.get("started_at", ""),
-            updated_at=data.get("updated_at", ""),
-            completed_at=data.get("completed_at"),
-            total_events=data.get("total_events", 0),
-            processed_events=data.get("processed_events", 0),
-            failed_events=data.get("failed_events", 0),
-            progress_percentage=data.get("progress_percentage", 0.0),
-            events_per_second=data.get("events_per_second", 0.0),
-            error_message=data.get("error_message"),
-        )
+    key: str
+    state: Dict[str, Any]
+    version: int
 
 
-@dataclass
-class Webhook:
-    """A registered webhook."""
+@dataclass(frozen=True)
+class SyncDelete:
+    """A row to remove from the caller's copy of the view."""
 
-    id: str
-    url: str
-    event_types: List[str] = field(default_factory=list)
-    entity_id: Optional[str] = None
-    active: bool = True
-    created_at: str = ""
+    key: str
+    version: int
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> Webhook:
-        return cls(
-            id=data["id"],
-            url=data["url"],
-            event_types=data.get("event_types", []),
-            entity_id=data.get("entity_id"),
-            active=data.get("active", True),
-            created_at=data.get("created_at", ""),
-        )
+
+@dataclass(frozen=True)
+class SyncReset:
+    """The view was reset; drop every stored row before the snapshot that follows."""
+
+    generation: int
+
+
+@dataclass(frozen=True)
+class SyncCheckpoint:
+    """Store `revision` with the rows yielded so far; pass it back as `checkpoint`."""
+
+    revision: int
+    generation: int
+
+
+SyncItem = Union[SyncUpsert, SyncDelete, SyncReset, SyncCheckpoint]
 
 
 @dataclass
@@ -309,29 +510,4 @@ class PrimeProvenance:
             source_event_id=data.get("source_event_id", ""),
             source_event_at=data.get("source_event_at", ""),
             merge_policy_applied=data.get("merge_policy_applied", ""),
-        )
-
-
-@dataclass
-class WebhookDelivery:
-    """A webhook delivery record."""
-
-    id: str
-    webhook_id: str
-    event_id: str
-    status: str
-    response_code: Optional[int] = None
-    attempts: int = 0
-    last_attempt_at: str = ""
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> WebhookDelivery:
-        return cls(
-            id=data["id"],
-            webhook_id=data["webhook_id"],
-            event_id=data.get("event_id", ""),
-            status=data.get("status", "unknown"),
-            response_code=data.get("response_code"),
-            attempts=data.get("attempts", 0),
-            last_attempt_at=data.get("last_attempt_at", ""),
         )

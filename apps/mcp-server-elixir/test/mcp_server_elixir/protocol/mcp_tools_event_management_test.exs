@@ -24,9 +24,9 @@ defmodule McpServerElixir.Protocol.McpToolsEventManagementTest do
       assert "split_entity" in tool_names
     end
 
-    test "returns 64 tools total" do
+    test "returns 67 tools total" do
       tools = McpTools.list_tools(%{control_plane_enabled: true})
-      assert length(tools) == 64
+      assert length(tools) == 67
     end
   end
 

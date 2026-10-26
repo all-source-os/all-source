@@ -55,7 +55,8 @@ impl EmbeddedConfig {
         &self.merge_strategies
     }
 
-    pub(crate) fn parquet_flush_interval_secs(&self) -> u64 {
+    /// Configured Parquet flush interval in seconds.
+    pub fn parquet_flush_interval_secs(&self) -> u64 {
         self.parquet_flush_interval_secs
     }
 

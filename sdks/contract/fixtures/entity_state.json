@@ -1,0 +1,23 @@
+{
+  "name": "entity_state",
+  "description": "entityState(\"skill:abc\") with history defaulting to false. The SDK sends no history parameter and returns current_state, version and the ETag for a later conditional read.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/entities/skill%3Aabc/state",
+    "query": {},
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "ETag": "\"sha256:3f1a9c0e7b2d4a6158e9c3b7d0f2a1e4\"" },
+    "body": {
+      "entity_id": "skill:abc",
+      "current_state": { "name": "x", "status": "published" },
+      "event_count": 12,
+      "last_updated": "2026-10-27T10:00:00Z",
+      "as_of": null,
+      "version": 12
+    }
+  }
+}

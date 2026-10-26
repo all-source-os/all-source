@@ -1,0 +1,16 @@
+{
+  "name": "entity_state_not_modified",
+  "description": "entityState(\"skill:abc\", {ifNoneMatch}) with the tag from entity_state. Core answers 304 with no body; the SDK returns NotModified carrying the ETag, never an error and never an empty state.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/entities/skill%3Aabc/state",
+    "query": {},
+    "headers": { "If-None-Match": "\"sha256:3f1a9c0e7b2d4a6158e9c3b7d0f2a1e4\"" },
+    "body": null
+  },
+  "response": {
+    "status": 304,
+    "headers": { "ETag": "\"sha256:3f1a9c0e7b2d4a6158e9c3b7d0f2a1e4\"" },
+    "body": null
+  }
+}

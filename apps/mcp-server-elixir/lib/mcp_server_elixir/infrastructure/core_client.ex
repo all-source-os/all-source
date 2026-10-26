@@ -53,130 +53,22 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
     end
   )
 
-  # ============================================================================
-  # Graceful degradation for endpoints the gateway does not route (#229)
-  # ============================================================================
-
-  # How many events to read when deriving an aggregate locally. Bounded so a
-  # large store cannot turn one stats call into an unbounded transfer.
-  @derive_limit 10_000
-
-  # Only 404/405 mean "this deployment does not expose that route", which is the
-  # gateway case worth degrading around. 401/403 are credential and permission
-  # problems and must surface verbatim — masking them behind an approximate
-  # answer is exactly what made #229 hard to diagnose.
-  defp route_absent?(status), do: status in [404, 405]
-
-  # Rebuild Core's StoreStats shape (total_events / total_entities /
-  # total_event_types / total_ingested) from the tenant's own events, plus the
-  # census and time range the MCP stats tools present.
-  defp derive_stats_from_events(status) do
-    case query_events(%{"limit" => @derive_limit}) do
-      {:ok, data} ->
-        events = Map.get(data, "events", [])
-        reported = Map.get(data, "count", length(events))
-        truncated = length(events) >= @derive_limit
-
-        types = events |> Enum.map(&Map.get(&1, "event_type")) |> Enum.reject(&is_nil/1)
-        entities = events |> Enum.map(&Map.get(&1, "entity_id")) |> Enum.reject(&is_nil/1)
-        timestamps = events |> Enum.map(&Map.get(&1, "timestamp")) |> Enum.reject(&is_nil/1)
-        census = Enum.frequencies(types)
-
-        {:ok,
-         %{
-           "total_events" => max(reported, length(events)),
-           "total_entities" => entities |> Enum.uniq() |> length(),
-           "total_event_types" => census |> Map.keys() |> length(),
-           "total_ingested" => max(reported, length(events)),
-           # Keys the MCP stats tools read directly.
-           "unique_entities" => entities |> Enum.uniq() |> length(),
-           "event_types" => census,
-           "oldest_event" => Enum.min(timestamps, fn -> nil end),
-           "newest_event" => Enum.max(timestamps, fn -> nil end),
-           # Provenance, so a caller can tell this apart from Core's own numbers.
-           "approximate" => true,
-           "source" => "derived_from_events",
-           "truncated" => truncated,
-           "note" =>
-             "Derived from up to #{@derive_limit} events because GET /api/v1/stats " <>
-               "returned HTTP #{status} (the gateway does not expose the global " <>
-               "stats endpoint to tenants)." <>
-               if(truncated,
-                 do: " Counts are a lower bound — the event limit was reached.",
-                 else: ""
-               )
-         }}
-
-      {:error, reason} ->
-        {:error,
-         "GET /api/v1/stats returned HTTP #{status} and deriving stats from events " <>
-           "also failed: #{inspect(reason)}"}
-    end
+  # 404/405 on a read route means the row is absent or this deployment does not
+  # expose the route. The server never rebuilds the answer from raw events: a
+  # fold over one bounded page is wrong for any entity or store larger than it.
+  defp not_served(path, status, body) do
+    "GET #{path} returned HTTP #{status}: #{inspect(body)}. It does not exist, or this " <>
+      "deployment does not expose that route to this credential."
   end
 
-  # Fold an entity's events into current state, matching the shape Core's
-  # /entities/{id}/state returns: a shallow last-write-wins merge of payloads in
-  # order, wrapped with entity_id / last_updated / event_count / as_of / history.
-  #
-  # Core seeds the merge from the latest snapshot; this replays raw events
-  # instead. Same result unless events behind a snapshot have been archived away,
-  # in which case those keys are missing here — flagged via "source".
-  defp fold_entity_state(entity_id, as_of, status) do
-    params = %{"entity_id" => entity_id, "limit" => @derive_limit}
-    params = if as_of, do: Map.put(params, "as_of", as_of), else: params
+  # View names are `[a-z0-9_-]` but row keys carry `:` and `/`, so every path
+  # segment is percent-encoded.
+  defp segment(value), do: URI.encode(to_string(value), &URI.char_unreserved?/1)
 
-    case query_events(params) do
-      {:ok, data} ->
-        # Re-apply the entity filter locally. Folding is only correct over ONE
-        # entity's events, so don't rely on the server having honoured the filter
-        # — a backend that ignores it would otherwise merge unrelated payloads
-        # into this entity's state and report it as fact.
-        events =
-          data
-          |> Map.get("events", [])
-          |> Enum.filter(&(Map.get(&1, "entity_id") in [nil, entity_id]))
-
-        case events do
-          [] ->
-            {:error, "Entity not found: #{entity_id}"}
-
-          events ->
-            merged =
-              Enum.reduce(events, %{}, fn event, acc ->
-                case Map.get(event, "payload") do
-                  payload when is_map(payload) -> Map.merge(acc, payload)
-                  _ -> acc
-                end
-              end)
-
-            {:ok,
-             %{
-               "entity_id" => entity_id,
-               "last_updated" => events |> List.last() |> Map.get("timestamp"),
-               "event_count" => length(events),
-               "as_of" => as_of,
-               "current_state" => merged,
-               "history" =>
-                 Enum.map(events, fn e ->
-                   %{
-                     "event_id" => Map.get(e, "event_id") || Map.get(e, "id"),
-                     "type" => Map.get(e, "event_type"),
-                     "timestamp" => Map.get(e, "timestamp"),
-                     "payload" => Map.get(e, "payload")
-                   }
-                 end),
-               "source" => "folded_from_events",
-               "note" =>
-                 "Folded locally from the entity's events because " <>
-                   "GET /api/v1/entities/#{entity_id}/state returned HTTP #{status}."
-             }}
-        end
-
-      {:error, reason} ->
-        {:error,
-         "GET /api/v1/entities/#{entity_id}/state returned HTTP #{status} and " <>
-           "folding the entity's events also failed: #{inspect(reason)}"}
-    end
+  defp compact(params) do
+    params
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Enum.into(%{})
   end
 
   @doc false
@@ -213,26 +105,24 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
   end
 
   @doc """
-  Reconstruct entity state at a point in time.
+  Reconstruct entity state at a point in time, with its `history[]`.
 
-  Falls back to folding the entity's events locally when the endpoint is absent
-  (see `route_absent?/1` — #229).
+  Core omits `history` unless asked, so this always sends `history=true`.
   """
   @impl true
   def reconstruct_state(entity_id, as_of \\ nil) do
     path = "/api/v1/entities/#{entity_id}/state"
-    query_params = if as_of, do: [as_of: as_of], else: []
+    query_params = if as_of, do: [as_of: as_of, history: "true"], else: [history: "true"]
 
     case get(path, query: query_params) do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
         {:ok, body}
 
+      {:ok, %Tesla.Env{status: status, body: body}} when status in [404, 405] ->
+        {:error, not_served(path, status, body)}
+
       {:ok, %Tesla.Env{status: status, body: body}} ->
-        if route_absent?(status) do
-          fold_entity_state(entity_id, as_of, status)
-        else
-          {:error, "HTTP #{status}: #{inspect(body)}"}
-        end
+        {:error, "HTTP #{status}: #{inspect(body)}"}
 
       {:error, reason} ->
         {:error, reason}
@@ -275,24 +165,104 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
   `GET /api/v1/stats` is a **global, whole-store** endpoint on Core
   (`store.stats()`), which the hosted gateway deliberately does not route — a
   tenant must not see cross-tenant totals. Against a gateway it therefore 404s,
-  which used to fail every stats tool with a bare `-32603` (#229).
-
-  When the route is absent we derive the same shape from the tenant's own event
-  stream via `query_events/1` (which the gateway does route, tenant-scoped), and
-  label the result as approximate.
+  which used to fail every stats tool with a bare `-32603` (#229). An absent
+  route is reported as an error naming the route; a gateway that routes it
+  answers tenant-scoped (#230).
   """
   @impl true
   def get_stats do
-    case get("/api/v1/stats") do
+    path = "/api/v1/stats"
+
+    case get(path) do
       {:ok, %Tesla.Env{status: 200, body: body}} ->
         {:ok, body}
 
+      {:ok, %Tesla.Env{status: status, body: body}} when status in [404, 405] ->
+        {:error, not_served(path, status, body)}
+
       {:ok, %Tesla.Env{status: status, body: body}} ->
-        if route_absent?(status) do
-          derive_stats_from_events(status)
-        else
-          {:error, "HTTP #{status}: #{inspect(body)}"}
-        end
+        {:error, "HTTP #{status}: #{inspect(body)}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # ============================================================================
+  # Views (latest-state read models, docs/contracts/latest-state §4)
+  # ============================================================================
+
+  @doc """
+  Latest state of one view row (`GET /api/v1/views/{view}/entities/{key}`).
+
+  A missing row reports the view's `ready` flag: a row absent from a view that
+  is still building its first page may appear once the build commits.
+  """
+  @impl true
+  def get_latest_state(view, key) do
+    path = "/api/v1/views/#{segment(view)}/entities/#{segment(key)}"
+
+    case get(path) do
+      {:ok, %Tesla.Env{status: 200, body: body}} ->
+        {:ok, body}
+
+      {:ok, %Tesla.Env{status: 404, body: %{"error" => "not_found"} = body}} ->
+        {:error,
+         "No row #{inspect(key)} in view #{inspect(view)} " <>
+           "(view ready: #{inspect(Map.get(body, "ready"))})"}
+
+      {:ok, %Tesla.Env{status: status, body: body}} when status in [404, 405] ->
+        {:error, not_served(path, status, body)}
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, "HTTP #{status}: #{inspect(body)}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  One page of a view's rows (`GET /api/v1/views/{view}/entities`).
+
+  `params` takes `"prefix"`, `"after"` (the previous page's `next`) and
+  `"limit"` (1..500).
+  """
+  @impl true
+  def list_latest(view, params \\ %{}) when is_map(params) do
+    view_read(
+      "/api/v1/views/#{segment(view)}/entities",
+      Map.take(params, ["prefix", "after", "limit"])
+    )
+  end
+
+  @doc """
+  Rows written after a revision (`GET /api/v1/views/{view}/changes`).
+
+  `params` takes `"after"` and `"limit"`. Never holds the request (`wait` is
+  not sent).
+  """
+  @impl true
+  def list_changes(view, params) when is_map(params) do
+    view_read("/api/v1/views/#{segment(view)}/changes", Map.take(params, ["after", "limit"]))
+  end
+
+  defp view_read(path, params) do
+    case get(path, query: compact(params)) do
+      {:ok, %Tesla.Env{status: 200, body: body}} ->
+        {:ok, body}
+
+      {:ok, %Tesla.Env{status: 409, body: %{"error" => "view_reset"} = body}} ->
+        {:error,
+         "View was rebuilt (generation #{inspect(Map.get(body, "generation"))}) after the " <>
+           "requested revision. Re-read its rows with list_latest and resume list_changes " <>
+           "from the revision that returns."}
+
+      {:ok, %Tesla.Env{status: status, body: body}} when status in [404, 405] ->
+        {:error, not_served(path, status, body)}
+
+      {:ok, %Tesla.Env{status: status, body: body}} ->
+        {:error, "HTTP #{status}: #{inspect(body)}"}
 
       {:error, reason} ->
         {:error, reason}
@@ -388,7 +358,6 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
   def storage_stats(_params \\ %{}) do
     # Core doesn't have a dedicated storage stats endpoint.
     # Combine event-store stats with compaction stats for a useful picture.
-    # get_stats/0 carries the gateway fallback, so this degrades with it (#229).
     compaction =
       case get("/api/v1/compaction/stats") do
         {:ok, %Tesla.Env{status: 200, body: body}} -> body

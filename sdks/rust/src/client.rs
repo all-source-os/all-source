@@ -9,6 +9,7 @@ use crate::{
     circuit_breaker::{CircuitBreaker, State as CircuitState},
     error::Error,
     fold::EventFolder,
+    latest::view_refusal,
     normalize::normalize_event_type,
     paginate::{EntityPaginator, EventPaginator, DEFAULT_PAGE_SIZE},
     response_meta::{
@@ -229,6 +230,21 @@ impl HttpTransport {
         .await
     }
 
+    /// DELETE that ignores the response body, so an empty `200` or `204` succeeds.
+    pub(crate) async fn delete(&self, path: &str) -> Result<(), Error> {
+        self.with_retry(|| async {
+            let url = format!("{}{}", self.base_url, path);
+            let resp = self.http.delete(&url).send().await?;
+            if resp.status().is_success() {
+                return Ok(());
+            }
+            self.handle_response::<serde_json::Value>(resp)
+                .await
+                .map(|_| ())
+        })
+        .await
+    }
+
     /// GET returning `None` on 404. Useful for "does this key exist" lookups
     /// where absence is a normal case, not an error.
     pub(crate) async fn get_optional<T: for<'de> Deserialize<'de>>(
@@ -327,6 +343,9 @@ impl HttpTransport {
                 })
                 .unwrap_or("Unknown error")
                 .to_string();
+            if let Some(err) = view_refusal(status, body.as_ref()) {
+                return Err(err);
+            }
             // A compare-and-swap rejection is a distinct outcome, not a
             // transport failure: the caller has to re-read and recompute, and
             // must NOT blindly retry. Core answers 409 with
@@ -450,6 +469,10 @@ impl QueryClient {
     /// The circuit breaker's current state.
     pub fn circuit_state(&self) -> CircuitState {
         self.transport.circuit_state()
+    }
+
+    pub(crate) fn http(&self) -> &Arc<HttpTransport> {
+        &self.transport
     }
 
     /// Get all events for a specific entity.
@@ -733,6 +756,10 @@ impl CoreClient {
 
     /// Shared transport handle, for in-crate modules that add more HTTP methods.
     pub(crate) fn transport(&self) -> &HttpTransport {
+        &self.transport
+    }
+
+    pub(crate) fn http(&self) -> &Arc<HttpTransport> {
         &self.transport
     }
 

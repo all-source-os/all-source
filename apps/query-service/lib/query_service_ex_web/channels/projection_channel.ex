@@ -53,6 +53,7 @@ defmodule QueryServiceExWeb.ProjectionChannel do
   require Logger
 
   alias Phoenix.PubSub
+  alias QueryServiceEx.Projections.TenantProjections
   alias QueryServiceExWeb.Presence
 
   # Intercept presence_diff to handle via handle_out/3
@@ -109,9 +110,7 @@ defmodule QueryServiceExWeb.ProjectionChannel do
 
   @impl true
   def handle_in("get_state", %{"entity_id" => entity_id}, socket) do
-    projection_name = socket.assigns.projection_name
-
-    case get_projection_state(projection_name, entity_id) do
+    case get_projection_state(socket.assigns, entity_id) do
       {:ok, state} ->
         QueryServiceExWeb.FundedChannel.reply(socket, {:ok, state})
 
@@ -164,13 +163,10 @@ defmodule QueryServiceExWeb.ProjectionChannel do
 
   # Private functions
 
-  defp get_projection_state(projection_name, entity_id) do
-    # Try to get from the ETS cache (fastest path)
-    alias QueryServiceEx.Application.Services.ProjectionSync
-
-    case ProjectionSync.get_state_from_cache(projection_name, entity_id) do
-      nil -> {:error, :not_found}
-      state -> {:ok, state}
-    end
+  defp get_projection_state(%{tenant_id: tenant, projection_name: projection}, entity_id)
+       when is_binary(tenant) and is_binary(projection) and is_binary(entity_id) do
+    TenantProjections.get_state(tenant, projection, entity_id)
   end
+
+  defp get_projection_state(_assigns, _entity_id), do: {:error, :not_found}
 end

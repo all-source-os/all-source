@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { foldEvents } from "../src/fold";
 import type { EventFolder } from "../src/fold";
+import { foldEvents } from "../src/fold";
 import type { Event } from "../src/types";
 
 function makeEvent(overrides: Partial<Event> = {}): Event {

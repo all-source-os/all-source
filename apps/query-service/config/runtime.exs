@@ -7,6 +7,7 @@ config :query_service_ex,
   customer_replay_enabled: System.get_env("CUSTOMER_REPLAY_ENABLED") == "true",
   customer_connections_enabled: System.get_env("CUSTOMER_CONNECTIONS_ENABLED") == "true",
   customer_remote_enabled: System.get_env("CUSTOMER_REMOTE_ENABLED") == "true",
+  views_fold_enabled: System.get_env("VIEWS_FOLD_ENABLED") == "true",
   customer_oauth_issuer: System.get_env("CUSTOMER_OAUTH_ISSUER"),
   customer_review_resource: System.get_env("CUSTOMER_REVIEW_RESOURCE")
 

@@ -5,6 +5,14 @@ All notable changes to the Query Service will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- View folding (latest-state contract, ADR-021): `Views.Reducer` applies declarative view definitions; `Views.ViewFolder` folds each tenant's view from Core's event feed into the `view_<name>` read model; `Views.ViewCatalog` polls `GET /api/v1/admin/views`. Off unless `VIEWS_FOLD_ENABLED=true`.
+
+### Removed
+- `GET /api/v1/snapshots` and `POST /api/query/projected`, with `ProjectionSync`, `EventPipeline`, `Projections.ProjectionServer`, `ProjectionSupervisor`, `FoldPipeline` and the Core snapshot and projection-state client calls. Their Core stores carry no tenant key.
+
 ## [0.10.7] - 2026-02-26
 
 ### Added

@@ -7,7 +7,6 @@ use allsource_core::{
     domain::entities::Event,
     infrastructure::persistence::{
         compaction::CompactionConfig,
-        snapshot::SnapshotConfig,
         wal::{QUARANTINE_DIR, WALConfig, WriteAheadLog},
     },
     store::{EventStore, EventStoreConfig},
@@ -172,7 +171,6 @@ fn production_config(data_dir: &Path) -> EventStoreConfig {
     EventStoreConfig::production(
         data_dir.join("storage"),
         data_dir.join("wal"),
-        SnapshotConfig::default(),
         WALConfig {
             sync_on_write: false,
             ..WALConfig::default()

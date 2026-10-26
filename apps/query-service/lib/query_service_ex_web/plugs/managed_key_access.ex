@@ -111,8 +111,7 @@ defmodule QueryServiceExWeb.Plugs.ManagedKeyAccess do
   defp required_scope("POST", path) when path in ["/api/events", "/api/events/batch"],
     do: "events:write"
 
-  defp required_scope("POST", path) when path in ["/api/query", "/api/query/projected"],
-    do: "queries:execute"
+  defp required_scope("POST", "/api/query"), do: "queries:execute"
 
   defp required_scope("POST", "/api/projections"), do: "projections:write"
   defp required_scope("DELETE", "/api/projections/" <> _), do: "projections:write"

@@ -1,0 +1,16 @@
+{
+  "name": "view_latest_not_found",
+  "description": "latest(\"ops_status\", \"probe-q:2026-10-27\") for a key with no row. The SDK returns a typed not-found result carrying ready, so a caller can tell a missing row from a view still rebuilding.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/entities/probe-q%3A2026-10-27",
+    "query": {},
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {},
+    "body": { "error": "not_found", "ready": true }
+  }
+}

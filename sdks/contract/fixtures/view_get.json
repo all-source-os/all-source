@@ -1,0 +1,40 @@
+{
+  "name": "view_get",
+  "description": "getView(\"ops_status\") after a redefinition (generation 2) has been folded and synced to revision 62.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status",
+    "query": {},
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "view": "ops_status",
+      "definition": {
+        "source": { "prefixes": ["ops.probe."] },
+        "key": "{payload.probe}:{day:timestamp}",
+        "ops": [
+          {
+            "on": "ops.probe.observed",
+            "set": { "probe": "payload.probe", "day": "day:timestamp" }
+          },
+          { "on": "ops.probe.observed", "when": { "payload.ok": true }, "increment": { "ok": 1 } },
+          {
+            "on": "ops.probe.observed",
+            "when": { "payload.ok": false },
+            "increment": { "failed": 1 }
+          },
+          { "on": "ops.probe.observed", "max": { "last_seen_at": "timestamp" } },
+          { "on": "ops.probe.observed", "set": { "status": "payload.status" } }
+        ]
+      },
+      "generation": 2,
+      "revision": 62,
+      "checkpoint": { "epoch": 41, "position": 9120 },
+      "ready": true
+    }
+  }
+}

@@ -1,11 +1,33 @@
 """Tests for the async AllSource client."""
 
 import json
+from typing import List, Optional
 
 import pytest
 from pytest_httpx import HTTPXMock
 
-from allsource_client import AllSourceAsyncClient, AllSourceError
+from allsource_client import (
+    AllSourceAsyncClient,
+    AllSourceError,
+    EntityState,
+    EpochChangedError,
+    Event,
+    EventList,
+    FeedCursor,
+    InvalidViewError,
+    NotModified,
+    ReadModelCommit,
+    SyncCheckpoint,
+    SyncDelete,
+    SyncReset,
+    SyncItem,
+    SyncUpsert,
+    VersionConflictError,
+    ViewLatest,
+    ViewNotFound,
+    ViewResetError,
+)
+from tests.contract import assert_request, load, respond
 
 
 BASE_URL = "http://localhost:3902"
@@ -19,18 +41,9 @@ def client() -> AllSourceAsyncClient:
 class TestAsyncIngest:
     async def test_ingest_event(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
-            url=f"{BASE_URL}/api/events",
+            url=f"{BASE_URL}/api/v1/events",
             method="POST",
-            json={
-                "data": {
-                    "id": "evt-1",
-                    "entity_id": "user-123",
-                    "event_type": "user.signup",
-                    "payload": {"plan": "pro"},
-                    "timestamp": "2026-01-01T00:00:00Z",
-                    "version": 1,
-                }
-            },
+            json={"event_id": "evt-1", "timestamp": "2026-01-01T00:00:00Z", "version": 1},
         )
 
         event = await client.ingest("user.signup", "user-123", {"plan": "pro"})
@@ -42,133 +55,301 @@ class TestAsyncIngest:
 
     async def test_ingest_batch(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
-            url=f"{BASE_URL}/api/events/batch",
+            url=f"{BASE_URL}/api/v1/events/batch",
             method="POST",
             json={
-                "data": [
-                    {
-                        "id": "evt-1",
-                        "entity_id": "u-1",
-                        "event_type": "user.signup",
-                        "payload": {},
-                        "timestamp": "2026-01-01T00:00:00Z",
-                        "version": 1,
-                    }
-                ]
+                "total": 1,
+                "ingested": 1,
+                "events": [{"event_id": "evt-1", "timestamp": "2026-01-01T00:00:00Z", "version": 1}],
             },
         )
 
         events = await client.ingest_batch([
             {"event_type": "user.signup", "entity_id": "u-1", "payload": {}}
         ])
-        assert len(events) == 1
+        assert [(e.id, e.entity_id) for e in events] == [("evt-1", "u-1")]
         await client.close()
 
 
 class TestAsyncQuery:
     async def test_query_events(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
-            url=f"{BASE_URL}/api/events",
+            url=f"{BASE_URL}/api/v1/events/query",
             method="GET",
-            json={
-                "data": {"data": [], "count": 0}
-            },
+            json={"events": [], "count": 0},
         )
 
         result = await client.query()
         assert result.count == 0
         await client.close()
 
-
-class TestAsyncProjections:
-    async def test_list_projections(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
-        httpx_mock.add_response(
-            url=f"{BASE_URL}/api/projections",
-            method="GET",
-            json={"data": []},
-        )
-
-        projections = await client.get_projections()
-        assert projections == []
-        await client.close()
-
-    async def test_get_projection(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
-        httpx_mock.add_response(
-            url=f"{BASE_URL}/api/projections/my-proj",
-            method="GET",
-            json={
-                "data": {
-                    "id": "p-1",
-                    "name": "my-proj",
-                    "version": 1,
-                    "status": "running",
-                    "initial_state": {},
-                    "definition": "count(*)",
-                    "created_at": "2026-01-01T00:00:00Z",
-                    "updated_at": "2026-01-01T00:00:00Z",
-                }
-            },
-        )
-
-        p = await client.get_projection("my-proj")
-        assert p.name == "my-proj"
-        await client.close()
-
-
-class TestAsyncProjectionReplay:
-    async def test_analyze_and_run_projection_replay(
+    async def test_entity_version_and_etag(
         self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
     ) -> None:
-        analysis = {
-            "projection_name": "event-count",
-            "projection_title": "Event Count",
-            "projection_kind": "counter",
-            "projection_status": "ready",
-            "current_entity_count": 1,
-            "total_events": 1,
-            "sampled_events": 1,
-            "analysis_scope": "full",
-            "event_type_distribution": [
-                {"event_type": "order.created", "count": 1, "share": 100.0}
-            ],
-            "sampled_entity_count": 1,
-            "sampled_entities": [{"entity_id": "order-1", "event_count": 1}],
-            "first_event_at": "2026-08-14T10:00:00Z",
-            "last_event_at": "2026-08-14T10:00:00Z",
-            "analyzed_at": "2026-08-14T10:01:00Z",
-            "ready_to_replay": True,
-            "checks": [],
-            "warnings": [],
-        }
-        run = {
-            "replay_id": "replay-1",
-            "projection_name": "event-count",
-            "status": "running",
-            "started_at": "2026-08-14T10:01:00Z",
-            "updated_at": "2026-08-14T10:01:00Z",
-            "completed_at": None,
-            "total_events": 1,
-            "processed_events": 0,
-            "failed_events": 0,
-            "progress_percentage": 0.0,
-            "events_per_second": 0.0,
-            "error_message": None,
-        }
-        httpx_mock.add_response(
-            url=f"{BASE_URL}/api/replay/preview",
-            method="POST",
-            json={"data": analysis},
-        )
-        httpx_mock.add_response(
-            url=f"{BASE_URL}/api/replay", method="POST", json={"data": run}
+        fx = load("events_query_with_entity_version")
+        respond(httpx_mock, fx)
+
+        result = await client.query_events(entity_id="skill:abc", limit=1)
+
+        assert isinstance(result, EventList)
+        assert result.entity_version == 12
+        assert result.etag == fx["response"]["headers"]["ETag"]
+        assert_request(httpx_mock.get_requests()[0], fx)
+        await client.close()
+
+    async def test_query_and_fold(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        respond(httpx_mock, load("events_query_with_entity_version"))
+
+        class LastName:
+            def __init__(self) -> None:
+                self.name: Optional[str] = None
+
+            def apply(self, event: Event) -> bool:
+                self.name = event.payload.get("name")
+                return True
+
+            def finalize(self) -> Optional[str]:
+                return self.name
+
+        assert await client.query_and_fold(LastName(), entity_id="skill:abc") == "x"
+        await client.close()
+
+
+class TestAsyncEntityState:
+    async def test_state_then_not_modified(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        fresh = load("entity_state")
+        unchanged = load("entity_state_not_modified")
+        respond(httpx_mock, fresh)
+        respond(httpx_mock, unchanged)
+
+        state = await client.entity_state("skill:abc")
+        assert isinstance(state, EntityState)
+        assert state.version == 12
+        again = await client.entity_state("skill:abc", if_none_match=state.etag)
+
+        assert again == NotModified(etag=state.etag)
+        requests = httpx_mock.get_requests()
+        assert_request(requests[0], fresh)
+        assert_request(requests[1], unchanged)
+        await client.close()
+
+
+class TestAsyncFeedAndReadModels:
+    async def test_feed(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
+        fx = load("event_feed")
+        respond(httpx_mock, fx)
+
+        page = await client.feed(
+            cursor=FeedCursor(epoch=41, position=0), prefixes=["skill."], limit=100
         )
 
-        preview = await client.analyze_projection_replay("event-count")
-        started = await client.start_projection_replay("event-count")
+        assert page.next_cursor == FeedCursor(epoch=41, position=1)
+        assert_request(httpx_mock.get_requests()[0], fx)
+        await client.close()
 
-        assert preview.ready_to_replay is True
-        assert preview.total_events == 1
-        assert started.replay_id == "replay-1"
+    async def test_feed_epoch_changed(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        respond(httpx_mock, load("event_feed_epoch_changed"))
+
+        with pytest.raises(EpochChangedError) as err:
+            await client.feed(cursor=FeedCursor(epoch=40, position=17))
+
+        assert err.value.current_version == 41
+        await client.close()
+
+    async def test_read_model_page_and_commit(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        page_fx = load("read_model_page")
+        commit_fx = load("read_model_commit")
+        respond(httpx_mock, page_fx)
+        respond(httpx_mock, commit_fx)
+
+        model = client.read_model("skills")
+        page = await model.page(prefix="skill:", limit=100)
+        assert page.checkpoint is not None
+        revision = await model.commit(
+            ReadModelCommit(
+                expected_revision=page.revision,
+                checkpoint=page.checkpoint,
+                changes={"skill:abc": {"status": "retired"}, "skill:old": None},
+            )
+        )
+
+        assert revision == 8
+        requests = httpx_mock.get_requests()
+        assert_request(requests[0], page_fx)
+        assert_request(requests[1], commit_fx)
+        await client.close()
+
+    async def test_commit_conflict(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        fx = load("read_model_commit_conflict")
+        respond(httpx_mock, fx)
+
+        with pytest.raises(VersionConflictError) as err:
+            await client.read_model("skills").commit(fx["request"]["body"])
+
+        assert err.value.current_version == 7
+        await client.close()
+
+
+class TestAsyncViews:
+    async def test_define_get_list_delete(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        define = load("view_define")
+        respond(httpx_mock, define)
+        respond(httpx_mock, load("view_get"))
+        respond(httpx_mock, load("views_list"))
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/views/ops_status", method="DELETE", status_code=204
+        )
+
+        created = await client.define_view("ops_status", define["request"]["body"])
+        fetched = await client.get_view("ops_status")
+        views = await client.list_views()
+        await client.delete_view("ops_status")
+
+        assert created.generation == 1
+        assert fetched.generation == 2
+        assert [v.view for v in views] == ["ops_status", "skill_catalog"]
+        assert_request(httpx_mock.get_requests()[0], define)
+        await client.close()
+
+    async def test_define_invalid(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        fx = load("view_define_invalid")
+        respond(httpx_mock, fx)
+
+        with pytest.raises(InvalidViewError) as err:
+            await client.define_view("ops_status", fx["request"]["body"])
+
+        assert err.value.detail == "ops must contain 1..64 operations"
+        await client.close()
+
+    async def test_latest_variants(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        respond(httpx_mock, load("view_latest"))
+        respond(httpx_mock, load("view_latest_not_modified"))
+        respond(httpx_mock, load("view_latest_not_found"))
+
+        row = await client.latest("ops_status", "probe-a:2026-10-27")
+        assert isinstance(row, ViewLatest)
+        unchanged = await client.latest("ops_status", "probe-a:2026-10-27", if_none_match=row.etag)
+        missing = await client.latest("ops_status", "probe-q:2026-10-27")
+
+        assert row.version == 57
+        assert unchanged == NotModified(etag=row.etag)
+        assert missing == ViewNotFound(view="ops_status", key="probe-q:2026-10-27", ready=True)
+        await client.close()
+
+    async def test_latest_many(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
+        page_1 = load("view_entities_page_1")
+        page_2 = load("view_entities_page_2")
+        respond(httpx_mock, page_1)
+        respond(httpx_mock, page_2)
+
+        keys = [row.key async for row in client.latest_many("ops_status", limit=2)]
+
+        assert keys == ["probe-a:2026-10-26", "probe-a:2026-10-27", "probe-z:2026-10-20"]
+        requests = httpx_mock.get_requests()
+        assert_request(requests[0], page_1)
+        assert_request(requests[1], page_2)
+        await client.close()
+
+    async def test_view_changes_reset(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        respond(httpx_mock, load("view_changes_reset"))
+
+        with pytest.raises(ViewResetError) as err:
+            await client.view_changes("ops_status", after=12)
+
+        assert err.value.generation == 3
+        await client.close()
+
+
+class TestAsyncSync:
+    async def test_snapshot_then_changes(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        respond(httpx_mock, load("view_entities_page_1"))
+        respond(httpx_mock, load("view_entities_page_2"))
+        respond(httpx_mock, load("view_changes"))
+
+        items: List[SyncItem] = [
+            item async for item in client.sync("ops_status", page_limit=2, follow=False)
+        ]
+
+        assert items[3] == SyncCheckpoint(revision=61, generation=2)
+        assert items[4:] == [
+            SyncUpsert(key="probe-a:2026-10-27", state={"ok": 1431, "failed": 2}, version=62),
+            SyncDelete(key="probe-z:2026-10-20", version=62),
+            SyncCheckpoint(revision=62, generation=2),
+        ]
+        await client.close()
+
+    async def test_reset_resnapshots(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        respond(httpx_mock, load("view_changes_reset"))
+        respond(httpx_mock, load("view_entities_page_2"))
+        respond(httpx_mock, load("view_changes"))
+
+        items = [
+            item
+            async for item in client.sync("ops_status", checkpoint=12, wait=0, follow=False)
+        ]
+
+        assert items[0] == SyncReset(generation=3)
+        assert items[2] == SyncCheckpoint(revision=61, generation=2)
+        await client.close()
+
+    async def test_retry_after_is_honoured(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        limited = load("rate_limited_retry_after")
+        respond(httpx_mock, limited)
+        respond(httpx_mock, load("view_changes"))
+        sleeps: List[float] = []
+
+        async def record(delay: float) -> None:
+            sleeps.append(delay)
+
+        client._sleep = record
+        items = [
+            item
+            async for item in client.sync("ops_status", checkpoint=61, wait=0, follow=False)
+        ]
+
+        assert sleeps == [1.0]
+        assert items[-1] == SyncCheckpoint(revision=62, generation=2)
+        for request in httpx_mock.get_requests():
+            assert_request(request, limited)
+        await client.close()
+
+    async def test_empty_long_poll_yields_nothing(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        fx = load("view_changes_empty_after_wait")
+        respond(httpx_mock, fx)
+
+        items = [
+            item
+            async for item in client.sync("ops_status", checkpoint=62, wait=20, follow=False)
+        ]
+
+        assert items == []
+        assert_request(httpx_mock.get_requests()[0], fx)
         await client.close()
 
 
@@ -281,7 +462,7 @@ class TestAsyncPrime:
 class TestAsyncErrorHandling:
     async def test_api_error(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
-            url=f"{BASE_URL}/api/events",
+            url=f"{BASE_URL}/api/v1/events",
             method="POST",
             status_code=401,
             json={"error": {"code": "unauthorized", "message": "Invalid API key"}},

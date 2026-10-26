@@ -18,7 +18,7 @@ AllSource runs two services. Only one of them is reachable from outside your net
 - **Gateway** — on our hosted offering, this is `https://api.all-source.xyz`. The only AllSource endpoint on public DNS. Handles auth, rate limiting, quotas, and billing before forwarding to Core. Self-hosted deployments run the equivalent under their own domain.
 - **Core** (internal, `:3900`) — the event store itself. Rust, durable via WAL + Parquet, in-memory reads via DashMap. Validates API keys in-process. Reachable only on your internal network (K8s service DNS, VPC, Fly `*.internal`, etc.). **Never publish Core on public DNS** — it's trust-the-caller by design.
 
-Both expose the same `/api/v1/*` surface. Which one you target depends on where your caller runs:
+Both use the same `/api/v1/*` paths, but the gateway forwards only the tenant data routes: ingest, `events/query`, `event-feed`, `read-models`, `views` and entity state. The WebSocket stream and durable consumers below are Core routes, reachable only from inside your network; an external caller tails the tenant through `GET /api/v1/event-feed` instead. Which one you target depends on where your caller runs:
 
 - **Caller outside your network** (mobile, browser, third-party service, your customer's backend) → gateway URL.
 - **Caller inside your network** (your own worker, projection service, admin tooling) → Core's internal DNS, at full speed.
@@ -191,7 +191,7 @@ A projection is application-defined state computed from the event stream. AllSou
 1. **Register a durable consumer** with the event-type filters you care about.
 2. **Open the WebSocket** with `?consumer_id=<name>`, subscribe.
 3. **Loop**: for each event, apply your reducer to in-memory state. Ack every N events (or time-based) so restarts are cheap.
-4. **Optional**: write the computed state back to Core via `POST /api/v1/projections/:name/:entity_id/state` so other consumers can read it.
+4. **Optional**: commit the computed rows to a read model with `PUT /api/v1/read-models/:name` so other consumers can read them.
 
 Pseudocode (works in any language):
 
@@ -226,27 +226,53 @@ for msg in ws:
 
 100 lines of application code replaces what used to require a Kafka cluster, a stream processor, and a state store.
 
-## Reading projection state
+## Reading latest state
 
-Projections written via `POST .../state` are readable by name + entity_id:
+The current state of one entity, without its history:
 
 ```bash
-# Single entity
 curl -H "Authorization: Bearer ask_..." \
-  https://your-allsource/api/v1/projections/assets/BTC/state
-
-# All entities under a projection
-curl -H "Authorization: Bearer ask_..." \
-  https://your-allsource/api/v1/projections/assets/state
-
-# Bulk fetch by entity_id list
-curl -X POST https://your-allsource/api/v1/projections/assets/bulk \
-  -H "Authorization: Bearer ask_..." \
-  -H "Content-Type: application/json" \
-  -d '{"entity_ids": ["BTC", "ETH", "SOL"]}'
+  https://your-allsource/api/v1/entities/order-42/state
 ```
 
-As of Core 0.19.1, these endpoints fall back to the projection state cache when no projection is registered in Core's projection manager — which means your SDK-managed projections (ones you computed client-side and pushed back via `POST .../state`) are readable via the same endpoints. Before 0.19.1 only Core-registered projections were readable this way.
+The body carries `current_state` and a `version`. Add `history=true` only when you need every event. Send the `ETag` back as `If-None-Match` and an unchanged entity answers `304` with no body.
+
+Rows you committed to a read model are readable by name, paged by key prefix:
+
+```bash
+curl -H "Authorization: Bearer ask_..." \
+  "https://your-allsource/api/v1/read-models/assets?prefix=BTC&limit=100"
+```
+
+If your fold fits a few declarative operations, define a **view** and let AllSource keep the rows current for you:
+
+```bash
+curl -X PUT https://your-allsource/api/v1/views/assets \
+  -H "Authorization: Bearer ask_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": {"prefixes": ["asset."]},
+    "key": "{entity_id}",
+    "ops": [
+      {"on": "asset.", "set": {"name": "payload.name", "price": "payload.price"}},
+      {"on": "asset.", "max": {"updated_at": "timestamp"}}
+    ]
+  }'
+
+# One row
+curl -H "Authorization: Bearer ask_..." \
+  https://your-allsource/api/v1/views/assets/entities/BTC
+
+# Many rows by prefix
+curl -H "Authorization: Bearer ask_..." \
+  "https://your-allsource/api/v1/views/assets/entities?prefix=B&limit=100"
+
+# Only what changed since the revision you last saw, waiting up to 20 s
+curl -H "Authorization: Bearer ask_..." \
+  "https://your-allsource/api/v1/views/assets/changes?after=61&wait=20"
+```
+
+A `changes` entry with `"state": null` is a deletion. A `409 {"error": "view_reset"}` means the view was rebuilt: read the entity pages again and continue from their `revision`.
 
 ## Error handling
 
@@ -256,7 +282,7 @@ All endpoints return standard HTTP status codes:
 - `400` — malformed request (bad JSON, missing field)
 - `401` — missing or invalid API key
 - `403` — key is valid but lacks permission for this operation
-- `404` — entity/projection not found (the `/state` endpoints return `{"found": false, "state": null}` with 200 instead)
+- `404` — entity or view row not found (a view row answers `{"error": "not_found", "ready": <bool>}`)
 - `429` — rate limit (only via Query Service — Core has no rate limiter)
 - `5xx` — treat as retryable with backoff
 

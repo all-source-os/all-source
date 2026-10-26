@@ -1,0 +1,22 @@
+{
+  "name": "view_changes_empty_after_wait",
+  "description": "sync({wait: 20}) long-poll from view_changes' revision 62 when nothing changed before wait elapsed. Empty changes with caught_up true; the SDK yields nothing, keeps checkpoint 62 and polls again.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/changes",
+    "query": { "after": "62", "wait": "20" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "view": "ops_status",
+      "changes": [],
+      "revision": 62,
+      "caught_up": true,
+      "generation": 2
+    }
+  }
+}

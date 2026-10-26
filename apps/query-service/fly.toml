@@ -69,6 +69,24 @@ primary_region = "iad"  # US East (Virginia)
     path = "/api/health/live"
     timeout = "3s"
 
+# A new machine takes traffic only after every credential kind customers
+# already hold reads through it. Bluegreen waits for the top-level check below;
+# it does not affect routing, so a Core outage does not pull a running machine
+# out of service. docs/runbooks/CONSUMER_ACCESS_GATE.md
+[deploy]
+  strategy = "bluegreen"
+  wait_timeout = "5m"
+
+[checks]
+  [checks.consumer_access]
+    type = "http"
+    port = 3902
+    path = "/api/health/consumers"
+    method = "GET"
+    grace_period = "30s"
+    interval = "60s"
+    timeout = "25s"
+
 [[vm]]
   cpu_kind = "shared"
   cpus = 1

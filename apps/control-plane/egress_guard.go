@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,6 +30,67 @@ const (
 )
 
 var egressResponseSlots = make(chan struct{}, 16)
+
+const viewChangesGrace = 5 * time.Second
+
+// viewChangesLane holds view long-polls apart from egressResponseSlots, so an
+// idle wait never takes a slot a normal read needs.
+var viewChangesLane = newLongPollLane(64, 8)
+
+type longPollLane struct {
+	mu        sync.Mutex
+	slots     chan struct{}
+	held      map[string]int
+	perTenant int
+}
+
+func newLongPollLane(slots, perTenant int) *longPollLane {
+	return &longPollLane{slots: make(chan struct{}, slots), held: map[string]int{}, perTenant: perTenant}
+}
+
+func (l *longPollLane) acquire(tenant string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.held[tenant] >= l.perTenant {
+		return false
+	}
+	select {
+	case l.slots <- struct{}{}:
+		l.held[tenant]++
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *longPollLane) release(tenant string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	<-l.slots
+	l.held[tenant]--
+	if l.held[tenant] <= 0 {
+		delete(l.held, tenant)
+	}
+}
+
+func (l *longPollLane) occupancy(tenant string) (occupied, held int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.slots), l.held[tenant]
+}
+
+// viewChangesHold reports how long Core may hold a view changes request. A
+// zero or absent wait is an ordinary read and takes the ordinary lane.
+func viewChangesHold(r *http.Request, route string) (time.Duration, bool) {
+	if r.Method != http.MethodGet || route != viewChangesRoute {
+		return 0, false
+	}
+	seconds, ok := viewChangesWait(r.URL.Query().Get("wait"))
+	if !ok || seconds == 0 {
+		return 0, false
+	}
+	return time.Duration(seconds) * time.Second, true
+}
 
 var errInvalidEgressReservation = errors.New("invalid egress reservation")
 
@@ -137,7 +199,12 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 		return
 	}
 	lane := admissionLane(c.Request, c.FullPath())
-	ticket, refusal, headers := cp.admission.admit(tenant, lane, len(egressResponseSlots), cap(egressResponseSlots), time.Now())
+	wait, longPoll := viewChangesHold(c.Request, c.FullPath())
+	poolOccupied, poolCapacity := len(egressResponseSlots), cap(egressResponseSlots)
+	if longPoll {
+		poolOccupied, poolCapacity = len(viewChangesLane.slots), cap(viewChangesLane.slots)
+	}
+	ticket, refusal, headers := cp.admission.admit(tenant, lane, poolOccupied, poolCapacity, time.Now())
 	if cp.admission.enforcing() {
 		for name, values := range headers {
 			c.Writer.Header()[name] = values
@@ -147,6 +214,12 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 		c.AbortWithStatusJSON(refusal.status, writeAdmissionRefusal(c.Writer, refusal))
 		return
 	}
+	if longPoll {
+		// The lane's per-tenant cap bounds held requests; counting them as
+		// in-flight would let idle waits refuse the tenant's other reads.
+		ticket.release(0, 0)
+		ticket = nil
+	}
 	if !billable {
 		defer func() { ticket.release(uint64(max(0, c.Writer.Size())), c.Writer.Status()) }() //nolint:gosec // Size is clamped nonnegative.
 		c.Next()
@@ -155,13 +228,23 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	var charged uint64
 	status := 0
 	defer func() { ticket.release(charged, status) }()
-	select {
-	case egressResponseSlots <- struct{}{}:
-		defer func() { <-egressResponseSlots }()
-	default:
-		admissionRefused.WithLabelValues(lane, admissionScopeGlobal, tenantLabel(tenant)).Inc()
-		rejectEgress(c, egressError{status: http.StatusTooManyRequests, reason: egressReasonPoolFull})
-		return
+	if longPoll {
+		defer func() { cp.admission.chargeBytes(tenant, charged) }()
+		if !viewChangesLane.acquire(tenant) {
+			admissionRefused.WithLabelValues(lane, admissionScopeGlobal, tenantLabel(tenant)).Inc()
+			rejectEgress(c, egressError{status: http.StatusTooManyRequests, reason: egressReasonPoolFull})
+			return
+		}
+		defer viewChangesLane.release(tenant)
+	} else {
+		select {
+		case egressResponseSlots <- struct{}{}:
+			defer func() { <-egressResponseSlots }()
+		default:
+			admissionRefused.WithLabelValues(lane, admissionScopeGlobal, tenantLabel(tenant)).Inc()
+			rejectEgress(c, egressError{status: http.StatusTooManyRequests, reason: egressReasonPoolFull})
+			return
+		}
 	}
 	hold, err := cp.reserveEgress(c.Request.Context(), tenant)
 	if errors.Is(err, errInvalidEgressReservation) {
@@ -174,7 +257,11 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	}
 	capacity := hold.capacity
 	original := c.Writer
-	requestContext, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	deadline := 10 * time.Second
+	if longPoll {
+		deadline = wait + viewChangesGrace
+	}
+	requestContext, cancel := context.WithTimeout(c.Request.Context(), deadline)
 	defer cancel()
 	c.Request = c.Request.WithContext(requestContext)
 	buffer := &egressWriter{ResponseWriter: original, headers: original.Header().Clone(), capacity: int(capacity), cancel: cancel, status: http.StatusOK} //nolint:gosec // A hold never exceeds maxEgressResponse.
@@ -182,6 +269,10 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	defer func() { c.Writer = original }()
 	c.Next()
 	c.Writer = original
+	// A conditional hit carries no body on the wire, whatever the handler wrote.
+	if buffer.status == http.StatusNotModified || buffer.status == http.StatusNoContent {
+		buffer.body.Reset()
+	}
 	charge := uint64(buffer.body.Len()) //nolint:gosec // Buffer length is nonnegative and capped at 16 MiB by Write.
 	if buffer.failed || requestContext.Err() != nil {
 		charge = 0
@@ -265,7 +356,7 @@ func (cp *ControlPlane) reserveEgress(ctx context.Context, tenant string) (egres
 	}, nil
 }
 
-// Ingest writes and the empty event-feed position probe return no tenant data,
+// Ingest writes, view definition writes and the empty event-feed position probe return no tenant data,
 // so they must not wait for a response slot or a ledger round trip.
 func billableEgressRequest(r *http.Request) bool {
 	path := r.URL.Path
@@ -273,6 +364,8 @@ func billableEgressRequest(r *http.Request) bool {
 	case r.Method == http.MethodPost && (path == "/api/v1/events" || path == "/api/v1/events/batch"):
 		return false
 	case r.Method == http.MethodPut && strings.HasPrefix(path, "/api/v1/read-models/"):
+		return false
+	case (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(path, viewsPath+"/"):
 		return false
 	case r.Method == http.MethodGet && path == eventFeedPath && r.URL.Query().Get("limit") == "0":
 		return false

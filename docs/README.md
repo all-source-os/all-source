@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Latest-state views and consumer-access gate, run end to end (2026-10-27)](./evidence/2026-10-27-latest-state-views/README.md): PR #366 on local Core, Query Service and gateway: view fold, conditional reads, sync, tenant isolation, restart, the consumer gate, and the TypeScript and Go SDK gateway 401 with its fix.
+
 - [Chronis native workflow qualification](./reports/2026-10-27-chronis-native-verification.md): rebuilt baseline failures, candidate CLI lifecycle success, actual Codex/Claude calls and installed-toolkit provenance.
 
 - [Chronis TOON integrity plan](./plans/2026-10-27-chronis-toon-escaping.md) and [native application request](./reference/chronis-toon-request.md): preserve exact task data while escaping structural output, qualified through real Codex and Claude.
@@ -100,6 +102,9 @@ For understanding the system architecture and design decisions.
 | [Architecture Optimization](./current/ARCHITECTURE_OPTIMIZATION.md) | System-level optimizations | ✅ |
 | [OCC version index](./research/2026-10-04-occ-version-index.md) | Why entity versions must be read, never counted; the eviction and memory defects that follow | ✅ |
 | [Strict hydration and version-index reuse](./research/2026-10-08-strict-hydration-version-index.md) | Reuse complete archive validation before conditional writes; failure and eviction checks | ✅ |
+| [Latest-state reads](./research/2026-10-27-latest-state-reads.md) | Why consumers pull history to get current state through every SDK, the gateway, Query Service and MCP; snapshot-plus-tail views as the target | ✅ |
+| [ADR-021: views folded by the Query Service](./adr/021-views-folded-by-query-service.md) | The Query Service folds declarative views from the event feed into Core read-model rows; Core validates, stores and serves them and never applies a reducer | Accepted |
+| [Latest-state read contract](./contracts/latest-state/README.md) | Wire contract for entity state without history, ETag/304, event feed and read models, view definitions, latest, latestMany and changes | ✅ |
 | [SEO evidence baseline](./reports/2026-10-20-seo-evidence-baseline.md) | Pages score 100/100 and take 2 organic clicks a month: DA 2, 3 referring domains, 12 ranked keywords | ✅ |
 
 ---
@@ -153,6 +158,8 @@ For DevOps and platform engineers.
 | [Client access outage (2026-10-26)](./reports/2026-10-26-client-access-outage.html) | Longhand's key refused for 2 h 29 m (18:56–21:25Z) and again for 8 m (22:44–22:52Z) by the API-key enforcement deploys; Core unreachable 6 m during a redeploy; timeline, cause, state, actions | ✅ |
 | [Why a deploy denied clients (2026-10-26)](./reports/2026-10-26-auth-deploy-denial-diagnosis.html) | The auth path that refused unregistered keys, which credentials it refuses, why no signal showed it, how to diagnose a denial spike, and ranked safeguards so no deploy denies a client without a named rule | ✅ |
 | [Fly image promotion](./runbooks/FLY_IMAGE_PROMOTION.md) | Copy tested private CI images into app-scoped Fly registries before deployment | Operator runbook |
+| [Consumer access gate](./runbooks/CONSUMER_ACCESS_GATE.md) | Gateways deploy bluegreen and take traffic only after one canary of every credential kind customers hold reads through the new machine | Operator runbook |
+| [Latest-state views](./runbooks/LATEST_STATE_VIEWS.md) | Turning views on (`ALLSOURCE_VIEWS`, admin `CORE_API_KEY` for the Query Service folder, optional `ALLSOURCE_FEED_DURABLE_LOG`), defining the ops-status view, folder counters and the gateway changes lane | Operator runbook |
 | [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
 | [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |
 | [Bounded archive repack](./runbooks/BOUNDED_ARCHIVE_REPACK.md) | Finalized output bounds, preserved originals, crash recovery and rollback commands | ✅ |

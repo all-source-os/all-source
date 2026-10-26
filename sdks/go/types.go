@@ -1,6 +1,9 @@
 package allsource
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Event represents an event in the AllSource event store.
 type Event struct {
@@ -16,78 +19,14 @@ type Event struct {
 
 // EventList is a list of events with a count.
 type EventList struct {
-	Events []Event `json:"events"`
-	Count  int     `json:"count"`
-}
-
-// Projection represents a projection in the AllSource event store.
-type Projection struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	Version      int            `json:"version"`
-	Status       string         `json:"status"`
-	InitialState map[string]any `json:"initial_state"`
-	Definition   string         `json:"definition"`
-	CreatedAt    string         `json:"created_at"`
-	UpdatedAt    string         `json:"updated_at"`
-}
-
-// ProjectionReplayEventType is one event-type bucket from replay analysis.
-type ProjectionReplayEventType struct {
-	EventType string  `json:"event_type"`
-	Count     int     `json:"count"`
-	Share     float64 `json:"share"`
-}
-
-// ProjectionReplayEntity is one frequently affected entity from the analysis sample.
-type ProjectionReplayEntity struct {
-	EntityID   string `json:"entity_id"`
-	EventCount int    `json:"event_count"`
-}
-
-// ProjectionReplayCheck is a server-asserted replay invariant.
-type ProjectionReplayCheck struct {
-	Key    string `json:"key"`
-	Label  string `json:"label"`
-	Status string `json:"status"`
-	Detail string `json:"detail"`
-}
-
-// ProjectionReplayAnalysis describes replay impact without mutating state.
-type ProjectionReplayAnalysis struct {
-	ProjectionName        string                      `json:"projection_name"`
-	ProjectionTitle       string                      `json:"projection_title"`
-	ProjectionKind        string                      `json:"projection_kind"`
-	ProjectionStatus      string                      `json:"projection_status"`
-	CurrentEntityCount    int                         `json:"current_entity_count"`
-	TotalEvents           int                         `json:"total_events"`
-	SampledEvents         int                         `json:"sampled_events"`
-	AnalysisScope         string                      `json:"analysis_scope"`
-	EventTypeDistribution []ProjectionReplayEventType `json:"event_type_distribution"`
-	SampledEntityCount    int                         `json:"sampled_entity_count"`
-	SampledEntities       []ProjectionReplayEntity    `json:"sampled_entities"`
-	FirstEventAt          *string                     `json:"first_event_at"`
-	LastEventAt           *string                     `json:"last_event_at"`
-	AnalyzedAt            string                      `json:"analyzed_at"`
-	ReadyToReplay         bool                        `json:"ready_to_replay"`
-	Checks                []ProjectionReplayCheck     `json:"checks"`
-	Warnings              []string                    `json:"warnings"`
-}
-
-// ProjectionReplayRun is one tenant-scoped projection rebuild.
-type ProjectionReplayRun struct {
-	ReplayID           string  `json:"replay_id"`
-	ProjectionName     string  `json:"projection_name"`
-	Status             string  `json:"status"`
-	StartedAt          string  `json:"started_at"`
-	UpdatedAt          string  `json:"updated_at"`
-	CompletedAt        *string `json:"completed_at"`
-	TotalEvents        int     `json:"total_events"`
-	ProcessedEvents    int     `json:"processed_events"`
-	FailedEvents       int     `json:"failed_events"`
-	ProgressPercentage float64 `json:"progress_percentage"`
-	EventsPerSecond    float64 `json:"events_per_second"`
-	ErrorMessage       *string `json:"error_message"`
+	Events     []Event `json:"events"`
+	Count      int     `json:"count"`
+	TotalCount int     `json:"total_count,omitempty"`
+	HasMore    bool    `json:"has_more,omitempty"`
+	// EntityVersion is the tenant's event count for the entity, sent by Core
+	// only when the query filters by entity_id.
+	EntityVersion *int64 `json:"entity_version,omitempty"`
+	ETag          string `json:"-"`
 }
 
 // APIError represents an error returned by the AllSource API.
@@ -95,6 +34,15 @@ type APIError struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 	StatusCode int    `json:"status_code"`
+	// Detail, ExpectedVersion, CurrentVersion, Generation and Ready carry
+	// Core's structured error fields when the body has them.
+	Detail          string `json:"detail,omitempty"`
+	ExpectedVersion *int64 `json:"expected_version,omitempty"`
+	CurrentVersion  *int64 `json:"current_version,omitempty"`
+	Generation      *int64 `json:"generation,omitempty"`
+	Ready           *bool  `json:"ready,omitempty"`
+	// RetryAfter is the parsed Retry-After header, zero when absent.
+	RetryAfter time.Duration `json:"-"`
 }
 
 func (e *APIError) Error() string {

@@ -28,6 +28,24 @@ defmodule McpServerElixir.Infrastructure.CoreBackend do
   @callback get_stats() :: {:ok, map()} | {:error, term()}
 
   # ============================================================================
+  # Views (latest-state read models)
+  # ============================================================================
+
+  @doc "Latest state of one view row"
+  @callback get_latest_state(view :: String.t(), key :: String.t()) ::
+              {:ok, map()} | {:error, term()}
+
+  @doc "One page of a view's rows (`prefix`, `after`, `limit`)"
+  @callback list_latest(view :: String.t(), params :: map()) :: {:ok, map()} | {:error, term()}
+
+  @doc "View rows written after a revision (`after`, `limit`)"
+  @callback list_changes(view :: String.t(), params :: map()) :: {:ok, map()} | {:error, term()}
+
+  # Views are rows Core stores for the Query Service; the embedded NIF has no
+  # route to them, so a backend may leave these out.
+  @optional_callbacks get_latest_state: 2, list_latest: 2, list_changes: 2
+
+  # ============================================================================
   # Search
   # ============================================================================
 

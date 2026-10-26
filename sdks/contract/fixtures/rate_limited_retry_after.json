@@ -1,0 +1,16 @@
+{
+  "name": "rate_limited_retry_after",
+  "description": "The view_changes request answered 429 with Retry-After: 1 and an empty body, as Core's response limiter sends it. sync waits at least one second and repeats the identical request; the same rule applies to 503 with Retry-After.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/changes",
+    "query": { "after": "61" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 429,
+    "headers": { "Retry-After": "1" },
+    "body": null
+  }
+}

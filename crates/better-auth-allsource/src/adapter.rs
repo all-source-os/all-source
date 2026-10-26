@@ -600,22 +600,12 @@ impl SessionOps for AllsourceAuthAdapter {
         Ok(())
     }
 
+    /// Reads nothing and writes nothing. better-auth-core refuses an expired
+    /// session on every read (`get_session`, `list_user_sessions`), and in an
+    /// append-only store a tombstone frees no space, so a sweep only spent a
+    /// whole-history read to add events.
     async fn delete_expired_sessions(&self) -> AuthResult<usize> {
-        let all: Vec<Session> = self
-            .client
-            .query_all("auth.session.created", 10000)
-            .await
-            .map_err(AuthError::from)?;
-
-        let now = Utc::now();
-        let mut deleted = 0;
-        for session in all {
-            if session.expires_at <= now || !session.active {
-                self.delete_session(&session.token).await?;
-                deleted += 1;
-            }
-        }
-        Ok(deleted)
+        Ok(0)
     }
 
     async fn update_session_active_organization(
@@ -862,22 +852,11 @@ impl VerificationOps for AllsourceAuthAdapter {
             .await
     }
 
+    /// Reads nothing and writes nothing: every verification lookup here
+    /// already refuses an expired row, and a tombstone frees no space in an
+    /// append-only store.
     async fn delete_expired_verifications(&self) -> AuthResult<usize> {
-        let all: Vec<Verification> = self
-            .client
-            .query_all("auth.verification.created", 10000)
-            .await
-            .map_err(AuthError::from)?;
-
-        let now = Utc::now();
-        let mut deleted = 0;
-        for v in all {
-            if v.expires_at <= now {
-                self.delete_verification(&v.id).await?;
-                deleted += 1;
-            }
-        }
-        Ok(deleted)
+        Ok(0)
     }
 }
 

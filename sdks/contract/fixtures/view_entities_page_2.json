@@ -1,0 +1,24 @@
+{
+  "name": "view_entities_page_2",
+  "description": "Second and last snapshot page: after is view_entities_page_1's next. next null ends the snapshot; revision 61 is the after cursor for view_changes.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/entities",
+    "query": { "after": "probe-a:2026-10-27", "limit": "2" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "view": "ops_status",
+      "rows": [{ "key": "probe-z:2026-10-20", "state": { "ok": 12, "failed": 9 }, "version": 33 }],
+      "next": null,
+      "revision": 61,
+      "content_revision": 61,
+      "generation": 2,
+      "ready": true
+    }
+  }
+}

@@ -3,8 +3,9 @@ package main
 // Data-plane delegation. Control Plane is the single public entry point for
 // chronis and the SDKs. After AuthMiddleware validates the caller (JWT or
 // ask_ API key), these handlers forward the request to the correct internal
-// backend — writes to Core, reads to Query Service — with the authenticated
-// tenant_id injected from the caller's identity. The forwarded request is
+// backend — event writes and every data read (events, entity state, event
+// feed, read models, views) to the tenant's Core, /prime to Prime — with the
+// authenticated tenant_id forced from the caller's identity. The forwarded request is
 // authenticated with Control Plane's service JWT, so backends never see
 // public auth material and never need to validate ask_ keys themselves.
 

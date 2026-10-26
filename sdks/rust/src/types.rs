@@ -382,6 +382,10 @@ pub struct QueryEventsResponse {
     pub total_count: Option<u64>,
     /// Whether more results are available beyond the current page. `None` if not supported.
     pub has_more: Option<bool>,
+    /// The entity's current version, sent by Core when the query filters by
+    /// `entity_id`. `None` otherwise or from an older Core.
+    #[serde(default)]
+    pub entity_version: Option<u64>,
     /// Response headers, filled in by [`crate::QueryClient::query_events`].
     #[serde(skip)]
     pub meta: crate::ResponseMeta,
@@ -626,6 +630,14 @@ mod tests {
         assert_eq!(resp.count, 1);
         assert_eq!(resp.events.len(), 1);
         assert_eq!(resp.events[0].event_type, "test");
+        assert_eq!(resp.entity_version, None);
+    }
+
+    #[test]
+    fn test_query_response_entity_version() {
+        let json = r#"{"events": [], "count": 0, "entity_version": 12}"#;
+        let resp: QueryEventsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.entity_version, Some(12));
     }
 
     #[test]

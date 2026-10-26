@@ -1,0 +1,16 @@
+{
+  "name": "view_latest_not_modified",
+  "description": "latest(\"ops_status\", \"probe-a:2026-10-27\", {ifNoneMatch}) with the tag from view_latest. Core answers 304 with no body; the SDK returns NotModified.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/views/ops_status/entities/probe-a%3A2026-10-27",
+    "query": {},
+    "headers": { "If-None-Match": "\"sha256:c4e2a7f91b3d5e60a8c2f4b6d8e0a1c3\"" },
+    "body": null
+  },
+  "response": {
+    "status": 304,
+    "headers": { "ETag": "\"sha256:c4e2a7f91b3d5e60a8c2f4b6d8e0a1c3\"" },
+    "body": null
+  }
+}

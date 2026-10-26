@@ -510,6 +510,7 @@ func (cp *ControlPlane) setupRoutes() {
 	// Public endpoints (no auth required — skipped by AuthMiddleware)
 	cp.router.GET("/livez", cp.livezHandler) // liveness only — Fly machine check uses this
 	cp.router.GET("/health", cp.healthHandler)
+	cp.router.GET(pathConsumerAccess, newConsumerAccessProbe().handle)
 	cp.router.GET("/metrics", gin.WrapH(publicMetricsHandler()))
 	cp.router.GET("/docs", cp.docsHandler)
 	cp.router.GET("/openapi", cp.openAPIHandler)
@@ -617,7 +618,7 @@ func (cp *ControlPlane) setupRoutes() {
 	// like any other authenticated API call.
 	api.POST("/agent-echo", RequirePermission(entities.PermissionRead), cp.AgentEchoHandler)
 
-	// Data-plane delegation. Writes delegate to Core, reads to Query Service.
+	// Data-plane delegation. Writes and reads delegate to the tenant's Core.
 	// Tenant is injected from the authenticated caller; backends see CP's
 	// service JWT, never the caller's ask_ key. These sit under `api` so they
 	// inherit AuthMiddleware + PolicyMiddleware + x402 auto-pay gating.
@@ -629,6 +630,7 @@ func (cp *ControlPlane) setupRoutes() {
 	api.GET("/event-feed", RequirePermission(entities.PermissionRead), cp.ProxyReadModel)
 	api.GET("/read-models/:name", RequirePermission(entities.PermissionRead), cp.ProxyReadModel)
 	api.PUT("/read-models/:name", RequirePermission(entities.PermissionWrite), cp.ProxyReadModel)
+	cp.registerViewRoutes(api)
 
 	// Tenant-scoped analytics surface (#230). Each of these forces an
 	// auth-derived tenant_id before forwarding; Core's equivalents are global

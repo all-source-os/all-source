@@ -100,3 +100,5 @@ that exact SHA for deployment. Never infer the deployed revision from `latest`.
 
 Registry copying and application deployment are separate operations. Existing
 read flows, budget refusal and recovery must be checked after deployment.
+The control plane and query service deploy bluegreen behind the consumer access
+check: see [CONSUMER_ACCESS_GATE.md](CONSUMER_ACCESS_GATE.md).

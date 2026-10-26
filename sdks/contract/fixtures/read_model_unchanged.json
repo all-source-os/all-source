@@ -1,0 +1,24 @@
+{
+  "name": "read_model_unchanged",
+  "description": "readModel(\"skills\").page({prefix: \"skill:\", revision: 7}) with the content_revision from read_model_page. Core answers unchanged: true with an empty rows object; the SDK reports unchanged and must not treat the empty rows as deletions.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/read-models/skills",
+    "query": { "prefix": "skill:", "revision": "7" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "revision": 7,
+      "content_revision": 7,
+      "checkpoint": { "epoch": 41, "position": 3 },
+      "ready": true,
+      "unchanged": true,
+      "rows": {},
+      "next": null
+    }
+  }
+}

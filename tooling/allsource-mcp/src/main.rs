@@ -5,11 +5,13 @@ use tracing_subscriber::EnvFilter;
 
 mod diagnostics;
 mod protocol;
+mod remote;
 mod stores;
 mod tools;
 mod transport;
 
 use diagnostics::{AccessProfile, DiagnosticPolicy};
+use remote::RemoteStore;
 use stores::StoreRegistry;
 use transport::StdioTransport;
 
@@ -22,7 +24,17 @@ use transport::StdioTransport;
 struct Cli {
     /// Path to `AllSource` data directory containing storage/ and wal/
     #[arg(long, env = "ALLSOURCE_DATA_DIR")]
-    data_dir: PathBuf,
+    data_dir: Option<PathBuf>,
+
+    /// Gateway base URL, read over HTTP. The view tools need it.
+    ///
+    /// Selected as `default` without --data-dir, otherwise as `remote`.
+    #[arg(long, value_name = "URL")]
+    remote: Option<String>,
+
+    /// Key sent as a bearer token to --remote.
+    #[arg(long, env = "ALLSOURCE_API_KEY", hide_env_values = true)]
+    api_key: Option<String>,
 
     /// Additional named store, `name=/path/to/allsource`, repeatable.
     ///
@@ -83,10 +95,16 @@ async fn main() -> Result<()> {
 
     tracing::info!("Opening AllSource data at {:?}", cli.data_dir);
 
+    let remote = cli
+        .remote
+        .as_deref()
+        .map(|url| RemoteStore::new(url, cli.api_key.clone()))
+        .transpose()?;
     let registry = StoreRegistry::open(
-        &cli.data_dir,
+        cli.data_dir.as_deref(),
         &cli.stores,
         Duration::from_millis(cli.refresh_ms),
+        remote,
     )
     .await?;
     for (name, store) in registry.iter() {
@@ -95,6 +113,13 @@ async fn main() -> Result<()> {
             path = %store.path.display(),
             events = store.core.event_count(),
             "AllSource store opened"
+        );
+    }
+    for (name, remote) in registry.remotes() {
+        tracing::info!(
+            store = name.as_str(),
+            url = remote.display_url(),
+            "AllSource gateway store bound"
         );
     }
 

@@ -6,7 +6,7 @@ Typed Rust client for the [AllSource](https://github.com/all-source-os/all-sourc
 
 ```toml
 [dependencies]
-allsource = "0.19"  # pairs with Core ≥ 0.19.1 for full ProjectionHandle::get_state behaviour
+allsource = "0.26"
 ```
 
 ## Which client do I want?
@@ -74,6 +74,52 @@ async fn process_all(query: &QueryClient) -> Result<(), allsource::Error> {
 ```
 
 Results are ordered — `query_events` by `(timestamp, version)`, `list_entities` by last-event time with an `entity_id` tie-break — so paging is stable: no row is skipped or repeated across pages. Pass `.order(SortOrder::Desc)` for newest-first. `list_entities_paged` works the same way over `ListEntitiesParams`.
+
+## Latest state without folding history
+
+The calls below implement the [latest-state contract](../../docs/contracts/latest-state/README.md) and are on both `QueryClient` and `CoreClient`.
+
+```rust,no_run
+use allsource::{EntityStateParams, LatestRow, QueryClient, SyncChange, SyncOptions, ViewEntitiesParams};
+use serde_json::json;
+use std::time::Duration;
+
+async fn run(qs: &QueryClient) -> Result<(), allsource::Error> {
+    // One entity's current state, no history. Send the ETag back to get a 304.
+    let state = qs.entity_state("skill:abc", &EntityStateParams::new()).await?;
+
+    // A view: a declarative fold the Query Service keeps current.
+    qs.define_view("ops_status", &json!({
+        "source": { "prefixes": ["ops.probe."] },
+        "key": "{payload.probe}:{day:timestamp}",
+        "ops": [{ "on": "ops.probe.observed", "increment": { "seen": 1 } }]
+    })).await?;
+
+    match qs.latest("ops_status", "probe-a:2026-10-27", None).await? {
+        LatestRow::Found(row) => println!("{} at version {}", row.state, row.version),
+        LatestRow::NotFound { ready } => println!("no row yet (view ready: {ready})"),
+        LatestRow::NotModified { .. } => {}
+    }
+
+    let all = qs.latest_many("ops_status", ViewEntitiesParams::new()).collect_all().await?;
+    println!("{} rows", all.len());
+
+    // Keep a local copy current: entity pages, then long-polled changes.
+    let mut sync = qs.sync("ops_status", SyncOptions::new().wait(Duration::from_secs(20)));
+    let batch = sync.next().await?;
+    for change in batch.changes {
+        match change {
+            SyncChange::Upsert { key, .. } => println!("upsert {key}"),
+            SyncChange::Delete { key, .. } => println!("delete {key}"),
+        }
+    }
+    // Store batch.checkpoint; pass it to SyncOptions::checkpoint on restart.
+    let _ = state;
+    Ok(())
+}
+```
+
+`sync` re-reads the entity pages (with `batch.reset == true`) when the view was reset past your checkpoint, and waits out `Retry-After` on 429 and 503. `feed(...)` and `read_model(name).page(...)` / `.commit(...)` expose the event feed and read-model protocol a custom folder needs.
 
 ## Performance cheatsheet
 
@@ -182,7 +228,7 @@ See the runnable [`examples/asset_projection.rs`](examples/asset_projection.rs) 
 - **Checkpointing**: the worker registers a durable consumer with Core. Core tracks the cursor server-side; the SDK `save_checkpoint` call is an `ack_consumer` under the hood. Restart → Core replays only what was added after the last ack.
 - **Reconnection**: exponential backoff (100ms → 30s) on WS or HTTP error. Core's consumer replay fills any gaps when the connection returns.
 - **Dedup**: per-entity version tracking in the worker. Events with `version ≤ last_applied` are skipped in case of replay overlap.
-- **State push-back** (optional, off by default): enable via `.state_flush_entities(...)` to periodically bulk-write reduced state to Core's projection KV for other consumers to read.
+- **State push-back** (optional, off by default): enable via `.state_flush_entities(...)` to periodically upsert reduced state into the Core read model named after the worker. Other consumers read it with `core.read_model("assets").page(...)`, and `ProjectionHandle::get_state(id)` reads one row of it.
 
 ### Cargo features
 
@@ -194,7 +240,7 @@ See the runnable [`examples/asset_projection.rs`](examples/asset_projection.rs) 
 To build without WebSocket support (smaller dep tree):
 
 ```toml
-allsource = { version = "0.19", default-features = false, features = ["rustls"] }
+allsource = { version = "0.26", default-features = false, features = ["rustls"] }
 ```
 
 For a deeper guide on projection design, operational concerns, and migration from polling, see [`docs/use-cases/custom-projections.md`](../../docs/use-cases/custom-projections.md).
@@ -204,8 +250,10 @@ For a deeper guide on projection design, operational concerns, and migration fro
 | Client | Method | Purpose |
 |--------|--------|---------|
 | `CoreClient` | `ingest_event` / `ingest_batch` | Write events |
-| `CoreClient` | `get/put_projection_state`, `bulk_get/bulk_put_projection_state(s)` | Projection KV |
-| `CoreClient` | `get_projection_state_summary` | All entities of a projection |
+| Both | `entity_state` | One entity's current state, conditional |
+| Both | `feed`, `read_model(name).page` / `.commit` | Event feed and read models |
+| Both | `define_view`, `get_view`, `delete_view`, `list_views` | View definitions |
+| Both | `latest`, `latest_many`, `view_entities`, `view_changes`, `sync` | View rows |
 | `CoreClient` | `register/get/ack_consumer` | Durable consumer registry |
 | `CoreClient` | `poll_consumer_events` | Pull-based alternative to the WS stream |
 | `CoreClient` | `save_checkpoint` / `load_checkpoint` | Worker checkpoint helpers |

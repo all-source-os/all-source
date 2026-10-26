@@ -6,6 +6,7 @@ pub mod api_v1;
 mod archive_work;
 pub mod audit_api;
 pub mod auth_api;
+pub mod conditional;
 pub mod config_api;
 pub mod demo_api;
 pub mod handlers;
@@ -20,6 +21,7 @@ pub mod tenant_api;
 pub mod tenant_egress_api;
 #[cfg(feature = "multi-tenant")]
 pub mod tenant_query_usage_api;
+pub mod view_api;
 pub mod websocket;
 
 // Public API re-exports

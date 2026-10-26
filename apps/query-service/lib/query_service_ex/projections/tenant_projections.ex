@@ -3,9 +3,7 @@ defmodule QueryServiceEx.Projections.TenantProjections do
   Per-tenant, QS-owned projection state + folding.
 
   This is the read-model engine for the per-tenant projections feature
-  (`docs/proposals/PER_TENANT_PROJECTIONS.md`). It is intentionally SEPARATE from
-  the legacy `QueryServiceEx.Application.Services.ProjectionSync`, which syncs
-  Core's global engine state and must not be repurposed.
+  (`docs/proposals/PER_TENANT_PROJECTIONS.md`).
 
   ## State
 

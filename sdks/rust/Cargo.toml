@@ -1,6 +1,6 @@
 [package]
 name = "allsource"
-version = "0.25.0"
+version = "0.26.0"
 edition = "2021"
 description = "Rust client for the AllSource event store — query, ingest, and fold events"
 license = "MIT"

@@ -113,10 +113,26 @@ var retryableStatusCodes = map[int]bool{
 	504: true,
 }
 
+// response is one HTTP answer. It is never nil, so a caller can read the
+// status of a failed request; status is 0 when no response arrived.
+type response struct {
+	body   []byte
+	status int
+	header http.Header
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte, int, error) {
+	resp, err := c.send(ctx, method, path, body, nil)
+	if err != nil {
+		return nil, resp.status, err
+	}
+	return resp.body, resp.status, nil
+}
+
+func (c *Client) send(ctx context.Context, method, path string, body any, header http.Header) (*response, error) {
 	// Check circuit breaker before attempting the request.
 	if c.cb != nil && !c.cb.Allow() {
-		return nil, 0, ErrCircuitOpen
+		return &response{}, ErrCircuitOpen
 	}
 
 	maxAttempts := 1
@@ -127,7 +143,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 	}
 
 	var lastErr error
-	var lastStatus int
+	last := &response{}
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
@@ -135,23 +151,28 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 			if delay > retryCfg.MaxDelay {
 				delay = retryCfg.MaxDelay
 			}
+			var apiErr *APIError
+			if errors.As(lastErr, &apiErr) && apiErr.RetryAfter > delay {
+				delay = apiErr.RetryAfter
+			}
 			select {
 			case <-ctx.Done():
-				return nil, 0, ctx.Err()
+				return &response{}, ctx.Err()
 			case <-time.After(delay):
 			}
 		}
 
-		data, status, err := c.doOnce(ctx, method, path, body)
+		resp, err := c.doOnce(ctx, method, path, body, header)
 		if err == nil {
 			if c.cb != nil {
 				c.cb.RecordSuccess()
 			}
-			return data, status, nil
+			return resp, nil
 		}
 
 		lastErr = err
-		lastStatus = status
+		last = resp
+		status := resp.status
 
 		// Determine if this error is retryable.
 		if !c.shouldRetry(err, status) {
@@ -161,7 +182,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 					c.cb.RecordFailure()
 				}
 			}
-			return nil, lastStatus, lastErr
+			return last, lastErr
 		}
 
 		if c.cb != nil {
@@ -169,7 +190,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 		}
 	}
 
-	return nil, lastStatus, lastErr
+	return last, lastErr
 }
 
 func (c *Client) shouldRetry(err error, status int) bool {
@@ -191,53 +212,90 @@ func (c *Client) shouldRetry(err error, status int) bool {
 	return retryableStatusCodes[status]
 }
 
-func (c *Client) doOnce(ctx context.Context, method, path string, body any) ([]byte, int, error) {
+func (c *Client) doOnce(ctx context.Context, method, path string, body any, header http.Header) (*response, error) {
 	var reqBody io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, 0, fmt.Errorf("marshal request body: %w", err)
+			return &response{}, fmt.Errorf("marshal request body: %w", err)
 		}
 		reqBody = bytes.NewReader(b)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)
 	if err != nil {
-		return nil, 0, fmt.Errorf("create request: %w", err)
+		return &response{}, fmt.Errorf("create request: %w", err)
 	}
+	// The gateway reads only Authorization; the Query Service reads X-API-Key first.
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("X-API-Key", c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	for name, values := range header {
+		for _, v := range values {
+			req.Header.Add(name, v)
+		}
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("execute request: %w", err)
+		return &response{}, fmt.Errorf("execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	out := &response{status: resp.StatusCode, header: resp.Header}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("read response body: %w", err)
+		return out, fmt.Errorf("read response body: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, resp.StatusCode, parseAPIError(data, resp.StatusCode)
+		apiErr := parseAPIError(data, resp.StatusCode)
+		apiErr.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		return out, apiErr
 	}
 
-	return data, resp.StatusCode, nil
+	out.body = data
+	return out, nil
 }
 
-func parseAPIError(data []byte, statusCode int) error {
+// parseAPIError reads both error shapes: the gateway's
+// {"error":{"code","message"}} and Core's {"error":"<code>", ...fields}.
+func parseAPIError(data []byte, statusCode int) *APIError {
 	var errResp struct {
-		Error struct {
+		Error           json.RawMessage `json:"error"`
+		Message         string          `json:"message"`
+		Detail          string          `json:"detail"`
+		ExpectedVersion *int64          `json:"expected_version"`
+		CurrentVersion  *int64          `json:"current_version"`
+		Generation      *int64          `json:"generation"`
+		Ready           *bool           `json:"ready"`
+	}
+	if err := json.Unmarshal(data, &errResp); err == nil && len(errResp.Error) > 0 {
+		apiErr := &APIError{
+			StatusCode:      statusCode,
+			Detail:          errResp.Detail,
+			ExpectedVersion: errResp.ExpectedVersion,
+			CurrentVersion:  errResp.CurrentVersion,
+			Generation:      errResp.Generation,
+			Ready:           errResp.Ready,
+		}
+		var nested struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(data, &errResp); err == nil && errResp.Error.Code != "" {
-		return &APIError{
-			Code:       errResp.Error.Code,
-			Message:    errResp.Error.Message,
-			StatusCode: statusCode,
+		}
+		if json.Unmarshal(errResp.Error, &nested) == nil && nested.Code != "" {
+			apiErr.Code = nested.Code
+			apiErr.Message = nested.Message
+			return apiErr
+		}
+		var code string
+		if json.Unmarshal(errResp.Error, &code) == nil && code != "" {
+			apiErr.Code = code
+			apiErr.Message = errResp.Message
+			if apiErr.Message == "" {
+				apiErr.Message = errResp.Detail
+			}
+			return apiErr
 		}
 	}
 	return &APIError{
@@ -245,6 +303,25 @@ func parseAPIError(data []byte, statusCode int) error {
 		Message:    string(data),
 		StatusCode: statusCode,
 	}
+}
+
+// parseRetryAfter accepts both RFC 9110 forms: delay-seconds and an HTTP date.
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	if value == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(value); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil {
+		if d := at.Sub(now); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 // IngestResponse is the response from ingesting a single event.
@@ -304,6 +381,9 @@ type QueryOptions struct {
 	End       string // ISO-8601 timestamp, maps to "until" query param
 	Limit     int
 	Offset    int
+	// IfNoneMatch is an ETag from an earlier EventList; an unchanged result
+	// returns a *NotModifiedError (errors.Is(err, ErrNotModified)).
+	IfNoneMatch string
 }
 
 // Query retrieves events matching the given filters.
@@ -328,105 +408,41 @@ func (c *Client) Query(ctx context.Context, opts QueryOptions) (*EventList, erro
 		params.Set("offset", strconv.Itoa(opts.Offset))
 	}
 
-	path := "/api/v1/events/query"
-	if len(params) > 0 {
-		path += "?" + params.Encode()
-	}
-
-	respData, _, err := c.do(ctx, http.MethodGet, path, nil)
+	var el EventList
+	etag, err := c.getJSON(ctx, withQuery("/api/v1/events/query", params), opts.IfNoneMatch, "event list", &el)
 	if err != nil {
 		return nil, err
 	}
-
-	var el EventList
-	if err := json.Unmarshal(respData, &el); err != nil {
-		return nil, fmt.Errorf("decode event list: %w", err)
-	}
+	el.ETag = etag
 	return &el, nil
 }
 
-// ProjectionList is a list of projections with a total.
-type ProjectionList struct {
-	Projections []Projection `json:"projections"`
-	Total       int          `json:"total"`
-}
-
-// GetProjections returns all projections.
-func (c *Client) GetProjections(ctx context.Context) (*ProjectionList, error) {
-	respData, _, err := c.do(ctx, http.MethodGet, "/api/v1/projections", nil)
+// getJSON performs a conditional GET. A 304 returns a *NotModifiedError
+// carrying the ETag; any other success decodes into out.
+func (c *Client) getJSON(ctx context.Context, path, ifNoneMatch, what string, out any) (string, error) {
+	var header http.Header
+	if ifNoneMatch != "" {
+		header = http.Header{"If-None-Match": []string{ifNoneMatch}}
+	}
+	resp, err := c.send(ctx, http.MethodGet, path, nil, header)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
-	var pl ProjectionList
-	if err := json.Unmarshal(respData, &pl); err != nil {
-		return nil, fmt.Errorf("decode projections: %w", err)
+	etag := resp.header.Get("ETag")
+	if resp.status == http.StatusNotModified {
+		return etag, &NotModifiedError{ETag: etag}
 	}
-	return &pl, nil
+	if err := json.Unmarshal(resp.body, out); err != nil {
+		return etag, fmt.Errorf("decode %s: %w", what, err)
+	}
+	return etag, nil
 }
 
-// AnalyzeProjectionReplay previews replay impact without changing events or projection state.
-func (c *Client) AnalyzeProjectionReplay(ctx context.Context, projectionName string) (*ProjectionReplayAnalysis, error) {
-	body := map[string]any{"projection_name": projectionName}
-	respData, _, err := c.do(ctx, http.MethodPost, "/api/replay/preview", body)
-	if err != nil {
-		return nil, err
+func withQuery(path string, params url.Values) string {
+	if len(params) == 0 {
+		return path
 	}
-
-	var wrapper struct {
-		Data ProjectionReplayAnalysis `json:"data"`
-	}
-	if err := json.Unmarshal(respData, &wrapper); err != nil {
-		return nil, fmt.Errorf("decode projection replay analysis: %w", err)
-	}
-	return &wrapper.Data, nil
-}
-
-// StartProjectionReplay starts an atomic rebuild of one enabled tenant projection.
-func (c *Client) StartProjectionReplay(ctx context.Context, projectionName string) (*ProjectionReplayRun, error) {
-	body := map[string]any{"projection_name": projectionName}
-	return c.projectionReplayRequest(ctx, http.MethodPost, "/api/replay", body)
-}
-
-// ListProjectionReplays returns replay runs for the authenticated tenant.
-func (c *Client) ListProjectionReplays(ctx context.Context) ([]ProjectionReplayRun, error) {
-	respData, _, err := c.do(ctx, http.MethodGet, "/api/replay", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var wrapper struct {
-		Data []ProjectionReplayRun `json:"data"`
-	}
-	if err := json.Unmarshal(respData, &wrapper); err != nil {
-		return nil, fmt.Errorf("decode projection replay list: %w", err)
-	}
-	return wrapper.Data, nil
-}
-
-// GetProjectionReplay reads one tenant-scoped replay run.
-func (c *Client) GetProjectionReplay(ctx context.Context, replayID string) (*ProjectionReplayRun, error) {
-	return c.projectionReplayRequest(ctx, http.MethodGet, "/api/replay/"+replayID, nil)
-}
-
-// CancelProjectionReplay stops a running rebuild without publishing partial state.
-func (c *Client) CancelProjectionReplay(ctx context.Context, replayID string) (*ProjectionReplayRun, error) {
-	return c.projectionReplayRequest(ctx, http.MethodPost, "/api/replay/"+replayID+"/cancel", map[string]any{})
-}
-
-func (c *Client) projectionReplayRequest(ctx context.Context, method, path string, body any) (*ProjectionReplayRun, error) {
-	respData, _, err := c.do(ctx, method, path, body)
-	if err != nil {
-		return nil, err
-	}
-
-	var wrapper struct {
-		Data ProjectionReplayRun `json:"data"`
-	}
-	if err := json.Unmarshal(respData, &wrapper); err != nil {
-		return nil, fmt.Errorf("decode projection replay: %w", err)
-	}
-	return &wrapper.Data, nil
+	return path + "?" + params.Encode()
 }
 
 // PrimeProjection describes a Prime projection definition: the entity type and

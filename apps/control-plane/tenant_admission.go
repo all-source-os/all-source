@@ -350,6 +350,22 @@ func (t *admissionTicket) release(bytes uint64, status int) {
 	state.inFlight = max(0, state.inFlight-1)
 }
 
+// chargeBytes debits delivered bytes for a request that released its ticket
+// early, without touching the in-flight count.
+func (a *tenantAdmission) chargeBytes(tenant string, bytes uint64) {
+	if !a.active() {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	state, ok := a.tenants[tenant]
+	if !ok {
+		return
+	}
+	state.refill(time.Now())
+	state.bytes.add(-float64(bytes))
+}
+
 func (s *tenantAdmissionState) headers(lane string) http.Header {
 	bucket := *s.bucket(lane)
 	window := func(b tokenBucket) int { return int(math.Ceil(b.capacity / b.rate)) }
