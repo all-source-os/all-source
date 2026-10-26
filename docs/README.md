@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Legacy registered key authority compatibility](./plans/2026-10-26-legacy-key-authority-compatibility.md): admit retained version-one prefixes while preserving completeness and terminal revocation.
+
 - [Prime sync interval validation](./plans/2026-10-25-prime-sync-interval-validation.md): reject zero before store startup and qualify actual native-host MCP delivery.
 
 - [Tenant polling defence](./plans/2026-10-24-tenant-polling-defense.md): per-tenant admission, conditional reads, change detection and caches on both sides, phased so Longhand is never starved.
@@ -260,3 +262,6 @@ Use relative paths for internal links:
 - [Managed API key lifecycle verification](reports/2026-10-26-managed-key-lifecycle-verification.md)
 
 - [Allstack delivery plan 568bfc54-0b16-4b1a-8043-af1d3d3a5a9e](plans/allstack-568bfc54-0b16-4b1a-8043-af1d3d3a5a9e.md)
+
+
+- [Allstack delivery plan 2432f3f6-c468-46ca-99ba-45fa6185deba](plans/allstack-2432f3f6-c468-46ca-99ba-45fa6185deba.md)
