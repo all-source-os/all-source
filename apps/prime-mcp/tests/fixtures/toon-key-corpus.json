@@ -1,0 +1,1325 @@
+{
+  "reference": "@toon-format/toon@4.4.0",
+  "cases": [
+    {
+      "name": "key_0_object",
+      "input": {
+        "_": "present"
+      },
+      "expected_toon": "_: present"
+    },
+    {
+      "name": "key_0_nested",
+      "input": {
+        "outer": {
+          "_": "present"
+        }
+      },
+      "expected_toon": "outer:\n  _: present"
+    },
+    {
+      "name": "key_0_scalar_array",
+      "input": {
+        "_": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "_[2]: alpha,beta"
+    },
+    {
+      "name": "key_0_tabular",
+      "input": {
+        "items": [
+          {
+            "_": "alpha"
+          },
+          {
+            "_": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{_}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_1_object",
+      "input": {
+        "safe_key": "present"
+      },
+      "expected_toon": "safe_key: present"
+    },
+    {
+      "name": "key_1_nested",
+      "input": {
+        "outer": {
+          "safe_key": "present"
+        }
+      },
+      "expected_toon": "outer:\n  safe_key: present"
+    },
+    {
+      "name": "key_1_scalar_array",
+      "input": {
+        "safe_key": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "safe_key[2]: alpha,beta"
+    },
+    {
+      "name": "key_1_tabular",
+      "input": {
+        "items": [
+          {
+            "safe_key": "alpha"
+          },
+          {
+            "safe_key": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{safe_key}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_2_object",
+      "input": {
+        "a.b": "present"
+      },
+      "expected_toon": "a.b: present"
+    },
+    {
+      "name": "key_2_nested",
+      "input": {
+        "outer": {
+          "a.b": "present"
+        }
+      },
+      "expected_toon": "outer:\n  a.b: present"
+    },
+    {
+      "name": "key_2_scalar_array",
+      "input": {
+        "a.b": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "a.b[2]: alpha,beta"
+    },
+    {
+      "name": "key_2_tabular",
+      "input": {
+        "items": [
+          {
+            "a.b": "alpha"
+          },
+          {
+            "a.b": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{a.b}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_3_object",
+      "input": {
+        "A0": "present"
+      },
+      "expected_toon": "A0: present"
+    },
+    {
+      "name": "key_3_nested",
+      "input": {
+        "outer": {
+          "A0": "present"
+        }
+      },
+      "expected_toon": "outer:\n  A0: present"
+    },
+    {
+      "name": "key_3_scalar_array",
+      "input": {
+        "A0": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "A0[2]: alpha,beta"
+    },
+    {
+      "name": "key_3_tabular",
+      "input": {
+        "items": [
+          {
+            "A0": "alpha"
+          },
+          {
+            "A0": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{A0}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_4_object",
+      "input": {
+        "true": "present"
+      },
+      "expected_toon": "true: present"
+    },
+    {
+      "name": "key_4_nested",
+      "input": {
+        "outer": {
+          "true": "present"
+        }
+      },
+      "expected_toon": "outer:\n  true: present"
+    },
+    {
+      "name": "key_4_scalar_array",
+      "input": {
+        "true": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "true[2]: alpha,beta"
+    },
+    {
+      "name": "key_4_tabular",
+      "input": {
+        "items": [
+          {
+            "true": "alpha"
+          },
+          {
+            "true": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{true}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_5_object",
+      "input": {
+        "null": "present"
+      },
+      "expected_toon": "null: present"
+    },
+    {
+      "name": "key_5_nested",
+      "input": {
+        "outer": {
+          "null": "present"
+        }
+      },
+      "expected_toon": "outer:\n  null: present"
+    },
+    {
+      "name": "key_5_scalar_array",
+      "input": {
+        "null": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "null[2]: alpha,beta"
+    },
+    {
+      "name": "key_5_tabular",
+      "input": {
+        "items": [
+          {
+            "null": "alpha"
+          },
+          {
+            "null": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{null}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_6_object",
+      "input": {
+        "false": "present"
+      },
+      "expected_toon": "false: present"
+    },
+    {
+      "name": "key_6_nested",
+      "input": {
+        "outer": {
+          "false": "present"
+        }
+      },
+      "expected_toon": "outer:\n  false: present"
+    },
+    {
+      "name": "key_6_scalar_array",
+      "input": {
+        "false": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "false[2]: alpha,beta"
+    },
+    {
+      "name": "key_6_tabular",
+      "input": {
+        "items": [
+          {
+            "false": "alpha"
+          },
+          {
+            "false": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{false}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_7_object",
+      "input": {
+        "": "present"
+      },
+      "expected_toon": "\"\": present"
+    },
+    {
+      "name": "key_7_nested",
+      "input": {
+        "outer": {
+          "": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"\": present"
+    },
+    {
+      "name": "key_7_scalar_array",
+      "input": {
+        "": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_7_tabular",
+      "input": {
+        "items": [
+          {
+            "": "alpha"
+          },
+          {
+            "": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_8_object",
+      "input": {
+        "1": "present"
+      },
+      "expected_toon": "\"1\": present"
+    },
+    {
+      "name": "key_8_nested",
+      "input": {
+        "outer": {
+          "1": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"1\": present"
+    },
+    {
+      "name": "key_8_scalar_array",
+      "input": {
+        "1": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"1\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_8_tabular",
+      "input": {
+        "items": [
+          {
+            "1": "alpha"
+          },
+          {
+            "1": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"1\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_9_object",
+      "input": {
+        "0key": "present"
+      },
+      "expected_toon": "\"0key\": present"
+    },
+    {
+      "name": "key_9_nested",
+      "input": {
+        "outer": {
+          "0key": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"0key\": present"
+    },
+    {
+      "name": "key_9_scalar_array",
+      "input": {
+        "0key": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"0key\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_9_tabular",
+      "input": {
+        "items": [
+          {
+            "0key": "alpha"
+          },
+          {
+            "0key": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"0key\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_10_object",
+      "input": {
+        "-dash": "present"
+      },
+      "expected_toon": "\"-dash\": present"
+    },
+    {
+      "name": "key_10_nested",
+      "input": {
+        "outer": {
+          "-dash": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"-dash\": present"
+    },
+    {
+      "name": "key_10_scalar_array",
+      "input": {
+        "-dash": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"-dash\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_10_tabular",
+      "input": {
+        "items": [
+          {
+            "-dash": "alpha"
+          },
+          {
+            "-dash": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"-dash\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_11_object",
+      "input": {
+        "hyphen-key": "present"
+      },
+      "expected_toon": "\"hyphen-key\": present"
+    },
+    {
+      "name": "key_11_nested",
+      "input": {
+        "outer": {
+          "hyphen-key": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"hyphen-key\": present"
+    },
+    {
+      "name": "key_11_scalar_array",
+      "input": {
+        "hyphen-key": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"hyphen-key\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_11_tabular",
+      "input": {
+        "items": [
+          {
+            "hyphen-key": "alpha"
+          },
+          {
+            "hyphen-key": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"hyphen-key\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_12_object",
+      "input": {
+        "#policy": "present"
+      },
+      "expected_toon": "\"#policy\": present"
+    },
+    {
+      "name": "key_12_nested",
+      "input": {
+        "outer": {
+          "#policy": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"#policy\": present"
+    },
+    {
+      "name": "key_12_scalar_array",
+      "input": {
+        "#policy": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"#policy\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_12_tabular",
+      "input": {
+        "items": [
+          {
+            "#policy": "alpha"
+          },
+          {
+            "#policy": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"#policy\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_13_object",
+      "input": {
+        " leading": "present"
+      },
+      "expected_toon": "\" leading\": present"
+    },
+    {
+      "name": "key_13_nested",
+      "input": {
+        "outer": {
+          " leading": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \" leading\": present"
+    },
+    {
+      "name": "key_13_scalar_array",
+      "input": {
+        " leading": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\" leading\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_13_tabular",
+      "input": {
+        "items": [
+          {
+            " leading": "alpha"
+          },
+          {
+            " leading": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\" leading\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_14_object",
+      "input": {
+        "trailing ": "present"
+      },
+      "expected_toon": "\"trailing \": present"
+    },
+    {
+      "name": "key_14_nested",
+      "input": {
+        "outer": {
+          "trailing ": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"trailing \": present"
+    },
+    {
+      "name": "key_14_scalar_array",
+      "input": {
+        "trailing ": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"trailing \"[2]: alpha,beta"
+    },
+    {
+      "name": "key_14_tabular",
+      "input": {
+        "items": [
+          {
+            "trailing ": "alpha"
+          },
+          {
+            "trailing ": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"trailing \"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_15_object",
+      "input": {
+        "a:b": "present"
+      },
+      "expected_toon": "\"a:b\": present"
+    },
+    {
+      "name": "key_15_nested",
+      "input": {
+        "outer": {
+          "a:b": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a:b\": present"
+    },
+    {
+      "name": "key_15_scalar_array",
+      "input": {
+        "a:b": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a:b\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_15_tabular",
+      "input": {
+        "items": [
+          {
+            "a:b": "alpha"
+          },
+          {
+            "a:b": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a:b\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_16_object",
+      "input": {
+        "a,b": "present"
+      },
+      "expected_toon": "\"a,b\": present"
+    },
+    {
+      "name": "key_16_nested",
+      "input": {
+        "outer": {
+          "a,b": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a,b\": present"
+    },
+    {
+      "name": "key_16_scalar_array",
+      "input": {
+        "a,b": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a,b\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_16_tabular",
+      "input": {
+        "items": [
+          {
+            "a,b": "alpha"
+          },
+          {
+            "a,b": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a,b\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_17_object",
+      "input": {
+        "a[b]": "present"
+      },
+      "expected_toon": "\"a[b]\": present"
+    },
+    {
+      "name": "key_17_nested",
+      "input": {
+        "outer": {
+          "a[b]": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a[b]\": present"
+    },
+    {
+      "name": "key_17_scalar_array",
+      "input": {
+        "a[b]": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a[b]\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_17_tabular",
+      "input": {
+        "items": [
+          {
+            "a[b]": "alpha"
+          },
+          {
+            "a[b]": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a[b]\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_18_object",
+      "input": {
+        "a{b}": "present"
+      },
+      "expected_toon": "\"a{b}\": present"
+    },
+    {
+      "name": "key_18_nested",
+      "input": {
+        "outer": {
+          "a{b}": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a{b}\": present"
+    },
+    {
+      "name": "key_18_scalar_array",
+      "input": {
+        "a{b}": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a{b}\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_18_tabular",
+      "input": {
+        "items": [
+          {
+            "a{b}": "alpha"
+          },
+          {
+            "a{b}": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a{b}\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_19_object",
+      "input": {
+        "a\"b": "present"
+      },
+      "expected_toon": "\"a\\\"b\": present"
+    },
+    {
+      "name": "key_19_nested",
+      "input": {
+        "outer": {
+          "a\"b": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a\\\"b\": present"
+    },
+    {
+      "name": "key_19_scalar_array",
+      "input": {
+        "a\"b": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a\\\"b\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_19_tabular",
+      "input": {
+        "items": [
+          {
+            "a\"b": "alpha"
+          },
+          {
+            "a\"b": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a\\\"b\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_20_object",
+      "input": {
+        "slash\\key": "present"
+      },
+      "expected_toon": "\"slash\\\\key\": present"
+    },
+    {
+      "name": "key_20_nested",
+      "input": {
+        "outer": {
+          "slash\\key": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"slash\\\\key\": present"
+    },
+    {
+      "name": "key_20_scalar_array",
+      "input": {
+        "slash\\key": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"slash\\\\key\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_20_tabular",
+      "input": {
+        "items": [
+          {
+            "slash\\key": "alpha"
+          },
+          {
+            "slash\\key": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"slash\\\\key\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_21_object",
+      "input": {
+        "literal\\nkey": "present"
+      },
+      "expected_toon": "\"literal\\\\nkey\": present"
+    },
+    {
+      "name": "key_21_nested",
+      "input": {
+        "outer": {
+          "literal\\nkey": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"literal\\\\nkey\": present"
+    },
+    {
+      "name": "key_21_scalar_array",
+      "input": {
+        "literal\\nkey": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"literal\\\\nkey\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_21_tabular",
+      "input": {
+        "items": [
+          {
+            "literal\\nkey": "alpha"
+          },
+          {
+            "literal\\nkey": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"literal\\\\nkey\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_22_object",
+      "input": {
+        "\nkey": "present"
+      },
+      "expected_toon": "\"\\nkey\": present"
+    },
+    {
+      "name": "key_22_nested",
+      "input": {
+        "outer": {
+          "\nkey": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"\\nkey\": present"
+    },
+    {
+      "name": "key_22_scalar_array",
+      "input": {
+        "\nkey": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"\\nkey\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_22_tabular",
+      "input": {
+        "items": [
+          {
+            "\nkey": "alpha"
+          },
+          {
+            "\nkey": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"\\nkey\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_23_object",
+      "input": {
+        "\rkey": "present"
+      },
+      "expected_toon": "\"\\rkey\": present"
+    },
+    {
+      "name": "key_23_nested",
+      "input": {
+        "outer": {
+          "\rkey": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"\\rkey\": present"
+    },
+    {
+      "name": "key_23_scalar_array",
+      "input": {
+        "\rkey": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"\\rkey\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_23_tabular",
+      "input": {
+        "items": [
+          {
+            "\rkey": "alpha"
+          },
+          {
+            "\rkey": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"\\rkey\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_24_object",
+      "input": {
+        "\tkey": "present"
+      },
+      "expected_toon": "\"\\tkey\": present"
+    },
+    {
+      "name": "key_24_nested",
+      "input": {
+        "outer": {
+          "\tkey": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"\\tkey\": present"
+    },
+    {
+      "name": "key_24_scalar_array",
+      "input": {
+        "\tkey": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"\\tkey\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_24_tabular",
+      "input": {
+        "items": [
+          {
+            "\tkey": "alpha"
+          },
+          {
+            "\tkey": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"\\tkey\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_25_object",
+      "input": {
+        "a\u0000b": "present"
+      },
+      "expected_toon": "\"a\\u0000b\": present"
+    },
+    {
+      "name": "key_25_nested",
+      "input": {
+        "outer": {
+          "a\u0000b": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a\\u0000b\": present"
+    },
+    {
+      "name": "key_25_scalar_array",
+      "input": {
+        "a\u0000b": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a\\u0000b\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_25_tabular",
+      "input": {
+        "items": [
+          {
+            "a\u0000b": "alpha"
+          },
+          {
+            "a\u0000b": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a\\u0000b\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_26_object",
+      "input": {
+        "a\bb": "present"
+      },
+      "expected_toon": "\"a\\u0008b\": present"
+    },
+    {
+      "name": "key_26_nested",
+      "input": {
+        "outer": {
+          "a\bb": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a\\u0008b\": present"
+    },
+    {
+      "name": "key_26_scalar_array",
+      "input": {
+        "a\bb": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a\\u0008b\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_26_tabular",
+      "input": {
+        "items": [
+          {
+            "a\bb": "alpha"
+          },
+          {
+            "a\bb": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a\\u0008b\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_27_object",
+      "input": {
+        "a\fb": "present"
+      },
+      "expected_toon": "\"a\\u000cb\": present"
+    },
+    {
+      "name": "key_27_nested",
+      "input": {
+        "outer": {
+          "a\fb": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a\\u000cb\": present"
+    },
+    {
+      "name": "key_27_scalar_array",
+      "input": {
+        "a\fb": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a\\u000cb\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_27_tabular",
+      "input": {
+        "items": [
+          {
+            "a\fb": "alpha"
+          },
+          {
+            "a\fb": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a\\u000cb\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_28_object",
+      "input": {
+        "a\u001fb": "present"
+      },
+      "expected_toon": "\"a\\u001fb\": present"
+    },
+    {
+      "name": "key_28_nested",
+      "input": {
+        "outer": {
+          "a\u001fb": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"a\\u001fb\": present"
+    },
+    {
+      "name": "key_28_scalar_array",
+      "input": {
+        "a\u001fb": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"a\\u001fb\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_28_tabular",
+      "input": {
+        "items": [
+          {
+            "a\u001fb": "alpha"
+          },
+          {
+            "a\u001fb": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"a\\u001fb\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_29_object",
+      "input": {
+        "é": "present"
+      },
+      "expected_toon": "\"é\": present"
+    },
+    {
+      "name": "key_29_nested",
+      "input": {
+        "outer": {
+          "é": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"é\": present"
+    },
+    {
+      "name": "key_29_scalar_array",
+      "input": {
+        "é": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"é\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_29_tabular",
+      "input": {
+        "items": [
+          {
+            "é": "alpha"
+          },
+          {
+            "é": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"é\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_30_object",
+      "input": {
+        "é": "present"
+      },
+      "expected_toon": "\"é\": present"
+    },
+    {
+      "name": "key_30_nested",
+      "input": {
+        "outer": {
+          "é": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"é\": present"
+    },
+    {
+      "name": "key_30_scalar_array",
+      "input": {
+        "é": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"é\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_30_tabular",
+      "input": {
+        "items": [
+          {
+            "é": "alpha"
+          },
+          {
+            "é": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"é\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_31_object",
+      "input": {
+        "键": "present"
+      },
+      "expected_toon": "\"键\": present"
+    },
+    {
+      "name": "key_31_nested",
+      "input": {
+        "outer": {
+          "键": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"键\": present"
+    },
+    {
+      "name": "key_31_scalar_array",
+      "input": {
+        "键": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"键\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_31_tabular",
+      "input": {
+        "items": [
+          {
+            "键": "alpha"
+          },
+          {
+            "键": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"键\"}:\n  alpha\n  beta"
+    },
+    {
+      "name": "key_32_object",
+      "input": {
+        "💡": "present"
+      },
+      "expected_toon": "\"💡\": present"
+    },
+    {
+      "name": "key_32_nested",
+      "input": {
+        "outer": {
+          "💡": "present"
+        }
+      },
+      "expected_toon": "outer:\n  \"💡\": present"
+    },
+    {
+      "name": "key_32_scalar_array",
+      "input": {
+        "💡": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected_toon": "\"💡\"[2]: alpha,beta"
+    },
+    {
+      "name": "key_32_tabular",
+      "input": {
+        "items": [
+          {
+            "💡": "alpha"
+          },
+          {
+            "💡": "beta"
+          }
+        ]
+      },
+      "expected_toon": "items[2]{\"💡\"}:\n  alpha\n  beta"
+    }
+  ]
+}
