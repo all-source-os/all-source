@@ -201,7 +201,7 @@ async fn delivered(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "writes synthetic hosted data; requires explicit --ignored and proof environment"]
 async fn hosted_prime_sync_write_restart() {
-    tokio::time::timeout(Duration::from_secs(120), async {
+    tokio::time::timeout(Duration::from_mins(2), async {
         let config = Config::load();
         assert!(
             !config.receipt.exists(),
@@ -300,7 +300,7 @@ async fn hosted_prime_sync_write_restart() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "independent hosted readback; requires explicit --ignored and writer receipt"]
 async fn hosted_prime_sync_independent_readback() {
-    tokio::time::timeout(Duration::from_secs(120), async {
+    tokio::time::timeout(Duration::from_mins(2), async {
         let config = Config::load();
         let bytes = fs::read(&config.receipt).expect("copy writer receipt to reader host first");
         let receipt = serde_json::from_slice::<Receipt>(&bytes);

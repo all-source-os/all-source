@@ -12,6 +12,10 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Prime TOON native workflow qualification](./reports/2026-10-27-prime-toon-native-verification.md): current-source failures, retained-memory interoperability, real Codex/Claude calls and durable native ownership.
+
+- [Prime TOON key integrity plan](./plans/2026-10-27-prime-toon-key-quoting.md) and [native application request](./reference/prime-toon-keys-request.md): preserve retained memory property names through independently decoded MCP responses.
+
 - [Latest-state views and consumer-access gate, run end to end (2026-10-27)](./evidence/2026-10-27-latest-state-views/README.md): PR #366 on local Core, Query Service and gateway: view fold, conditional reads, sync, tenant isolation, restart, the consumer gate, and the TypeScript and Go SDK gateway 401 with its fix.
 
 - [Chronis native workflow qualification](./reports/2026-10-27-chronis-native-verification.md): rebuilt baseline failures, candidate CLI lifecycle success, actual Codex/Claude calls and installed-toolkit provenance.
@@ -283,3 +287,5 @@ Use relative paths for internal links:
 - [Allstack native skills](reference/allstack-skills.md)
 
 - [Allstack delivery plan b67f2a72-0d88-40b5-bf4d-efdc492f4f99](plans/allstack-b67f2a72-0d88-40b5-bf4d-efdc492f4f99.md)
+
+- [Allstack delivery plan d8404323-55a8-4137-8e69-639179e39202](plans/allstack-d8404323-55a8-4137-8e69-639179e39202.md)
