@@ -23,6 +23,12 @@ When installed, `allstack check --expect-exit 4 --seconds 120 -- /absolute/progr
 
 Record the target version, command or interaction, input, observed result, expected result, and executed test count where available. A zero-case run, timeout, skipped browser, or unavailable credential remains unverified. Inspect the underlying result rather than trusting a model summary or green wrapper.
 
+For HTTP failures, retain the status, a safely redacted response body, timestamp, and request identifier when supplied. Preserve the failed observation alongside later successes. Read the relevant runtime conditions before assigning a cause; missing response evidence leaves the cause unresolved. Keep credentials and identity payloads out of shared reports.
+
+For independent host proof, inspect actual tool calls and retained outputs: which skill file was read, which program ran, and which assertions executed. Separate source review, proposed commands, denied calls, and completed runtime checks. Another host's summary cannot fill a missing execution.
+
+When qualifying a deployment, bind observations to the running image and its source/configuration. Keep earlier deployment evidence separate. If the final publication adds only tests or docs, compare the actual runtime build inputs before claiming the deployed application still matches; final-commit CI and runtime proof establish different facts.
+
 ## Deliver the outcome
 
 Report reproducible defects with steps and consequences, then map the completed user flow to actual evidence. Fix only within the user's requested scope; repeat affected checks after a repair. Save required reports under indexed repo docs, and use `allstack remember --kind qa --source <report> --summary <observed-result>` for durable context when available. Stop when the requested flow is proved or a concrete external prerequisite prevents completion.

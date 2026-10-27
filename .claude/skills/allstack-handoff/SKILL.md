@@ -13,6 +13,8 @@ Use `allstack handoff <id> --epoch <current> --to codex|claude-code`, then `alls
 
 If invoking another real host CLI, use existing supervised Allstack plan/build operations with normal authentication and permission modes. Native tools used outside those operations have the host's own authority and are not fenced by the epoch. Do not claim global protection.
 
+For independent native planning, review, or QA, ask the receiving host to read its installed skill and current source. Retain actual calls and command outputs with the target revision. Do not report a fresh skill read or executed check from the receiving host's final text alone.
+
 Report which job moved, the receiving host, preserved work, and the next user-relevant action. Recovery must inspect receipts and actual edits; never replay an uncertain build merely because its final response is missing. Retain ownership and process cleanup until the operation is complete.
 
 ## Host capability

@@ -81,15 +81,11 @@ async fn handle_normal_input<R: TaskRepository>(app: &mut App<R>, key: KeyEvent)
             View::Dashboard | View::Graph => app.select_prev(),
             View::Kanban => app.kanban_select_prev(),
         },
-        KeyCode::Char('h') | KeyCode::Left => {
-            if app.view == View::Kanban {
-                app.kanban_column = app.kanban_column.prev();
-            }
+        KeyCode::Char('h') | KeyCode::Left if app.view == View::Kanban => {
+            app.kanban_column = app.kanban_column.prev();
         }
-        KeyCode::Char('l') | KeyCode::Right => {
-            if app.view == View::Kanban {
-                app.kanban_column = app.kanban_column.next();
-            }
+        KeyCode::Char('l') | KeyCode::Right if app.view == View::Kanban => {
+            app.kanban_column = app.kanban_column.next();
         }
         KeyCode::Char('r') => {
             app.refresh();
