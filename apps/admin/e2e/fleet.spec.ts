@@ -142,10 +142,8 @@ test.describe("Fleet health overview", () => {
     await expect(page.getByTestId("fleet-worst-table")).toBeVisible();
     await expect(page.getByTestId(`fleet-row-${TENANT_ID}`)).toContainText("Acme Corp");
 
-    // Health chip exists and uses the cluster-health colour vocabulary.
     const criticalChip = page.getByTestId("health-chip-critical").first();
     await expect(criticalChip).toBeVisible();
-    // The chip's dot uses bg-red-500 (critical), matching cluster-health.tsx.
     await expect(criticalChip.locator("span.bg-red-500")).toHaveCount(1);
 
     // Degraded row → yellow dot in a reason.

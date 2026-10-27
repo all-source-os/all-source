@@ -127,6 +127,14 @@ defmodule QueryServiceEx.PrometheusMetrics do
         "query_service_ex.http.error.count",
         description: "Total HTTP errors",
         tags: [:error_type, :status]
+      ),
+
+      # No tenant tag: this endpoint is public. The log line names the tenant.
+      counter(
+        "query_service_ex.auth.key_authority_denial.count",
+        description:
+          "API-key requests the managed-key authority refused, or would refuse in shadow mode",
+        tags: [:mode, :reason]
       )
     ]
   end

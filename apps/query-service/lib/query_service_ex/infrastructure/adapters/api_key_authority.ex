@@ -3,6 +3,45 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
 
   alias QueryServiceEx.Infrastructure.Adapters.RustCoreClient
 
+  require Logger
+
+  @denial_log_interval_s 60
+
+  # ALLSOURCE_KEY_AUTHORITY_MODE, read in config/runtime.exs. Unset outside prod, so tests run the authority as enforce unless they opt out.
+  def mode, do: Application.get_env(:query_service_ex, :key_authority_mode, :enforce)
+
+  @doc """
+  Whether a credential the authority refuses is still served. Shadow serves all
+  of them except a revocation, which no legacy key can carry.
+  """
+  def serve_refused?(claims, reason) do
+    mode = mode()
+    serve = mode == :off or (mode == :shadow and reason != :key_revoked)
+
+    :telemetry.execute([:query_service_ex, :auth, :key_authority_denial], %{count: 1}, %{
+      mode: mode,
+      reason: reason
+    })
+
+    log_denial(claims["tenant_id"], mode, reason, serve)
+    serve
+  end
+
+  # :persistent_term is rewritten at most once per tenant and reason a minute.
+  defp log_denial(tenant, mode, reason, serve) do
+    key = {__MODULE__, :denial_logged, tenant, reason}
+    now = System.monotonic_time(:second)
+
+    if now - :persistent_term.get(key, now - @denial_log_interval_s) >= @denial_log_interval_s do
+      :persistent_term.put(key, now)
+
+      Logger.warning(
+        "API key authority #{if serve, do: "would refuse", else: "refused"}: " <>
+          "mode=#{mode} tenant=#{inspect(tenant)} reason=#{reason}"
+      )
+    end
+  end
+
   @scopes ~w(events:read events:write queries:execute projections:read projections:write schemas:read schemas:write)
 
   def kind(claims) do
@@ -34,11 +73,12 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
          {:ok, :managed} <- kind(claims),
          {:ok, records} <- records(claims["tenant_id"]),
          %{} = key <- Map.get(records, claims["sub"]),
+         :ok <- if(key["revoked"] == true, do: {:error, :key_revoked}, else: :ok),
          true <- key["active"] == true,
          true <- valid_scopes?(key["scopes"]),
          true <- not non_expiring_token?(claims) or is_nil(key["expires_at"]),
          :ok <- expiry(key["expires_at"]) do
-      {:ok, Map.put(key, "role", claims["role"])}
+      {:ok, Map.merge(key, %{"role" => claims["role"], "authority" => "verified"})}
     else
       {:error, _} = error -> error
       _ -> {:error, :invalid_key}
@@ -142,8 +182,14 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
          _
        )
        when is_binary(id) and id != "" do
-    key = records[id] || %{"id" => id}
-    {:ok, Map.put(records, id, Map.put(key, "active", false))}
+    # Only a registered key can be revoked; an unknown id stays unregistered.
+    update =
+      case records[id] do
+        nil -> %{"id" => id, "active" => false}
+        key -> Map.merge(key, %{"active" => false, "revoked" => true})
+      end
+
+    {:ok, Map.put(records, id, update)}
   end
 
   defp apply_event(_, _, _), do: {:error, :invalid_key}

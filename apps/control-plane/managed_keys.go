@@ -231,8 +231,14 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 			return nil, errors.New("invalid API key history")
 		}
 	}
-	if record == nil || revoked || len(page.Events) == 0 || page.Events[len(page.Events)-1].Version != *page.Version {
-		return nil, errors.New("unregistered or revoked API key")
+	if len(page.Events) == 0 || page.Events[len(page.Events)-1].Version != *page.Version {
+		return nil, errors.New("unregistered API key")
+	}
+	if record == nil {
+		return nil, errors.New("unregistered API key")
+	}
+	if revoked {
+		return nil, errRevokedAPIKey
 	}
 	if claims.ExpiresAt == 0 && record.ExpiresAt != nil {
 		return nil, errors.New("API key expiration contract mismatch")

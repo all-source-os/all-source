@@ -79,6 +79,15 @@ func NewPooledHTTPClient() *http.Client {
 	}
 }
 
+const defaultMetricsPromURL = "https://api.fly.io/prometheus/allsource"
+
+func metricsPromURL() string {
+	if u := os.Getenv("ALLSOURCE_METRICS_PROM_URL"); u != "" {
+		return u
+	}
+	return defaultMetricsPromURL
+}
+
 // ControlPlane is the main control plane service that manages the event store cluster.
 type ControlPlane struct {
 	egressPrepaid   *usecases.EgressPrepaid
@@ -153,6 +162,12 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 		jwtSecret = "default-secret-change-in-production"
 	}
 	authClient := NewAuthClient(jwtSecret, coreURL)
+	keyMode, modeErr := parseKeyAuthorityMode(os.Getenv(keyAuthorityModeEnv))
+	if modeErr != nil {
+		return nil, modeErr
+	}
+	authClient.SetKeyAuthorityMode(keyMode)
+	log.Printf("API key authority mode: %s", keyMode) //nolint:gosec // G706: parseKeyAuthorityMode returns one of three constants.
 
 	// Sign a service-to-service JWT so the resty client can authenticate with Core.
 	// Uses a long-lived token with admin role — Core validates with the same shared secret.
@@ -260,6 +275,8 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 		// client reuses connections to the QS.
 		ServiceToken:      serviceToken,
 		MetricsHTTPClient: NewPooledHTTPClient(),
+		MetricsPromURL:    metricsPromURL(),
+		MetricsPromToken:  strings.TrimSpace(os.Getenv("ALLSOURCE_METRICS_PROM_TOKEN")),
 		// Read-only view-as impersonation (ADMIN_TENANT_POWER_TOOL §5 / Phase 7).
 		// The signer mints a DISTINCT readonly+view_as ~15m token off AuthClient —
 		// the signing key never leaves AuthClient (we pass the method value, not
@@ -876,6 +893,9 @@ func (cp *ControlPlane) setupRoutes() {
 	adminMetrics.GET("/summary", cp.container.MetricsHandler.Summary)
 	adminMetrics.GET("/timeseries", cp.container.MetricsHandler.Timeseries)
 	admin.GET("/cluster/members", cp.container.MetricsHandler.ClusterMembers)
+	// Client health reads Fly Prometheus, not the Query Service: served vs
+	// refused client requests, per tenant, with release markers.
+	adminMetrics.GET("/client-health", cp.container.ClientHealthHandler.Get)
 
 	// Alert rules management
 	admin.POST("/alerts", cp.container.AlertHandler.Create)

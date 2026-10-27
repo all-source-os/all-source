@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploy Denial Diagnosis</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #dddcd6;
+  --accent: #2557d6; --ok: #1f8a4c; --warn: #c27c0e; --bad: #c8322b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f;
+    --accent: #6f95ff; --ok: #4cc27f; --warn: #e3a43a; --bad: #ff6b62;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f;
+  --accent: #6f95ff; --ok: #4cc27f; --warn: #e3a43a; --bad: #ff6b62;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 20px 0 6px; }
+p { margin: 6px 0 10px; max-width: 80ch; }
+li { max-width: 80ch; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+a { color: var(--accent); }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: color-mix(in srgb, var(--line) 45%, transparent); padding: 1px 4px; border-radius: 4px; }
+pre { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 12px 0; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+tr.denied td { background: color-mix(in srgb, var(--bad) 9%, transparent); }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.tag.bad { color: var(--bad); } .tag.warn { color: var(--warn); } .tag.ok { color: var(--ok); }
+.rule { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin: 16px 0; font-size: 16px; }
+.flow { display: grid; gap: 6px; margin: 12px 0; }
+.flow .step { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; }
+.flow .step.new { border-left: 4px solid var(--bad); }
+.flow .step .out { color: var(--muted); font-size: 12.5px; }
+.evidence { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc { font-size: 13.5px; columns: 2; max-width: 640px; }
+@media (max-width: 640px) { .toc { columns: 1; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Why a deploy denied clients</h1>
+<p class="muted">Diagnosis of the 2026-10-26 key-enforcement deploys and what has to exist so that no deploy denies a client again without a rule that names it. Code references are at <code>e1416e58</code> unless another revision is given. Incident timeline and impact: <a href="2026-10-26-client-access-outage.html">Client access outage</a>.</p>
+
+<div class="rule"><strong>Invariant.</strong> A client that was served before a deploy is served after it, unless a written rule names that client, or the kind of credential it uses, with an owner and a date. A deploy that would deny anyone else does not cut over.</div>
+
+<nav class="toc">
+  <a href="#path">1. The request path that refused clients</a><br>
+  <a href="#kinds">2. Which credentials it refuses</a><br>
+  <a href="#blind">3. Why nobody could see it</a><br>
+  <a href="#shipped">4. How it shipped</a><br>
+  <a href="#diagnose">5. How to diagnose a denial spike</a><br>
+  <a href="#prevent">6. Safeguards, ranked</a><br>
+  <a href="#unknown">7. Still unknown</a>
+</nav>
+
+<h2 id="path">1. The request path that refused clients</h2>
+<p>Every <code>Authorization: Bearer</code> request to the control plane goes through <code>AuthMiddleware</code> (<code>auth.go:375-462</code>). The red steps are new in the key-lifecycle change; at <code>7e08966d</code> a token with a valid signature and expiry was accepted at <code>auth.go:409</code>.</p>
+<div class="flow">
+  <div class="step">Public path (<code>/livez</code>, <code>/api/v1/admin/*</code>, <code>/auth/*</code> except <code>/auth/session</code>)? <span class="out">skip auth. This is why the health check stayed green.</span></div>
+  <div class="step"><code>ask_</code> key? <span class="out">validated by Core <code>/api/v1/auth/me</code>; unchanged.</span></div>
+  <div class="step">JWT signature and expiry (<code>auth.go:218-244</code>) <span class="out">401 <code>invalid token</code> / <code>token expired</code>; unchanged.</span></div>
+  <div class="step new"><code>credentialType</code> (<code>managed_keys.go:263-280</code>): human session → accepted. Short service delegation (≤ 60 s) → accepted. <strong>Any other API-key JWT, including every key minted before the change, → treated as a managed key.</strong></div>
+  <div class="step new">Managed key → <code>managedKey()</code> (<code>managed_keys.go:138-247</code>): a strict read of Core's <code>apikey:&lt;tenant&gt;</code> history <strong>on every request</strong>, no cache, 5 s timeout.
+    <div class="out">Core slow, down or non-200 → 401 <code>API key authority unavailable</code>. History incomplete → 401 <code>incomplete API key authority</code>. History malformed → 401 <code>invalid API key history</code>. <strong>No <code>apikey.created</code> with id = token subject → 401 <code>unregistered or revoked API key</code></strong> (<code>:235</code>). Expired record → 401 <code>API key expired</code>.</div></div>
+  <div class="step new">Scope check (<code>managedKeyAllows</code>) <span class="out">403 <code>insufficient API key scope</code>.</span></div>
+</div>
+<p>Every 401 goes back to the client as <code>{"error":"unauthorized","message":…}</code> (<code>auth.go:426</code>) and nowhere else.</p>
+
+<h2 id="kinds">2. Which credentials it refuses</h2>
+<div class="panel">
+<table>
+<tr><th>Credential</th><th>Minted by</th><th>Subject</th><th>Registered in Core?</th><th>Under enforcement</th></tr>
+<tr class="denied"><td>Legacy onboarding key (Longhand's kind)</td><td><code>SignAPIKey</code> from <code>OnboardHandler</code>, before <code>36a99822</code> (<code>onboard.go:117</code> at <code>7e08966d</code>)</td><td>the tenant id</td><td>never</td><td><span class="tag bad">401 on every route</span></td></tr>
+<tr class="denied"><td>Agent registration and anonymous trial keys</td><td><code>SignAPIKey</code> via <code>register_agent.go:97</code>, <code>register_trial_agent.go:178</code> (<code>main.go:252</code>), <strong>still on main</strong></td><td>the tenant id</td><td>never</td><td><span class="tag bad">401</span>: keys minted today on <code>e1416e58</code> are refused by <code>e1416e58</code></td></tr>
+<tr><td>Old dashboard key</td><td>Query Service <code>sign_api_key</code> at <code>7e08966d</code></td><td>uuid</td><td>best effort: the old code logged and continued if the Core write failed</td><td><span class="tag warn">depends</span> 200 if the write landed, 401 if it was lost</td></tr>
+<tr><td>New onboarding / dashboard managed key</td><td><code>IssueManagedAPIKey</code>, Query Service <code>append_key_lifecycle</code></td><td>uuid</td><td>yes, fails closed</td><td><span class="tag ok">accepted</span> within scope</td></tr>
+<tr><td>Human session, view-as, delegation, <code>ask_</code></td><td>OAuth / login, internal</td><td>—</td><td>n/a</td><td><span class="tag ok">accepted</span>, no lookup</td></tr>
+</table>
+</div>
+<p><strong>Longhand's key is very likely a legacy onboarding key.</strong> Its tenant id has the <code>onboard-</code> prefix that <code>OnboardHandler</code> generates (<code>onboard.go:78</code>), and that handler signed with <code>SignAPIKey</code>. The prod read key used by our own tooling got the exact text <code>unregistered or revoked API key</code>, which only <code>managed_keys.go:235</code> produces. The key's claims were not read.</p>
+<p><strong>Second defect, not hit today:</strong> while Core is down or slow, every API-key request gets a 401, the status that means "your credential is bad". During Core's 21:02–21:08 restart, v127 answered 401 to event reads and 0 × 5xx. An availability fault becomes an access denial, which clients treat as permanent.</p>
+
+<h2 id="blind">3. Why nobody could see it</h2>
+<div class="panel">
+<table>
+<tr><th>Signal you would want</th><th>What exists</th></tr>
+<tr><td>A log line per denial</td><td><span class="tag bad">none</span> no log call at <code>auth.go:425-428</code>; <code>managed_keys.go</code> logs only a body-close failure</td></tr>
+<tr><td>Denials counted by reason</td><td><span class="tag bad">none</span> <code>control_plane_http_requests_total</code> has method, path, status (<code>metrics.go:39-42</code>)</td></tr>
+<tr><td>Denials counted by tenant</td><td><span class="tag bad">wrong label</span> denied requests are counted as tenant <code>anonymous</code> (<code>tenant_metrics.go:27,80</code>), although the claims, tenant included, are already parsed at <code>auth.go:411</code></td></tr>
+<tr><td>Authority lookup latency and outcome</td><td><span class="tag bad">none</span></td></tr>
+<tr><td>A health check that uses a credential</td><td><span class="tag bad">none</span> <code>/livez</code> is public, so bluegreen cut over to a machine that refused every client</td></tr>
+<tr><td>An alert on 401 rate</td><td><span class="tag bad">none</span> four bandwidth rules only (<code>deploy/prometheus/bandwidth.rules.yml</code>)</td></tr>
+<tr><td>Shadow (log-only) mode for auth</td><td><span class="tag bad">none</span> the pattern exists for tenant admission (<code>ALLSOURCE_ADMISSION_MODE=off|shadow|enforce</code>, <code>tenant_admission.go:18-25,174-184</code>) but not for credentials</td></tr>
+<tr><td>Query Service denial log</td><td><span class="tag warn">partial</span> <code>[AuthPipeline] Rejected</code> warnings, no tenant or reason metric</td></tr>
+</table>
+</div>
+<p>The result: the only trace of 11,400 refused requests is a rise in tenant <code>anonymous</code> 4xx from about 80 to about 1,000 per 10 minutes. That is indistinguishable from a scanner wave unless you also notice that a paying tenant's series has stopped.</p>
+
+<h2 id="shipped">4. How it shipped</h2>
+<ul>
+<li><strong>The denial was a written decision, not an accident.</strong> "Unregistered long-lived API JWTs are rejected. This includes legacy onboarding tokens" (<code>docs/plans/2026-10-26-api-key-lifecycle-repair.md:35</code>), repeated in the PR #363 body. The plan named <code>SignAPIKey</code> as "used by onboarding" (<code>:15</code>). What was missing was the list of who holds such a key. No inventory, owner notice or reissue path is recorded anywhere in the repo.</li>
+<li><strong>The tests assert the denial.</strong> <code>managed_keys_test.go:196-199</code> requires a long-lived unmarked key to get 401; Query Service has "markerless serviceaccounts are rejected". No test feeds a token from the pre-change <code>SignAPIKey</code> path and expects it to keep working.</li>
+<li><strong>The proof ran against an empty Core.</strong> The "Tenant Egress and Key Lifecycle" workflow runs revoke-across-restart on a fresh Core. The hosted proof used synthetic keys and one other tenant's existing key: "The proof covers one tenant" (verification report <code>:128</code>).</li>
+<li><strong>A failed post-rollout check was recorded and passed over.</strong> <code>initialPostRolloutObservation</code>: 401, cause "undetermined" (<code>docs/reports/evidence/2026-10-26-legacy-admission-readback.json:47-51</code>). PR #364: "One immediate post-rollout 401 remains unexplained".</li>
+<li><strong>Images were deployed from local trees before merge</strong> (v124–v127), and both PRs merged with zero reviews.</li>
+<li><strong>The 19:45 warning was misread.</strong> Longhand's 401 at 19:45 arrived during v125; the 19:52 diagnosis on PR #363 was about a different tenant. #364 then fixed registered keys with legacy version histories and left unregistered keys denied by design.</li>
+<li><strong>The redeploy at 22:44 was blind too.</strong> I deployed <code>e1416e58</code> after its CI and proof workflow passed, without checking which live credentials it refuses, and judged the cutover by the health check.</li>
+</ul>
+
+<h2 id="diagnose">5. How to diagnose a denial spike</h2>
+<p>Use the Fly Prometheus API for org <code>allsource</code>. Each control-plane process has its own counters, so compare instances, not time ranges alone.</p>
+<h3>Step 1: is the new process refusing what the old one served?</h3>
+<pre>sum by (instance, path, status) (
+  increase(control_plane_http_requests_total{app="allsource-control-plane",
+    path=~"/api/v1/events/query|/api/v1/event-feed|/api/v1/events"}[10m]))</pre>
+<p>Today this read: old machine 10,417 × 200 on event reads; new machine 651 × 401 and 0 × 200.</p>
+<h3>Step 2: which tenant went quiet?</h3>
+<pre>sum by (tenant, status_class) (
+  increase(control_plane_tenant_requests_total{app="allsource-control-plane"}[10m]))</pre>
+<p>A tenant whose 2xx goes to zero while <code>anonymous</code> 4xx jumps is the victim. Normal <code>anonymous</code> 4xx is about 80 per 10 minutes.</p>
+<h3>Step 3: when did it start, per release?</h3>
+<pre>max by (instance) (process_start_time_seconds{app="allsource-control-plane"})
+sum by (status) (increase(control_plane_http_requests_total{app="allsource-control-plane",
+  path="/api/v1/events/query"}[1m]))</pre>
+<p>Line the process start times up with the first minute of 401s. Today: v124 started 18:56:19, 401s began at 18:57.</p>
+<h3>Step 4: what reason?</h3>
+<p>Today there is no server-side record. Reproduce with the affected credential against <code>GET /api/v1/auth/session</code> and read the body's <code>message</code>, or decode the key's payload to learn its subject and kind and compare with section 2. Once safeguard 2 below exists, this step becomes one query on <code>control_plane_auth_denials_total</code> by reason.</p>
+
+<h2 id="prevent">6. Safeguards, ranked</h2>
+<p>Ranked by how directly each stops a deploy from denying a client that no rule names.</p>
+<ol>
+<li><strong>Shadow mode for credential authority.</strong> <code>ALLSOURCE_KEY_AUTHORITY_MODE=off|shadow|enforce</code>, default <code>shadow</code>, mirroring <code>tenant_admission.go</code>. In shadow, a lookup that would deny is counted and logged and the request proceeds on the previous rule. <code>enforce</code> refuses to start unless the would-deny count over a window is zero, or every tenant it would deny is listed in a deprecation file. New file <code>apps/control-plane/key_authority_mode.go</code>, branch at <code>auth.go:415-423</code>; same switch in Query Service <code>api_key_authority.ex</code>. Test: copy <code>TestAdmissionShadowChangesNoBehaviour</code> (<code>tenant_admission_test.go:127</code>): the same requests return the same statuses with and without shadow, and the would-deny is recorded.</li>
+<li><strong>Denials labelled by reason, credential kind and tenant, and logged.</strong> <code>control_plane_auth_denials_total{reason, credential_kind, tenant}</code>, with the tenant taken from the already-parsed claims, never <code>anonymous</code>. Fixed reason set: unregistered, revoked, history_invalid, incomplete_authority, authority_unavailable, expired, scope. One log line per denial with the same fields. Cardinality bounded by the existing cap in <code>tenant_metrics.go</code>. Test: one table case per reason asserting the counter moves.</li>
+<li><strong>An authority outage is not a denial.</strong> When Core cannot answer the lookup, return 503 with <code>Retry-After</code>, not 401; optionally serve from a short positive cache of the last good answer. A client must be able to tell "your key is bad" from "we are down".</li>
+<li><strong>Frozen compatibility fixtures.</strong> Commit tokens produced by every past minting path (<code>SignAPIKey</code> onboarding, agent register, trial, old dashboard), signed with a test-only key. <code>TestPreviouslyIssuedCredentialsStillAdmitted</code> requires 200 for each, unless <code>docs/contracts/credential-deprecations.json</code> lists that shape with an owner, a notice date and an end date. Run it in the lifecycle workflow. Removing a shape without an entry fails CI.</li>
+<li><strong>Credential census before any auth deploy.</strong> An admin endpoint that reports, per tenant over the last N hours, requests by credential kind and registered-or-not (built on safeguard 2). Runbook step in <code>FLY_IMAGE_PROMOTION.md</code>: no cutover while any tenant shows unregistered traffic without a deprecation entry.</li>
+<li><strong>Cutover gated on authenticated traffic.</strong> Deploy with <code>--strategy canary</code>, then compare 401 rate on the new instance against the old through the Prometheus API; abort and roll back if it is higher. Add an authenticated read probe with a dedicated registered canary key next to <code>/livez</code>. With today's numbers (651 × 401 against 0) this trips in the first minute.</li>
+<li><strong>Alert</strong> (<code>deploy/prometheus/auth.rules.yml</code>): 401 ratio above 5 % for 2 minutes and three times the ratio an hour earlier; and a per-tenant rule when a tenant that was mostly 2xx becomes mostly 401. Test with <code>promtool test rules</code> fed today's series.</li>
+<li><strong>Process.</strong> Production images only from merged main commits; a PR that touches <code>auth.go</code>, <code>managed_keys.go</code>, <code>api_key_authority.ex</code> or <code>managed_key_access.ex</code> needs a human review and a filled "credentials denied by this change" section.</li>
+<li><strong>Stop minting unregistered keys.</strong> Agent registration and trial still call <code>SignAPIKey</code> on main; move them to <code>IssueManagedAPIKey</code> before any enforcement returns.</li>
+</ol>
+<p><strong>Shipped with this report:</strong> safeguard 1 as <code>ALLSOURCE_KEY_AUTHORITY_MODE</code>, defaulting to <code>shadow</code> (the lookup is cached for 30 s per key only while shadowing; enforce keeps a per-request read so a revocation acts immediately); safeguard 2 as <code>control_plane_auth_denials_total{mode,reason,tenant}</code> with one log line per tenant and reason per minute; safeguard 3 as a 503 with <code>Retry-After</code> when enforcing and Core cannot answer; and the admin Monitoring page rebuilt on client traffic (<code>/api/v1/admin/metrics/client-health</code>).</p>
+<p><strong>Order for re-enabling enforcement:</strong> safeguards 2 and 3 → shadow mode (1) deployed → Longhand and every other tenant shown by the shadow count reissued a registered key → the count reads zero for a full day → enforce, with the canary gate (6) and alert (7) in place.</p>
+
+<h2 id="unknown">7. Still unknown</h2>
+<div class="panel">
+<table>
+<tr><th>Unknown</th><th>Cheapest way to settle it</th></tr>
+<tr><td>Longhand's key subject and kind</td><td>Decode the payload of its <code>ALLSOURCE_API_KEY</code> locally</td></tr>
+<tr><td>Other tenants or tools holding unregistered keys</td><td>Only a shadow-mode count can answer it; no current metric records the credential kind</td></tr>
+<tr><td>Lookup latency against Core under load (≈ 19 requests/s, one Core read each)</td><td>The proposed lookup-outcome metric; never measured</td></tr>
+<tr><td>Source code of v124, v126, v127</td><td>The other session's build tree; v124 predates every commit to <code>managed_keys.go</code></td></tr>
+<tr><td>Query Service denials during the windows</td><td>It exports no per-status HTTP metric; its logs for the period</td></tr>
+</table>
+</div>
+<p class="evidence">Method: code read at <code>e1416e58</code> and <code>7e08966d</code>; Prometheus queries as shown, read 22:59–23:10Z; PR #363 and #364 bodies and reviews via <code>gh</code>; the other session's plans, verification report and evidence files. Three load-bearing claims were re-verified independently: the routing of a legacy key to the managed lookup, the onboarding path's use of <code>SignAPIKey</code>, and Longhand's tenant series dropping from 17,376 requests (18:27–18:57) to none (19:00–19:30).</p>
+</main>
+</body>
+</html>

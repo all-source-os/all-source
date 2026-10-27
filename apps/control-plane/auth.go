@@ -96,6 +96,14 @@ type AuthClient struct {
 
 	apiKeyCache   map[string]apiKeyCacheEntry
 	apiKeyCacheMu sync.RWMutex
+
+	keys *keyAuthority
+}
+
+// SetKeyAuthorityMode chooses whether the managed-key authority refuses
+// requests (enforce), only counts what it would refuse (shadow), or is skipped.
+func (a *AuthClient) SetKeyAuthorityMode(mode keyAuthorityMode) {
+	a.keys = newKeyAuthority(mode, a.managedKey)
 }
 
 // apiKeyCacheTTL is how long a validated ask_ key (resolved via Core /me)
@@ -122,12 +130,14 @@ func NewAuthClient(jwtSecret, coreURL string) *AuthClient {
 	if jwtSecret == "" {
 		jwtSecret = "default-secret-change-in-production"
 	}
-	return &AuthClient{
+	client := &AuthClient{
 		jwtSecret:   jwtSecret,
 		coreURL:     coreURL,
 		http:        &http.Client{Timeout: 5 * time.Second},
 		apiKeyCache: make(map[string]apiKeyCacheEntry),
 	}
+	client.SetKeyAuthorityMode(keyAuthorityEnforce)
+	return client
 }
 
 // SignDelegationJWT mints a short-lived JWT scoped to a single data-plane
@@ -412,12 +422,35 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 			if err == nil {
 				var kind string
 				kind, err = credentialType(claims)
-				if err == nil && kind == managedKeyKind {
-					var key *managedKeyRecord
-					key, err = authClient.managedKey(c.Request.Context(), claims)
-					if err == nil && !managedKeyAllows(c, key, claims.Role) {
-						c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient API key scope"})
-						return
+				if err != nil && authClient.keys.mode != keyAuthorityEnforce {
+					if authClient.keys.mode == keyAuthorityShadow {
+						authClient.keys.record(claims.TenantID, denialKind, err)
+					}
+					err = nil
+				}
+				if err == nil && kind == managedKeyKind && authClient.keys.mode != keyAuthorityOff {
+					keys := authClient.keys
+					key, lookupErr := keys.resolve(c.Request.Context(), claims)
+					switch {
+					case lookupErr != nil:
+						reason := denialReason(lookupErr)
+						keys.record(claims.TenantID, reason, lookupErr)
+						if reason == denialRevoked {
+							err = lookupErr
+						} else if keys.mode == keyAuthorityEnforce {
+							if reason == denialUnavailable {
+								c.Header("Retry-After", "5")
+								c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "authority_unavailable", "message": "API key authority is unavailable; retry shortly"})
+								return
+							}
+							err = lookupErr
+						}
+					case !managedKeyAllows(c, key, claims.Role):
+						keys.record(claims.TenantID, denialScope, nil)
+						if keys.mode == keyAuthorityEnforce {
+							c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient API key scope"})
+							return
+						}
 					}
 				}
 			}
