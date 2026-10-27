@@ -18,6 +18,28 @@ if config_env() == :prod do
   edition = System.get_env("ALLSOURCE_EDITION", "community")
   config :query_service_ex, :edition, String.to_atom(edition)
 
+  key_authority_mode =
+    case System.get_env("ALLSOURCE_KEY_AUTHORITY_MODE", "")
+         |> String.trim()
+         |> String.downcase() do
+      "" ->
+        :shadow
+
+      "shadow" ->
+        :shadow
+
+      "off" ->
+        :off
+
+      "enforce" ->
+        :enforce
+
+      raw ->
+        raise "ALLSOURCE_KEY_AUTHORITY_MODE must be off, shadow or enforce, got #{inspect(raw)}"
+    end
+
+  config :query_service_ex, :key_authority_mode, key_authority_mode
+
   # Secret key base - use provided value or generate a temporary one for health checks
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||

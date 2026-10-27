@@ -900,14 +900,15 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
       {:ok, claims} ->
         tenant_id = claims["tenant_id"]
 
-        with {:ok, key} <- ApiKeyAuthority.authorize(claims),
+        with {:ok, key} <- authorized_key(claims),
              {:ok, tenant} <- get_tenant_for_authorization(tenant_id) do
           api_key_info = %{
             "id" => claims["sub"],
             "name" => claims["name"],
             "tenant_id" => tenant_id,
-            "role" => claims["role"],
-            "scopes" => key["scopes"]
+            "role" => key["role"],
+            "scopes" => key["scopes"],
+            "authority" => key["authority"]
           }
 
           {:ok, {tenant, api_key_info}}
@@ -918,6 +919,31 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # A key the authority refuses but the mode still serves keeps the identity it
+  # was signed with, as before the authority existed, and skips scope checks.
+  defp authorized_key(claims) do
+    result =
+      if ApiKeyAuthority.mode() == :off,
+        do: {:error, :authority_off},
+        else: ApiKeyAuthority.authorize(claims)
+
+    case result do
+      {:ok, _key} = ok ->
+        ok
+
+      {:error, reason} ->
+        if reason == :authority_off or ApiKeyAuthority.serve_refused?(claims, reason),
+          do:
+            {:ok,
+             %{
+               "role" => claims["role"] || "serviceaccount",
+               "scopes" => claims["scopes"] || [],
+               "authority" => "unverified"
+             }},
+          else: {:error, reason}
     end
   end
 

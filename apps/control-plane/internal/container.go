@@ -209,6 +209,7 @@ type Container struct {
 	CommsEfficiencyHandler       *httphandlers.CommsEfficiencyHandler
 	ViewAsHandler                *httphandlers.ViewAsHandler
 	MetricsHandler               *httphandlers.MetricsHandler
+	ClientHealthHandler          *httphandlers.ClientHealthHandler
 
 	// Use Cases — Metrics passthrough (ADMIN_TENANT_POWER_TOOL §3 Gap 2)
 	MetricsPassthroughUC *usecases.MetricsPassthroughUseCase
@@ -245,6 +246,12 @@ type ContainerConfig struct {
 	// MetricsHTTPClient is the pooled HTTP client the passthrough uses. nil ⇒
 	// http.DefaultClient (tests rely on the default; prod injects the pooled one).
 	MetricsHTTPClient *http.Client
+	// MetricsPromURL is the Prometheus base URL client health reads
+	// (ALLSOURCE_METRICS_PROM_URL). MetricsPromToken is its read-only token
+	// (ALLSOURCE_METRICS_PROM_TOKEN); empty ⇒ client health reports
+	// configured=false.
+	MetricsPromURL   string
+	MetricsPromToken string
 	// ViewAsSigner mints the read-only "view as tenant" impersonation token
 	// (ADMIN_TENANT_POWER_TOOL §5). Satisfied by AuthClient.SignViewAsJWT —
 	// injected so the signing key stays in AuthClient. nil ⇒ the view-as mint
@@ -658,6 +665,14 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 	metricsPassthroughUC := usecases.NewMetricsPassthroughUseCase(cfg.MetricsHTTPClient, cfg.QueryServiceURL, cfg.ServiceToken, tenantRepo)
 	metricsHandler := httphandlers.NewMetricsHandler(metricsPassthroughUC)
 
+	var promQuerier usecases.PromQuerier
+	if cfg.MetricsPromURL != "" && cfg.MetricsPromToken != "" {
+		// The default client, not MetricsHTTPClient: that one re-sends
+		// Authorization on redirects, which would hand the token to another host.
+		promQuerier = clients.NewPrometheusClient(nil, cfg.MetricsPromURL, cfg.MetricsPromToken)
+	}
+	clientHealthHandler := httphandlers.NewClientHealthHandler(usecases.NewClientHealthUseCase(promQuerier))
+
 	return &Container{
 		TenantRepo:                   tenantRepo,
 		PolicyRepo:                   policyRepo,
@@ -766,6 +781,7 @@ func NewContainerWithConfig(cfg ContainerConfig) *Container {
 		CommsEfficiencyHandler:       commsEfficiencyHandler,
 		ViewAsHandler:                viewAsHandler,
 		MetricsHandler:               metricsHandler,
+		ClientHealthHandler:          clientHealthHandler,
 		MetricsPassthroughUC:         metricsPassthroughUC,
 		VerifyBillingConfigUC:        verifyBillingConfigUC,
 		ProcessLSWebhookUC:           processLSWebhookUC,

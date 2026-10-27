@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Access Outage</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #dddcd6;
+  --accent: #2557d6; --ok: #1f8a4c; --warn: #c27c0e; --bad: #c8322b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f;
+    --accent: #6f95ff; --ok: #4cc27f; --warn: #e3a43a; --bad: #ff6b62;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f;
+  --accent: #6f95ff; --ok: #4cc27f; --warn: #e3a43a; --bad: #ff6b62;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 16px; margin: 20px 0 6px; }
+p { margin: 6px 0 10px; max-width: 80ch; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+a { color: var(--accent); }
+code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: color-mix(in srgb, var(--line) 45%, transparent); padding: 1px 4px; border-radius: 4px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 16px 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.card .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.card .k { font-size: 12.5px; color: var(--muted); }
+.card.bad .v { color: var(--bad); } .card.warn .v { color: var(--warn); } .card.ok .v { color: var(--ok); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 12px 0; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+td.n, th.n { text-align: right; }
+tr.down td { background: color-mix(in srgb, var(--bad) 9%, transparent); }
+.tag { display: inline-block; font-size: 11.5px; font-weight: 650; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.tag.bad { color: var(--bad); } .tag.warn { color: var(--warn); } .tag.ok { color: var(--ok); }
+.problem { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 10px; padding: 14px 16px; margin: 16px 0; }
+.problem.warn { border-left-color: var(--warn); } .problem.ok { border-left-color: var(--ok); }
+.problem h3 { margin-top: 0; }
+.evidence { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.timeline { position: relative; height: 54px; margin: 18px 0 30px; background: color-mix(in srgb, var(--ok) 18%, transparent); border-radius: 6px; }
+.timeline .seg { position: absolute; top: 0; height: 100%; border-radius: 4px; }
+.timeline .seg.bad { background: var(--bad); opacity: .85; }
+.timeline .seg.core { background: var(--warn); top: 34px; height: 20px; opacity: .95; }
+.timeline .tick { position: absolute; top: 58px; font-size: 11.5px; color: var(--muted); transform: translateX(-50%); }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc { font-size: 13.5px; columns: 2; max-width: 640px; }
+@media (max-width: 640px) { .toc { columns: 1; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Client access outage</h1>
+<p class="muted">AllSource control plane and Core, 2026-10-26. All times UTC. Request counts come from Fly's Prometheus series <code>control_plane_http_requests_total</code> and <code>control_plane_tenant_requests_total</code>, one counter per control-plane process, read between 22:59 and 23:10Z. The companion report <a href="2026-10-26-auth-deploy-denial-diagnosis.html">Why a deploy denied clients</a> holds the code-level diagnosis and the safeguards.</p>
+
+<div class="cards">
+  <div class="card bad"><div class="v">2 h 29 m</div><div class="k">Longhand's API key refused on every read, 18:56:19–21:25:20 (control-plane releases v124–v127)</div></div>
+  <div class="card bad"><div class="v">8 m</div><div class="k">refused again, 22:44:30–22:52:29 (v129)</div></div>
+  <div class="card bad"><div class="v">6 m</div><div class="k">Core unreachable while replaying its system log after a redeploy, 21:02:08–21:08:01</div></div>
+  <div class="card ok"><div class="v">0 × 401</div><div class="k">on client reads since 22:52:29 (v130): 7,077 event reads served in its first 7 minutes</div></div>
+</div>
+
+<nav class="toc">
+  <a href="#impact">1. Who was affected</a><br>
+  <a href="#timeline">2. Timeline</a><br>
+  <a href="#cause">3. Cause</a><br>
+  <a href="#core">4. The Core restart</a><br>
+  <a href="#why">5. Why it lasted</a><br>
+  <a href="#now">6. State now</a><br>
+  <a href="#actions">7. Actions</a><br>
+  <a href="#unknown">8. Still unknown</a>
+</nav>
+
+<h2 id="impact">1. Who was affected</h2>
+<p><strong>Longhand</strong>, AllSource's only tenant with real traffic today. Its control plane reads and writes through one API key for tenant <code>onboard-control-plane-at-technical-leaders-com</code>. Sign-in, the analyst queue board and the control-panel Skills page all depend on those reads, so Longhand users could not sign in or load the queue. Longhand's status page showed Sign-in and Queue reads <em>Down</em>, with the reasons <code>sign_in_read_failed</code> and <code>core_read_failed</code>.</p>
+<div class="panel">
+<table>
+<tr><th>Window</th><th class="n">Longhand reads served</th><th class="n">Requests refused 401</th><th class="n">Expected at the normal rate</th></tr>
+<tr class="down"><td>18:56:19–21:25:20 (v124–v127)</td><td class="n">0</td><td class="n">≈ 11,400</td><td class="n">≈ 96,000 (10.8/s)</td></tr>
+<tr><td>21:25:20–22:44:30 (v128)</td><td class="n">95,075 (2xx)</td><td class="n">0</td><td class="n">—</td></tr>
+<tr class="down"><td>22:44:30–22:52:29 (v129)</td><td class="n">0</td><td class="n">833</td><td class="n">≈ 9,000 (18.9/s)</td></tr>
+<tr><td>22:52:29 onward (v130)</td><td class="n">9,054 (2xx) by ~22:59</td><td class="n">0</td><td class="n">—</td></tr>
+</table>
+</div>
+<p class="evidence">The 401s carry the tenant label <code>anonymous</code>, because the denial happens before the tenant is resolved. They are attributed to Longhand because its own series drops to zero in exactly these windows (absent from every 10-minute bucket 19:10–21:20) and the anonymous 4xx count rises from its normal ≈80 per 10 minutes (scanners) to 568–1,102. The "expected" column is the tenant's own rate before the window, times its length; the refused count is lower because clients back off.</p>
+<p>No other tenant had traffic in these 8 hours, so no other tenant can be shown to have lost requests. One other user, <code>decebal-dobrica-at-gmail-com</code>, sent 147 requests under v123 and none under v124–v126; volume is too small to call it lost.</p>
+
+<h2 id="timeline">2. Timeline</h2>
+<div class="timeline" aria-label="Outage timeline 18:00 to 23:00">
+  <div class="seg bad" style="left:18.9%;width:49.7%" title="v124–v127: Longhand refused"></div>
+  <div class="seg core" style="left:60.7%;width:2%" title="Core unreachable"></div>
+  <div class="seg bad" style="left:94.8%;width:2.7%" title="v129: Longhand refused"></div>
+  <div class="tick" style="left:0%">18:00</div>
+  <div class="tick" style="left:20%">19:00</div>
+  <div class="tick" style="left:40%">20:00</div>
+  <div class="tick" style="left:60%">21:00</div>
+  <div class="tick" style="left:80%">22:00</div>
+  <div class="tick" style="left:99%">23:00</div>
+</div>
+<p class="muted small">Red: Longhand's key refused. Amber: Core unreachable.</p>
+<div class="panel">
+<table>
+<tr><th>Time</th><th>Release</th><th>Event</th></tr>
+<tr><td>11:29:14</td><td>v123 <code>c60a152a</code></td><td>Control plane running, no key enforcement. Longhand served (258,537 × 2xx over the process life).</td></tr>
+<tr class="down"><td>18:56:19</td><td>v124 (digest <code>148c841b</code>)</td><td>A local, unmerged build of the key-lifecycle enforcement is deployed. First 401s within one minute: 115 at 18:57, 162 at 18:58. Longhand's reads drop to 0.</td></tr>
+<tr class="down"><td>19:30:52</td><td>v125 <code>f1ede26f</code> (local build)</td><td>Still refusing: 5,732 × 401 on event reads. At 19:45 Longhand logs a 401 from <code>/api/v1/event-feed</code>.</td></tr>
+<tr class="down"><td>19:52</td><td>—</td><td>A PR #363 comment diagnoses a different tenant's denial ("invalid API key history"). Longhand's is not investigated.</td></tr>
+<tr class="down"><td>20:52:46</td><td>v126 (digest <code>a2af5572</code>)</td><td>Still refusing: 922 × 401, 0 × 200.</td></tr>
+<tr class="down"><td>21:02:08</td><td>Core</td><td>Core redeployed for the egress lease (#362). Its one machine refuses connections until 21:08:01 while it replays 2,751,968 system events (section 4).</td></tr>
+<tr class="down"><td>21:06:58</td><td>v127 (digest <code>1f733226</code>)</td><td>Still refusing Longhand: 1,312 × 401. Its 847 × 200 went to a different tenant.</td></tr>
+<tr><td>21:25:20</td><td>v128 <code>7e08966d</code></td><td>Main at the egress-lease merge, deployed in place (not bluegreen). It has no key enforcement, so Longhand is served again: 90,815 × 200 event reads, 0 × 401. The control plane was briefly unavailable during the in-place restart.</td></tr>
+<tr class="down"><td>22:44:30</td><td>v129 <code>e1416e58</code></td><td>Main with the enforcement merged (#363, #364), deployed bluegreen. The new machine passes its unauthenticated health check, takes traffic, and refuses Longhand: 821 × 401 on event reads, 0 × 200.</td></tr>
+<tr class="down"><td>22:47</td><td>—</td><td>Longhand's status page shows Sign-in and Queue reads down.</td></tr>
+<tr><td>22:52:29</td><td>v130 <code>7e08966d</code></td><td>Rollback, bluegreen. 0 × 401 since; Longhand's four services report operational from the next probe.</td></tr>
+</table>
+</div>
+<p class="evidence">Process start times from <code>process_start_time_seconds</code>; per-release totals from <code>max_over_time(counter[life] @ end)</code>. v124–v128 all ran on machine <code>08045e2c642d68</code>; v129 on <code>8045e2c631e938</code>; v130 on <code>849100f2140768</code>.</p>
+
+<h2 id="cause">3. Cause</h2>
+<div class="problem">
+<h3>A policy that refuses every unregistered API key, deployed without knowing who holds one <span class="tag bad">root cause</span></h3>
+<p>The key-lifecycle change makes the control plane accept an API key only if Core holds an <code>apikey.created</code> record whose id equals the key's subject, with no later revocation. It looks that record up in Core on every request. Keys minted before the change were never registered, and the plan recorded the consequence as accepted: "Unregistered long-lived API JWTs are rejected. This includes legacy onboarding tokens" (<code>docs/plans/2026-10-26-api-key-lifecycle-repair.md:35</code>).</p>
+<p>Longhand's tenant id, <code>onboard-control-plane-at-technical-leaders-com</code>, is the pattern the onboarding handler produces, and before this change that handler minted its key with <code>SignAPIKey</code>: subject equal to the tenant id, no credential kind (<code>onboard.go:78</code> and <code>:117</code> at <code>7e08966d</code>). The new code classes such a key as a managed key (<code>managed_keys.go:279</code>), finds no record whose id is the tenant id, and answers <code>401 unregistered or revoked API key</code> (<code>managed_keys.go:235</code>). Nothing checked which live clients held that kind of key, and nobody told Longhand.</p>
+<p class="evidence">Confidence: high on the mechanism. Not read: the claims inside Longhand's key (the secret was not opened) and the exact 401 body Longhand received, which no log retains.</p>
+</div>
+<div class="problem warn">
+<h3>Deploys outside main <span class="tag warn">contributing</span></h3>
+<p>v124–v127 were built from local trees before #363 and #364 merged. v124's source is not on any branch: the first commit touching <code>managed_keys.go</code> is dated 19:49, after v124 went live at 18:56. Both PRs merged with zero reviews.</p>
+</div>
+<div class="problem warn">
+<h3>A health check that cannot see the failure <span class="tag warn">contributing</span></h3>
+<p>Bluegreen cutover waits only for <code>/livez</code>, which needs no credential. The v129 machine was healthy by that check while it refused every client read. "No downtime" was reported for that deploy. That was wrong: clients were refused for 8 minutes.</p>
+</div>
+
+<h2 id="core">4. The Core restart</h2>
+<p>Core runs as one machine with its data on a volume. Deploying it replaces that machine in place, and Core opens its port only after it has replayed its system streams into memory. On 21:02:08 that replay covered 2,751,968 events (2,740,641 of them tenant events) and stage 2 alone took 4 m 56 s, so AllSource was unreachable until 21:08:01. During that window the v127 control plane answered 401 rather than 503: its key lookup goes to Core, and an unreachable Core is reported as <code>API key authority unavailable</code> with the same 401 as a revoked key.</p>
+<p>An earlier note already said a Core redeploy means platform-wide downtime. The zero-downtime procedure the team remembers having was not found in the repo's docs or history.</p>
+
+<h2 id="why">5. Why it lasted</h2>
+<ul>
+<li><strong>No signal named the victim.</strong> Every denial is counted under tenant <code>anonymous</code> with no reason label, and the control plane writes no log line for a 401. Longhand disappearing looked like low traffic.</li>
+<li><strong>The verification checked one other tenant.</strong> The hosted proof reused "a separate existing tenant's credential" and never probed Longhand's. Its own post-rollout check recorded a 401 with cause "undetermined" and the rollout continued.</li>
+<li><strong>No alert exists on 401 rate.</strong> The only Prometheus alerts are four bandwidth rules.</li>
+<li><strong>v128 hid the problem.</strong> From 21:25 Longhand worked again, only because v128 did not contain the enforcement, so the merged code went out again at 22:44 with the same defect.</li>
+</ul>
+
+<h2 id="now">6. State now</h2>
+<div class="panel">
+<table>
+<tr><th>Component</th><th>Running</th><th>Key enforcement</th></tr>
+<tr><td>Control plane (<code>api.all-source.xyz</code>)</td><td><code>7e08966d</code>, machine <code>849100f2140768</code></td><td><span class="tag warn">off</span> unregistered keys accepted again</td></tr>
+<tr><td>Query Service</td><td><code>e1416e58</code>, machine <code>80d229a60ee028</code></td><td><span class="tag ok">on</span> no client traffic observed in a 60 s sample at 22:58</td></tr>
+<tr><td>Core</td><td><code>7e08966d</code></td><td>n/a</td></tr>
+<tr><td>Longhand</td><td>all four services operational</td><td>—</td></tr>
+</table>
+</div>
+<p>The revoked-proof-credential problem that the enforcement was written to close is open again on the control plane until Longhand's key is replaced with a registered one.</p>
+
+<h2 id="actions">7. Actions</h2>
+<ol>
+<li><strong>Replace Longhand's key with a registered managed key</strong> and confirm reads through the new key before any enforcement is re-deployed.</li>
+<li><strong>Do not re-deploy enforcement</strong> until a shadow-mode count shows zero would-be denials, or each denied tenant is listed by name with an owner and a date. Design in the companion report, section 5.</li>
+<li><strong>Label every denial</strong> with tenant, credential kind and reason, and log it.</li>
+<li><strong>Gate cutover on authenticated traffic</strong>: compare 401 rate on the new machine with the old before the old is stopped; roll back automatically on a jump.</li>
+<li><strong>Alert</strong> when a tenant that was served flips to refused.</li>
+<li><strong>Deploy only images built from merged main commits.</strong></li>
+<li><strong>Write down and restore the Core zero-downtime procedure</strong>, or change Core to open its port before replay and report not-ready until it finishes.</li>
+</ol>
+
+<h2 id="unknown">8. Still unknown, and what would settle it</h2>
+<div class="panel">
+<table>
+<tr><th>Unknown</th><th>Would settle it</th></tr>
+<tr><td>The claims (subject, kind, issue date) of Longhand's key</td><td>Decode the payload segment of <code>ALLSOURCE_API_KEY</code> on <code>longhand-control-plane-api</code> locally; no signature check needed</td></tr>
+<tr><td>The exact denial message Longhand received</td><td>Longhand's control-plane logs for 22:44–22:52, if they kept response bodies</td></tr>
+<tr><td>Source of v124, v126, v127</td><td>The other session's build tree, or its transcript</td></tr>
+<tr><td>Other clients holding unregistered keys</td><td>No metric records it. A shadow-mode counter is the only way to find out before enforcing</td></tr>
+<tr><td>Cause of the verification's "undetermined" post-rollout 401</td><td>Its receipt <code>480ff2c4…</code> has no timestamp. If it ran just after v127 started (21:06:58), Core was down and the lookup failed; not confirmed</td></tr>
+</table>
+</div>
+</main>
+</body>
+</html>

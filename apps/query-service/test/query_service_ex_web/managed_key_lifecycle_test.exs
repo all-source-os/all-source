@@ -493,4 +493,112 @@ defmodule QueryServiceExWeb.ManagedKeyLifecycleTest do
       end
     end
   end
+
+  # The shape SignAPIKey minted for onboarded tenants: subject is the tenant id
+  # and no apikey.created record registers it.
+  defp legacy_onboarding_key do
+    now = System.system_time(:second)
+
+    sign(%{
+      "sub" => @tenant,
+      "tenant_id" => @tenant,
+      "name" => "Longhand",
+      "username" => "Longhand",
+      "role" => "developer",
+      "is_api_key" => true,
+      "iss" => "allsource",
+      "iat" => now,
+      "exp" => now + 365 * 24 * 3600
+    })
+  end
+
+  defp with_mode(mode) do
+    Application.put_env(:query_service_ex, :key_authority_mode, mode)
+    on_exit(fn -> Application.delete_env(:query_service_ex, :key_authority_mode) end)
+  end
+
+  defp count_denials(test_pid) do
+    handler = "key-authority-denials-#{inspect(test_pid)}"
+
+    :telemetry.attach(
+      handler,
+      [:query_service_ex, :auth, :key_authority_denial],
+      fn _, _, meta, _ -> send(test_pid, {:denial, meta.mode, meta.reason}) end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+  end
+
+  test "shadow serves an unregistered legacy onboarding key and counts it" do
+    with_mode(:shadow)
+    count_denials(self())
+    key = legacy_onboarding_key()
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      refute request(plug, key).halted, "#{inspect(plug)} refused the legacy key in shadow"
+      assert_received {:denial, :shadow, _reason}
+    end
+
+    reserved =
+      conn(:post, "/api/events", %{
+        "entity_id" => "apikey:#{@tenant}",
+        "event_type" => "apikey.created"
+      })
+      |> put_req_header("authorization", "Bearer " <> key)
+      |> AuthPipeline.call([])
+
+    assert reserved.status == 403
+  end
+
+  test "enforce refuses the legacy onboarding key" do
+    with_mode(:enforce)
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      assert request(plug, legacy_onboarding_key()).status == 401
+    end
+  end
+
+  test "shadow still refuses a revoked key" do
+    with_mode(:shadow)
+    count_denials(self())
+    created = create(%{"scopes" => ["events:read"]}) |> Map.fetch!(:resp_body) |> Jason.decode!()
+    assert :ok = ApiKeyStore.revoke_key(@tenant, created["id"])
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      assert request(plug, created["key"]).status == 401
+      assert_received {:denial, :shadow, :key_revoked}
+    end
+  end
+
+  test "shadow serves a legacy key whose id a stray revocation names", %{state: state} do
+    with_mode(:shadow)
+    count_denials(self())
+
+    stray = %{
+      "id" => "stray",
+      "tenant_id" => @tenant,
+      "entity_id" => "apikey:#{@tenant}",
+      "event_type" => "apikey.revoked",
+      "version" => 1,
+      "timestamp" => "2026-01-01T00:00:00Z",
+      "payload" => %{"key_id" => @tenant}
+    }
+
+    Agent.update(state, &%{&1 | events: [stray]})
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      refute request(plug, legacy_onboarding_key()).halted
+      assert_received {:denial, :shadow, :invalid_key}
+    end
+  end
+
+  test "off skips the authority read", %{state: state} do
+    with_mode(:off)
+    Agent.update(state, &%{&1 | truncated: true})
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      refute request(plug, legacy_onboarding_key()).halted
+    end
+  end
 end

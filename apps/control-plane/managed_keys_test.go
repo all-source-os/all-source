@@ -122,7 +122,7 @@ func TestManagedKeyAuthorityFailsClosed(t *testing.T) {
 	t.Run("unavailable", func(t *testing.T) {
 		core := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }))
 		defer core.Close()
-		if result := lifecycleRequest(t, NewAuthClient("synthetic-secret", core.URL), lifecycleClaims(), "GET", "/api/v1/events/query", ""); result.Code != 401 {
+		if result := lifecycleRequest(t, NewAuthClient("synthetic-secret", core.URL), lifecycleClaims(), "GET", "/api/v1/events/query", ""); result.Code != http.StatusServiceUnavailable {
 			t.Fatal(result.Code)
 		}
 	})

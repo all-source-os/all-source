@@ -243,6 +243,9 @@ CMD ["./control-plane"]
 | `METRICS_ADDR` | `:9091` | Private listener for tenant-labelled Prometheus metrics; never expose it publicly |
 | `ALLSOURCE_ADMISSION_MODE` | `shadow` | Per-tenant admission: `off`, `shadow` (count only, no response changes) or `enforce` |
 | `ALLSOURCE_ADMISSION_OVERRIDES` | `` | JSON object of per-tenant limit overrides; required (`{}` for none) when enforcing |
+| `ALLSOURCE_KEY_AUTHORITY_MODE` | `shadow` | Managed API-key authority: `off`, `shadow` (count and log would-be refusals in `control_plane_auth_denials_total{mode,reason,tenant}`, serve the request) or `enforce` (refuse; 503 when Core cannot answer). Enforce only once the shadow count is zero or every denied tenant has been reissued a registered key |
+| `ALLSOURCE_METRICS_PROM_URL` | `https://api.fly.io/prometheus/allsource` | Prometheus API the admin client-health view reads |
+| `ALLSOURCE_METRICS_PROM_TOKEN` | `` | Read-only Fly token for that API; unset shows the client-health view as not configured |
 
 ### Example Configuration
 

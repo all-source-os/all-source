@@ -5,14 +5,13 @@ import { cn } from "@allsource/ui/utils";
 import { type HealthTier, tierLabel } from "@/lib/fleet-api";
 
 /**
- * Health chip — a coloured dot + tier label, using the EXACT dot+colour
- * vocabulary established by ClusterHealth (cluster-health.tsx:57-63):
+ * Health chip — a coloured dot + tier label, using the dot+colour vocabulary
+ * of the monitoring machines panel:
  *   green  → healthy
  *   yellow → degraded
  *   red    → at_risk / critical
- * so the fleet view reads consistently with monitoring. At-Risk and Critical are
- * both red dots (matching cluster's "unreachable" red) but kept distinct by the
- * label + badge variant.
+ * At-Risk and Critical are both red dots but kept distinct by the label + badge
+ * variant.
  */
 
 interface HealthChipProps {

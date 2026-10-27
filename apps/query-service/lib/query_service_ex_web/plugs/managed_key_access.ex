@@ -17,30 +17,50 @@ defmodule QueryServiceExWeb.Plugs.ManagedKeyAccess do
       do: {:ok, forbid(conn, "view-as sessions are read-only")}
 
   def claims(conn, claims) do
+    if ApiKeyAuthority.mode() == :off, do: {:ok, conn}, else: authorize(conn, claims)
+  end
+
+  defp authorize(conn, claims) do
     case ApiKeyAuthority.kind(claims) do
       {:ok, :managed} ->
         case ApiKeyAuthority.authorize(claims) do
           {:ok, key} -> {:ok, key(conn, key)}
-          _ -> {:error, "invalid, expired or revoked API key"}
+          {:error, reason} -> refused(conn, claims, reason, "invalid, expired or revoked API key")
         end
 
       {:ok, _} ->
         {:ok, conn}
 
       _ ->
-        {:error, "invalid credential kind"}
+        refused(conn, claims, :invalid_credential_kind, "invalid credential kind")
     end
   end
+
+  defp refused(conn, claims, reason, message) do
+    if ApiKeyAuthority.serve_refused?(claims, reason),
+      do: {:ok, conn},
+      else: {:error, message}
+  end
+
+  def key(conn, %{"authority" => "unverified"} = key),
+    do: conn |> assign(:api_key, key) |> guard_ingest()
 
   def key(conn, key) do
     required = required_scope(conn.method, canonical_path(conn))
     scopes = key["scopes"]
     conn = assign(conn, :api_key, key)
 
-    if ApiKeyAuthority.valid_scopes?(scopes) and required in scopes and
-         role_permits?(key["role"], required),
-       do: guard_ingest(conn),
-       else: forbid(conn, "insufficient API key scope")
+    cond do
+      ApiKeyAuthority.valid_scopes?(scopes) and required in scopes and
+          role_permits?(key["role"], required) ->
+        guard_ingest(conn)
+
+      ApiKeyAuthority.serve_refused?(key, :scope) ->
+        guard_ingest(conn)
+
+      true ->
+        forbid(conn, "insufficient API key scope")
+    end
   end
 
   defp role_permits?(role, scope)
