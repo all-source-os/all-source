@@ -12,6 +12,10 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Chronis native workflow qualification](./reports/2026-10-27-chronis-native-verification.md): rebuilt baseline failures, candidate CLI lifecycle success, actual Codex/Claude calls and installed-toolkit provenance.
+
+- [Chronis TOON integrity plan](./plans/2026-10-27-chronis-toon-escaping.md) and [native application request](./reference/chronis-toon-request.md): preserve exact task data while escaping structural output, qualified through real Codex and Claude.
+
 - [Legacy registered key authority compatibility](./plans/2026-10-26-legacy-key-authority-compatibility.md): admit retained version-one prefixes while preserving completeness and terminal revocation.
 
 - [Prime sync interval validation](./plans/2026-10-25-prime-sync-interval-validation.md): reject zero before store startup and qualify actual native-host MCP delivery.
@@ -267,3 +271,8 @@ Use relative paths for internal links:
 
 
 - [Allstack delivery plan 2432f3f6-c468-46ca-99ba-45fa6185deba](plans/allstack-2432f3f6-c468-46ca-99ba-45fa6185deba.md)
+- [Allstack CLI and recovery](reference/allstack.md)
+- [Allstack workflow catalog](reference/allstack-catalog.md)
+- [Allstack native skills](reference/allstack-skills.md)
+
+- [Allstack delivery plan b67f2a72-0d88-40b5-bf4d-efdc492f4f99](plans/allstack-b67f2a72-0d88-40b5-bf4d-efdc492f4f99.md)

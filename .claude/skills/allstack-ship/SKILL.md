@@ -21,7 +21,11 @@ Existing guarded configuration files can remain in the tracked base: snapshots b
 
 Use the returned run identity and epoch internally. `allstack verify` prepares the owned single commit and runs the frozen policy against that exact SHA. Confirm positive test execution and unchanged candidate/environment. Any edit or amended commit requires fresh affected verification; do not ship stale receipts. A pending host call must be reconciled, never bypassed.
 
+Before `allstack ship`, preserve required epoch-local receipts and separate raw streams outside disposable worktrees, with paths, lengths, and digests verified. Shipping can remove accepted epoch worktrees. Put the public evidence summary under indexed repo docs and keep private transcripts in ignored storage; preserving only a receipt whose stream paths will disappear is insufficient.
+
 Use `allstack ship` to publish the exact verified commit and read back the branch and PR head. Confirm Chronis task completion and the Prime source-linked outcome. If publication is uncertain, read the destination before repeating a side effect. Never bypass hooks, push trunk, weaken gates, or rewrite another author's history.
+
+Read back required project memory through its engine before archiving an isolated coordinator. Use queries that match each recorded summary; an unrelated lexical search can omit a node that still exists. Preserve tracker/memory state and verified receipts before removing owned checkouts and idle build directories. Recheck PR liveness before any later commit; a merged branch requires newly authorized continuation.
 
 Report the application behavior delivered, PR, exact commit, actual executed checks, and material limits. Required documentation stays indexed under repo docs. Keep private process receipts out of source. The user should not need to manage run IDs or epochs to ask for shipping.
 

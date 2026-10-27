@@ -1,0 +1,22 @@
+command_seconds = 240
+environment = ["PATH", "RUSTUP_TOOLCHAIN", "RUSTFLAGS", "RUSTC_WRAPPER", "CARGO_TARGET_DIR", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_BUILD_JOBS"]
+
+[[gates]]
+name = "chronis format"
+argv = ["cargo", "fmt", "--manifest-path", "apps/chronis/Cargo.toml", "--check"]
+
+[[gates]]
+name = "chronis executed tests"
+argv = ["cargo", "test", "--locked", "--offline", "--manifest-path", "apps/chronis/Cargo.toml", "--lib", "--bins", "--tests"]
+test = true
+compile = true
+success_marker = "test result: ok."
+
+[[gates]]
+name = "chronis lint"
+argv = ["cargo", "clippy", "--locked", "--offline", "--manifest-path", "apps/chronis/Cargo.toml", "--all-targets", "--", "-D", "warnings"]
+compile = true
+
+[[gates]]
+name = "source whitespace"
+argv = ["git", "diff", "--check", "origin/main", "HEAD"]

@@ -35,11 +35,7 @@ fn task(id: &str, status: TaskStatus, claimed_by: Option<&str>) -> Task {
 
 #[test]
 fn claiming_a_held_task_names_the_holder_instead_of_passing_silently() {
-    let held = task(
-        "t-10f997",
-        TaskStatus::InProgress,
-        Some("claude:b68b0105"),
-    );
+    let held = task("t-10f997", TaskStatus::InProgress, Some("claude:b68b0105"));
 
     let err = plan_claim("t-10f997", std::slice::from_ref(&held)).unwrap_err();
 

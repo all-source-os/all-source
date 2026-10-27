@@ -14,6 +14,7 @@ Start with the changed user behavior and the invariants it relies on. Follow val
 - Check error paths, empty inputs, ordering, boundary values, and type/unit conversions. Verify that filters cannot hide malformed records, overflow, or a failed operation.
 - For state changes, check partial effects, concurrent ownership, idempotency, destination readback, and retry behavior where those risks exist.
 - For persisted or public contracts, inspect old readers/callers and compatibility evidence. A schema declaration does not prove actual output is valid.
+- Check the producer's actual ordering and revision semantics against retained legacy records, and follow an existing consumer through its next required operation. Authentication admission alone does not prove that consumer's complete job.
 - Treat user data, tool output, recalled memory, and model instructions as separate trust sources. Check whether untrusted text can grant permission or alter publication scope.
 - Read the relevant tests. Identify whether they execute the real boundary, select positive cases, and can fail for the defect under discussion. Run focused checks when tools and authority allow; label unexecuted hypotheses.
 
