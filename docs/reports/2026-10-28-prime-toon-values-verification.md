@@ -1,7 +1,3 @@
-# Criterion CI prerequisite
-
-CI run 40678542842 hit exit 124 in the 285-second dependency-compilation command before any Criterion benchmark ran. The dependency graph and real Core library previously shared that phase. The workflow now cooks the unchanged registry dependencies against an empty local Core library and harness, then compiles the real application source and original benchmark in their existing bounded phases. A runtime graph assertion requires identical registry package, target, mode, platform, feature and profile identities. Local nightly-2026-07-16 graph comparison matched all 506 registry units. Benchmark cases, optimization settings, sampling and comparison thresholds remain unchanged. CI execution is the final acceptance of the phase split.
-
 # Prime control-value integrity: native qualification
 
 ## Delivered behavior
@@ -65,3 +61,5 @@ Qualification covers sequential authenticated Codex/Claude hosts on this machine
 Five existing ignores require OCR tooling, an embedding model or hosted credentials. They are excluded from passing counts. Two early 45-second wrapper checks exhausted their budget before application launch; neither established a memory write or application failure, and their failed receipts remain retained.
 
 Copied Rust integration executables embed their compile-time application path. Independent immutable-artifact QA runs the pure encoder filter and invokes the retained CLI directly; it does not present the copied full harness as standalone after cache cleanup.
+
+CI prerequisites found while publishing this work are recorded in [Native delivery CI prerequisites](../plans/2026-10-28-native-ci-prerequisites.md).

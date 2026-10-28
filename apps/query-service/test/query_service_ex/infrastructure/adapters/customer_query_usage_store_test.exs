@@ -12,9 +12,17 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStoreTest do
     # Other suites' buffered reporters can flush unrelated tenants.
     # Calls for this test's tenant still get captured, including legacy fallback.
     def call(conn, opts) do
-      if unrelated_usage?(conn.request_path, opts[:tenant]),
-        do: send_resp(conn, 200, "{}"),
-        else: capture(conn, opts)
+      cond do
+        conn.method == "GET" and conn.request_path == "/health" and
+            get_req_header(conn, "authorization") == [] ->
+          send_resp(conn, 200, "{}")
+
+        unrelated_usage?(conn.request_path, opts[:tenant]) ->
+          send_resp(conn, 200, "{}")
+
+        true ->
+          capture(conn, opts)
+      end
     end
 
     defp unrelated_usage?(path, tenant) do
@@ -56,6 +64,17 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStoreTest do
 
     Application.put_env(:query_service_ex, :core_api_key, "Bearer synthetic-admin")
     :ok
+  end
+
+  test "background health probes never mask authenticated requests" do
+    url = fixture(fn _, _ -> {200, "{}"} end)
+    assert %{status: 200} = Req.get!(url <> "/health")
+    refute_receive {:request, _, _, _, _}
+
+    assert %{status: 200} =
+             Req.get!(url <> "/health", headers: [{"authorization", "Bearer synthetic-health"}])
+
+    assert_receive {:request, "GET", "/health", nil, ["Bearer synthetic-health"]}
   end
 
   test "snapshot and exact retry receipt come from the leader with service authority" do

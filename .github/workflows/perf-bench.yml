@@ -8,6 +8,10 @@ on:
       - 'apps/prime-mcp/**'
       - 'apps/chronis/**'
       - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+      - 'tooling/ci-verification/**'
+      - '.github/workflows/perf-bench.yml'
 
 concurrency:
   group: perf-${{ github.ref }}
@@ -98,11 +102,27 @@ jobs:
           set -o pipefail
           timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/criterion-native-dependencies.json
 
+      - name: Require real Core source compilation (PR)
+        # Shared target fingerprints can otherwise reuse the recipe's empty library.
+        timeout-minutes: 1
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const now = new Date();
+          for (const source of ['src/lib.rs', 'benches/performance_benchmarks.rs']) fs.utimesSync(source, now, now);
+          NODE
+
       - name: Compile benchmark dependencies (PR)
         timeout-minutes: 5
         run: |
           set -o pipefail
           timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/pr-dependencies.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const rows = fs.readFileSync('/tmp/pr-dependencies.json', 'utf8').trim().split('\n').map(JSON.parse);
+          if (!rows.some(row => row.reason === 'compiler-artifact' && row.target.name === 'allsource_core' && row.target.src_path === path.resolve('src/lib.rs') && row.fresh === false)) throw Error('real PR Core library was not compiled');
+          NODE
 
       - name: Compile benchmarks (PR)
         id: pr-binary
@@ -144,6 +164,8 @@ jobs:
             return !binary;
           });
           fs.writeFileSync(path, lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n'));
+          const now = new Date();
+          for (const source of ['src/lib.rs', 'benches/performance_benchmarks.rs']) fs.utimesSync(source, now, now);
           NODE
 
       - name: Compile benchmark dependencies (base)
@@ -152,6 +174,12 @@ jobs:
         run: |
           set -o pipefail
           timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/base-dependencies.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const rows = fs.readFileSync('/tmp/base-dependencies.json', 'utf8').trim().split('\n').map(JSON.parse);
+          if (!rows.some(row => row.reason === 'compiler-artifact' && row.target.name === 'allsource_core' && row.target.src_path === path.resolve('src/lib.rs') && row.fresh === false)) throw Error('real base Core library was not compiled');
+          NODE
 
       - name: Compile benchmarks (base)
         id: base-binary
@@ -223,6 +251,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      CARGO_PROFILE_BENCH_STRIP: "false"
+      IAI_CALLGRIND_HOME: ${{ github.workspace }}/.iai-proof-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.package }}
     strategy:
       fail-fast: false
       matrix:
@@ -280,6 +310,13 @@ jobs:
         # against a mismatched crate in either direction, so bumping one side
         # alone reds the bench job for every PR touching that crate's lockfile.
         run: timeout -k 15 285 cargo install iai-callgrind-runner --version 0.16.1 --locked
+
+      - name: Validate instruction regression gate
+        timeout-minutes: 3
+        run: |
+          timeout -k 5 55 cargo test --manifest-path "$GITHUB_WORKSPACE/tooling/ci-verification/Cargo.toml" --locked --offline --tests
+          timeout -k 5 20 cargo fmt --manifest-path "$GITHUB_WORKSPACE/tooling/ci-verification/Cargo.toml" -- --check
+          timeout -k 5 55 cargo clippy --manifest-path "$GITHUB_WORKSPACE/tooling/ci-verification/Cargo.toml" --locked --offline --all-targets -- -D warnings
 
       - name: Scope instruction benchmark to library APIs
         timeout-minutes: 1
@@ -392,6 +429,113 @@ jobs:
           set -o pipefail
           timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/iai-native-dependencies.json
 
+      - name: Checkout instruction baseline
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: baseline
+
+      # The runner refuses a mismatched iai-callgrind crate, so the base is
+      # measured with the runner version its own lockfile pins.
+      - name: Install baseline iai-callgrind-runner
+        id: iai-base-runner
+        timeout-minutes: 5
+        working-directory: .
+        env:
+          BENCHMARK_DIRECTORY: ${{ matrix.working-directory }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const pinned = root => {
+            const local = path.join(root, process.env.BENCHMARK_DIRECTORY, 'Cargo.lock');
+            const lock = fs.readFileSync(fs.existsSync(local) ? local : path.join(root, 'Cargo.lock'), 'utf8');
+            const match = lock.match(/\[\[package\]\]\nname = "iai-callgrind"\nversion = "([^"]+)"/);
+            if (!match) throw Error(`iai-callgrind is not locked under ${root}`);
+            return match[1];
+          };
+          const candidate = pinned(process.env.GITHUB_WORKSPACE);
+          const base = pinned(path.join(process.env.GITHUB_WORKSPACE, 'baseline'));
+          console.log(`iai-callgrind candidate ${candidate}, base ${base}`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${base === candidate ? '' : base}\n`);
+          NODE
+
+      - name: Install baseline runner version
+        if: steps.iai-base-runner.outputs.version != ''
+        timeout-minutes: 5
+        working-directory: .
+        run: timeout -k 15 285 cargo install iai-callgrind-runner --version "${{ steps.iai-base-runner.outputs.version }}" --locked --root "$RUNNER_TEMP/iai-base-runner"
+
+      - name: Scope real baseline source
+        timeout-minutes: 1
+        working-directory: baseline/${{ matrix.working-directory }}
+        env:
+          BENCHMARK_PACKAGE: ${{ matrix.package }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const manifest = fs.readFileSync('Cargo.toml', 'utf8');
+          let binary = false;
+          const lines = manifest.split('\n').filter(line => {
+            if (line === '[[bin]]') { binary = true; return false; }
+            if (line.startsWith('[')) binary = false;
+            return !binary;
+          });
+          let scoped = lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n');
+          if (process.env.BENCHMARK_PACKAGE !== 'allsource-core' && !/^\[workspace\]\s*$/m.test(scoped)) scoped += '\n[workspace]\nresolver = "3"\n';
+          fs.writeFileSync('Cargo.toml', scoped);
+          const now = new Date();
+          const root = path.join(process.env.GITHUB_WORKSPACE, 'baseline');
+          for (const member of ['apps/core', 'apps/prime-mcp', 'apps/chronis']) {
+            for (const file of ['src/lib.rs', 'benches/iai.rs']) {
+              const source = path.join(root, member, file);
+              if (fs.existsSync(source)) fs.utimesSync(source, now, now);
+            }
+          }
+          NODE
+
+      - name: Compile instruction baseline dependencies
+        timeout-minutes: 5
+        working-directory: baseline/${{ matrix.working-directory }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/iai-base-dependencies.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const rows = fs.readFileSync('/tmp/iai-base-dependencies.json', 'utf8').trim().split('\n').map(JSON.parse);
+          const sources = new Set([path.join(process.env.GITHUB_WORKSPACE, 'baseline/apps/core/src/lib.rs')]);
+          if (fs.existsSync('src/lib.rs')) sources.add(path.resolve('src/lib.rs'));
+          for (const source of sources) {
+            if (!rows.some(row => row.reason === 'compiler-artifact' && row.fresh === false && fs.realpathSync(row.target.src_path) === fs.realpathSync(source))) throw Error(`real baseline library was not compiled: ${source}`);
+          }
+          NODE
+
+      - name: Compile instruction baseline harness
+        id: iai-base-binary
+        timeout-minutes: 5
+        working-directory: baseline/${{ matrix.working-directory }}
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics | tee /tmp/iai-base-build.json
+          node -e 'const fs=require("node:fs");const rows=fs.readFileSync("/tmp/iai-base-build.json","utf8").trim().split("\n").map(JSON.parse);const artifact=rows.find(r=>r.reason==="compiler-artifact"&&r.target.name==="iai"&&r.executable);if(!artifact)throw Error("baseline instruction executable missing");fs.appendFileSync(process.env.GITHUB_OUTPUT,"binary="+artifact.executable+"\n");'
+
+      - name: Measure actual base instructions
+        timeout-minutes: 5
+        working-directory: baseline/${{ matrix.working-directory }}
+        env:
+          BENCHMARK_BINARY: ${{ steps.iai-base-binary.outputs.binary }}
+          BASE_RUNNER_VERSION: ${{ steps.iai-base-runner.outputs.version }}
+        run: |
+          set -o pipefail
+          if [ -n "$BASE_RUNNER_VERSION" ]; then export IAI_CALLGRIND_RUNNER="$RUNNER_TEMP/iai-base-runner/bin/iai-callgrind-runner"; fi
+          timeout -k 15 285 "$BENCHMARK_BINARY" --bench --save-baseline=base | tee /tmp/iai-base-output.txt
+
+      - name: Require positive base instructions
+        timeout-minutes: 1
+        run: timeout -k 5 55 cargo run --quiet --manifest-path "$GITHUB_WORKSPACE/tooling/ci-verification/Cargo.toml" --locked --offline -- baseline /tmp/iai-base-output.txt
+
       - name: Require real application source compilation
         timeout-minutes: 1
         working-directory: .
@@ -412,6 +556,16 @@ jobs:
         run: |
           set -o pipefail
           timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/iai-dependencies.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const rows = fs.readFileSync('/tmp/iai-dependencies.json', 'utf8').trim().split('\n').map(JSON.parse);
+          const sources = new Set([path.join(process.env.GITHUB_WORKSPACE, 'apps/core/src/lib.rs')]);
+          if (fs.existsSync('src/lib.rs')) sources.add(path.resolve('src/lib.rs'));
+          for (const source of sources) {
+            if (!rows.some(row => row.reason === 'compiler-artifact' && row.fresh === false && fs.realpathSync(row.target.src_path) === fs.realpathSync(source))) throw Error(`real instruction library was not compiled: ${source}`);
+          }
+          NODE
 
       - name: Compile instruction benchmark harness
         id: iai-binary
@@ -421,35 +575,32 @@ jobs:
           timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics | tee /tmp/iai-build.json
           node -e 'const fs=require("node:fs");const rows=fs.readFileSync("/tmp/iai-build.json","utf8").trim().split("\n").map(JSON.parse);const artifact=rows.find(r=>r.reason==="compiler-artifact"&&r.target.name==="iai"&&r.executable);if(!artifact)throw Error("instruction benchmark executable missing");fs.appendFileSync(process.env.GITHUB_OUTPUT,"binary="+artifact.executable+"\n");'
 
-      - name: Run iai-callgrind and compare to main baseline
+      - name: Run iai-callgrind against measured base
         id: bench
         timeout-minutes: 5
         env:
           BENCHMARK_BINARY: ${{ steps.iai-binary.outputs.binary }}
         run: |
           set -o pipefail
-          timeout -k 15 285 "$BENCHMARK_BINARY" --bench --save-baseline=main | tee /tmp/iai-output.txt
+          timeout -k 15 285 "$BENCHMARK_BINARY" --bench --baseline=base | tee /tmp/iai-output.txt
 
       - name: Enforce 3% regression threshold
         timeout-minutes: 1
-        run: |
-          python3 - <<'PY'
-          import pathlib, re, sys
-          output = pathlib.Path("/tmp/iai-output.txt").read_text()
-          output = re.sub(r"\x1b\[[0-9;]*m", "", output)
-          if not re.search(r"Instructions:\s*[\d,]+", output):
-              sys.exit("instruction measurements missing")
-          pattern = re.compile(r"Instructions:.*?Change:\s*([+-]?\d+\.?\d*)%", re.DOTALL)
-          worst = 0.0
-          for m in pattern.finditer(output):
-              pct = float(m.group(1))
-              if pct > worst:
-                  worst = pct
-          print(f"worst instruction-count regression: {worst:.2f}% (threshold 3%)")
-          if worst > 3.0:
-              print(f"::error::Perf regression {worst:.2f}% exceeds 3% threshold")
-              sys.exit(1)
-          PY
+        run: timeout -k 5 55 cargo run --quiet --manifest-path "$GITHUB_WORKSPACE/tooling/ci-verification/Cargo.toml" --locked --offline -- compare /tmp/iai-output.txt 3 /tmp/iai-base-output.txt
+
+      - name: Preserve instruction measurements
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v6
+        with:
+          name: instruction-proof-${{ matrix.package }}
+          path: |
+            /tmp/iai-base-dependencies.json
+            /tmp/iai-base-build.json
+            /tmp/iai-base-output.txt
+            /tmp/iai-dependencies.json
+            /tmp/iai-build.json
+            /tmp/iai-output.txt
 
       - name: Comment iai summary on PR
         if: always() && steps.bench.outcome == 'success' && github.event_name == 'pull_request'
