@@ -58,6 +58,46 @@ jobs:
           fs.writeFileSync(path, lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n'));
           NODE
 
+      - name: Prepare Criterion dependency recipe
+        timeout-minutes: 1
+        working-directory: .
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const destination = path.join(process.env.RUNNER_TEMP, 'criterion-cook');
+          fs.cpSync(process.env.GITHUB_WORKSPACE, destination, {
+            recursive: true,
+            filter: source => !['.git', 'target', '.allstack', '.chronis'].includes(path.basename(source)),
+          });
+          fs.writeFileSync(path.join(destination, 'apps/core/src/lib.rs'), '');
+          fs.writeFileSync(path.join(destination, 'apps/core/benches/performance_benchmarks.rs'), 'fn main() {}\n');
+          NODE
+
+      - name: Verify Criterion dependency fingerprints
+        timeout-minutes: 1
+        run: |
+          timeout -k 5 20 cargo rustc --profile bench --bench performance_benchmarks -Z unstable-options --unit-graph > "$RUNNER_TEMP/criterion-real-units.json"
+          timeout -k 5 20 cargo rustc --manifest-path "$RUNNER_TEMP/criterion-cook/apps/core/Cargo.toml" --profile bench --bench performance_benchmarks -Z unstable-options --unit-graph > "$RUNNER_TEMP/criterion-cook-units.json"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const native = file => JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, file), 'utf8')).units
+            .filter(unit => unit.pkg_id.startsWith('registry+'))
+            .map(unit => JSON.stringify([unit.pkg_id, unit.target.name, unit.target.kind, unit.mode, unit.platform, unit.features, unit.profile])).sort();
+          const real = native('criterion-real-units.json');
+          const skeleton = native('criterion-cook-units.json');
+          if (!real.length || JSON.stringify(real) !== JSON.stringify(skeleton)) throw Error('Criterion dependency compiler fingerprints differ');
+          console.log(`Verified ${real.length} Criterion dependency units`);
+          NODE
+
+      - name: Cook Criterion dependencies
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}/criterion-cook/apps/core
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --profile bench --bench performance_benchmarks --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/criterion-native-dependencies.json
+
       - name: Compile benchmark dependencies (PR)
         timeout-minutes: 5
         run: |
@@ -164,6 +204,9 @@ jobs:
         with:
           name: criterion-compiler-diagnostics
           path: |
+            /tmp/criterion-native-dependencies.json
+            ${{ runner.temp }}/criterion-real-units.json
+            ${{ runner.temp }}/criterion-cook-units.json
             /tmp/pr-dependencies.json
             /tmp/pr-build.json
             /tmp/base-dependencies.json

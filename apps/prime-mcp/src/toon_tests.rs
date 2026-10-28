@@ -68,3 +68,17 @@ fn entity_ids_with_colons_are_not_quoted() {
     let v = json!({ "node_id": "node:person:42" });
     assert_eq!(encode(&v), "node_id: node:person:42");
 }
+
+#[test]
+fn control_edges_and_literal_backslash_are_distinct() {
+    let v = json!({
+        "backspace": "\u{0008}",
+        "ending": "A\u{000c}",
+        "literal": "\\f",
+        "starting": "\u{000c}A"
+    });
+    assert_eq!(
+        encode(&v),
+        "backspace: \"\\u0008\"\nending: \"A\\u000c\"\nliteral: \"\\\\f\"\nstarting: \"\\u000cA\""
+    );
+}

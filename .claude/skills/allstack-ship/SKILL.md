@@ -23,7 +23,11 @@ Use the returned run identity and epoch internally. `allstack verify` prepares t
 
 Before `allstack ship`, preserve required epoch-local receipts and separate raw streams outside disposable worktrees, with paths, lengths, and digests verified. Shipping can remove accepted epoch worktrees. Put the public evidence summary under indexed repo docs and keep private transcripts in ignored storage; preserving only a receipt whose stream paths will disappear is insufficient.
 
+Include the runtime dependencies needed to reproduce the claimed checks: application binaries, inputs and referenced fixtures or executable paths. Keeping a copied harness alone may leave a compile-time application path pointing into a deleted build directory.
+
 Use `allstack ship` to publish the exact verified commit and read back the branch and PR head. Confirm Chronis task completion and the Prime source-linked outcome. If publication is uncertain, read the destination before repeating a side effect. Never bypass hooks, push trunk, weaken gates, or rewrite another author's history.
+
+Read applicable branch rules/protection before describing CI as merge enforcement. Rebase-only settings control commit shape; they do not require green checks. Report advisory CI and exact-commit verification according to their actual authority.
 
 Read back required project memory through its engine before archiving an isolated coordinator. Use queries that match each recorded summary; an unrelated lexical search can omit a node that still exists. Preserve tracker/memory state and verified receipts before removing owned checkouts and idle build directories. Recheck PR liveness before any later commit; a merged branch requires newly authorized continuation.
 

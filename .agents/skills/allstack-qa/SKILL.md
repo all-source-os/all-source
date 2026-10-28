@@ -11,6 +11,8 @@ Identify the target and the complete user job. Use an explicit supplied target d
 
 Trace the success path from user input to persisted result or delivered output. Include representative empty input, invalid input, and a boundary that could produce a plausible but incorrect success. For a filter, compare matching, nonmatching, and unfiltered results and inspect the original data for silently skipped failures.
 
+For serialization changes, freeze representative inputs and independent expected output before implementation. Exercise the changed positions, such as keys and values separately, and compare retained data plus the complete decoded result. Distinguish an encoder's required representation from forms its decoder merely accepts; preserve unrelated compatibility choices.
+
 For a UI, use an available browser to perform the interaction and inspect the visible result plus relevant runtime failures. For a CLI, execute the built program with concrete input, capture exit status, stdout, and stderr. For an API or job, exercise its actual ingress and read back its result through the owning system. Do not substitute a source inspection or unit test for a claimed browser check.
 
 ## Execute safely and retain evidence
@@ -18,6 +20,8 @@ For a UI, use an available browser to perform the interaction and inspect the vi
 Use an isolated local target when mutations would otherwise affect production. Verify the server or executable belongs to this work, not another session. Respect explicit authorization for external writes. Give every subprocess a deadline no greater than 300 seconds, kill then reap on timeout, and run only one local build at once.
 
 Establish that the application was rebuilt from the intended source before recording its executable digest. Warm build directories can reuse stale binaries after timestamp-preserving copies; invalidate the affected application artifact or otherwise prove the rebuild. Run the actual built program, including negative cases with explicit expected exits.
+
+Qualify immutable copies of the final runtime artifacts when later builds or cleanup can replace their paths. Rehash after execution and bind observations to their actual build inputs. A copied Rust integration executable may still embed a `CARGO_BIN_EXE_*` path; invoke the retained application directly or preserve that dependency before claiming the copied harness remains runnable.
 
 When installed, `allstack check --expect-exit 4 --seconds 120 -- /absolute/program arguments` retains a private receipt without creating a delivery run or task. Omit `--expect-exit` for zero; `--input prompt.txt` supplies bounded UTF-8 stdin. The deadline includes metadata. The repository must ignore `.allstack/`. A matching expected negative exit succeeds; timeout, signal, spawn failure, changed executable, and status mismatch fail and retain their receipt. Inspect `outcome`, separated raw stream paths and digests, and the target's result. Decoded text can be lossy; raw streams preserve bytes. Host tool summaries can combine channels and do not replace those files. An executable digest binds observed bytes, not the source that produced them.
 
