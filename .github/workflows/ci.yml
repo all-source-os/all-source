@@ -240,6 +240,15 @@ jobs:
     needs: [workflow-lint, workflow-validate, changes]
     if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      CC: ccache cc
+      CXX: ccache c++
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1G
     defaults:
       run:
         working-directory: apps/core
@@ -273,23 +282,165 @@ jobs:
         with:
           tool: cargo-sort@2.1.3
 
+      - name: Install native compiler cache
+        timeout-minutes: 5
+        run: |
+          sudo timeout -k 10 60 apt-get update
+          sudo timeout -k 10 180 apt-get install -y --no-install-recommends ccache
+
+      - name: Restore native compiler cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+
       # Fast checks first
       - name: Check formatting
+        timeout-minutes: 1
         run: cargo fmt --check
 
       - name: Check Cargo.toml sorting
+        timeout-minutes: 1
         run: cargo sort --check
 
-      # Then linting
+      - name: Prepare native dependency phase
+        timeout-minutes: 1
+        run: |
+          timeout -k 5 25 cargo test --locked --lib --all-features --no-run -Z unstable-options --unit-graph > /tmp/core-test-units.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const units = JSON.parse(fs.readFileSync('/tmp/core-test-units.json', 'utf8')).units;
+          const roots = units.map((unit, index) => ({ unit, index })).filter(({ unit }) => unit.pkg_id.includes('#librocksdb-sys@') && unit.target.kind.includes('lib'));
+          if (roots.length !== 1) throw Error('expected one RocksDB native dependency');
+          const seen = new Set();
+          function visit(index) {
+            if (seen.has(index)) return;
+            seen.add(index);
+            units[index].dependencies.forEach(dep => visit(dep.index));
+          }
+          visit(roots[0].index);
+          const destination = path.join(process.env.RUNNER_TEMP, 'core-native');
+          fs.mkdirSync(path.join(destination, 'src'), { recursive: true });
+          const lines = ['[package]', 'name = "core-native-foundation"', 'version = "0.0.0"', 'edition = "2024"', '[workspace]', 'resolver = "3"'];
+          for (const host of [false, true]) {
+            lines.push(host ? '[build-dependencies]' : '[dependencies]');
+            for (const index of [...seen].sort((a, b) => a - b)) {
+              const unit = units[index];
+              if (!unit.target.kind.some(kind => ['lib', 'proc-macro'].includes(kind)) || (unit.platform === null) !== host) continue;
+              if (!unit.pkg_id.startsWith('registry+')) throw Error('native phase must use locked registry dependencies');
+              const [name, metadataVersion] = unit.pkg_id.split('#')[1].split('@');
+              const version = metadataVersion.split('+')[0];
+              const alias = `${name.replaceAll('-', '_')}_${version.replaceAll('.', '_')}`;
+              lines.push(`${alias} = { package = ${JSON.stringify(name)}, version = ${JSON.stringify('=' + version)}, default-features = false, features = ${JSON.stringify(unit.features)} }`);
+            }
+          }
+          fs.writeFileSync(path.join(destination, 'Cargo.toml'), lines.join('\n') + '\n');
+          fs.writeFileSync(path.join(destination, 'src/lib.rs'), '');
+          fs.writeFileSync(path.join(destination, 'build.rs'), 'fn main() {}\n');
+          fs.copyFileSync(path.join(process.env.GITHUB_WORKSPACE, 'Cargo.lock'), path.join(destination, 'Cargo.lock'));
+          NODE
+          timeout -k 5 25 cargo test --manifest-path "$RUNNER_TEMP/core-native/Cargo.toml" --offline --lib --no-run -Z unstable-options --unit-graph > /tmp/core-native-units.json
+
+      - name: Verify native compiler fingerprints
+        timeout-minutes: 1
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          function fingerprints(file) {
+            const units = JSON.parse(fs.readFileSync(file, 'utf8')).units;
+            const root = units.findIndex(unit => unit.pkg_id.includes('#librocksdb-sys@') && unit.target.kind.includes('lib'));
+            if (root < 0) throw Error('RocksDB native root missing');
+            const seen = new Set();
+            function visit(index) {
+              if (seen.has(index)) return;
+              seen.add(index);
+              units[index].dependencies.forEach(dep => visit(dep.index));
+            }
+            visit(root);
+            return [...seen].map(index => {
+              const unit = units[index];
+              return JSON.stringify([unit.pkg_id, unit.target.name, unit.target.kind, unit.mode, unit.platform, unit.features, unit.profile]);
+            }).sort();
+          }
+          const actual = fingerprints('/tmp/core-test-units.json');
+          const foundation = fingerprints('/tmp/core-native-units.json');
+          if (!actual.length || JSON.stringify(actual) !== JSON.stringify(foundation)) throw Error('native dependency compiler fingerprints differ');
+          console.log(`Verified ${actual.length} native compiler units`);
+          NODE
+
+      - name: Compile native dependency foundation
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo test --manifest-path "$RUNNER_TEMP/core-native/Cargo.toml" --locked --offline --lib --no-run --message-format=json-render-diagnostics | tee /tmp/core-native-build.json
+
+      # A cold registry graph does not fit one bounded phase; a paused warm
+      # pass keeps its finished units for the strict pass.
+      - name: Warm enterprise test dependencies
+        timeout-minutes: 5
+        run: |
+          set +e
+          timeout -k 15 280 cargo rustc --locked --lib --all-features --profile test --message-format=json-render-diagnostics -- -Z no-codegen > /tmp/core-enterprise-warm-build.json
+          result=$?
+          set -e
+          case "$result" in
+            0) ;;
+            124) echo "Dependency warm phase paused; the strict phase resumes completed units." ;;
+            *) exit "$result" ;;
+          esac
+
+      - name: Compile enterprise test dependencies
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo rustc --locked --lib --all-features --profile test --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/core-enterprise-deps-build.json
+
+      - name: Compile enterprise unit tests
+        id: enterprise-tests
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo test --locked --lib --all-features --no-run --message-format=json-render-diagnostics | tee /tmp/core-enterprise-build.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const rows = fs.readFileSync('/tmp/core-enterprise-build.json', 'utf8').trim().split('\n').map(JSON.parse);
+          const artifact = rows.find(row => row.reason === 'compiler-artifact' && row.target.name === 'allsource_core' && row.profile.test && row.executable);
+          if (!artifact) throw Error('enterprise unit-test executable missing');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `binary=${artifact.executable}\n`);
+          NODE
+
       - name: Run Clippy
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+        timeout-minutes: 5
+        run: timeout -k 15 285 cargo clippy --locked --all-targets --all-features --profile test -- -D warnings
 
       # Then tests and build (both editions)
       - name: Run tests (enterprise — all features)
-        run: cargo test --locked --lib --all-features
+        timeout-minutes: 5
+        env:
+          TEST_BINARY: ${{ steps.enterprise-tests.outputs.binary }}
+        run: timeout -k 15 285 "$TEST_BINARY"
+
+      - name: Compile community unit tests
+        id: community-tests
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          timeout -k 15 285 cargo test --locked --lib --features community --no-run --message-format=json-render-diagnostics | tee /tmp/core-community-build.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const rows = fs.readFileSync('/tmp/core-community-build.json', 'utf8').trim().split('\n').map(JSON.parse);
+          const artifact = rows.find(row => row.reason === 'compiler-artifact' && row.target.name === 'allsource_core' && row.profile.test && row.executable);
+          if (!artifact) throw Error('community unit-test executable missing');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `binary=${artifact.executable}\n`);
+          NODE
 
       - name: Run tests (community edition)
-        run: cargo test --locked --lib --features community
+        timeout-minutes: 5
+        env:
+          TEST_BINARY: ${{ steps.community-tests.outputs.binary }}
+        run: timeout -k 15 285 "$TEST_BINARY"
 
       # Until this step existed, NOTHING in apps/core/tests/ ever ran. Both
       # steps above are `--lib`, and clippy --all-targets compiles an
@@ -313,15 +464,45 @@ jobs:
       # Adding a feature-gated test file? Add its feature here, then check the
       # run really says "N passed" for it.
       - name: Run integration tests
-        run: cargo test --locked --tests --features embedded-phase2,embedded-sync,embedded-replicant,embedded-streaming,embedded-projections,embedded-toon,prime-recall,replication,multi-tenant,cold-tier-s3
+        timeout-minutes: 5
+        run: timeout -k 15 285 cargo test --locked --tests --features embedded-phase2,embedded-sync,embedded-replicant,embedded-streaming,embedded-projections,embedded-toon,prime-recall,replication,multi-tenant,cold-tier-s3
+
+      - name: Compile release dependencies
+        timeout-minutes: 5
+        run: timeout -k 15 285 cargo rustc --locked --lib --release -- -Z no-codegen
 
       - name: Build release
-        run: cargo build --locked --lib --release
+        timeout-minutes: 5
+        run: timeout -k 15 285 cargo build --locked --lib --release
 
       - name: Check documentation
-        run: cargo doc --no-deps --document-private-items
+        timeout-minutes: 5
+        run: timeout -k 15 285 cargo doc --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: "-D warnings"
+
+      - name: Preserve Core compiler diagnostics
+        if: failure()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v6
+        with:
+          name: core-compiler-diagnostics
+          path: |
+            /tmp/core-*-build.json
+            /tmp/core-*-units.json
+
+      - name: Report native compiler cache
+        if: always()
+        timeout-minutes: 1
+        run: ccache --show-stats
+
+      - name: Save native compiler cache
+        if: always()
+        timeout-minutes: 5
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # ============================================================================
   # Tenant Isolation Gate (scans both QS Elixir + Core Rust source)

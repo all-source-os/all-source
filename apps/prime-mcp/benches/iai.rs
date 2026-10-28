@@ -38,8 +38,7 @@ fn bench_add_node_batch(n: usize) {
     });
 }
 
-#[library_benchmark]
-fn bench_stats_over_populated_graph() {
+fn populated_graph() -> (Runtime, Prime) {
     let rt = rt();
     let prime = rt.block_on(async {
         let p = Prime::open_in_memory().await.unwrap();
@@ -48,7 +47,16 @@ fn bench_stats_over_populated_graph() {
         }
         p
     });
-    std::hint::black_box(prime.stats());
+    (rt, prime)
+}
+
+// Population and teardown run on runtime threads whose scheduling varies
+// between runs, so they stay outside the measured frame.
+#[library_benchmark]
+#[bench::thousand_nodes(setup = populated_graph)]
+fn bench_stats_over_populated_graph(graph: (Runtime, Prime)) -> (Runtime, Prime) {
+    std::hint::black_box(graph.1.stats());
+    graph
 }
 
 library_benchmark_group!(

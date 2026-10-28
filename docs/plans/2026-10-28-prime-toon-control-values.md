@@ -1,7 +1,3 @@
-# Criterion compilation prerequisite
-
-Publication must also repair the inherited Criterion dependency-phase timeout on this PR. CI run 40678542842 stopped with exit 124 before producing a benchmark executable. Use a dependency-only recipe with empty local Core library and harness sources, verify identical registry compiler fingerprints, then compile the real application and benchmark under the existing separate 285-second limits. Keep benchmark cases, optimization settings and comparison thresholds unchanged. This is required delivery work on the existing authorized branch and PR.
-
 # Prime TOON control-value integrity
 
 Status: accepted. The user authorized `fix/prime-toon-control-values` and one AllSource PR.
@@ -47,3 +43,5 @@ Publish one exact-verified commit on the authorized live branch and one PR. Read
 ## Independent planning evidence
 
 Authenticated Claude session `2328098f-b22b-49c8-a2c3-ee4dd6e5829f` read its installed native plan method and current producer/tests/policy. Sixteen observed tool calls yielded fourteen successful tool results; two attempted Bash calls were denied because this planning session exposed only Read/Grep/Glob. Neither denied call executed. Its 136,305 ms completed host call returned an executable plan, preserving the control-value scope and existing key/entity-ID compatibility. Actual receipts remain private. Implementation, candidate execution and publication are still pending.
+
+CI prerequisites found while publishing this work are recorded in [Native delivery CI prerequisites](2026-10-28-native-ci-prerequisites.md).
