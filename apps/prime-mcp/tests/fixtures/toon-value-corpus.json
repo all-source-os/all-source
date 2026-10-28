@@ -1,0 +1,3605 @@
+{
+  "reference": "@toon-format/toon@4.4.0",
+  "cases": [
+    {
+      "name": "c0-00/object",
+      "input": {
+        "value": "a\u0000z"
+      },
+      "expected": "value: \"a\\u0000z\""
+    },
+    {
+      "name": "c0-00/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0000z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0000z\""
+    },
+    {
+      "name": "c0-00/scalar_array",
+      "input": {
+        "values": [
+          "a\u0000z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0000z\""
+    },
+    {
+      "name": "c0-00/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0000z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0000z\""
+    },
+    {
+      "name": "c0-00/mixed_list",
+      "input": {
+        "items": [
+          "a\u0000z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0000z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-00/object",
+      "input": {
+        "value": "a,\u0000z"
+      },
+      "expected": "value: \"a,\\u0000z\""
+    },
+    {
+      "name": "comma-c0-00/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0000z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0000z\""
+    },
+    {
+      "name": "comma-c0-00/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0000z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0000z\""
+    },
+    {
+      "name": "comma-c0-00/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0000z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0000z\""
+    },
+    {
+      "name": "comma-c0-00/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0000z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0000z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-01/object",
+      "input": {
+        "value": "a\u0001z"
+      },
+      "expected": "value: \"a\\u0001z\""
+    },
+    {
+      "name": "c0-01/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0001z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0001z\""
+    },
+    {
+      "name": "c0-01/scalar_array",
+      "input": {
+        "values": [
+          "a\u0001z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0001z\""
+    },
+    {
+      "name": "c0-01/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0001z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0001z\""
+    },
+    {
+      "name": "c0-01/mixed_list",
+      "input": {
+        "items": [
+          "a\u0001z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0001z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-01/object",
+      "input": {
+        "value": "a,\u0001z"
+      },
+      "expected": "value: \"a,\\u0001z\""
+    },
+    {
+      "name": "comma-c0-01/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0001z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0001z\""
+    },
+    {
+      "name": "comma-c0-01/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0001z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0001z\""
+    },
+    {
+      "name": "comma-c0-01/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0001z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0001z\""
+    },
+    {
+      "name": "comma-c0-01/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0001z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0001z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-02/object",
+      "input": {
+        "value": "a\u0002z"
+      },
+      "expected": "value: \"a\\u0002z\""
+    },
+    {
+      "name": "c0-02/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0002z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0002z\""
+    },
+    {
+      "name": "c0-02/scalar_array",
+      "input": {
+        "values": [
+          "a\u0002z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0002z\""
+    },
+    {
+      "name": "c0-02/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0002z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0002z\""
+    },
+    {
+      "name": "c0-02/mixed_list",
+      "input": {
+        "items": [
+          "a\u0002z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0002z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-02/object",
+      "input": {
+        "value": "a,\u0002z"
+      },
+      "expected": "value: \"a,\\u0002z\""
+    },
+    {
+      "name": "comma-c0-02/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0002z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0002z\""
+    },
+    {
+      "name": "comma-c0-02/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0002z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0002z\""
+    },
+    {
+      "name": "comma-c0-02/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0002z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0002z\""
+    },
+    {
+      "name": "comma-c0-02/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0002z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0002z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-03/object",
+      "input": {
+        "value": "a\u0003z"
+      },
+      "expected": "value: \"a\\u0003z\""
+    },
+    {
+      "name": "c0-03/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0003z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0003z\""
+    },
+    {
+      "name": "c0-03/scalar_array",
+      "input": {
+        "values": [
+          "a\u0003z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0003z\""
+    },
+    {
+      "name": "c0-03/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0003z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0003z\""
+    },
+    {
+      "name": "c0-03/mixed_list",
+      "input": {
+        "items": [
+          "a\u0003z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0003z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-03/object",
+      "input": {
+        "value": "a,\u0003z"
+      },
+      "expected": "value: \"a,\\u0003z\""
+    },
+    {
+      "name": "comma-c0-03/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0003z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0003z\""
+    },
+    {
+      "name": "comma-c0-03/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0003z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0003z\""
+    },
+    {
+      "name": "comma-c0-03/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0003z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0003z\""
+    },
+    {
+      "name": "comma-c0-03/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0003z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0003z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-04/object",
+      "input": {
+        "value": "a\u0004z"
+      },
+      "expected": "value: \"a\\u0004z\""
+    },
+    {
+      "name": "c0-04/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0004z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0004z\""
+    },
+    {
+      "name": "c0-04/scalar_array",
+      "input": {
+        "values": [
+          "a\u0004z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0004z\""
+    },
+    {
+      "name": "c0-04/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0004z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0004z\""
+    },
+    {
+      "name": "c0-04/mixed_list",
+      "input": {
+        "items": [
+          "a\u0004z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0004z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-04/object",
+      "input": {
+        "value": "a,\u0004z"
+      },
+      "expected": "value: \"a,\\u0004z\""
+    },
+    {
+      "name": "comma-c0-04/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0004z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0004z\""
+    },
+    {
+      "name": "comma-c0-04/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0004z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0004z\""
+    },
+    {
+      "name": "comma-c0-04/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0004z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0004z\""
+    },
+    {
+      "name": "comma-c0-04/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0004z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0004z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-05/object",
+      "input": {
+        "value": "a\u0005z"
+      },
+      "expected": "value: \"a\\u0005z\""
+    },
+    {
+      "name": "c0-05/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0005z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0005z\""
+    },
+    {
+      "name": "c0-05/scalar_array",
+      "input": {
+        "values": [
+          "a\u0005z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0005z\""
+    },
+    {
+      "name": "c0-05/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0005z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0005z\""
+    },
+    {
+      "name": "c0-05/mixed_list",
+      "input": {
+        "items": [
+          "a\u0005z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0005z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-05/object",
+      "input": {
+        "value": "a,\u0005z"
+      },
+      "expected": "value: \"a,\\u0005z\""
+    },
+    {
+      "name": "comma-c0-05/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0005z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0005z\""
+    },
+    {
+      "name": "comma-c0-05/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0005z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0005z\""
+    },
+    {
+      "name": "comma-c0-05/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0005z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0005z\""
+    },
+    {
+      "name": "comma-c0-05/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0005z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0005z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-06/object",
+      "input": {
+        "value": "a\u0006z"
+      },
+      "expected": "value: \"a\\u0006z\""
+    },
+    {
+      "name": "c0-06/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0006z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0006z\""
+    },
+    {
+      "name": "c0-06/scalar_array",
+      "input": {
+        "values": [
+          "a\u0006z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0006z\""
+    },
+    {
+      "name": "c0-06/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0006z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0006z\""
+    },
+    {
+      "name": "c0-06/mixed_list",
+      "input": {
+        "items": [
+          "a\u0006z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0006z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-06/object",
+      "input": {
+        "value": "a,\u0006z"
+      },
+      "expected": "value: \"a,\\u0006z\""
+    },
+    {
+      "name": "comma-c0-06/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0006z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0006z\""
+    },
+    {
+      "name": "comma-c0-06/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0006z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0006z\""
+    },
+    {
+      "name": "comma-c0-06/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0006z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0006z\""
+    },
+    {
+      "name": "comma-c0-06/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0006z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0006z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-07/object",
+      "input": {
+        "value": "a\u0007z"
+      },
+      "expected": "value: \"a\\u0007z\""
+    },
+    {
+      "name": "c0-07/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0007z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0007z\""
+    },
+    {
+      "name": "c0-07/scalar_array",
+      "input": {
+        "values": [
+          "a\u0007z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0007z\""
+    },
+    {
+      "name": "c0-07/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0007z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0007z\""
+    },
+    {
+      "name": "c0-07/mixed_list",
+      "input": {
+        "items": [
+          "a\u0007z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0007z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-07/object",
+      "input": {
+        "value": "a,\u0007z"
+      },
+      "expected": "value: \"a,\\u0007z\""
+    },
+    {
+      "name": "comma-c0-07/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0007z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0007z\""
+    },
+    {
+      "name": "comma-c0-07/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0007z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0007z\""
+    },
+    {
+      "name": "comma-c0-07/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0007z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0007z\""
+    },
+    {
+      "name": "comma-c0-07/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0007z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0007z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-08/object",
+      "input": {
+        "value": "a\bz"
+      },
+      "expected": "value: \"a\\u0008z\""
+    },
+    {
+      "name": "c0-08/nested",
+      "input": {
+        "outer": {
+          "value": "a\bz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0008z\""
+    },
+    {
+      "name": "c0-08/scalar_array",
+      "input": {
+        "values": [
+          "a\bz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0008z\""
+    },
+    {
+      "name": "c0-08/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\bz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0008z\""
+    },
+    {
+      "name": "c0-08/mixed_list",
+      "input": {
+        "items": [
+          "a\bz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0008z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-08/object",
+      "input": {
+        "value": "a,\bz"
+      },
+      "expected": "value: \"a,\\u0008z\""
+    },
+    {
+      "name": "comma-c0-08/nested",
+      "input": {
+        "outer": {
+          "value": "a,\bz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0008z\""
+    },
+    {
+      "name": "comma-c0-08/scalar_array",
+      "input": {
+        "values": [
+          "a,\bz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0008z\""
+    },
+    {
+      "name": "comma-c0-08/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\bz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0008z\""
+    },
+    {
+      "name": "comma-c0-08/mixed_list",
+      "input": {
+        "items": [
+          "a,\bz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0008z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-09/object",
+      "input": {
+        "value": "a\tz"
+      },
+      "expected": "value: \"a\\tz\""
+    },
+    {
+      "name": "c0-09/nested",
+      "input": {
+        "outer": {
+          "value": "a\tz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\tz\""
+    },
+    {
+      "name": "c0-09/scalar_array",
+      "input": {
+        "values": [
+          "a\tz"
+        ]
+      },
+      "expected": "values[1]: \"a\\tz\""
+    },
+    {
+      "name": "c0-09/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\tz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\tz\""
+    },
+    {
+      "name": "c0-09/mixed_list",
+      "input": {
+        "items": [
+          "a\tz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\tz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-09/object",
+      "input": {
+        "value": "a,\tz"
+      },
+      "expected": "value: \"a,\\tz\""
+    },
+    {
+      "name": "comma-c0-09/nested",
+      "input": {
+        "outer": {
+          "value": "a,\tz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\tz\""
+    },
+    {
+      "name": "comma-c0-09/scalar_array",
+      "input": {
+        "values": [
+          "a,\tz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\tz\""
+    },
+    {
+      "name": "comma-c0-09/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\tz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\tz\""
+    },
+    {
+      "name": "comma-c0-09/mixed_list",
+      "input": {
+        "items": [
+          "a,\tz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\tz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-0a/object",
+      "input": {
+        "value": "a\nz"
+      },
+      "expected": "value: \"a\\nz\""
+    },
+    {
+      "name": "c0-0a/nested",
+      "input": {
+        "outer": {
+          "value": "a\nz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\nz\""
+    },
+    {
+      "name": "c0-0a/scalar_array",
+      "input": {
+        "values": [
+          "a\nz"
+        ]
+      },
+      "expected": "values[1]: \"a\\nz\""
+    },
+    {
+      "name": "c0-0a/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\nz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\nz\""
+    },
+    {
+      "name": "c0-0a/mixed_list",
+      "input": {
+        "items": [
+          "a\nz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\nz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-0a/object",
+      "input": {
+        "value": "a,\nz"
+      },
+      "expected": "value: \"a,\\nz\""
+    },
+    {
+      "name": "comma-c0-0a/nested",
+      "input": {
+        "outer": {
+          "value": "a,\nz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\nz\""
+    },
+    {
+      "name": "comma-c0-0a/scalar_array",
+      "input": {
+        "values": [
+          "a,\nz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\nz\""
+    },
+    {
+      "name": "comma-c0-0a/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\nz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\nz\""
+    },
+    {
+      "name": "comma-c0-0a/mixed_list",
+      "input": {
+        "items": [
+          "a,\nz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\nz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-0b/object",
+      "input": {
+        "value": "a\u000bz"
+      },
+      "expected": "value: \"a\\u000bz\""
+    },
+    {
+      "name": "c0-0b/nested",
+      "input": {
+        "outer": {
+          "value": "a\u000bz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u000bz\""
+    },
+    {
+      "name": "c0-0b/scalar_array",
+      "input": {
+        "values": [
+          "a\u000bz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u000bz\""
+    },
+    {
+      "name": "c0-0b/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u000bz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u000bz\""
+    },
+    {
+      "name": "c0-0b/mixed_list",
+      "input": {
+        "items": [
+          "a\u000bz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u000bz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-0b/object",
+      "input": {
+        "value": "a,\u000bz"
+      },
+      "expected": "value: \"a,\\u000bz\""
+    },
+    {
+      "name": "comma-c0-0b/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u000bz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u000bz\""
+    },
+    {
+      "name": "comma-c0-0b/scalar_array",
+      "input": {
+        "values": [
+          "a,\u000bz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u000bz\""
+    },
+    {
+      "name": "comma-c0-0b/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u000bz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u000bz\""
+    },
+    {
+      "name": "comma-c0-0b/mixed_list",
+      "input": {
+        "items": [
+          "a,\u000bz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u000bz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-0c/object",
+      "input": {
+        "value": "a\fz"
+      },
+      "expected": "value: \"a\\u000cz\""
+    },
+    {
+      "name": "c0-0c/nested",
+      "input": {
+        "outer": {
+          "value": "a\fz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u000cz\""
+    },
+    {
+      "name": "c0-0c/scalar_array",
+      "input": {
+        "values": [
+          "a\fz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u000cz\""
+    },
+    {
+      "name": "c0-0c/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\fz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u000cz\""
+    },
+    {
+      "name": "c0-0c/mixed_list",
+      "input": {
+        "items": [
+          "a\fz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u000cz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-0c/object",
+      "input": {
+        "value": "a,\fz"
+      },
+      "expected": "value: \"a,\\u000cz\""
+    },
+    {
+      "name": "comma-c0-0c/nested",
+      "input": {
+        "outer": {
+          "value": "a,\fz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u000cz\""
+    },
+    {
+      "name": "comma-c0-0c/scalar_array",
+      "input": {
+        "values": [
+          "a,\fz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u000cz\""
+    },
+    {
+      "name": "comma-c0-0c/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\fz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u000cz\""
+    },
+    {
+      "name": "comma-c0-0c/mixed_list",
+      "input": {
+        "items": [
+          "a,\fz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u000cz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-0d/object",
+      "input": {
+        "value": "a\rz"
+      },
+      "expected": "value: \"a\\rz\""
+    },
+    {
+      "name": "c0-0d/nested",
+      "input": {
+        "outer": {
+          "value": "a\rz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\rz\""
+    },
+    {
+      "name": "c0-0d/scalar_array",
+      "input": {
+        "values": [
+          "a\rz"
+        ]
+      },
+      "expected": "values[1]: \"a\\rz\""
+    },
+    {
+      "name": "c0-0d/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\rz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\rz\""
+    },
+    {
+      "name": "c0-0d/mixed_list",
+      "input": {
+        "items": [
+          "a\rz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\rz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-0d/object",
+      "input": {
+        "value": "a,\rz"
+      },
+      "expected": "value: \"a,\\rz\""
+    },
+    {
+      "name": "comma-c0-0d/nested",
+      "input": {
+        "outer": {
+          "value": "a,\rz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\rz\""
+    },
+    {
+      "name": "comma-c0-0d/scalar_array",
+      "input": {
+        "values": [
+          "a,\rz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\rz\""
+    },
+    {
+      "name": "comma-c0-0d/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\rz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\rz\""
+    },
+    {
+      "name": "comma-c0-0d/mixed_list",
+      "input": {
+        "items": [
+          "a,\rz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\rz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-0e/object",
+      "input": {
+        "value": "a\u000ez"
+      },
+      "expected": "value: \"a\\u000ez\""
+    },
+    {
+      "name": "c0-0e/nested",
+      "input": {
+        "outer": {
+          "value": "a\u000ez"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u000ez\""
+    },
+    {
+      "name": "c0-0e/scalar_array",
+      "input": {
+        "values": [
+          "a\u000ez"
+        ]
+      },
+      "expected": "values[1]: \"a\\u000ez\""
+    },
+    {
+      "name": "c0-0e/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u000ez"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u000ez\""
+    },
+    {
+      "name": "c0-0e/mixed_list",
+      "input": {
+        "items": [
+          "a\u000ez",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u000ez\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-0e/object",
+      "input": {
+        "value": "a,\u000ez"
+      },
+      "expected": "value: \"a,\\u000ez\""
+    },
+    {
+      "name": "comma-c0-0e/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u000ez"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u000ez\""
+    },
+    {
+      "name": "comma-c0-0e/scalar_array",
+      "input": {
+        "values": [
+          "a,\u000ez"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u000ez\""
+    },
+    {
+      "name": "comma-c0-0e/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u000ez"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u000ez\""
+    },
+    {
+      "name": "comma-c0-0e/mixed_list",
+      "input": {
+        "items": [
+          "a,\u000ez",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u000ez\"\n  - k: plain"
+    },
+    {
+      "name": "c0-0f/object",
+      "input": {
+        "value": "a\u000fz"
+      },
+      "expected": "value: \"a\\u000fz\""
+    },
+    {
+      "name": "c0-0f/nested",
+      "input": {
+        "outer": {
+          "value": "a\u000fz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u000fz\""
+    },
+    {
+      "name": "c0-0f/scalar_array",
+      "input": {
+        "values": [
+          "a\u000fz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u000fz\""
+    },
+    {
+      "name": "c0-0f/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u000fz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u000fz\""
+    },
+    {
+      "name": "c0-0f/mixed_list",
+      "input": {
+        "items": [
+          "a\u000fz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u000fz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-0f/object",
+      "input": {
+        "value": "a,\u000fz"
+      },
+      "expected": "value: \"a,\\u000fz\""
+    },
+    {
+      "name": "comma-c0-0f/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u000fz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u000fz\""
+    },
+    {
+      "name": "comma-c0-0f/scalar_array",
+      "input": {
+        "values": [
+          "a,\u000fz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u000fz\""
+    },
+    {
+      "name": "comma-c0-0f/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u000fz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u000fz\""
+    },
+    {
+      "name": "comma-c0-0f/mixed_list",
+      "input": {
+        "items": [
+          "a,\u000fz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u000fz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-10/object",
+      "input": {
+        "value": "a\u0010z"
+      },
+      "expected": "value: \"a\\u0010z\""
+    },
+    {
+      "name": "c0-10/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0010z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0010z\""
+    },
+    {
+      "name": "c0-10/scalar_array",
+      "input": {
+        "values": [
+          "a\u0010z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0010z\""
+    },
+    {
+      "name": "c0-10/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0010z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0010z\""
+    },
+    {
+      "name": "c0-10/mixed_list",
+      "input": {
+        "items": [
+          "a\u0010z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0010z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-10/object",
+      "input": {
+        "value": "a,\u0010z"
+      },
+      "expected": "value: \"a,\\u0010z\""
+    },
+    {
+      "name": "comma-c0-10/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0010z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0010z\""
+    },
+    {
+      "name": "comma-c0-10/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0010z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0010z\""
+    },
+    {
+      "name": "comma-c0-10/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0010z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0010z\""
+    },
+    {
+      "name": "comma-c0-10/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0010z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0010z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-11/object",
+      "input": {
+        "value": "a\u0011z"
+      },
+      "expected": "value: \"a\\u0011z\""
+    },
+    {
+      "name": "c0-11/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0011z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0011z\""
+    },
+    {
+      "name": "c0-11/scalar_array",
+      "input": {
+        "values": [
+          "a\u0011z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0011z\""
+    },
+    {
+      "name": "c0-11/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0011z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0011z\""
+    },
+    {
+      "name": "c0-11/mixed_list",
+      "input": {
+        "items": [
+          "a\u0011z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0011z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-11/object",
+      "input": {
+        "value": "a,\u0011z"
+      },
+      "expected": "value: \"a,\\u0011z\""
+    },
+    {
+      "name": "comma-c0-11/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0011z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0011z\""
+    },
+    {
+      "name": "comma-c0-11/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0011z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0011z\""
+    },
+    {
+      "name": "comma-c0-11/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0011z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0011z\""
+    },
+    {
+      "name": "comma-c0-11/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0011z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0011z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-12/object",
+      "input": {
+        "value": "a\u0012z"
+      },
+      "expected": "value: \"a\\u0012z\""
+    },
+    {
+      "name": "c0-12/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0012z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0012z\""
+    },
+    {
+      "name": "c0-12/scalar_array",
+      "input": {
+        "values": [
+          "a\u0012z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0012z\""
+    },
+    {
+      "name": "c0-12/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0012z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0012z\""
+    },
+    {
+      "name": "c0-12/mixed_list",
+      "input": {
+        "items": [
+          "a\u0012z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0012z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-12/object",
+      "input": {
+        "value": "a,\u0012z"
+      },
+      "expected": "value: \"a,\\u0012z\""
+    },
+    {
+      "name": "comma-c0-12/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0012z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0012z\""
+    },
+    {
+      "name": "comma-c0-12/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0012z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0012z\""
+    },
+    {
+      "name": "comma-c0-12/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0012z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0012z\""
+    },
+    {
+      "name": "comma-c0-12/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0012z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0012z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-13/object",
+      "input": {
+        "value": "a\u0013z"
+      },
+      "expected": "value: \"a\\u0013z\""
+    },
+    {
+      "name": "c0-13/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0013z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0013z\""
+    },
+    {
+      "name": "c0-13/scalar_array",
+      "input": {
+        "values": [
+          "a\u0013z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0013z\""
+    },
+    {
+      "name": "c0-13/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0013z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0013z\""
+    },
+    {
+      "name": "c0-13/mixed_list",
+      "input": {
+        "items": [
+          "a\u0013z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0013z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-13/object",
+      "input": {
+        "value": "a,\u0013z"
+      },
+      "expected": "value: \"a,\\u0013z\""
+    },
+    {
+      "name": "comma-c0-13/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0013z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0013z\""
+    },
+    {
+      "name": "comma-c0-13/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0013z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0013z\""
+    },
+    {
+      "name": "comma-c0-13/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0013z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0013z\""
+    },
+    {
+      "name": "comma-c0-13/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0013z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0013z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-14/object",
+      "input": {
+        "value": "a\u0014z"
+      },
+      "expected": "value: \"a\\u0014z\""
+    },
+    {
+      "name": "c0-14/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0014z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0014z\""
+    },
+    {
+      "name": "c0-14/scalar_array",
+      "input": {
+        "values": [
+          "a\u0014z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0014z\""
+    },
+    {
+      "name": "c0-14/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0014z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0014z\""
+    },
+    {
+      "name": "c0-14/mixed_list",
+      "input": {
+        "items": [
+          "a\u0014z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0014z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-14/object",
+      "input": {
+        "value": "a,\u0014z"
+      },
+      "expected": "value: \"a,\\u0014z\""
+    },
+    {
+      "name": "comma-c0-14/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0014z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0014z\""
+    },
+    {
+      "name": "comma-c0-14/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0014z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0014z\""
+    },
+    {
+      "name": "comma-c0-14/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0014z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0014z\""
+    },
+    {
+      "name": "comma-c0-14/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0014z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0014z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-15/object",
+      "input": {
+        "value": "a\u0015z"
+      },
+      "expected": "value: \"a\\u0015z\""
+    },
+    {
+      "name": "c0-15/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0015z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0015z\""
+    },
+    {
+      "name": "c0-15/scalar_array",
+      "input": {
+        "values": [
+          "a\u0015z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0015z\""
+    },
+    {
+      "name": "c0-15/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0015z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0015z\""
+    },
+    {
+      "name": "c0-15/mixed_list",
+      "input": {
+        "items": [
+          "a\u0015z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0015z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-15/object",
+      "input": {
+        "value": "a,\u0015z"
+      },
+      "expected": "value: \"a,\\u0015z\""
+    },
+    {
+      "name": "comma-c0-15/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0015z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0015z\""
+    },
+    {
+      "name": "comma-c0-15/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0015z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0015z\""
+    },
+    {
+      "name": "comma-c0-15/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0015z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0015z\""
+    },
+    {
+      "name": "comma-c0-15/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0015z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0015z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-16/object",
+      "input": {
+        "value": "a\u0016z"
+      },
+      "expected": "value: \"a\\u0016z\""
+    },
+    {
+      "name": "c0-16/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0016z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0016z\""
+    },
+    {
+      "name": "c0-16/scalar_array",
+      "input": {
+        "values": [
+          "a\u0016z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0016z\""
+    },
+    {
+      "name": "c0-16/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0016z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0016z\""
+    },
+    {
+      "name": "c0-16/mixed_list",
+      "input": {
+        "items": [
+          "a\u0016z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0016z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-16/object",
+      "input": {
+        "value": "a,\u0016z"
+      },
+      "expected": "value: \"a,\\u0016z\""
+    },
+    {
+      "name": "comma-c0-16/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0016z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0016z\""
+    },
+    {
+      "name": "comma-c0-16/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0016z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0016z\""
+    },
+    {
+      "name": "comma-c0-16/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0016z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0016z\""
+    },
+    {
+      "name": "comma-c0-16/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0016z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0016z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-17/object",
+      "input": {
+        "value": "a\u0017z"
+      },
+      "expected": "value: \"a\\u0017z\""
+    },
+    {
+      "name": "c0-17/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0017z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0017z\""
+    },
+    {
+      "name": "c0-17/scalar_array",
+      "input": {
+        "values": [
+          "a\u0017z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0017z\""
+    },
+    {
+      "name": "c0-17/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0017z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0017z\""
+    },
+    {
+      "name": "c0-17/mixed_list",
+      "input": {
+        "items": [
+          "a\u0017z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0017z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-17/object",
+      "input": {
+        "value": "a,\u0017z"
+      },
+      "expected": "value: \"a,\\u0017z\""
+    },
+    {
+      "name": "comma-c0-17/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0017z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0017z\""
+    },
+    {
+      "name": "comma-c0-17/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0017z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0017z\""
+    },
+    {
+      "name": "comma-c0-17/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0017z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0017z\""
+    },
+    {
+      "name": "comma-c0-17/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0017z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0017z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-18/object",
+      "input": {
+        "value": "a\u0018z"
+      },
+      "expected": "value: \"a\\u0018z\""
+    },
+    {
+      "name": "c0-18/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0018z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0018z\""
+    },
+    {
+      "name": "c0-18/scalar_array",
+      "input": {
+        "values": [
+          "a\u0018z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0018z\""
+    },
+    {
+      "name": "c0-18/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0018z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0018z\""
+    },
+    {
+      "name": "c0-18/mixed_list",
+      "input": {
+        "items": [
+          "a\u0018z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0018z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-18/object",
+      "input": {
+        "value": "a,\u0018z"
+      },
+      "expected": "value: \"a,\\u0018z\""
+    },
+    {
+      "name": "comma-c0-18/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0018z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0018z\""
+    },
+    {
+      "name": "comma-c0-18/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0018z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0018z\""
+    },
+    {
+      "name": "comma-c0-18/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0018z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0018z\""
+    },
+    {
+      "name": "comma-c0-18/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0018z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0018z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-19/object",
+      "input": {
+        "value": "a\u0019z"
+      },
+      "expected": "value: \"a\\u0019z\""
+    },
+    {
+      "name": "c0-19/nested",
+      "input": {
+        "outer": {
+          "value": "a\u0019z"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u0019z\""
+    },
+    {
+      "name": "c0-19/scalar_array",
+      "input": {
+        "values": [
+          "a\u0019z"
+        ]
+      },
+      "expected": "values[1]: \"a\\u0019z\""
+    },
+    {
+      "name": "c0-19/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u0019z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u0019z\""
+    },
+    {
+      "name": "c0-19/mixed_list",
+      "input": {
+        "items": [
+          "a\u0019z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u0019z\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-19/object",
+      "input": {
+        "value": "a,\u0019z"
+      },
+      "expected": "value: \"a,\\u0019z\""
+    },
+    {
+      "name": "comma-c0-19/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u0019z"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u0019z\""
+    },
+    {
+      "name": "comma-c0-19/scalar_array",
+      "input": {
+        "values": [
+          "a,\u0019z"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u0019z\""
+    },
+    {
+      "name": "comma-c0-19/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u0019z"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u0019z\""
+    },
+    {
+      "name": "comma-c0-19/mixed_list",
+      "input": {
+        "items": [
+          "a,\u0019z",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u0019z\"\n  - k: plain"
+    },
+    {
+      "name": "c0-1a/object",
+      "input": {
+        "value": "a\u001az"
+      },
+      "expected": "value: \"a\\u001az\""
+    },
+    {
+      "name": "c0-1a/nested",
+      "input": {
+        "outer": {
+          "value": "a\u001az"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u001az\""
+    },
+    {
+      "name": "c0-1a/scalar_array",
+      "input": {
+        "values": [
+          "a\u001az"
+        ]
+      },
+      "expected": "values[1]: \"a\\u001az\""
+    },
+    {
+      "name": "c0-1a/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u001az"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u001az\""
+    },
+    {
+      "name": "c0-1a/mixed_list",
+      "input": {
+        "items": [
+          "a\u001az",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u001az\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-1a/object",
+      "input": {
+        "value": "a,\u001az"
+      },
+      "expected": "value: \"a,\\u001az\""
+    },
+    {
+      "name": "comma-c0-1a/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u001az"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u001az\""
+    },
+    {
+      "name": "comma-c0-1a/scalar_array",
+      "input": {
+        "values": [
+          "a,\u001az"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u001az\""
+    },
+    {
+      "name": "comma-c0-1a/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u001az"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u001az\""
+    },
+    {
+      "name": "comma-c0-1a/mixed_list",
+      "input": {
+        "items": [
+          "a,\u001az",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u001az\"\n  - k: plain"
+    },
+    {
+      "name": "c0-1b/object",
+      "input": {
+        "value": "a\u001bz"
+      },
+      "expected": "value: \"a\\u001bz\""
+    },
+    {
+      "name": "c0-1b/nested",
+      "input": {
+        "outer": {
+          "value": "a\u001bz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u001bz\""
+    },
+    {
+      "name": "c0-1b/scalar_array",
+      "input": {
+        "values": [
+          "a\u001bz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u001bz\""
+    },
+    {
+      "name": "c0-1b/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u001bz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u001bz\""
+    },
+    {
+      "name": "c0-1b/mixed_list",
+      "input": {
+        "items": [
+          "a\u001bz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u001bz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-1b/object",
+      "input": {
+        "value": "a,\u001bz"
+      },
+      "expected": "value: \"a,\\u001bz\""
+    },
+    {
+      "name": "comma-c0-1b/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u001bz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u001bz\""
+    },
+    {
+      "name": "comma-c0-1b/scalar_array",
+      "input": {
+        "values": [
+          "a,\u001bz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u001bz\""
+    },
+    {
+      "name": "comma-c0-1b/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u001bz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u001bz\""
+    },
+    {
+      "name": "comma-c0-1b/mixed_list",
+      "input": {
+        "items": [
+          "a,\u001bz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u001bz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-1c/object",
+      "input": {
+        "value": "a\u001cz"
+      },
+      "expected": "value: \"a\\u001cz\""
+    },
+    {
+      "name": "c0-1c/nested",
+      "input": {
+        "outer": {
+          "value": "a\u001cz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u001cz\""
+    },
+    {
+      "name": "c0-1c/scalar_array",
+      "input": {
+        "values": [
+          "a\u001cz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u001cz\""
+    },
+    {
+      "name": "c0-1c/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u001cz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u001cz\""
+    },
+    {
+      "name": "c0-1c/mixed_list",
+      "input": {
+        "items": [
+          "a\u001cz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u001cz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-1c/object",
+      "input": {
+        "value": "a,\u001cz"
+      },
+      "expected": "value: \"a,\\u001cz\""
+    },
+    {
+      "name": "comma-c0-1c/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u001cz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u001cz\""
+    },
+    {
+      "name": "comma-c0-1c/scalar_array",
+      "input": {
+        "values": [
+          "a,\u001cz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u001cz\""
+    },
+    {
+      "name": "comma-c0-1c/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u001cz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u001cz\""
+    },
+    {
+      "name": "comma-c0-1c/mixed_list",
+      "input": {
+        "items": [
+          "a,\u001cz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u001cz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-1d/object",
+      "input": {
+        "value": "a\u001dz"
+      },
+      "expected": "value: \"a\\u001dz\""
+    },
+    {
+      "name": "c0-1d/nested",
+      "input": {
+        "outer": {
+          "value": "a\u001dz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u001dz\""
+    },
+    {
+      "name": "c0-1d/scalar_array",
+      "input": {
+        "values": [
+          "a\u001dz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u001dz\""
+    },
+    {
+      "name": "c0-1d/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u001dz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u001dz\""
+    },
+    {
+      "name": "c0-1d/mixed_list",
+      "input": {
+        "items": [
+          "a\u001dz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u001dz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-1d/object",
+      "input": {
+        "value": "a,\u001dz"
+      },
+      "expected": "value: \"a,\\u001dz\""
+    },
+    {
+      "name": "comma-c0-1d/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u001dz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u001dz\""
+    },
+    {
+      "name": "comma-c0-1d/scalar_array",
+      "input": {
+        "values": [
+          "a,\u001dz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u001dz\""
+    },
+    {
+      "name": "comma-c0-1d/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u001dz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u001dz\""
+    },
+    {
+      "name": "comma-c0-1d/mixed_list",
+      "input": {
+        "items": [
+          "a,\u001dz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u001dz\"\n  - k: plain"
+    },
+    {
+      "name": "c0-1e/object",
+      "input": {
+        "value": "a\u001ez"
+      },
+      "expected": "value: \"a\\u001ez\""
+    },
+    {
+      "name": "c0-1e/nested",
+      "input": {
+        "outer": {
+          "value": "a\u001ez"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u001ez\""
+    },
+    {
+      "name": "c0-1e/scalar_array",
+      "input": {
+        "values": [
+          "a\u001ez"
+        ]
+      },
+      "expected": "values[1]: \"a\\u001ez\""
+    },
+    {
+      "name": "c0-1e/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u001ez"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u001ez\""
+    },
+    {
+      "name": "c0-1e/mixed_list",
+      "input": {
+        "items": [
+          "a\u001ez",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u001ez\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-1e/object",
+      "input": {
+        "value": "a,\u001ez"
+      },
+      "expected": "value: \"a,\\u001ez\""
+    },
+    {
+      "name": "comma-c0-1e/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u001ez"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u001ez\""
+    },
+    {
+      "name": "comma-c0-1e/scalar_array",
+      "input": {
+        "values": [
+          "a,\u001ez"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u001ez\""
+    },
+    {
+      "name": "comma-c0-1e/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u001ez"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u001ez\""
+    },
+    {
+      "name": "comma-c0-1e/mixed_list",
+      "input": {
+        "items": [
+          "a,\u001ez",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u001ez\"\n  - k: plain"
+    },
+    {
+      "name": "c0-1f/object",
+      "input": {
+        "value": "a\u001fz"
+      },
+      "expected": "value: \"a\\u001fz\""
+    },
+    {
+      "name": "c0-1f/nested",
+      "input": {
+        "outer": {
+          "value": "a\u001fz"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\u001fz\""
+    },
+    {
+      "name": "c0-1f/scalar_array",
+      "input": {
+        "values": [
+          "a\u001fz"
+        ]
+      },
+      "expected": "values[1]: \"a\\u001fz\""
+    },
+    {
+      "name": "c0-1f/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\u001fz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\u001fz\""
+    },
+    {
+      "name": "c0-1f/mixed_list",
+      "input": {
+        "items": [
+          "a\u001fz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\u001fz\"\n  - k: plain"
+    },
+    {
+      "name": "comma-c0-1f/object",
+      "input": {
+        "value": "a,\u001fz"
+      },
+      "expected": "value: \"a,\\u001fz\""
+    },
+    {
+      "name": "comma-c0-1f/nested",
+      "input": {
+        "outer": {
+          "value": "a,\u001fz"
+        }
+      },
+      "expected": "outer:\n  value: \"a,\\u001fz\""
+    },
+    {
+      "name": "comma-c0-1f/scalar_array",
+      "input": {
+        "values": [
+          "a,\u001fz"
+        ]
+      },
+      "expected": "values[1]: \"a,\\u001fz\""
+    },
+    {
+      "name": "comma-c0-1f/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,\u001fz"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,\\u001fz\""
+    },
+    {
+      "name": "comma-c0-1f/mixed_list",
+      "input": {
+        "items": [
+          "a,\u001fz",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,\\u001fz\"\n  - k: plain"
+    },
+    {
+      "name": "plain/object",
+      "input": {
+        "value": "plain"
+      },
+      "expected": "value: plain"
+    },
+    {
+      "name": "plain/nested",
+      "input": {
+        "outer": {
+          "value": "plain"
+        }
+      },
+      "expected": "outer:\n  value: plain"
+    },
+    {
+      "name": "plain/scalar_array",
+      "input": {
+        "values": [
+          "plain"
+        ]
+      },
+      "expected": "values[1]: plain"
+    },
+    {
+      "name": "plain/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "plain"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  plain"
+    },
+    {
+      "name": "plain/mixed_list",
+      "input": {
+        "items": [
+          "plain",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - plain\n  - k: plain"
+    },
+    {
+      "name": "space/object",
+      "input": {
+        "value": "with space"
+      },
+      "expected": "value: with space"
+    },
+    {
+      "name": "space/nested",
+      "input": {
+        "outer": {
+          "value": "with space"
+        }
+      },
+      "expected": "outer:\n  value: with space"
+    },
+    {
+      "name": "space/scalar_array",
+      "input": {
+        "values": [
+          "with space"
+        ]
+      },
+      "expected": "values[1]: with space"
+    },
+    {
+      "name": "space/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "with space"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  with space"
+    },
+    {
+      "name": "space/mixed_list",
+      "input": {
+        "items": [
+          "with space",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - with space\n  - k: plain"
+    },
+    {
+      "name": "unicode/object",
+      "input": {
+        "value": "é"
+      },
+      "expected": "value: é"
+    },
+    {
+      "name": "unicode/nested",
+      "input": {
+        "outer": {
+          "value": "é"
+        }
+      },
+      "expected": "outer:\n  value: é"
+    },
+    {
+      "name": "unicode/scalar_array",
+      "input": {
+        "values": [
+          "é"
+        ]
+      },
+      "expected": "values[1]: é"
+    },
+    {
+      "name": "unicode/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "é"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  é"
+    },
+    {
+      "name": "unicode/mixed_list",
+      "input": {
+        "items": [
+          "é",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - é\n  - k: plain"
+    },
+    {
+      "name": "decomposed/object",
+      "input": {
+        "value": "é"
+      },
+      "expected": "value: é"
+    },
+    {
+      "name": "decomposed/nested",
+      "input": {
+        "outer": {
+          "value": "é"
+        }
+      },
+      "expected": "outer:\n  value: é"
+    },
+    {
+      "name": "decomposed/scalar_array",
+      "input": {
+        "values": [
+          "é"
+        ]
+      },
+      "expected": "values[1]: é"
+    },
+    {
+      "name": "decomposed/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "é"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  é"
+    },
+    {
+      "name": "decomposed/mixed_list",
+      "input": {
+        "items": [
+          "é",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - é\n  - k: plain"
+    },
+    {
+      "name": "emoji/object",
+      "input": {
+        "value": "💡"
+      },
+      "expected": "value: 💡"
+    },
+    {
+      "name": "emoji/nested",
+      "input": {
+        "outer": {
+          "value": "💡"
+        }
+      },
+      "expected": "outer:\n  value: 💡"
+    },
+    {
+      "name": "emoji/scalar_array",
+      "input": {
+        "values": [
+          "💡"
+        ]
+      },
+      "expected": "values[1]: 💡"
+    },
+    {
+      "name": "emoji/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "💡"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  💡"
+    },
+    {
+      "name": "emoji/mixed_list",
+      "input": {
+        "items": [
+          "💡",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - 💡\n  - k: plain"
+    },
+    {
+      "name": "literal-f/object",
+      "input": {
+        "value": "\\f"
+      },
+      "expected": "value: \"\\\\f\""
+    },
+    {
+      "name": "literal-f/nested",
+      "input": {
+        "outer": {
+          "value": "\\f"
+        }
+      },
+      "expected": "outer:\n  value: \"\\\\f\""
+    },
+    {
+      "name": "literal-f/scalar_array",
+      "input": {
+        "values": [
+          "\\f"
+        ]
+      },
+      "expected": "values[1]: \"\\\\f\""
+    },
+    {
+      "name": "literal-f/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "\\f"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"\\\\f\""
+    },
+    {
+      "name": "literal-f/mixed_list",
+      "input": {
+        "items": [
+          "\\f",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"\\\\f\"\n  - k: plain"
+    },
+    {
+      "name": "literal-b/object",
+      "input": {
+        "value": "\\b"
+      },
+      "expected": "value: \"\\\\b\""
+    },
+    {
+      "name": "literal-b/nested",
+      "input": {
+        "outer": {
+          "value": "\\b"
+        }
+      },
+      "expected": "outer:\n  value: \"\\\\b\""
+    },
+    {
+      "name": "literal-b/scalar_array",
+      "input": {
+        "values": [
+          "\\b"
+        ]
+      },
+      "expected": "values[1]: \"\\\\b\""
+    },
+    {
+      "name": "literal-b/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "\\b"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"\\\\b\""
+    },
+    {
+      "name": "literal-b/mixed_list",
+      "input": {
+        "items": [
+          "\\b",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"\\\\b\"\n  - k: plain"
+    },
+    {
+      "name": "empty/object",
+      "input": {
+        "value": ""
+      },
+      "expected": "value: \"\""
+    },
+    {
+      "name": "empty/nested",
+      "input": {
+        "outer": {
+          "value": ""
+        }
+      },
+      "expected": "outer:\n  value: \"\""
+    },
+    {
+      "name": "empty/scalar_array",
+      "input": {
+        "values": [
+          ""
+        ]
+      },
+      "expected": "values[1]: \"\""
+    },
+    {
+      "name": "empty/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": ""
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"\""
+    },
+    {
+      "name": "empty/mixed_list",
+      "input": {
+        "items": [
+          "",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"\"\n  - k: plain"
+    },
+    {
+      "name": "comma/object",
+      "input": {
+        "value": "a,b"
+      },
+      "expected": "value: \"a,b\""
+    },
+    {
+      "name": "comma/nested",
+      "input": {
+        "outer": {
+          "value": "a,b"
+        }
+      },
+      "expected": "outer:\n  value: \"a,b\""
+    },
+    {
+      "name": "comma/scalar_array",
+      "input": {
+        "values": [
+          "a,b"
+        ]
+      },
+      "expected": "values[1]: \"a,b\""
+    },
+    {
+      "name": "comma/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a,b"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a,b\""
+    },
+    {
+      "name": "comma/mixed_list",
+      "input": {
+        "items": [
+          "a,b",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a,b\"\n  - k: plain"
+    },
+    {
+      "name": "newline/object",
+      "input": {
+        "value": "line\nbreak"
+      },
+      "expected": "value: \"line\\nbreak\""
+    },
+    {
+      "name": "newline/nested",
+      "input": {
+        "outer": {
+          "value": "line\nbreak"
+        }
+      },
+      "expected": "outer:\n  value: \"line\\nbreak\""
+    },
+    {
+      "name": "newline/scalar_array",
+      "input": {
+        "values": [
+          "line\nbreak"
+        ]
+      },
+      "expected": "values[1]: \"line\\nbreak\""
+    },
+    {
+      "name": "newline/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "line\nbreak"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"line\\nbreak\""
+    },
+    {
+      "name": "newline/mixed_list",
+      "input": {
+        "items": [
+          "line\nbreak",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"line\\nbreak\"\n  - k: plain"
+    },
+    {
+      "name": "quote/object",
+      "input": {
+        "value": "a\"b"
+      },
+      "expected": "value: \"a\\\"b\""
+    },
+    {
+      "name": "quote/nested",
+      "input": {
+        "outer": {
+          "value": "a\"b"
+        }
+      },
+      "expected": "outer:\n  value: \"a\\\"b\""
+    },
+    {
+      "name": "quote/scalar_array",
+      "input": {
+        "values": [
+          "a\"b"
+        ]
+      },
+      "expected": "values[1]: \"a\\\"b\""
+    },
+    {
+      "name": "quote/tabular",
+      "input": {
+        "rows": [
+          {
+            "value": "a\"b"
+          }
+        ]
+      },
+      "expected": "rows[1]{value}:\n  \"a\\\"b\""
+    },
+    {
+      "name": "quote/mixed_list",
+      "input": {
+        "items": [
+          "a\"b",
+          {
+            "k": "plain"
+          }
+        ]
+      },
+      "expected": "items[2]:\n  - \"a\\\"b\"\n  - k: plain"
+    }
+  ]
+}

@@ -12,6 +12,10 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Prime TOON control-value integrity (2026-10-28)](./plans/2026-10-28-prime-toon-control-values.md): accepted encoder repair, retained-memory reproduction and native Codex/Claude acceptance.
+- [Prime control-value native verification](./reports/2026-10-28-prime-toon-values-verification.md): frozen baseline/candidate execution, independent real-host QA and retained-memory compatibility.
+- [Prime control-value delivery request](./reference/prime-toon-values-request.md): accepted application job, compatibility boundary and publication authority.
+
 - [Prime TOON native workflow qualification](./reports/2026-10-27-prime-toon-native-verification.md): current-source failures, retained-memory interoperability, real Codex/Claude calls and durable native ownership.
 
 - [Prime TOON key integrity plan](./plans/2026-10-27-prime-toon-key-quoting.md) and [native application request](./reference/prime-toon-keys-request.md): preserve retained memory property names through independently decoded MCP responses.
@@ -289,3 +293,7 @@ Use relative paths for internal links:
 - [Allstack delivery plan b67f2a72-0d88-40b5-bf4d-efdc492f4f99](plans/allstack-b67f2a72-0d88-40b5-bf4d-efdc492f4f99.md)
 
 - [Allstack delivery plan d8404323-55a8-4137-8e69-639179e39202](plans/allstack-d8404323-55a8-4137-8e69-639179e39202.md)
+
+- [Allstack delivery plan 66712413-6a19-4587-a359-387994e20530](plans/allstack-66712413-6a19-4587-a359-387994e20530.md)
+
+- [Allstack delivery plan d408c686-a3db-46f1-96a5-c5264bdd1a6d](plans/allstack-d408c686-a3db-46f1-96a5-c5264bdd1a6d.md)

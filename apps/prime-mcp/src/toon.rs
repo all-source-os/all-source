@@ -170,9 +170,13 @@ fn fmt_key(k: &str) -> String {
         return k.to_string();
     }
 
-    let mut out = String::with_capacity(k.len() + 2);
+    quote_string(k)
+}
+
+fn quote_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
-    for c in k.chars() {
+    for c in s.chars() {
         match c {
             '\\' => out.push_str("\\\\"),
             '"' => out.push_str("\\\""),
@@ -199,7 +203,7 @@ fn fmt_value(v: &Value) -> String {
         Value::Number(n) => n.to_string(),
         Value::String(s) => {
             if string_needs_quote(s) {
-                serde_json::to_string(s).unwrap_or_else(|_| format!("{s:?}"))
+                quote_string(s)
             } else {
                 s.clone()
             }
@@ -218,6 +222,7 @@ fn string_needs_quote(s: &str) -> bool {
     s.is_empty()
         || s != s.trim()
         || s.contains([',', '"', '\n', '\r', '\t', '\\'])
+        || s.bytes().any(|b| b < 0x20)
         || matches!(s, "true" | "false" | "null")
         || s.parse::<f64>().is_ok()
 }

@@ -9,6 +9,8 @@ Use handoff only when the user requests another host or continuation requires it
 
 Read current run state and resolve any pending operation through its destination-specific recovery path before transferring. Confirm the requested host exists and is authenticated when execution is required. Preserve already granted authority; ask only for an actually missing authorization against a concrete result.
 
+After an update, with multiple installations, or after observed runtime drift, resolve the chosen Allstack and host executables to absolute paths. Bind their bytes to the intended source/artifact and packaged methods, then carry those paths into receiving-host calls. A version string or inherited PATH does not establish the same runtime.
+
 Use `allstack handoff <id> --epoch <current> --to codex|claude-code`, then `allstack resume <id> --epoch <returned>`. Keep these identifiers inside the tool calls. Read the returned workspace and Chronis claimant before acting. The new worktree, accepted plan, selected methods, and outstanding evidence define continuation; prior hidden reasoning is unnecessary.
 
 If invoking another real host CLI, use existing supervised Allstack plan/build operations with normal authentication and permission modes. Native tools used outside those operations have the host's own authority and are not fenced by the epoch. Do not claim global protection.
