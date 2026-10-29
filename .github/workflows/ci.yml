@@ -293,7 +293,11 @@ jobs:
         with:
           path: .ccache
           key: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+          # ccache is content-addressed, so a cache saved under another
+          # lockfile is safe to restore: only the changed units miss.
+          restore-keys: |
+            core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-
+            core-native-${{ runner.os }}-
 
       # Fast checks first
       - name: Check formatting
@@ -369,6 +373,21 @@ jobs:
           if (!actual.length || JSON.stringify(actual) !== JSON.stringify(foundation)) throw Error('native dependency compiler fingerprints differ');
           console.log(`Verified ${actual.length} native compiler units`);
           NODE
+
+      # A cold ccache does not fit RocksDB's C++ build in one bounded phase;
+      # objects a paused pass finished are ccache hits for the strict pass.
+      - name: Warm native dependency foundation
+        timeout-minutes: 5
+        run: |
+          set +e
+          timeout -k 15 280 cargo test --manifest-path "$RUNNER_TEMP/core-native/Cargo.toml" --locked --offline --lib --no-run --message-format=json-render-diagnostics > /tmp/core-native-warm-build.json
+          result=$?
+          set -e
+          case "$result" in
+            0) ;;
+            124) echo "Native warm phase paused; the strict phase resumes from ccache." ;;
+            *) exit "$result" ;;
+          esac
 
       - name: Compile native dependency foundation
         timeout-minutes: 5

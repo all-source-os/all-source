@@ -82,7 +82,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "allsource-core"
-version = "0.26.1"
+version = "0.27.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "chronis"
-version = "0.9.1"
+version = "0.9.2"
 dependencies = [
  "allsource-core",
  "anyhow",
