@@ -26,10 +26,8 @@ ARG RUST_VERSION=1.92.0
 # =============================================================================
 # Stage 1: Build (Elixir + Rust toolchain)
 # =============================================================================
-FROM elixir:${ELIXIR_VERSION}-otp-${OTP_VERSION} AS builder
+FROM elixir:${ELIXIR_VERSION}-otp-${OTP_VERSION} AS builder-toolchain
 
-ARG VERSION=dev
-ARG REVISION=unknown
 ARG RUST_VERSION
 
 # Elixir build deps + the native deps the embedded crate tree needs:
@@ -46,6 +44,35 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal
+
+# The NIF's dependency tree (allsource-core, rocksdb) does not compile cold
+# within one bounded CI step. Each phase below is its own cached target; exit
+# 124 keeps the finished units for the next phase to resume, any other failure
+# stops the build. Rustler later runs `cargo rustc --release` in this crate
+# with the default target dir, so it reuses every unit built here.
+WORKDIR /app
+COPY native native
+
+FROM builder-toolchain AS builder-nif-warm
+WORKDIR /app/native/core_nif
+RUN timeout -k 15 200 cargo build --release --locked; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "NIF dependency build paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-nif-warm AS builder-nif-resume
+RUN timeout -k 15 200 cargo build --release --locked; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "NIF dependency build paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-nif-resume AS builder-nif
+RUN timeout -k 15 240 cargo build --release --locked
+
+FROM builder-nif AS builder
+
+ARG VERSION=dev
+ARG REVISION=unknown
 
 # Embedded mode is a compile-time decision — set it before `mix compile` so the
 # CoreEmbedded / CoreNif modules and the NIF are built into the release.
@@ -64,9 +91,8 @@ COPY config config
 RUN mix deps.get --only $MIX_ENV && \
     mix deps.compile
 
-# Copy source + the Rustler NIF crate (native/core_nif builds standalone)
+# Copy source (native/ is already in place from builder-toolchain)
 COPY lib lib
-COPY native native
 COPY tooling/customer-connection tooling/customer-connection
 
 # Compile (builds the NIF via Rustler) and assemble the release
