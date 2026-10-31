@@ -290,6 +290,48 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-parquet
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-core,mode=max
 
+      # The embedded image compiles the core_nif dependency tree, which a cold
+      # cache cannot finish inside one step. Each phase exports its own cache;
+      # later steps in this job reuse the builder's local layers.
+      - name: Warm embedded NIF dependencies
+        if: matrix.name == 'mcp-server-embedded'
+        timeout-minutes: 5
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/mcp-server-elixir
+          file: apps/mcp-server-elixir/Dockerfile.embedded
+          target: builder-nif-warm
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache-builder-nif-warm
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache-builder-nif-warm,mode=max
+
+      - name: Resume embedded NIF dependencies
+        if: matrix.name == 'mcp-server-embedded'
+        timeout-minutes: 5
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/mcp-server-elixir
+          file: apps/mcp-server-elixir/Dockerfile.embedded
+          target: builder-nif-resume
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache-builder-nif-resume
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache-builder-nif-resume,mode=max
+
+      - name: Cache embedded NIF dependencies
+        if: matrix.name == 'mcp-server-embedded'
+        timeout-minutes: 5
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/mcp-server-elixir
+          file: apps/mcp-server-elixir/Dockerfile.embedded
+          target: builder-nif
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache-builder-nif
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-mcp-server-embedded:buildcache-builder-nif,mode=max
+
       - name: Build and push
         id: build
         timeout-minutes: 5
