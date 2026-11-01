@@ -1,0 +1,256 @@
+# Core restarts without refused clients
+
+Status: proposed. Confidence: sand. The phases below are ordered so each one
+ships on its own and lowers the refused-request window measured from the
+client side.
+
+## The job
+
+An operator deploys a new `allsource-core` image to production, and no client
+of the gateways sees a refused or failed request. Downtime is counted at the
+client: a refused read, a 401 for a valid key, a 503 from the egress ledger and
+a 502 from delegation all count, whatever the machine swap looked like.
+
+## What happens today
+
+Measured on 2026-11-01, deploying `16dd13eb` (v0.27.0) with
+`fly machine update --image` on the single Core machine:
+
+| Time (UTC) | Event |
+|---|---|
+| 17:32:20 | Old process gets SIGINT, shuts down cleanly |
+| 17:32:31 | v0.27.0 starts; data WAL recovers 0 events |
+| 17:33:16 | Stage 1: 2,852,970 system events recovered from the system WAL (45 s) |
+| 17:33:18 | Stage 2: system streams replayed into repository caches |
+| 17:38:05 | Stage 4 done, listener bound on `:3900` |
+| 17:38:01 | Last gateway refusal: `egress refused status=503 reason=ledger_unavailable` |
+| 17:38:25 | Longhand's tenant reads served again |
+
+Clients were refused for 5 m 45 s. Longhand's `/health` counted 30 failed
+queries, 2 failed canary reads and 9 failed board reads across its two
+machines. On 2026-10-26 the same restart took about 6 minutes.
+
+## Why every restart costs minutes
+
+- **The system WAL is never pruned or snapshotted.** `system_store.rs` only
+  creates and recovers its WAL (`:86`, `:92`); the only `truncate` trims a query
+  result (`:274`). Every boot parses all system events (stage 1) and folds them
+  into five repository caches (stage 2). The cost grows with system history.
+- **Core binds only after the whole bootstrap.** `main.rs` runs
+  `SystemBootstrap::try_initialize` before `serve_v1` binds the listener, so
+  for the whole replay the port refuses connections.
+- **The gateways turn a short Core outage into client errors.**
+  - API-key auth: a cache miss calls Core `/api/v1/auth/me`; a dial error or any
+    non-200 becomes "invalid api key" (`auth.go:305-316`), so `ask_` keys get
+    401 within the 120 s cache TTL.
+  - Egress ledger: the lease book closes leases every 30 s and the next acquire
+    needs Core; failure is `503 egress_budget_unavailable` with
+    `Retry-After: 30`.
+  - Delegation: a dial error is a `502 delegation upstream`, with no retry and
+    no dial timeout on the HTTP client.
+- **Some Core state does not survive any restart.**
+  - Webhook subscriptions are in-memory only (`webhook.rs:81`).
+  - The feed epoch is random per process (`store_feed.rs:87`), so every feed
+    cursor gets `409` after a restart unless `ALLSOURCE_FEED_DURABLE_LOG` is on.
+
+## Ruled out: leader/follower replication
+
+Core ships a WAL shipper, a receiver, `promote` and `allsource-sentinel`.
+They cannot back a cutover as they stand:
+
+- The shipper streams only the live broadcast channel. A fresh follower gets
+  either no history, or a Parquet snapshot loaded from a flat directory in
+  which every event is restamped to tenant `default`.
+- System streams (tenants, keys, config, audit) live in `__system` and are not
+  replicated at all.
+- `promote` flips the role before the receiver stops and there is no fencing,
+  so an old leader that comes back is a second leader.
+- Leader WAL sequences reset on every boot, which stalls repointed followers
+  silently.
+
+Making replication carry production is a separate design, not a restart fix.
+
+## Phases
+
+Each phase is one or more commits on this branch, verified before the next.
+
+### Phase 1: the gateways hold through a short outage (rock)
+
+Gateways first, because a Core restart of any length is refused today even
+after it is fast.
+
+- One shared Core-hold helper in the control plane, used by delegation,
+  `ValidateAPIKey`, the egress lease exchange and the key authority.
+  - It retries only when no Core handler can have run: a dial error
+    (connection refused, DNS failure, dial timeout) or a `503` whose body is
+    `not_ready`. Never on a reset, an EOF or another 5xx for a write, because
+    ingest has no idempotency key and a resend would duplicate the event.
+  - Deadline D, bounded below the egress request deadline (10 s today) and the
+    16 egress response slots. Held requests must not starve the slot pool.
+  - Core unreachable maps to `503` with `Retry-After`, never to 401.
+- A `net.Dialer{Timeout: 1s}` on the delegation client.
+- Narrow the three retrying resty clients in `core_client.go` (`:448`, `:479`,
+  `:530`) to the same rule. Today they retry POST on any error or 5xx.
+- Query Service: put `Tesla.Middleware.Timeout` inside `Retry` (or raise it to
+  cover D), and narrow `should_retry` on writes. Move `/api/health/ready` out of
+  `[[http_service.checks]]` into a top-level `[checks]` so a Core outage does
+  not drop the Query Service from Fly routing.
+- Prime's delegation (`ProxyPrime`) uses the same helper.
+
+Verification: a Go integration test that stops a real Core binary behind the
+control plane under load for less than D and asserts zero non-2xx across all
+six refusal classes (401, 502, 503 ledger, 503 authority, 504, 429 pool full).
+
+#### As built
+
+- `internal/infrastructure/corehold` holds a call for D = 6 s and shares one
+  availability state per process. The first call that finds Core unreachable
+  marks it down; later billable requests wait in `corehold.WaitUp` before they
+  take an egress response slot, so a restart parks requests outside the
+  16-slot pool instead of filling it. A waiter goes through as a probe when no
+  call has tried Core for a second, so the state cannot stay down after every
+  holder gave up.
+- Delegation resends idempotent methods after a transport error and any method
+  after a refused dial or `not_ready`. Lease waiters wait `D + 3 s`, longer than
+  the holder's hold.
+- The control plane's resty clients retry 12 times from 50 ms doubling to
+  500 ms, about D in total, and resend a write only under the same rule.
+- In the Query Service, the Tesla client and the five Req-based Core stores use
+  the same rule. A tenant read that gets no answer while verifying an API key
+  is a `503 core_unavailable` with `Retry-After`, not a 401.
+
+#### Known limits
+
+- With tenant admission in `enforce` mode, held reads still count as in flight,
+  so a busy tenant can hit its own in-flight cap during a restart. Production
+  runs admission in `shadow`.
+- The Query Service key authority still folds a failed Core read into
+  `:invalid_key`. Production leaves `ALLSOURCE_KEY_AUTHORITY_MODE` unset, which
+  is `shadow`: refused keys are still served except revocations. In `enforce`
+  mode a restart would answer 401.
+- The Req-based stores halt their body on a 503, so they hold only on a refused
+  dial, not on `not_ready`, until phase 2 makes Core send it.
+- The real-Core load test above is not written yet.
+
+### Phase 2: Core answers `not_ready` instead of refusing (rock)
+
+- Bind the listener first and serve a not-ready router from a spawned task
+  while the bootstrap runs in `spawn_blocking`; flip a ready flag when stage 4
+  completes. Every route, `/internal/*` included, answers
+  `503 {"error":"not_ready"}` with `Retry-After: 1` until then.
+- `/health` returns 503 until ready and stays O(1) afterwards (today it counts
+  two streams and all events per call).
+- `apps/core/fly.toml`: `kill_timeout` of at least 65 s (strict archive reads
+  run up to 60 s) and a `[deploy]` `wait_timeout` longer than the measured
+  replay, so a slow first boot is not reported as a failed release and rolled
+  back into a second outage.
+- Install the SIGTERM handler at the top of `main`, so a stop during boot is
+  clean.
+
+#### As built
+
+- `main` binds the port before anything else and serves
+  `infrastructure::web::boot_gate::BootGate`. Until `serve_v1` opens it, every
+  route, `/health` and `/internal/*` included, answers `503 not_ready` with
+  `Retry-After: 1`; afterwards each request goes to the real router.
+- The bootstrap still runs on `main`'s thread; the gate is served by the
+  runtime's workers. A SIGTERM or Ctrl+C before the gate opens exits the
+  process at once, since no handler has run and the bootstrap cannot be
+  interrupted.
+- `apps/core/fly.toml` sets `kill_timeout = 65` and `[deploy] wait_timeout =
+  "15m"`. Both apply to `fly deploy`; `fly machine update` ignores them.
+- `/health` still counts system streams on every call; making it O(1) is open.
+
+With phases 1 and 2, a restart shorter than D is invisible to clients. Longer
+restarts still refuse, but with 503 and `Retry-After`, never 401.
+
+### Phase 3: boot in seconds (sand)
+
+#### What the replay is
+
+On 2026-11-01 Core's `/health` reported 2,852,971 system events, 2,841,079 of
+them in the tenant stream. Most come from
+`POST /api/v1/tenants/{id}/usage/increment`, which the Query Service's
+`UsageReporter` calls: each call appends a tenant `UPDATED` event that carries
+the tenant's whole metadata blob. The stream grows with traffic and never
+shrinks, so every boot replays more than the last.
+
+`tests/system_replay_cost.rs` (ignored; run by hand in release) writes a
+synthetic tenant stream and times recovery and the tenant rebuild. On an M-series
+laptop, 300,000 `UPDATED` events with 1 KiB of metadata recover in 0.57 s and
+rebuild in 0.40 to 0.52 s, about 1.3 to 1.7 µs per event. Scaled to 2.85 M events
+that is about 5 s each; production measured 45 s and 4 m 47 s. Recovery's gap
+fits a shared CPU and larger events. The rebuild's gap, about 57x, does not:
+production's events carry egress and query-usage receipts the synthetic ones do
+not, and each egress event retains three maps of live reservations, leases and
+receipts (`egress.rs:221-223`), so its cost grows with how many are live.
+
+Stage 2 now logs each repository's rebuild time, and the tenant rebuild logs the
+count and time per event kind (lifecycle, egress, query_usage, metadata). The
+next production boot says which part to fix, before any snapshot is built:
+
+- If egress dominates, give `EgressAccount` an expiry-ordered index so expiring
+  entries costs O(log n) per event instead of a scan.
+- If metadata dominates, stop writing the whole metadata blob on every usage
+  increment: a usage event that carries only the counter keeps the stream small
+  and the replay cheap.
+- Only if neither is enough, the snapshot below.
+
+#### Snapshot, if still needed
+
+A system-store snapshot so boot loads folded state and replays only the tail.
+
+- One mutex around the WAL append and the in-memory push, so a snapshot never
+  covers a sequence whose event is not folded yet.
+- The snapshot is a fold of the event list under that mutex, with
+  `covered_seq` set to the highest sequence it includes, written to
+  `__system/snapshot/` with tmp, fsync, rename and directory fsync. The old
+  binary ignores the directory (it lists only `wal-*.log`).
+- Boot skips a segment only when a per-segment max-sequence sidecar, written
+  at seal time, is at or below `covered_seq`. A segment's file name is only a
+  lower bound: older segments can be appended to after a restart (`wal.rs:462`).
+- On boot, set the WAL sequence to `max(recovered, covered_seq)` before the
+  first append. Without it, a pruned WAL restarts at 0 and the next boot drops
+  every write since the snapshot.
+- Pruning stays behind `ALLSOURCE_SYSTEM_WAL_PRUNE`, default off, so rolling
+  back to an image without the snapshot stays lossless. Turning it on is a
+  later, separate release, and that release becomes the rollback floor.
+- Test: snapshot, prune, restart, write, restart, and the write is present;
+  kill during snapshot write, restart, state intact.
+
+The first deploy carrying phase 3 still replays everything once to build the
+snapshot. Avoiding that window needs an offline tool that builds the snapshot
+from the volume before the new image boots; it is water and not in this plan.
+
+### Phase 4: state that survives a restart (sand)
+
+- Persist webhook subscriptions as a `_system` stream, folded at boot.
+- Turn on `ALLSOURCE_FEED_DURABLE_LOG` after measuring its disk and first-read
+  cost at production size. `build_durable_feed` holds the store's write lock
+  across a disk write, so the first read per tenant stalls ingest for all.
+- Accept a client event id or `Idempotency-Key` on ingest and dedupe it, so the
+  gateways may later retry a reset write safely.
+
+## Rehearsal before production
+
+Each phase is rehearsed on a separate Fly app restored from a Core volume
+snapshot, never as a second machine in `allsource-core`: any machine there
+answers `allsource-core.internal` and would take production traffic.
+
+- Copy the gateway `fly.toml` files with Core URLs rewritten and check
+  `fly ssh console -C env` before any load; the production files point at
+  `allsource-core.internal`.
+- Copy `ALLSOURCE_JWT_SECRET` and the bootstrap key to the rehearsal apps, or
+  every delegated call is 401 and the measurement means nothing.
+- Use synthetic tenants only, and block webhook egress on the rehearsal Core.
+- Measure restart time and every refusal class under load through the
+  rehearsal control plane.
+
+## What this does not cover
+
+- The gateway deploys themselves, which wait on `CONSUMER_CANARY_CREDENTIALS`
+  (`docs/runbooks/CONSUMER_ACCESS_GATE.md`).
+- `allsource-prime`: its volume makes every deploy a restart, and its image is
+  not anonymously pullable while the image-promotion workflow has no
+  `FLY_IMAGE_PROMOTION_TOKEN`.
+- A second Core serving traffic. That needs the replication redesign above.

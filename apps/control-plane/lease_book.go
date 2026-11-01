@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/allsource/control-plane/internal/infrastructure/corehold"
 )
 
 const (
@@ -20,11 +22,13 @@ const (
 	egressReasonBusy      = "busy"
 
 	// Core expires a lease at its own clock; the margin covers clock skew.
-	leaseSafetyMargin   = 15 * time.Second
-	leaseRenewAhead     = 45 * time.Second
-	leaseFlushInterval  = 30 * time.Second
-	leaseIdleAfter      = 5 * time.Minute
-	leaseAwaitBusy      = 3 * time.Second
+	leaseSafetyMargin  = 15 * time.Second
+	leaseRenewAhead    = 45 * time.Second
+	leaseFlushInterval = 30 * time.Second
+	leaseIdleAfter     = 5 * time.Minute
+	// A waiter must outlast the holder's Core hold, or it gives up while the
+	// holder is still riding out a restart.
+	leaseAwaitBusy      = corehold.Deadline + egressExchangeTimeout
 	leaseSettleOnExit   = 3 * time.Second
 	leaseExhaustedPause = 5 * time.Second
 )

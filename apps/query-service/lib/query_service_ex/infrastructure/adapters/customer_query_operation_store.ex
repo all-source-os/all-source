@@ -4,6 +4,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryOperationStore do
   alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.CustomerAgent.QueryOperationJournal, as: Journal
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
+  alias QueryServiceEx.Infrastructure.Adapters.CoreHold
 
   @impl true
   def load(tenant) do
@@ -76,19 +77,19 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryOperationStore do
 
   defp perform(method, path, body) do
     with {:ok, url, token} <- connection() do
-      options = [
-        method: method,
-        url: url <> path,
-        headers: [{"authorization", token}],
-        redirect: false,
-        retry: false,
-        raw: true,
-        compressed: false,
-        receive_timeout: 3_000,
-        request_timeout: 5_000,
-        finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
-        into: &chunk/2
-      ]
+      options =
+        [
+          method: method,
+          url: url <> path,
+          headers: [{"authorization", token}],
+          redirect: false,
+          raw: true,
+          compressed: false,
+          receive_timeout: 3_000,
+          request_timeout: 5_000,
+          finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
+          into: &chunk/2
+        ] ++ CoreHold.req_options()
 
       options = if method == :post, do: Keyword.put(options, :json, body), else: options
 

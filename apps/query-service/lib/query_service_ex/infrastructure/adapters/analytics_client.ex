@@ -19,6 +19,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AnalyticsClient do
   """
 
   alias QueryServiceEx.Infrastructure.Adapters.AnalyticsCache
+  alias QueryServiceEx.Infrastructure.Adapters.CoreHold
 
   @default_base_url "http://localhost:3900"
   @default_timeout 60_000
@@ -32,17 +33,9 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AnalyticsClient do
 
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
+      {CoreHold, max_retries: 3},
       Tesla.Middleware.JSON,
-      {Tesla.Middleware.Timeout, timeout: @default_timeout},
-      {Tesla.Middleware.Retry,
-       delay: 100,
-       max_retries: 3,
-       max_delay: 2_000,
-       should_retry: fn
-         {:ok, %{status: status}} when status in [408, 429, 500, 502, 503, 504] -> true
-         {:ok, _} -> false
-         {:error, _} -> true
-       end}
+      {Tesla.Middleware.Timeout, timeout: @default_timeout}
     ]
 
     middleware =

@@ -21,6 +21,7 @@ import (
 
 	"github.com/allsource/control-plane/internal/application/usecases"
 	"github.com/allsource/control-plane/internal/domain/entities"
+	"github.com/allsource/control-plane/internal/infrastructure/corehold"
 )
 
 // Claims represents JWT claims
@@ -302,12 +303,27 @@ func (a *AuthClient) ValidateAPIKey(ctx context.Context, token string) (*Claims,
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := a.http.Do(req)
+	var resp *http.Response
+	corehold.Hold(ctx, func() bool {
+		if resp != nil {
+			closeResponseBody(resp)
+			resp = nil
+		}
+		resp, err = a.http.Do(req) //nolint:bodyclose // closed by the next attempt or the deferred close below
+		if err != nil {
+			return corehold.Unreached(err)
+		}
+		return corehold.ResponseNotReady(resp)
+	})
+	// No answer from Core says nothing about the key, so it must not become a 401.
 	if err != nil {
-		return nil, fmt.Errorf("call Core /me: %w", err)
+		return nil, fmt.Errorf("%w: Core /me: %w", corehold.ErrUnreachable, err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // close-on-defer, non-actionable
+	defer closeResponseBody(resp)
 
+	if resp.StatusCode >= http.StatusInternalServerError {
+		return nil, fmt.Errorf("%w: Core /me HTTP %d", corehold.ErrUnreachable, resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 512))
 		if readErr != nil {
@@ -417,6 +433,11 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		var claims *Claims
 		if strings.HasPrefix(token, "ask_") {
 			claims, err = authClient.ValidateAPIKey(c.Request.Context(), token)
+			if errors.Is(err, corehold.ErrUnreachable) {
+				c.Header("Retry-After", corehold.RetryAfter)
+				c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "auth_unavailable", "message": "API key validation is unavailable while the event store restarts; retry shortly"})
+				return
+			}
 		} else {
 			claims, err = authClient.ValidateToken(token)
 			if err == nil {

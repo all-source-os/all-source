@@ -5,6 +5,15 @@
 
 app = "allsource-core"
 primary_region = "iad"  # US East (Virginia) - change to your preferred region
+# Strict archive reads run up to ALLSOURCE_STRICT_ARCHIVE_TIMEOUT_SECONDS (60s);
+# the old process must be able to finish them before it is killed.
+kill_timeout = 65
+
+# A boot replays the system WAL before it is ready (4m47s on 2026-11-01), and
+# /health answers 503 not_ready until then; a shorter wait reports the release
+# as failed while the machine is still booting.
+[deploy]
+  wait_timeout = "15m"
 
 [build]
   dockerfile = "Dockerfile"

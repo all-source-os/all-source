@@ -13,6 +13,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/allsource/control-plane/internal/infrastructure/corehold"
 )
 
 // ErrVersionConflict is returned by IngestEvent when Core rejects a write with
@@ -415,17 +417,34 @@ type ListConfigsResponse struct {
 // --- Implementation ---
 
 const (
-	defaultCoreURL   = "http://localhost:3900"
-	defaultTimeout   = 30 * time.Second
-	maxRetries       = 3
-	retryWaitTime    = 500 * time.Millisecond
-	retryMaxWaitTime = 5 * time.Second
+	defaultCoreURL = "http://localhost:3900"
+	defaultTimeout = 30 * time.Second
+	// 50ms doubling to 500ms over 12 retries waits about corehold.Deadline in
+	// total, so a refused dial rides out the same restart window as delegation.
+	maxRetries       = 12
+	retryWaitTime    = 50 * time.Millisecond
+	retryMaxWaitTime = 500 * time.Millisecond
 	tracerName       = "core-client"
 )
 
 type coreClient struct {
 	client *resty.Client
 	tracer trace.Tracer
+}
+
+// coreRetryCondition resends a write only when Core cannot have run it: ingest
+// has no idempotency key, so a resent write would duplicate the event.
+func coreRetryCondition(r *resty.Response, err error) bool {
+	method, status := "", 0
+	var body []byte
+	if r != nil {
+		status = r.StatusCode()
+		body = r.Body()
+		if r.Request != nil {
+			method = r.Request.Method
+		}
+	}
+	return corehold.Retryable(method, status, body, err)
 }
 
 // NewCoreClient creates a CoreClient using CORE_SERVICE_URL and CORE_API_KEY env vars.
@@ -449,12 +468,7 @@ func NewCoreClient() CoreClient {
 		SetRetryCount(maxRetries).
 		SetRetryWaitTime(retryWaitTime).
 		SetRetryMaxWaitTime(retryMaxWaitTime).
-		AddRetryCondition(func(r *resty.Response, err error) bool {
-			if err != nil {
-				return true
-			}
-			return r.StatusCode() >= 500
-		})
+		AddRetryCondition(coreRetryCondition)
 
 	if apiKey != "" {
 		client.SetHeader("X-API-Key", apiKey)
@@ -480,12 +494,7 @@ func NewCoreClientWithURL(baseURL, apiKey string) CoreClient {
 		SetRetryCount(maxRetries).
 		SetRetryWaitTime(retryWaitTime).
 		SetRetryMaxWaitTime(retryMaxWaitTime).
-		AddRetryCondition(func(r *resty.Response, err error) bool {
-			if err != nil {
-				return true
-			}
-			return r.StatusCode() >= 500
-		})
+		AddRetryCondition(coreRetryCondition)
 
 	if apiKey != "" {
 		client.SetHeader("X-API-Key", apiKey)
@@ -531,12 +540,7 @@ func NewCoreClientWithJWT(baseURL, bearerToken string) CoreClient {
 		SetRetryCount(maxRetries).
 		SetRetryWaitTime(retryWaitTime).
 		SetRetryMaxWaitTime(retryMaxWaitTime).
-		AddRetryCondition(func(r *resty.Response, err error) bool {
-			if err != nil {
-				return true
-			}
-			return r.StatusCode() >= 500
-		})
+		AddRetryCondition(coreRetryCondition)
 
 	if bearerToken != "" {
 		client.SetAuthToken(bearerToken)

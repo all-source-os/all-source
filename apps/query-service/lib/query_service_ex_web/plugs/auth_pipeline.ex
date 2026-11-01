@@ -85,6 +85,9 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
       {:error, :key_expired} ->
         reject(conn, "API key has expired")
 
+      {:error, :core_unavailable} ->
+        core_unavailable(conn)
+
       {:error, _reason} ->
         reject(conn, "API key verification failed")
     end
@@ -207,6 +210,23 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
   # -------------------------------------------------------------------
   # Error Responses
   # -------------------------------------------------------------------
+
+  defp core_unavailable(conn) do
+    Logger.warning("[AuthPipeline] Core gave no answer while verifying an API key")
+
+    conn
+    |> put_resp_header("retry-after", "2")
+    |> put_status(:service_unavailable)
+    |> Phoenix.Controller.json(%{
+      error: %{
+        code: "core_unavailable",
+        message: "The event store is restarting; retry shortly.",
+        correlation_id: conn.assigns[:correlation_id] || "unknown",
+        timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+      }
+    })
+    |> halt()
+  end
 
   defp reject(conn, message) do
     Logger.warning("[AuthPipeline] Rejected: #{message}")

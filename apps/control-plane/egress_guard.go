@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
+
+	"github.com/allsource/control-plane/internal/infrastructure/corehold"
 )
 
 const (
@@ -27,6 +30,7 @@ const (
 	egressOperationLease    = "lease"
 	egressOperationSettle   = "settle"
 	fundedEgressProtocol    = "funded-egress-v1"
+	egressExchangeTimeout   = 3 * time.Second
 )
 
 var egressResponseSlots = make(chan struct{}, 16)
@@ -138,8 +142,6 @@ type egressExchange func(context.Context, string, egressCommand) (egressAdmissio
 
 func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, command egressCommand) (egressAdmission, error) {
 	var result egressAdmission
-	deadline, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
 	target := *cp.delegation.coreForTenant(tenant)
 	target.Path = strings.TrimRight(target.Path, "/") + "/api/v1/tenants/" + url.PathEscape(tenant) + "/egress"
 	payload := map[string]any{"operation": command.Operation, "id": command.ID}
@@ -149,38 +151,46 @@ func (cp *ControlPlane) exchangeEgress(ctx context.Context, tenant string, comma
 	if command.Next != nil {
 		payload["next"] = command.Next
 	}
-	for attempt := 0; attempt < 2; attempt++ {
-		response, err := cp.client.R().SetContext(deadline).SetBody(payload).SetResult(&result).Post(target.String())
+	var response *resty.Response
+	var err error
+	corehold.Hold(ctx, func() bool {
+		attemptContext, cancel := context.WithTimeout(ctx, egressExchangeTimeout)
+		defer cancel()
+		result = egressAdmission{}
+		response, err = cp.client.R().SetContext(attemptContext).SetBody(payload).SetResult(&result).Post(target.String())
 		if err != nil {
-			if deadline.Err() != nil {
-				return result, deadline.Err()
-			}
-			continue
+			return corehold.Unreached(err)
 		}
-		if response.StatusCode() == http.StatusServiceUnavailable {
-			continue
+		return corehold.NotReady(response.StatusCode(), response.Body())
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return result, ctx.Err()
 		}
-		if !response.IsSuccess() {
-			var denial struct {
-				Reason string `json:"reason"`
-			}
-			if json.Unmarshal(response.Body(), &denial) != nil {
-				denial.Reason = ""
-			}
-			refusal := egressError{status: response.StatusCode(), reason: denial.Reason}
-			if refusal.status == http.StatusTooManyRequests && refusal.reason == "" {
-				// Core's per-credential limiter answers plain text, with no ledger reason.
-				refusal.reason = egressReasonRateLimited
-				refusal.retryAfter = response.Header().Get("Retry-After")
-			}
-			return result, refusal
-		}
-		if result.Protocol != fundedEgressProtocol {
-			return result, errors.New("unsupported egress ledger")
-		}
-		return result, nil
+		return result, errors.New("egress ledger unavailable")
 	}
-	return result, errors.New("egress ledger unavailable")
+	if response.StatusCode() == http.StatusServiceUnavailable {
+		return result, errors.New("egress ledger unavailable")
+	}
+	if !response.IsSuccess() {
+		var denial struct {
+			Reason string `json:"reason"`
+		}
+		if json.Unmarshal(response.Body(), &denial) != nil {
+			denial.Reason = ""
+		}
+		refusal := egressError{status: response.StatusCode(), reason: denial.Reason}
+		if refusal.status == http.StatusTooManyRequests && refusal.reason == "" {
+			// Core's per-credential limiter answers plain text, with no ledger reason.
+			refusal.reason = egressReasonRateLimited
+			refusal.retryAfter = response.Header().Get("Retry-After")
+		}
+		return result, refusal
+	}
+	if result.Protocol != fundedEgressProtocol {
+		return result, errors.New("unsupported egress ledger")
+	}
+	return result, nil
 }
 
 func (cp *ControlPlane) enforceEgress(c *gin.Context) {
@@ -228,6 +238,11 @@ func (cp *ControlPlane) enforceEgress(c *gin.Context) {
 	var charged uint64
 	status := 0
 	defer func() { ticket.release(charged, status) }()
+	if !corehold.WaitUp(c.Request.Context()) {
+		c.Header("Retry-After", corehold.RetryAfter)
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "core_unavailable", "message": "The event store is restarting; retry shortly."})
+		return
+	}
 	if longPoll {
 		defer func() { cp.admission.chargeBytes(tenant, charged) }()
 		if !viewChangesLane.acquire(tenant) {

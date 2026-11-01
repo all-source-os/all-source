@@ -25,6 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/allsource/control-plane/internal/domain/entities"
+	"github.com/allsource/control-plane/internal/infrastructure/corehold"
 )
 
 const queryEventsPath = "/api/v1/events/query"
@@ -226,7 +227,7 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 		target.RawQuery = query.Encode()
 	}
 
-	var bodyReader io.Reader
+	bodyReader := io.Reader(http.NoBody)
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
 	}
@@ -249,12 +250,34 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := d.http.Do(req)
+	var resp *http.Response
+	exhausted := corehold.Hold(c.Request.Context(), func() bool {
+		if resp != nil {
+			closeResponseBody(resp)
+			resp = nil
+		}
+		attempt := req.Clone(req.Context())
+		if req.GetBody != nil {
+			if attempt.Body, err = req.GetBody(); err != nil {
+				return false
+			}
+		}
+		resp, err = d.http.Do(attempt) //nolint:bodyclose // closed by the next attempt or the deferred close below
+		if err != nil {
+			return c.Request.Context().Err() == nil && corehold.Retryable(method, 0, nil, err)
+		}
+		return corehold.ResponseNotReady(resp)
+	})
 	if err != nil {
+		if exhausted {
+			c.Header("Retry-After", corehold.RetryAfter)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "core_unavailable", "message": "The event store is restarting; retry shortly."})
+			return
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": "delegation upstream", "message": err.Error()})
 		return
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // close-on-defer, non-actionable
+	defer closeResponseBody(resp)
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 && beforeSuccess != nil {
 		if err := beforeSuccess(); err != nil {

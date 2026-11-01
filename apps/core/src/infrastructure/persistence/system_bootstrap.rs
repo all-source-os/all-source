@@ -85,12 +85,28 @@ impl SystemBootstrap {
 
         // Stage 2: Replay system streams → populate in-memory caches
         tracing::info!("Stage 2: Replaying system streams into repository caches");
+        let timed = |name: &str, started: std::time::Instant| {
+            tracing::info!("Stage 2: {name} cache rebuilt in {:?}", started.elapsed());
+        };
+        let started = std::time::Instant::now();
         let tenant_repository = Arc::new(EventSourcedTenantRepository::new(system_store.clone()));
+        timed("tenant", started);
+        let started = std::time::Instant::now();
         let audit_repository = Arc::new(EventSourcedAuditRepository::new(system_store.clone()));
+        timed("audit", started);
+        let started = std::time::Instant::now();
         let config_repository = Arc::new(EventSourcedConfigRepository::new(system_store.clone()));
+        timed("config", started);
         #[cfg(feature = "server")]
-        let auth_repository = Arc::new(EventSourcedAuthRepository::new(system_store.clone()));
+        let auth_repository = {
+            let started = std::time::Instant::now();
+            let repository = Arc::new(EventSourcedAuthRepository::new(system_store.clone()));
+            timed("auth", started);
+            repository
+        };
+        let started = std::time::Instant::now();
         let consumer_registry = Arc::new(ConsumerRegistry::new_durable(system_store.clone()));
+        timed("consumer", started);
 
         let tenant_count = tenant_repository.count().await.unwrap_or(0);
         #[cfg(feature = "server")]

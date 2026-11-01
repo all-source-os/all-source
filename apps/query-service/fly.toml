@@ -51,17 +51,9 @@ primary_region = "iad"  # US East (Virginia)
     hard_limit = 500
     soft_limit = 400
 
-  # Readiness check - determines if instance should receive traffic
-  # Returns 503 when database or backend is unavailable
-  [[http_service.checks]]
-    grace_period = "15s"
-    interval = "15s"
-    method = "GET"
-    path = "/api/health/ready"
-    timeout = "5s"
-
-  # Liveness check - determines if instance needs restart
-  # Only fails if Elixir process cannot respond
+  # The only routing check: does the Elixir process answer HTTP? Readiness
+  # requires Core, so as a routing check it would drop every machine from Fly
+  # routing during a Core restart that the Core client holds through.
   [[http_service.checks]]
     grace_period = "10s"
     interval = "30s"
@@ -70,8 +62,8 @@ primary_region = "iad"  # US East (Virginia)
     timeout = "3s"
 
 # A new machine takes traffic only after every credential kind customers
-# already hold reads through it. Bluegreen waits for the top-level check below;
-# it does not affect routing, so a Core outage does not pull a running machine
+# already hold reads through it. Bluegreen waits for the top-level checks below;
+# they do not affect routing, so a Core outage does not pull a running machine
 # out of service. docs/runbooks/CONSUMER_ACCESS_GATE.md
 [deploy]
   strategy = "bluegreen"
@@ -86,6 +78,16 @@ primary_region = "iad"  # US East (Virginia)
     grace_period = "30s"
     interval = "60s"
     timeout = "25s"
+
+  # Returns 503 when Core is unavailable. Reported, never routed on.
+  [checks.ready]
+    type = "http"
+    port = 3902
+    path = "/api/health/ready"
+    method = "GET"
+    grace_period = "15s"
+    interval = "15s"
+    timeout = "5s"
 
 [[vm]]
   cpu_kind = "shared"
