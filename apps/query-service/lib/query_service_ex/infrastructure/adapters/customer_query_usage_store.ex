@@ -3,6 +3,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStore do
   @behaviour QueryServiceEx.Domain.CustomerAgent.QueryUsagePort
   alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.CustomerAgent.QueryAdmission
+  alias QueryServiceEx.Infrastructure.Adapters.CoreHold
   @max_bytes 2_048
   @denials %{
     {400, "invalid_query_usage_request"} => :invalid_query_usage_request,
@@ -57,19 +58,19 @@ defmodule QueryServiceEx.Infrastructure.Adapters.CustomerQueryUsageStore do
 
   defp perform(method, path, body) do
     with {:ok, url, token} <- connection() do
-      options = [
-        method: method,
-        url: url <> path,
-        headers: [{"authorization", token}],
-        redirect: false,
-        retry: false,
-        raw: true,
-        compressed: false,
-        receive_timeout: 3_000,
-        request_timeout: 5_000,
-        finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
-        into: &chunk/2
-      ]
+      options =
+        [
+          method: method,
+          url: url <> path,
+          headers: [{"authorization", token}],
+          redirect: false,
+          raw: true,
+          compressed: false,
+          receive_timeout: 3_000,
+          request_timeout: 5_000,
+          finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
+          into: &chunk/2
+        ] ++ CoreHold.req_options()
 
       options = if method == :post, do: Keyword.put(options, :json, body), else: options
 

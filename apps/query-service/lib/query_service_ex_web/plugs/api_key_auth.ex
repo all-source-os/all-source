@@ -69,7 +69,25 @@ defmodule QueryServiceExWeb.Plugs.ApiKeyAuth do
 
       {:error, :key_expired} ->
         reject(conn, "API key has expired")
+
+      {:error, :core_unavailable} ->
+        core_unavailable(conn)
     end
+  end
+
+  defp core_unavailable(conn) do
+    Logger.warning("[ApiKeyAuth] Core gave no answer while verifying an API key")
+
+    conn
+    |> put_resp_header("retry-after", "2")
+    |> put_status(:service_unavailable)
+    |> Phoenix.Controller.json(%{
+      error: %{
+        code: "core_unavailable",
+        message: "The event store is restarting; retry shortly."
+      }
+    })
+    |> halt()
   end
 
   defp reject(conn, message) do

@@ -25,11 +25,13 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   alias QueryServiceEx.Domain.Entities.Query
   alias QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority
   alias QueryServiceEx.Infrastructure.Adapters.CoreHealthChecker
+  alias QueryServiceEx.Infrastructure.Adapters.CoreHold
 
   require Logger
 
   @default_base_url "http://localhost:3900"
   @default_timeout 30_000
+  @connect_timeout 1_000
   @read_counter_name :core_read_round_robin
 
   @doc false
@@ -118,17 +120,9 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   defp build_client(base_url, opts \\ []) do
     middleware = [
       {Tesla.Middleware.BaseUrl, base_url},
+      {CoreHold, max_retries: Keyword.get(opts, :max_retries, 3)},
       Tesla.Middleware.JSON,
-      {Tesla.Middleware.Timeout, timeout: Keyword.get(opts, :timeout, @default_timeout)},
-      {Tesla.Middleware.Retry,
-       delay: 100,
-       max_retries: Keyword.get(opts, :max_retries, 3),
-       max_delay: 2_000,
-       should_retry: fn
-         {:ok, %{status: status}} when status in [408, 429, 500, 502, 503, 504] -> true
-         {:ok, _} -> false
-         {:error, _} -> true
-       end}
+      {Tesla.Middleware.Timeout, timeout: Keyword.get(opts, :timeout, @default_timeout)}
     ]
 
     # Add Authorization header if CORE_API_KEY is configured
@@ -139,7 +133,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
         api_key -> [{Tesla.Middleware.Headers, [{"authorization", api_key}]} | middleware]
       end
 
-    Tesla.client(middleware, {Tesla.Adapter.Hackney, [connect_options: [:inet6]]})
+    Tesla.client(
+      middleware,
+      {Tesla.Adapter.Hackney, [connect_options: [:inet6], connect_timeout: @connect_timeout]}
+    )
   end
 
   defp pick_read_url([single_url]), do: single_url
@@ -857,7 +854,8 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   registration from the authoritative Core lifecycle stream. Tenant subscription
   metadata also comes from the leader without identity caching.
 
-  Returns `{:ok, {tenant_map, api_key_info}}` or `{:error, reason}`.
+  Returns `{:ok, {tenant_map, api_key_info}}` or `{:error, reason}`, where
+  `:core_unavailable` means Core gave no answer and the key was not judged.
   """
   def verify_api_key(raw_key) when is_binary(raw_key) do
     case decode_api_key_jwt(raw_key) do
@@ -865,7 +863,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
         tenant_id = claims["tenant_id"]
 
         with {:ok, key} <- authorized_key(claims),
-             {:ok, tenant} <- get_tenant_for_authorization(tenant_id) do
+             {:ok, tenant} <- tenant_for_key(tenant_id) do
           api_key_info = %{
             "id" => claims["sub"],
             "name" => claims["name"],
@@ -877,12 +875,24 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
 
           {:ok, {tenant, api_key_info}}
         else
+          {:error, :core_unavailable} ->
+            {:error, :core_unavailable}
+
           {:error, _reason} ->
             {:error, :invalid_key}
         end
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # A tenant read that got no answer from Core is not a denial of the key.
+  defp tenant_for_key(tenant_id) do
+    case get_tenant_for_authorization(tenant_id) do
+      {:ok, _tenant} = ok -> ok
+      {:error, reason} when reason in [:not_found, :invalid_tenant] -> {:error, reason}
+      {:error, _unanswered} -> {:error, :core_unavailable}
     end
   end
 
@@ -984,8 +994,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   @doc """
   Read current tenant metadata from the leader for credential verification.
 
-  No follower, read cache or retry can supply stale revocation state. A five-second
-  request timeout bounds failure; callers must deny access if this read fails.
+  No follower, read cache or retry can supply stale revocation state: the only resend
+  is to the same leader while it refuses the dial or answers `not_ready`, for at most
+  `CoreHold.deadline_ms/0`. Each attempt has a five-second timeout; callers must deny
+  access if this read fails.
   """
   @spec get_tenant_for_authorization(String.t()) :: {:ok, map()} | {:error, term()}
   def get_tenant_for_authorization(tenant_id)

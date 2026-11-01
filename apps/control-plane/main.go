@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -49,12 +50,17 @@ const (
 	MaxIdleConnsPerHost = 100
 	// IdleConnTimeout is the duration an idle connection remains open.
 	IdleConnTimeout = 90 * time.Second
+	// DialTimeout bounds one TCP connect to a backend.
+	DialTimeout = time.Second
 )
 
 // NewPooledHTTPClient creates an http.Client with connection pooling configured.
 // Preserves the Authorization header on redirects (Go's default client strips it).
 func NewPooledHTTPClient() *http.Client {
 	transport := &http.Transport{
+		// A short dial timeout keeps each refused attempt cheap while corehold
+		// waits for a restarting Core.
+		DialContext:         (&net.Dialer{Timeout: DialTimeout, KeepAlive: 30 * time.Second}).DialContext,
 		MaxIdleConns:        MaxIdleConns,
 		MaxIdleConnsPerHost: MaxIdleConnsPerHost,
 		IdleConnTimeout:     IdleConnTimeout,

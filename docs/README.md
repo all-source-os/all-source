@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Core restarts without refused clients](plans/2026-11-01-core-zero-downtime-restart.md): why a Core deploy refuses clients for minutes, and the phased fix.
+
 - [Native delivery CI prerequisites](plans/2026-10-28-native-ci-prerequisites.md)
 
 - [Prime TOON control-value integrity (2026-10-28)](./plans/2026-10-28-prime-toon-control-values.md): accepted encoder repair, retained-memory reproduction and native Codex/Claude acceptance.

@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/allsource/control-plane/internal/domain/entities"
+	"github.com/allsource/control-plane/internal/infrastructure/corehold"
 )
 
 const managedKeyKind = "managed_api_key"
@@ -157,7 +158,7 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 	q.Set("limit", "1001")
 	q.Set("integrity", "retained-entity-v1")
 	u.RawQuery = q.Encode()
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, corehold.Deadline+5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
@@ -168,7 +169,18 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 		return nil, errors.New("API key authority unavailable")
 	}
 	req.Header.Set("Authorization", "Bearer "+bearer)
-	resp, err := a.http.Do(req)
+	var resp *http.Response
+	corehold.Hold(ctx, func() bool {
+		if resp != nil {
+			closeResponseBody(resp)
+			resp = nil
+		}
+		resp, err = a.http.Do(req) //nolint:bodyclose // closed by the next attempt or the deferred close below
+		if err != nil {
+			return corehold.Unreached(err)
+		}
+		return corehold.ResponseNotReady(resp)
+	})
 	if err != nil {
 		return nil, errors.New("API key authority unavailable")
 	}

@@ -16,6 +16,7 @@ use allsource_core::{
         di::ContainerBuilder,
         persistence::SystemBootstrap,
         repositories::InMemoryTenantRepository,
+        web::boot_gate::BootGate,
     },
     rate_limit::{RateLimitConfig, RateLimiter},
     resp::RespServer,
@@ -49,6 +50,38 @@ async fn main() -> Result<()> {
         NodeRole::Follower => tracing::info!("   Starting as FOLLOWER (read-only)"),
     }
     tracing::info!("   Production-ready event store with authentication & multi-tenancy");
+
+    // Bind before the bootstrap: while it replays, the gate answers 503
+    // not_ready, which the gateways hold through, instead of a refused dial.
+    // Use Config::from_env() to pick up ALLSOURCE_HOST / ALLSOURCE_PORT / PORT env vars
+    // (Critical on Fly.io where ALLSOURCE_HOST="::" enables IPv6 6PN internal networking)
+    let server_config = ServerConfig::from_env();
+    let addr = if server_config.host.contains(':') {
+        format!("[{}]:{}", server_config.host, server_config.port)
+    } else {
+        format!("{}:{}", server_config.host, server_config.port)
+    };
+    let gate = BootGate::new();
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let server = {
+        let gate = Arc::clone(&gate);
+        tokio::spawn(async move {
+            let shutdown_gate = Arc::clone(&gate);
+            axum::serve(listener, gate.router())
+                .with_graceful_shutdown(async move {
+                    api_v1::shutdown_signal().await;
+                    // Before the gate opens no handler has run, and the
+                    // bootstrap blocks main until it finishes, so exiting is
+                    // the only way to stop promptly.
+                    if !shutdown_gate.is_open() {
+                        tracing::info!("🛑 Stopping before the bootstrap finished");
+                        std::process::exit(0);
+                    }
+                })
+                .await
+        })
+    };
+    tracing::info!("🚦 Listening on {addr}; answering not_ready until the bootstrap finishes");
 
     // Initialize components — read persistence config from environment
     let (config, mode) = allsource_core::store::EventStoreConfig::from_env();
@@ -452,31 +485,13 @@ async fn main() -> Result<()> {
         mgr
     });
 
-    // Start API server (v1.0 with auth & rate limiting)
-    // Use Config::from_env() to pick up ALLSOURCE_HOST / ALLSOURCE_PORT / PORT env vars
-    // (Critical on Fly.io where ALLSOURCE_HOST="::" enables IPv6 6PN internal networking)
-    let config = ServerConfig::from_env();
-    let addr = if config.host.contains(':') {
-        format!("[{}]:{}", config.host, config.port)
-    } else {
-        format!("{}:{}", config.host, config.port)
-    };
-    tracing::info!("🚀 AllSource Core listening on {}", addr);
-    tracing::info!("📝 API: /health, /api/v1/events, /api/v1/events/query");
-    tracing::info!(
-        "🔌 WebSocket: ws://{}:{}/api/v1/events/stream",
-        config.host,
-        config.port
-    );
-    tracing::info!("🔒 Features: Auth, Multi-tenancy, Rate Limiting");
-
     api_v1::serve_v1(
         store,
         auth_manager,
         tenant_repo,
         rate_limiter,
         service_container,
-        &addr,
+        &gate,
         role,
         wal_shipper,
         wal_receiver,
@@ -485,6 +500,16 @@ async fn main() -> Result<()> {
         geo_replication,
     )
     .await?;
+    tracing::info!("🚀 AllSource Core ready on {}", addr);
+    tracing::info!("📝 API: /health, /api/v1/events, /api/v1/events/query");
+    tracing::info!(
+        "🔌 WebSocket: ws://{}:{}/api/v1/events/stream",
+        server_config.host,
+        server_config.port
+    );
+    tracing::info!("🔒 Features: Auth, Multi-tenancy, Rate Limiting");
 
+    server.await??;
+    tracing::info!("🛑 AllSource Core shutdown complete");
     Ok(())
 }

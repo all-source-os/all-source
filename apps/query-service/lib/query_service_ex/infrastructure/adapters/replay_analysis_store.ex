@@ -1,6 +1,7 @@
 defmodule QueryServiceEx.Infrastructure.Adapters.ReplayAnalysisStore do
   @moduledoc "Fixed, bounded replay sample; no arbitrary query or claim of complete retained history."
   alias QueryServiceEx.Domain.AgentRun.Event
+  alias QueryServiceEx.Infrastructure.Adapters.CoreHold
   @limit 2_097_152
 
   def sample(tenant, at) do
@@ -17,17 +18,19 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ReplayAnalysisStore do
          {:ok, _, 0} <- DateTime.from_iso8601(at),
          {:ok, url, token} <- connection(),
          {:ok, %{status: 200, body: bytes}} when is_binary(bytes) <-
-           Req.get(url <> "/api/v1/events/query",
-             headers: [{"authorization", token}],
-             params: [tenant_id: tenant, limit: 1_000, offset: 0, order: "asc", as_of: at],
-             redirect: false,
-             retry: false,
-             raw: true,
-             compressed: false,
-             receive_timeout: 3_000,
-             request_timeout: 5_000,
-             finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
-             into: &chunk/2
+           Req.get(
+             url <> "/api/v1/events/query",
+             [
+               headers: [{"authorization", token}],
+               params: [tenant_id: tenant, limit: 1_000, offset: 0, order: "asc", as_of: at],
+               redirect: false,
+               raw: true,
+               compressed: false,
+               receive_timeout: 3_000,
+               request_timeout: 5_000,
+               finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
+               into: &chunk/2
+             ] ++ CoreHold.req_options()
            ),
          {:ok, %{"events" => events} = body} <- Jason.decode(bytes),
          true <- valid_page?(body, tenant, events) do

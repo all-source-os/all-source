@@ -154,7 +154,7 @@ pub async fn serve_v1(
     tenant_repo: Arc<dyn TenantRepository>,
     rate_limiter: Arc<RateLimiter>,
     service_container: ServiceContainer,
-    addr: &str,
+    gate: &super::boot_gate::BootGate,
     role: NodeRole,
     wal_shipper: Option<Arc<WalShipper>>,
     wal_receiver: Option<Arc<WalReceiver>>,
@@ -558,14 +558,7 @@ pub async fn serve_v1(
             super::http_metrics::record,
         ))
         .layer(super::response_limit::compression());
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-
-    // Graceful shutdown on SIGTERM (required for serverless platforms)
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
-
-    tracing::info!("🛑 AllSource Core shutdown complete");
+    gate.open(app);
     Ok(())
 }
 
@@ -1169,7 +1162,7 @@ async fn geo_failover_handler(State(state): State<AppState>) -> impl IntoRespons
 }
 
 /// Listen for shutdown signals (SIGTERM for serverless, SIGINT for local dev)
-async fn shutdown_signal() {
+pub async fn shutdown_signal() {
     let ctrl_c = async {
         tokio::signal::ctrl_c()
             .await

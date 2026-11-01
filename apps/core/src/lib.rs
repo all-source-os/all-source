@@ -180,7 +180,9 @@ pub mod backup {
 /// API v1 module re-export
 #[cfg(feature = "server")]
 pub mod api_v1 {
-    pub use crate::infrastructure::web::api_v1::{AppState, AtomicNodeRole, NodeRole, serve_v1};
+    pub use crate::infrastructure::web::api_v1::{
+        AppState, AtomicNodeRole, NodeRole, serve_v1, shutdown_signal,
+    };
 }
 
 /// Replication module re-export (enterprise feature)

@@ -94,12 +94,38 @@ impl EventSourcedTenantRepository {
     /// Rebuild the in-memory cache from all tenant events in the system store.
     fn rebuild_cache(&self) {
         let events = self.system_store.read_stream(SystemDomain::Tenant);
-        for event in events {
-            self.apply_event(&event);
+        // Boot replay time is dominated by this stream; per-kind timing shows
+        // which part of the replay a restart is waiting on.
+        let mut kinds: std::collections::BTreeMap<&'static str, (u64, std::time::Duration)> =
+            std::collections::BTreeMap::new();
+        for event in &events {
+            let payload = event.payload();
+            let kind = if event.event_type_str() != tenant_events::UPDATED {
+                "lifecycle"
+            } else if payload.get(egress::EVENT_KEY).is_some() {
+                "egress"
+            } else if payload.get(query_usage::ADMITTED).is_some()
+                || payload.get(query_usage::RESET).is_some()
+            {
+                "query_usage"
+            } else {
+                "metadata"
+            };
+            let started = std::time::Instant::now();
+            self.apply_event(event);
+            let entry = kinds.entry(kind).or_default();
+            entry.0 += 1;
+            entry.1 += started.elapsed();
         }
+        let replay: Vec<String> = kinds
+            .iter()
+            .map(|(kind, (count, spent))| format!("{kind}={count} in {spent:?}"))
+            .collect();
         tracing::info!(
-            "Rebuilt tenant cache: {} tenants from system store",
-            self.cache.len()
+            "Rebuilt tenant cache: {} tenants from {} events ({})",
+            self.cache.len(),
+            events.len(),
+            replay.join(", ")
         );
     }
 

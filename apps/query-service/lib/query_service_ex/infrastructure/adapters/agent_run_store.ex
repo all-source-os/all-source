@@ -8,6 +8,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStore do
   @behaviour QueryServiceEx.Domain.AgentRun.AppendPort
   alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.AgentRun.Timeline
+  alias QueryServiceEx.Infrastructure.Adapters.CoreHold
   @max_bytes 2_097_152
 
   @impl true
@@ -113,14 +114,13 @@ defmodule QueryServiceEx.Infrastructure.Adapters.AgentRunStore do
     [
       headers: headers,
       redirect: false,
-      retry: false,
       raw: true,
       compressed: false,
       receive_timeout: 3_000,
       request_timeout: 5_000,
       finch: [pool_timeout: 1_000, protocols: [:http1], conn_opts: [timeout: 2_000]],
       into: &chunk(&1, &2, max_bytes)
-    ]
+    ] ++ CoreHold.req_options()
   end
 
   defp chunk({:data, data}, {request, %{status: 200, body: body} = response}, max_bytes)

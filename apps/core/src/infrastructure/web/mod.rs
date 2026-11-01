@@ -6,6 +6,7 @@ pub mod api_v1;
 mod archive_work;
 pub mod audit_api;
 pub mod auth_api;
+pub mod boot_gate;
 pub mod conditional;
 pub mod config_api;
 pub mod demo_api;
