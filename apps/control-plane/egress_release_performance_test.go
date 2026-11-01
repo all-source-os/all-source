@@ -23,6 +23,9 @@ func TestEgressRealCoreReleaseReadPerformance(t *testing.T) {
 		core := newWorkspaceCore(t)
 		defer core.stop(t)
 		cp := core.controlPlane(t, core.url)
+		// Matches the control plane's own Core client (DisableCompression in main.go); a baseline
+		// that predates CompressionLayer would otherwise be compared against gzip encode+decode.
+		cp.client.SetHeader("Accept-Encoding", "identity")
 		workspaceJSON(t, cp.client, "POST", "/api/v1/tenants", map[string]any{
 			"id": "release-benchmark", "name": "release-benchmark",
 			"metadata": map[string]any{"subscription": map[string]any{"tier": "indie", "status": "active"}},
