@@ -1127,3 +1127,78 @@ async fn an_inactive_tenant_still_settles_its_last_lease() {
     assert!(replayed.replayed, "the settle's receipt survives replay");
     assert_eq!(replayed.snapshot.used_bytes, 700);
 }
+
+#[test]
+fn replay_reaches_the_state_apply_reaches() {
+    let mut applied = EgressAccount::default();
+    let mut replayed = EgressAccount::default();
+    let mut lease = id();
+    let mut events = vec![
+        event(
+            EgressCommand::Configure {
+                included_bytes: 1 << 30,
+            },
+            100,
+            1,
+        ),
+        event(
+            EgressCommand::Lease {
+                id: lease.clone(),
+                bytes: 1 << 20,
+            },
+            100,
+            1,
+        ),
+    ];
+    for n in 0..50 {
+        let next = id();
+        events.push(event(
+            EgressCommand::Settle {
+                id: lease,
+                bytes: 4096,
+                next: Some(LeaseRequest {
+                    id: next.clone(),
+                    bytes: 1 << 20,
+                }),
+            },
+            101 + n,
+            1,
+        ));
+        lease = next;
+    }
+    for event in &events {
+        assert_eq!(applied.apply(event), replayed.replay(event));
+    }
+    assert_eq!(applied.snapshot(), replayed.snapshot());
+    assert_eq!(replayed.snapshot().used_bytes, 50 * 4096);
+}
+
+#[test]
+fn a_replay_that_fails_invalidates_the_account() {
+    let mut account = EgressAccount::default();
+    account
+        .replay(&event(
+            EgressCommand::Configure { included_bytes: 10 },
+            100,
+            1,
+        ))
+        .unwrap();
+    assert_eq!(
+        account.replay(&event(
+            EgressCommand::Reserve {
+                id: "not-a-uuid".into()
+            },
+            100,
+            1
+        )),
+        Err(EgressDenial::Invalid)
+    );
+    assert_eq!(
+        account.apply(&event(
+            EgressCommand::Configure { included_bytes: 10 },
+            100,
+            1
+        )),
+        Err(EgressDenial::Invalid)
+    );
+}

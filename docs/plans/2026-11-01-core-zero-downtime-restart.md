@@ -182,15 +182,41 @@ rebuild in 0.40 to 0.52 s, about 1.3 to 1.7 µs per event. Scaled to 2.85 M even
 that is about 5 s each; production measured 45 s and 4 m 47 s. Recovery's gap
 fits a shared CPU and larger events. The rebuild's gap, about 57x, does not:
 production's events carry egress and query-usage receipts the synthetic ones do
-not, and each egress event retains three maps of live reservations, leases and
-receipts (`egress.rs:221-223`), so its cost grows with how many are live.
+not.
 
-Stage 2 now logs each repository's rebuild time, and the tenant rebuild logs the
+#### Egress replay: measured and fixed
+
+`EgressAccount::apply` clones the whole account before each transition so a
+refused command leaves it untouched. The clone includes every live settle
+receipt, kept for an hour and capped at 4,096 per tenant, so a gateway that
+settles once a second makes every replayed egress event copy a map of thousands
+of entries. `SYSTEM_REPLAY_SETTLES` adds that traffic to the synthetic stream
+(valid UUID operation ids; the test asserts the replayed ledger's used bytes):
+
+| Settles, one tenant | Rebuild with the clone | Rebuild in place |
+|---|---|---|
+| 20,000 | 4.61 s (about 230 µs each) | 0.136 s |
+| 100,000 | not run | 0.733 s (about 7.3 µs each) |
+
+Replay events were accepted once when written, and a replay error already
+invalidated the account, so the rebuild now calls `EgressAccount::replay`,
+which transitions in place and invalidates on error. `tests/egress_budget.rs`
+checks that `replay` and `apply` reach the same results and snapshot over a
+lease and settle chain, and that a failed replay invalidates the account.
+
+At about 230 µs each, 1.2 M settles would account for the whole 4 m 47 s. How
+many of production's 2.84 M events are egress settles is not measured yet; the
+per-kind counts below answer it.
+
+#### What the next boot says
+
+Stage 2 logs each repository's rebuild time, and the tenant rebuild logs the
 count and time per event kind (lifecycle, egress, query_usage, metadata). The
-next production boot says which part to fix, before any snapshot is built:
+next production boot says whether anything is left to fix, before any snapshot
+is built:
 
-- If egress dominates, give `EgressAccount` an expiry-ordered index so expiring
-  entries costs O(log n) per event instead of a scan.
+- If egress still dominates, give `EgressAccount` an expiry-ordered index so
+  expiring entries costs O(log n) per event instead of three scans.
 - If metadata dominates, stop writing the whole metadata blob on every usage
   increment: a usage event that carries only the counter keeps the stream small
   and the replay cheap.

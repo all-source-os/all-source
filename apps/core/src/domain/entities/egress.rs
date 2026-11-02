@@ -213,6 +213,17 @@ impl EgressAccount {
         Ok(result)
     }
 
+    /// `apply` without its atomic copy, which costs O(receipts) per event, for
+    /// events already accepted once. An error leaves the account part-applied,
+    /// so it is invalidated.
+    pub fn replay(&mut self, event: &EgressEvent) -> Result<EgressAdmission, EgressDenial> {
+        let result = self.transition(event);
+        if result.is_err() {
+            self.invalid = true;
+        }
+        result
+    }
+
     fn transition(&mut self, event: &EgressEvent) -> Result<EgressAdmission, EgressDenial> {
         use EgressDenial::{Capacity, Conflict, Exhausted, Expired, Invalid};
         if self.invalid || event.at < 0 || event.period < self.period {
