@@ -7,6 +7,7 @@ use crate::{
     error::Result,
 };
 use chrono::{Datelike, Utc};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 pub(super) const EVENT_KEY: &str = "egress_ledger_v1";
@@ -52,11 +53,11 @@ impl EventSourcedTenantRepository {
 
     pub(super) fn apply_egress_event(&self, tenant: &str, value: &Value) {
         let mut account = self.egress_accounts.entry(tenant.to_string()).or_default();
-        let outcome = serde_json::from_value::<EgressEvent>(value.clone())
+        let outcome = EgressEvent::deserialize(value)
             .map_err(|e| e.to_string())
             .and_then(|event| {
                 account
-                    .apply(&event)
+                    .replay(&event)
                     .map(|_| ())
                     .map_err(|d| format!("{d:?}"))
             });
