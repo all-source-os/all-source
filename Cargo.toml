@@ -106,7 +106,7 @@ sha2 = "0.10"
 simd-json = "0.18"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "json", "chrono", "uuid"] }
 tabled = "0.17"
-tantivy = { version = "0.26" }
+tantivy = { version = "0.27" }
 tempfile = "3.27"
 thiserror = "2.0"
 time = "0.3.47"
