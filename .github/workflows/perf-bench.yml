@@ -227,7 +227,7 @@ jobs:
 
       - name: Preserve compiler diagnostics
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         timeout-minutes: 5
         with:
           name: criterion-compiler-diagnostics
@@ -591,7 +591,7 @@ jobs:
       - name: Preserve instruction measurements
         if: always()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: instruction-proof-${{ matrix.package }}
           path: |

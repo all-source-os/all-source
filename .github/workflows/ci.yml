@@ -289,7 +289,7 @@ jobs:
           sudo timeout -k 10 180 apt-get install -y --no-install-recommends ccache
 
       - name: Restore native compiler cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .ccache
           key: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -503,7 +503,7 @@ jobs:
       - name: Preserve Core compiler diagnostics
         if: failure()
         timeout-minutes: 5
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: core-compiler-diagnostics
           path: |
@@ -518,7 +518,7 @@ jobs:
       - name: Save native compiler cache
         if: always()
         timeout-minutes: 5
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .ccache
           key: core-native-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -731,7 +731,7 @@ jobs:
           bun --cwd sdks/typescript run type-check
           bun --cwd sdks/typescript test
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
