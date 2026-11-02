@@ -11,11 +11,6 @@ on:
         required: false
         default: "false"
         type: boolean
-      candidate_shas:
-        description: "Also measure read throughput of these core-alpine image SHAs (space-separated) against the baseline"
-        required: false
-        default: ""
-        type: string
 
 concurrency:
   group: docker-build-${{ github.ref }}
@@ -405,7 +400,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/core-release"
-          baseline="ghcr.io/all-source-os/allsource-core:sha-a8b94f3"
+          # Same musl image family and build flags as the candidate; a glibc baseline's
+          # lead over musl varies by runner CPU, so the ratio would measure the runner.
+          baseline="ghcr.io/all-source-os/allsource-core-alpine:sha-a85bec0"
+          grep -m1 'model name' /proc/cpuinfo
           candidate="ghcr.io/all-source-os/allsource-core-alpine:sha-${SOURCE_SHA:0:7}"
           timeout -k 15 90 docker pull "$baseline"
           timeout -k 15 90 docker pull "$candidate"
@@ -423,29 +421,6 @@ jobs:
           ALLSOURCE_CORE_BASELINE_BINARY: ${{ runner.temp }}/core-release/baseline
           ALLSOURCE_CORE_BINARY: ${{ runner.temp }}/core-release/candidate
         run: timeout -k 15 280 go test -timeout 180s -tags egressintegration,corerelease -run '^TestEgressRealCore' -v -count=1 .
-
-      - name: Measure read throughput of earlier images
-        if: always() && inputs.candidate_shas != ''
-        timeout-minutes: 5
-        working-directory: apps/control-plane
-        env:
-          ALLSOURCE_CORE_BASELINE_BINARY: ${{ runner.temp }}/core-release/baseline
-          CANDIDATE_SHAS: ${{ inputs.candidate_shas }}
-        run: |
-          set -uo pipefail
-          go test -c -o "$RUNNER_TEMP/release.test" -tags egressintegration,corerelease .
-          for sha in $CANDIDATE_SHAS; do
-            image="ghcr.io/all-source-os/allsource-core-alpine:sha-$sha"
-            timeout -k 15 60 docker pull -q "$image" >/dev/null || { echo "$sha: pull failed"; continue; }
-            container=$(docker create "$image")
-            docker cp "$container:/app/allsource-core" "$RUNNER_TEMP/core-release/$sha"
-            docker rm -f "$container" >/dev/null
-            for attempt in 1 2 3; do
-              ALLSOURCE_CORE_BINARY="$RUNNER_TEMP/core-release/$sha" timeout -k 5 40 "$RUNNER_TEMP/release.test" \
-                -test.run '^TestEgressRealCoreReleaseReadPerformance$' -test.v -test.count=1 |
-                grep -o 'release reads/s: .*' | sed "s/^/$sha #$attempt: /"
-            done
-          done
 
   verify-community-public:
     name: Verify -community packages are public
