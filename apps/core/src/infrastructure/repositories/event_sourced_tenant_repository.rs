@@ -16,6 +16,7 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+mod checkpoint;
 mod egress;
 mod query_usage;
 
@@ -58,24 +59,40 @@ pub struct EventSourcedTenantRepository {
     usage_locks: Arc<DashMap<String, Arc<Mutex<()>>>>,
     query_usage: DashMap<String, query_usage::QueryUsageState>,
     egress_accounts: DashMap<String, crate::domain::entities::egress::EgressAccount>,
+    /// Event types and payload keys applied but ignored by this binary. A
+    /// checkpoint records them so a binary that interprets one replays the
+    /// stream instead of trusting a fold that skipped it.
+    uninterpreted: parking_lot::Mutex<std::collections::BTreeSet<String>>,
+    boot_source: std::sync::OnceLock<&'static str>,
 }
 
 impl EventSourcedTenantRepository {
     /// Create a new event-sourced tenant repository.
     ///
-    /// Replays all existing tenant events from the system store to rebuild
-    /// the in-memory cache.
+    /// Rebuilds the in-memory cache from the store's checkpoint and the tenant
+    /// events after it, or from every tenant event when there is none.
     pub fn new(system_store: Arc<SystemMetadataStore>) -> Self {
-        let cache = Arc::new(DashMap::new());
-        let repo = Self {
+        let repo = Self::unbooted(system_store);
+        repo.boot();
+        repo
+    }
+
+    fn unbooted(system_store: Arc<SystemMetadataStore>) -> Self {
+        Self {
             system_store,
-            cache,
+            cache: Arc::new(DashMap::new()),
             usage_locks: Arc::new(DashMap::new()),
             query_usage: DashMap::new(),
             egress_accounts: DashMap::new(),
-        };
-        repo.rebuild_cache();
-        repo
+            uninterpreted: parking_lot::Mutex::default(),
+            boot_source: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// What the cache was rebuilt from: `wal`, `checkpoint tail`,
+    /// `checkpoint verbatim` or `wal after unusable checkpoint`.
+    pub fn boot_source(&self) -> &'static str {
+        self.boot_source.get().copied().unwrap_or("not booted")
     }
 
     /// Fetch (or lazily create) the per-tenant usage lock.
@@ -91,14 +108,14 @@ impl EventSourcedTenantRepository {
             .clone()
     }
 
-    /// Rebuild the in-memory cache from all tenant events in the system store.
-    fn rebuild_cache(&self) {
-        let events = self.system_store.read_stream(SystemDomain::Tenant);
+    /// Apply `events`, tenant events in sequence order, to the cache.
+    fn rebuild_cache(&self, events: &[crate::domain::entities::Event], source: &'static str) {
+        let _ = self.boot_source.set(source);
         // Boot replay time is dominated by this stream; per-kind timing shows
         // which part of the replay a restart is waiting on.
         let mut kinds: std::collections::BTreeMap<&'static str, (u64, std::time::Duration)> =
             std::collections::BTreeMap::new();
-        for event in &events {
+        for event in events {
             let payload = event.payload();
             let kind = if event.event_type_str() != tenant_events::UPDATED {
                 "lifecycle"
@@ -122,7 +139,7 @@ impl EventSourcedTenantRepository {
             .map(|(kind, (count, spent))| format!("{kind}={count} in {spent:?}"))
             .collect();
         tracing::info!(
-            "Rebuilt tenant cache: {} tenants from {} events ({})",
+            "Rebuilt tenant cache: {} tenants from {} events via {source} ({})",
             self.cache.len(),
             events.len(),
             replay.join(", ")
@@ -131,6 +148,7 @@ impl EventSourcedTenantRepository {
 
     /// Apply a single event to the in-memory cache.
     fn apply_event(&self, event: &crate::domain::entities::Event) {
+        checkpoint::note_uninterpreted(event, &self.uninterpreted);
         let event_type = event.event_type_str();
         let payload = event.payload();
 

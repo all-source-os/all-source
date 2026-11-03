@@ -73,6 +73,15 @@ kill_timeout = 65
   # docs/migrations/STORAGE_LAYOUT_FLAT_TO_TENANT.md.
   ALLSOURCE_MIGRATE_FLAT_TO_TENANT = "true"
 
+  # System checkpoints (docs/runbooks/SYSTEM_CHECKPOINTS.md). A boot loads the
+  # newest valid checkpoint and replays only the system WAL after it; the WAL
+  # itself is never pruned. VERIFY compares that checkpoint with a full replay
+  # in the background 30 s after boot; on a difference it moves every
+  # checkpoint aside and exits so the restart replays the WAL.
+  ALLSOURCE_SYSTEM_CHECKPOINT = "true"
+  ALLSOURCE_SYSTEM_CHECKPOINT_INTERVAL_SECONDS = "300"
+  ALLSOURCE_SYSTEM_CHECKPOINT_VERIFY = "true"
+
 # Core is internal-only (bead t-0ff8). Public ingress removed 2026-04-17.
 # All user-facing traffic enters through Control Plane's delegation layer.
 # Internal .fly network (http://allsource-core.internal:3900) still works

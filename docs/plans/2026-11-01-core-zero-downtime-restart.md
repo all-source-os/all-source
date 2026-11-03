@@ -248,6 +248,72 @@ The first deploy carrying phase 3 still replays everything once to build the
 snapshot. Avoiding that window needs an offline tool that builds the snapshot
 from the volume before the new image boots; it is water and not in this plan.
 
+#### Snapshot: as built
+
+Built without waiting for the per-kind boot logs, because no change to the
+replay loop can make a boot that reads 2.85 M events fit inside the 6 s
+gateway hold. Operator view: `docs/runbooks/SYSTEM_CHECKPOINTS.md`.
+
+- `persistence/system_checkpoint.rs`: one file per checkpoint, JSON body plus a
+  footer with length and CRC-32, written tmp, fsync, rename, directory fsync.
+  The two newest valid files are kept; a file that fails its footer or is in
+  an unknown format is skipped and never deleted.
+- What it holds: the tenant stream folded (tenants, query-usage state, egress
+  accounts), every other system event verbatim, per-domain event counts, and
+  each WAL segment with the length of it that is covered.
+- `SystemMetadataStore` holds one lock across the WAL append and the resident
+  push, so a capture reads a sequence, segment lengths and a resident length
+  that agree. Resident events are append-only, so the copy after the lock is
+  released is still exact.
+- Boot skips a covered segment whose length is unchanged, reads a longer one
+  from its covered length, and reads an unlisted one whole. A covered segment
+  that is shorter, or an entry at or below `covered_seq` outside the covered
+  bytes, discards the checkpoint and replays the whole WAL. The next sequence
+  is above both, so a pruned or skipped WAL never restarts at 0.
+- Checkpoints are written at boot from the rebuilt state (before any request),
+  every 300 s by folding the tenant events since the last one onto it, and on a
+  graceful stop. Periodic folds use events only, never the live cache, so
+  runtime-only writes such as usage windows never reach a checkpoint.
+- `ALLSOURCE_SYSTEM_CHECKPOINT_VERIFY` replays the whole WAL in the background
+  after a checkpoint boot. On a difference it stops this process writing
+  checkpoints, moves every checkpoint aside and exits, so the restart replays
+  the WAL. It is on in `apps/core/fly.toml`.
+- The WAL is never pruned. With pruning, every fallback (a contradiction, an
+  unreadable or rejected checkpoint, a fold format change) would replay a
+  truncated WAL. Without it, any doubt about a checkpoint is answered by
+  replaying the WAL, and rolling back to an image without checkpoints is
+  lossless.
+- Segment lengths are recorded after every segment and the WAL directory are
+  fsynced. A failed WAL append stops checkpoints until restart, and a capture
+  refuses while the WAL's sequence is ahead of the last resident event. A
+  rotation failure after a durable write no longer reports the write as
+  failed.
+- A contradiction between WAL and checkpoint moves every checkpoint aside and
+  starts the next sequence above every checkpoint name on disk.
+- The tenant fold records every event type and payload key its binary
+  ignored, and is used only if it re-encodes to the same JSON through the
+  loading binary's types and lists nothing that binary reads.
+- `/health`'s system counts are per-domain counters, no longer a scan of every
+  event per call.
+- Measured with `tests/system_replay_cost.rs`, debug build (the build machine
+  had no disk for a release build), 105,060 events (100,000 usage updates with
+  256-byte metadata, 5,000 egress settles): full replay recovered in 2.35 s and
+  rebuilt tenants in 0.61 s; the boot from the checkpoint recovered in 14 ms
+  and rebuilt in 18 ms with no tenant event resident, and the egress state was
+  identical. Writing the checkpoint took 46 ms. A boot from a checkpoint reads
+  only the WAL after it, so its cost does not grow with history.
+- `tests/system_checkpoint.rs`: checkpoint boot equals a full replay after
+  mixed traffic (usage, metadata, egress leases and settles, query admissions,
+  config); writes after checkpoint boots survive and no WAL sequence repeats;
+  a corrupt newest checkpoint falls back to the older one; no valid checkpoint
+  replays the whole WAL; a torn temporary file is ignored and removed; a WAL
+  shorter than the checkpoint saw is replayed whole; writes from an image
+  without checkpoints reach the next checkpoint boot; writes racing repeated
+  checkpoints are all kept; a fold that does not round-trip, or that ignored a
+  key this binary reads, is replayed from the WAL; ignored event types and
+  keys are recorded; verify accepts a true checkpoint, rejects a forged one,
+  and the rejected checkpointer writes nothing more.
+
 ### Phase 4: state that survives a restart (sand)
 
 - Persist webhook subscriptions as a `_system` stream, folded at boot.
