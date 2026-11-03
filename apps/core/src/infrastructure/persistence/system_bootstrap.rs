@@ -5,7 +5,9 @@ use crate::{
     domain::{entities::TenantQuotas, repositories::TenantRepository, value_objects::TenantId},
     error::Result,
     infrastructure::{
-        persistence::SystemMetadataStore,
+        persistence::{
+            SystemCheckpointSettings, SystemCheckpointer, SystemMetadataStore, SystemStoreOptions,
+        },
         repositories::{
             EventSourcedAuditRepository, EventSourcedConfigRepository, EventSourcedTenantRepository,
         },
@@ -37,6 +39,9 @@ pub struct SystemRepositories {
 
     /// Durable consumer registry for subscription cursor tracking
     pub consumer_registry: Arc<ConsumerRegistry>,
+
+    /// Writes the checkpoints the next boot starts from
+    pub checkpointer: Arc<SystemCheckpointer>,
 }
 
 /// Staged system initialization with static stability.
@@ -72,12 +77,33 @@ impl SystemBootstrap {
         system_data_dir: PathBuf,
         bootstrap_tenant: Option<String>,
     ) -> Result<SystemRepositories> {
+        Self::initialize_with(
+            system_data_dir,
+            bootstrap_tenant,
+            SystemCheckpointSettings::default(),
+        )
+        .await
+    }
+
+    pub async fn initialize_with(
+        system_data_dir: PathBuf,
+        bootstrap_tenant: Option<String>,
+        checkpoints: SystemCheckpointSettings,
+    ) -> Result<SystemRepositories> {
         // Stage 1: Initialize SystemMetadataStore
         tracing::info!(
             "Stage 1: Initializing system metadata store at {}",
             system_data_dir.display()
         );
-        let system_store = Arc::new(SystemMetadataStore::new(&system_data_dir)?);
+        let started = std::time::Instant::now();
+        let system_store = Arc::new(SystemMetadataStore::open(
+            &system_data_dir,
+            SystemStoreOptions {
+                load_checkpoint: checkpoints.enabled,
+                ..SystemStoreOptions::default()
+            },
+        )?);
+        tracing::info!("Stage 1: system store opened in {:?}", started.elapsed());
         tracing::info!(
             "System store initialized: {} events recovered",
             system_store.total_events()
@@ -169,6 +195,11 @@ impl SystemBootstrap {
             tracing::info!("Stage 3: Skipped — {} existing tenants found", tenant_count);
         }
 
+        // Nothing else holds these repositories yet, so the tenant cache is
+        // exactly the fold of every resident tenant event.
+        let checkpointer = Arc::new(SystemCheckpointer::new(system_store.clone(), checkpoints));
+        checkpointer.checkpoint_at_boot(&tenant_repository);
+
         // Stage 4: Ready
         tracing::info!("Stage 4: System metadata initialized — ready to accept traffic");
 
@@ -180,6 +211,7 @@ impl SystemBootstrap {
             #[cfg(feature = "server")]
             auth_repository,
             consumer_registry,
+            checkpointer,
         })
     }
 
@@ -192,8 +224,21 @@ impl SystemBootstrap {
         system_data_dir: Option<PathBuf>,
         bootstrap_tenant: Option<String>,
     ) -> Option<SystemRepositories> {
+        Self::try_initialize_with(
+            system_data_dir,
+            bootstrap_tenant,
+            SystemCheckpointSettings::default(),
+        )
+        .await
+    }
+
+    pub async fn try_initialize_with(
+        system_data_dir: Option<PathBuf>,
+        bootstrap_tenant: Option<String>,
+        checkpoints: SystemCheckpointSettings,
+    ) -> Option<SystemRepositories> {
         if let Some(dir) = system_data_dir {
-            match Self::initialize(dir, bootstrap_tenant).await {
+            match Self::initialize_with(dir, bootstrap_tenant, checkpoints).await {
                 Ok(repos) => Some(repos),
                 Err(e) => {
                     tracing::error!(

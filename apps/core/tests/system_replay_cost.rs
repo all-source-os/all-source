@@ -23,7 +23,10 @@ use allsource_core::{
         },
     },
     infrastructure::{
-        persistence::{SystemMetadataStore, WALConfig, WriteAheadLog},
+        persistence::{
+            SystemCheckpointSettings, SystemCheckpointer, SystemMetadataStore, WALConfig,
+            WriteAheadLog,
+        },
         repositories::EventSourcedTenantRepository,
     },
 };
@@ -145,19 +148,48 @@ fn tenant_stream_replay_cost() {
     let started = Instant::now();
     let repository = EventSourcedTenantRepository::new(store.clone());
     let stage2 = started.elapsed();
-    if settles > 0 {
-        let snapshot = tokio::runtime::Runtime::new()
-            .unwrap()
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let used = |repository: &EventSourcedTenantRepository| {
+        runtime
             .block_on(repository.egress_snapshot(&TenantId::new("tenant-0".into()).unwrap()))
             .unwrap()
-            .expect("replayed egress account is valid");
-        assert_eq!(snapshot.used_bytes, 4096 * settles.div_ceil(tenants) as u64);
+            .expect("replayed egress account is valid")
+            .used_bytes
+    };
+    if settles > 0 {
+        assert_eq!(used(&repository), 4096 * settles.div_ceil(tenants) as u64);
     }
-    drop(repository);
 
     eprintln!(
         "events={} metadata_bytes={metadata_bytes} stage1_recover={stage1:?} stage2_tenant_rebuild={stage2:?} per_event_stage2={:?}",
         store.total_events(),
         stage2 / u32::try_from(store.total_events().max(1)).unwrap()
+    );
+
+    let started = Instant::now();
+    let checkpointer = Arc::new(SystemCheckpointer::new(
+        Arc::clone(&store),
+        SystemCheckpointSettings::default(),
+    ));
+    checkpointer.checkpoint_at_boot(&repository);
+    checkpointer.wait_pending().unwrap().unwrap();
+    let written = started.elapsed();
+    let replayed = repository.export_fold().unwrap();
+    drop((repository, checkpointer, store));
+
+    let started = Instant::now();
+    let store = Arc::new(SystemMetadataStore::new(&system_dir).unwrap());
+    let stage1 = started.elapsed();
+    assert!(store.loaded_checkpoint().is_some());
+    let started = Instant::now();
+    let repository = EventSourcedTenantRepository::new(Arc::clone(&store));
+    let stage2 = started.elapsed();
+    assert_eq!(
+        repository.export_fold().unwrap().state["egress"],
+        replayed.state["egress"]
+    );
+    eprintln!(
+        "checkpoint written in {written:?}; boot from it: stage1_recover={stage1:?} stage2_tenant_rebuild={stage2:?} resident={}",
+        store.resident_events()
     );
 }

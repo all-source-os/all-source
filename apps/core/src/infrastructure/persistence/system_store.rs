@@ -10,15 +10,87 @@ use crate::{
         },
     },
     error::{AllSourceError, Result},
-    infrastructure::persistence::wal::{WALConfig, WriteAheadLog},
+    infrastructure::persistence::{
+        system_checkpoint::{self, CHECKPOINT_DIR, FoldedStream, SystemCheckpoint},
+        wal::{CoveredSegment, WALConfig, WriteAheadLog},
+    },
 };
 use chrono::{DateTime, Utc};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde_json::Value as JsonValue;
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
 };
+
+/// Events held in memory, each with its WAL sequence. A folded domain holds
+/// only the events after the checkpoint the store booted from.
+#[derive(Default)]
+struct Resident {
+    events: Vec<Event>,
+    sequences: Vec<u64>,
+    /// Events written per domain over the whole history, folded ones included.
+    counts: BTreeMap<String, u64>,
+}
+
+impl Resident {
+    fn push(&mut self, sequence: u64, event: Event) {
+        *self
+            .counts
+            .entry(domain_of(&event).to_string())
+            .or_default() += 1;
+        self.sequences.push(sequence);
+        self.events.push(event);
+    }
+}
+
+fn domain_of(event: &Event) -> &str {
+    let rest = event
+        .entity_id_str()
+        .strip_prefix(SYSTEM_ENTITY_ID_PREFIX)
+        .unwrap_or_default();
+    rest.split(':').next().unwrap_or(rest)
+}
+
+fn in_domain(event: &Event, domain: SystemDomain) -> bool {
+    event
+        .entity_id_str()
+        .strip_prefix(SYSTEM_ENTITY_ID_PREFIX)
+        .is_some_and(|rest| rest.starts_with(domain.as_str()))
+}
+
+/// What a system checkpoint needs from the store at one sequence.
+pub struct CheckpointCapture {
+    pub covered_seq: u64,
+    pub segments: Vec<CoveredSegment>,
+    pub domain_counts: BTreeMap<String, u64>,
+    /// Every resident event outside `folded`.
+    pub verbatim: Vec<(u64, Event)>,
+    /// Resident events of `folded` with a sequence above the caller's base.
+    pub tail: Vec<Event>,
+}
+
+/// How [`SystemMetadataStore::open`] treats checkpoints.
+#[derive(Debug, Clone, Copy)]
+pub struct SystemStoreOptions {
+    /// Boot from the newest valid checkpoint; when false, replay the whole WAL.
+    pub load_checkpoint: bool,
+    /// Domains a checkpoint folds; their events before it are not resident.
+    pub folded: &'static [SystemDomain],
+}
+
+impl Default for SystemStoreOptions {
+    fn default() -> Self {
+        Self {
+            load_checkpoint: true,
+            folded: &[SystemDomain::Tenant],
+        }
+    }
+}
 
 /// SystemMetadataStore provides durable storage for operational metadata.
 ///
@@ -45,14 +117,31 @@ use std::{
 /// └──────────────────────────┘
 /// ```
 pub struct SystemMetadataStore {
-    /// In-memory event storage (recovered from WAL on startup)
-    events: Arc<RwLock<Vec<Event>>>,
+    resident: RwLock<Resident>,
+
+    /// Held across the WAL append and the resident push, so a checkpoint
+    /// capture never covers a sequence whose event is not resident yet.
+    append_lock: Mutex<()>,
 
     /// Write-ahead log for durability
     wal: Arc<WriteAheadLog>,
 
     /// Base directory for system data
     data_dir: PathBuf,
+
+    options: SystemStoreOptions,
+
+    /// The checkpoint this store booted from.
+    loaded: Option<SystemCheckpoint>,
+
+    /// The sequence of the last event made resident. A capture refuses when
+    /// the WAL has handed out a sequence beyond it.
+    last_sequence: AtomicU64,
+
+    /// Set by a failed WAL append. Its bytes may still reach the segment
+    /// later without being resident, so no checkpoint may cover them until a
+    /// restart reads the WAL again.
+    append_failed: AtomicBool,
 }
 
 impl SystemMetadataStore {
@@ -60,9 +149,13 @@ impl SystemMetadataStore {
     ///
     /// On creation, the store:
     /// 1. Initializes WAL in `{data_dir}/wal/`
-    /// 2. Recovers any existing events from WAL
-    /// 3. Populates the in-memory cache
+    /// 2. Loads the newest valid checkpoint, if any
+    /// 3. Recovers the WAL events the checkpoint does not cover
     pub fn new(data_dir: impl Into<PathBuf>) -> Result<Self> {
+        Self::open(data_dir, SystemStoreOptions::default())
+    }
+
+    pub fn open(data_dir: impl Into<PathBuf>, options: SystemStoreOptions) -> Result<Self> {
         let data_dir = data_dir.into();
         let wal_dir = data_dir.join("wal");
 
@@ -86,43 +179,182 @@ impl SystemMetadataStore {
         let wal = WriteAheadLog::new(&wal_dir, wal_config)?;
         let wal = Arc::new(wal);
 
-        let events = Arc::new(RwLock::new(Vec::new()));
+        let mut resident = Resident::default();
+        let checkpoint_dir = data_dir.join(CHECKPOINT_DIR);
+        let mut loaded = options
+            .load_checkpoint
+            .then(|| system_checkpoint::load_latest(&checkpoint_dir))
+            .flatten();
 
-        // Recover from WAL
-        match wal.recover_for_append() {
-            Ok(recovered_events) if !recovered_events.is_empty() => {
-                tracing::info!(
-                    "Recovered {} system events from WAL",
-                    recovered_events.len()
-                );
-                let mut event_vec = events.write();
-                for event in recovered_events {
-                    if is_system_event_type(event.event_type_str()) {
-                        event_vec.push(event);
-                    } else {
-                        tracing::warn!(
-                            "Skipping non-system event in system WAL: {}",
-                            event.event_type_str()
+        let tail = match &loaded {
+            Some(checkpoint) => {
+                match wal.recover_for_append_after(checkpoint.covered_seq, &checkpoint.segments) {
+                    Ok(tail) => Some(tail),
+                    Err(e) => {
+                        tracing::error!(
+                            "System WAL contradicts checkpoint {}, replaying the whole WAL: {e}",
+                            checkpoint.covered_seq
                         );
+                        // Left in place, a stale checkpoint would win a later
+                        // boot over everything this replay goes on to write.
+                        match system_checkpoint::reject_all(&checkpoint_dir) {
+                            Ok(moved) => tracing::error!(
+                                "{moved} system checkpoints moved to {}/rejected",
+                                checkpoint_dir.display()
+                            ),
+                            Err(e) => tracing::error!("System checkpoints not rejected: {e}"),
+                        }
+                        None
                     }
                 }
             }
-            Ok(_) => {
-                tracing::debug!("No system events to recover from WAL");
+            None => None,
+        };
+        let recovered = if let Some(tail) = tail {
+            let checkpoint = loaded.as_ref().expect("tail implies a checkpoint");
+            for (sequence, event) in &checkpoint.verbatim {
+                resident.sequences.push(*sequence);
+                resident.events.push(event.clone());
             }
-            Err(e) => {
+            resident.counts.clone_from(&checkpoint.domain_counts);
+            tail
+        } else {
+            loaded = None;
+            let floor = system_checkpoint::highest_named(&checkpoint_dir);
+            wal.recover_entries_for_append(floor).map_err(|e| {
                 tracing::error!("System WAL recovery failed: {}", e);
-                return Err(AllSourceError::StorageError(format!(
-                    "System WAL recovery failed: {e}"
-                )));
+                AllSourceError::StorageError(format!("System WAL recovery failed: {e}"))
+            })?
+        };
+
+        let mut skipped = 0usize;
+        for (sequence, event) in recovered {
+            if is_system_event_type(event.event_type_str()) {
+                resident.push(sequence, event);
+            } else {
+                skipped += 1;
+                tracing::warn!(
+                    "Skipping non-system event in system WAL: {}",
+                    event.event_type_str()
+                );
             }
         }
+        tracing::info!(
+            "System store recovered: {} resident events, {} in history, checkpoint {:?}{}",
+            resident.events.len(),
+            resident.counts.values().sum::<u64>(),
+            loaded.as_ref().map(|c| c.covered_seq),
+            if skipped > 0 {
+                format!(", {skipped} non-system events skipped")
+            } else {
+                String::new()
+            }
+        );
 
+        let last_sequence = AtomicU64::new(wal.current_sequence());
         Ok(Self {
-            events,
+            resident: RwLock::new(resident),
+            append_lock: Mutex::new(()),
             wal,
             data_dir,
+            options,
+            loaded,
+            last_sequence,
+            append_failed: AtomicBool::new(false),
         })
+    }
+
+    /// The folded state of `domain` in the checkpoint this store booted
+    /// from. Resident events of `domain` all come after it.
+    pub fn folded(&self, domain: SystemDomain) -> Option<&FoldedStream> {
+        self.loaded.as_ref()?.folds.get(domain.as_str())
+    }
+
+    /// The checkpoint this store booted from.
+    pub fn loaded_checkpoint(&self) -> Option<&SystemCheckpoint> {
+        self.loaded.as_ref()
+    }
+
+    pub fn options(&self) -> SystemStoreOptions {
+        self.options
+    }
+
+    pub fn checkpoint_dir(&self) -> PathBuf {
+        self.data_dir.join(CHECKPOINT_DIR)
+    }
+
+    pub fn wal(&self) -> &WriteAheadLog {
+        &self.wal
+    }
+
+    /// Everything a checkpoint at the current sequence needs, read with
+    /// appends stopped. `tail` holds the folded domains' events above
+    /// `after_seq`.
+    pub fn capture(&self, after_seq: u64) -> Result<CheckpointCapture> {
+        let (covered_seq, segments, resident_len, domain_counts) = {
+            let _appends = self.append_lock.lock();
+            if self.append_failed.load(Ordering::SeqCst) {
+                return Err(AllSourceError::StorageError(
+                    "A system WAL append failed in this process; no checkpoint until restart"
+                        .into(),
+                ));
+            }
+            let covered_seq = self.wal.current_sequence();
+            let last = self.last_sequence.load(Ordering::SeqCst);
+            if covered_seq != last {
+                return Err(AllSourceError::StorageError(format!(
+                    "System WAL is at sequence {covered_seq} but the last resident event is {last}"
+                )));
+            }
+            let segments = self.wal.covered_segments()?;
+            let resident = self.resident.read();
+            (
+                covered_seq,
+                segments,
+                resident.events.len(),
+                resident.counts.clone(),
+            )
+        };
+        // Resident events are only ever appended, so the first `resident_len`
+        // are exactly those at or below `covered_seq`; copying them in chunks
+        // keeps appends waiting for one chunk at most.
+        const CHUNK: usize = 8192;
+        let folded = self.options.folded;
+        let mut verbatim = Vec::new();
+        let mut tail = Vec::new();
+        for start in (0..resident_len).step_by(CHUNK) {
+            let resident = self.resident.read();
+            let end = (start + CHUNK).min(resident_len);
+            for index in start..end {
+                let (sequence, event) = (resident.sequences[index], &resident.events[index]);
+                if folded.iter().any(|domain| in_domain(event, *domain)) {
+                    if sequence > after_seq {
+                        tail.push(event.clone());
+                    }
+                } else {
+                    verbatim.push((sequence, event.clone()));
+                }
+            }
+        }
+        Ok(CheckpointCapture {
+            covered_seq,
+            segments,
+            domain_counts,
+            verbatim,
+            tail,
+        })
+    }
+
+    /// Every system event on disk of `domain`, in sequence order, read from
+    /// the WAL whatever the checkpoint covers. For a fold that cannot use
+    /// the checkpoint, and for verifying one.
+    pub fn read_domain_history(&self, domain: SystemDomain) -> Result<Vec<(u64, Event)>> {
+        Ok(self
+            .wal
+            .read_all_entries()?
+            .into_iter()
+            .filter(|(_, event)| in_domain(event, domain))
+            .collect())
     }
 
     /// Append a system event to the store.
@@ -140,11 +372,13 @@ impl SystemMetadataStore {
             )));
         }
 
-        // Write to WAL first (durability)
-        self.wal.append(event.clone())?;
-
-        // Add to in-memory cache
-        self.events.write().push(event);
+        let _appends = self.append_lock.lock();
+        let sequence = self.wal.append(event.clone()).inspect_err(|e| {
+            self.append_failed.store(true, Ordering::SeqCst);
+            tracing::error!("System WAL append failed; checkpoints stop until restart: {e}");
+        })?;
+        self.resident.write().push(sequence, event);
+        self.last_sequence.store(sequence, Ordering::SeqCst);
 
         Ok(())
     }
@@ -170,14 +404,16 @@ impl SystemMetadataStore {
         Ok(event)
     }
 
-    /// Read all events from a system stream (filtered by entity_id prefix).
+    /// Read all resident events from a system stream (filtered by entity_id
+    /// prefix). For a folded domain, only those after the loaded checkpoint.
     ///
     /// For example, `read_stream(SystemDomain::Tenant)` returns all events
     /// with entity_id starting with `_system:tenant:`.
     pub fn read_stream(&self, domain: SystemDomain) -> Vec<Event> {
         let prefix = format!("{}{}", SYSTEM_ENTITY_ID_PREFIX, domain.as_str());
-        let events = self.events.read();
-        events
+        let resident = self.resident.read();
+        resident
+            .events
             .iter()
             .filter(|e| e.entity_id_str().starts_with(&prefix))
             .cloned()
@@ -191,8 +427,9 @@ impl SystemMetadataStore {
     pub fn read_entity(&self, domain: SystemDomain, resource_id: &str) -> Vec<Event> {
         let entity_id = system_entity_id_value(domain, resource_id);
         let entity_id_str = entity_id.as_str();
-        let events = self.events.read();
-        events
+        let resident = self.resident.read();
+        resident
+            .events
             .iter()
             .filter(|e| e.entity_id_str() == entity_id_str)
             .cloned()
@@ -204,8 +441,9 @@ impl SystemMetadataStore {
     /// This is useful for incremental catch-up after initial bootstrap.
     pub fn read_stream_from(&self, domain: SystemDomain, from_version: usize) -> Vec<Event> {
         let prefix = format!("{}{}", SYSTEM_ENTITY_ID_PREFIX, domain.as_str());
-        let events = self.events.read();
-        events
+        let resident = self.resident.read();
+        resident
+            .events
             .iter()
             .filter(|e| e.entity_id_str().starts_with(&prefix))
             .skip(from_version)
@@ -215,22 +453,28 @@ impl SystemMetadataStore {
 
     /// Read all system events (across all domains).
     pub fn read_all(&self) -> Vec<Event> {
-        self.events.read().clone()
+        self.resident.read().events.clone()
     }
 
-    /// Count events in a system stream.
+    /// Events ever written to a system stream, including those a checkpoint
+    /// folded.
     pub fn count_stream(&self, domain: SystemDomain) -> usize {
-        let prefix = format!("{}{}", SYSTEM_ENTITY_ID_PREFIX, domain.as_str());
-        let events = self.events.read();
-        events
-            .iter()
-            .filter(|e| e.entity_id_str().starts_with(&prefix))
-            .count()
+        self.resident
+            .read()
+            .counts
+            .get(domain.as_str())
+            .map_or(0, |count| *count as usize)
     }
 
-    /// Total number of system events.
+    /// Events ever written to the system store, including those a checkpoint
+    /// folded.
     pub fn total_events(&self) -> usize {
-        self.events.read().len()
+        self.resident.read().counts.values().sum::<u64>() as usize
+    }
+
+    /// Events held in memory.
+    pub fn resident_events(&self) -> usize {
+        self.resident.read().events.len()
     }
 
     /// Get the data directory path.
@@ -246,8 +490,9 @@ impl SystemMetadataStore {
         end: Option<DateTime<Utc>>,
         limit: Option<usize>,
     ) -> Vec<Event> {
-        let events = self.events.read();
-        let mut results: Vec<Event> = events
+        let resident = self.resident.read();
+        let mut results: Vec<Event> = resident
+            .events
             .iter()
             .filter(|e| {
                 if e.event_type_str() != event_type_str {
@@ -282,7 +527,7 @@ impl std::fmt::Debug for SystemMetadataStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SystemMetadataStore")
             .field("data_dir", &self.data_dir)
-            .field("total_events", &self.events.read().len())
+            .field("total_events", &self.total_events())
             .finish()
     }
 }

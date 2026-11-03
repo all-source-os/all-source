@@ -21,6 +21,8 @@ pub mod simd_json;
 pub mod storage;
 pub mod storage_integrity;
 pub mod system_bootstrap;
+pub mod system_checkpoint;
+pub mod system_checkpointer;
 pub mod system_store;
 pub mod tenant_loader;
 pub mod version_manifest;
@@ -55,6 +57,9 @@ pub use storage::{
 };
 pub use storage_integrity::{IntegrityCheckResult, StorageIntegrity};
 pub use system_bootstrap::{SystemBootstrap, SystemRepositories};
-pub use system_store::SystemMetadataStore;
+pub use system_checkpointer::{
+    CheckpointOutcome, SystemCheckpointSettings, SystemCheckpointer, VerifyOutcome,
+};
+pub use system_store::{SystemMetadataStore, SystemStoreOptions};
 pub use tenant_loader::{DEFAULT_LOAD_TIMEOUT, TenantLoader};
 pub use wal::{WALConfig, WriteAheadLog};

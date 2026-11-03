@@ -23,6 +23,14 @@ pub struct WalSegmentStamp {
     pub modified: Option<SystemTime>,
 }
 
+/// A segment as a checkpoint saw it: every entry in its first `len` bytes
+/// has a sequence at or below the checkpoint's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoveredSegment {
+    pub name: String,
+    pub len: u64,
+}
+
 /// Subdirectory of the WAL dir that holds retired segments containing lines
 /// recovery could not read. Nothing lists, replays, or deletes it.
 pub const QUARANTINE_DIR: &str = "quarantine";
@@ -173,9 +181,11 @@ impl WALFile {
         // straight after it would fuse the next entry onto the torn bytes and
         // make that entry unreadable too.
         if size > 0 && !ends_with_newline(&mut file)? {
-            file.write_all(b"\n").map_err(|e| {
-                AllSourceError::StorageError(format!("Failed to terminate torn WAL line: {e}"))
-            })?;
+            file.write_all(b"\n")
+                .and_then(|()| file.sync_all())
+                .map_err(|e| {
+                    AllSourceError::StorageError(format!("Failed to terminate torn WAL line: {e}"))
+                })?;
             size += 1;
         }
 
@@ -286,8 +296,10 @@ impl WriteAheadLog {
         let should_rotate = current.size >= self.config.max_file_size;
         drop(current);
 
-        if should_rotate {
-            self.rotate()?;
+        // The entry is already written, so a failed rotation must not report
+        // the append as failed; the next append retries it.
+        if should_rotate && let Err(e) = self.rotate() {
+            tracing::error!("WAL rotation failed after sequence {sequence}: {e}");
         }
 
         tracing::trace!("WAL entry written: sequence={}", sequence);
@@ -465,6 +477,190 @@ impl WriteAheadLog {
         Ok(recovered.into_iter().map(|(_, event)| event).collect())
     }
 
+    /// Recover only what a system checkpoint does not cover, then move the
+    /// writer past both. A segment listed in `covered` is read from its
+    /// recorded length on, so an unchanged one is not opened at all.
+    ///
+    /// Fails with [`AllSourceError::StorageError`] when the WAL contradicts
+    /// the checkpoint: a covered segment shorter than recorded, or an entry
+    /// at or below `covered_seq` outside the covered bytes. The caller then
+    /// replays the whole WAL instead.
+    pub fn recover_for_append_after(
+        &self,
+        covered_seq: u64,
+        covered: &[CoveredSegment],
+    ) -> Result<Vec<(u64, Event)>> {
+        let mut wal_files = self.list_wal_files()?;
+        wal_files.sort();
+        let mut recovered = Vec::new();
+        let mut max_sequence = covered_seq;
+        let mut skipped = 0usize;
+        for path in &wal_files {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let len = fs::metadata(path)
+                .map_err(|e| {
+                    AllSourceError::StorageError(format!("Failed to stat WAL segment: {e}"))
+                })?
+                .len();
+            let offset = match covered.iter().find(|segment| segment.name == name) {
+                Some(segment) if len == segment.len => {
+                    skipped += 1;
+                    continue;
+                }
+                Some(segment) if len < segment.len => {
+                    return Err(AllSourceError::StorageError(format!(
+                        "WAL segment {name} is {len} bytes, shorter than the {} a checkpoint \
+                         covered",
+                        segment.len
+                    )));
+                }
+                Some(segment) => segment.len,
+                None => 0,
+            };
+            let (entries, corrupted) = Self::read_segment(path, offset)?;
+            if corrupted > 0 {
+                self.unreadable_segments.lock().insert(path.clone());
+            }
+            for (sequence, event) in entries {
+                if sequence <= covered_seq {
+                    return Err(AllSourceError::StorageError(format!(
+                        "WAL segment {name} holds sequence {sequence} at or below checkpoint \
+                         sequence {covered_seq} outside the bytes it covered"
+                    )));
+                }
+                max_sequence = max_sequence.max(sequence);
+                recovered.push((sequence, event));
+            }
+        }
+        *self.sequence.write() = max_sequence;
+        self.stats.write().recovery_count += 1;
+        recovered.sort_by_key(|(sequence, _)| *sequence);
+        self.seal()?;
+        tracing::info!(
+            "✅ WAL recovery after checkpoint {covered_seq}: {} segments skipped, {} events \
+             recovered",
+            skipped,
+            recovered.len()
+        );
+        Ok(recovered)
+    }
+
+    /// [`Self::recover_for_append`], keeping each event's sequence. The next
+    /// sequence is above `floor` even if no entry reaches it.
+    pub fn recover_entries_for_append(&self, floor: u64) -> Result<Vec<(u64, Event)>> {
+        let mut recovered = self.recover_entries()?;
+        {
+            let mut sequence = self.sequence.write();
+            *sequence = (*sequence).max(floor);
+        }
+        recovered.sort_by_key(|(sequence, _)| *sequence);
+        self.seal()?;
+        Ok(recovered)
+    }
+
+    /// Every readable entry, in sequence order, without moving the writer or
+    /// marking segments.
+    pub fn read_all_entries(&self) -> Result<Vec<(u64, Event)>> {
+        let mut wal_files = self.list_wal_files()?;
+        wal_files.sort();
+        let mut entries = Vec::new();
+        for path in &wal_files {
+            entries.extend(Self::read_segment(path, 0)?.0);
+        }
+        entries.sort_by_key(|(sequence, _)| *sequence);
+        Ok(entries)
+    }
+
+    /// Every segment with its current length, after making every segment and
+    /// the directory durable, so no recorded length exceeds what a power loss
+    /// leaves on disk.
+    ///
+    /// The caller must stop appends for the duration of this call and until
+    /// it has read the sequence the stamps cover.
+    pub fn covered_segments(&self) -> Result<Vec<CoveredSegment>> {
+        self.sync()?;
+        let sync_err = |e: std::io::Error| {
+            AllSourceError::StorageError(format!("Failed to sync WAL segment: {e}"))
+        };
+        for path in self.list_wal_files()? {
+            File::open(&path)
+                .and_then(|f| f.sync_all())
+                .map_err(sync_err)?;
+        }
+        File::open(&self.wal_dir)
+            .and_then(|d| d.sync_all())
+            .map_err(sync_err)?;
+        Ok(self
+            .segment_stamps()?
+            .into_iter()
+            .filter_map(|stamp| {
+                Some(CoveredSegment {
+                    name: stamp.path.file_name()?.to_string_lossy().into_owned(),
+                    len: stamp.len,
+                })
+            })
+            .collect())
+    }
+
+    /// Readable entries of one segment from `offset`, and how many lines
+    /// could not be read.
+    fn read_segment(path: &Path, offset: u64) -> Result<(Vec<(u64, Event)>, usize)> {
+        let mut file = File::open(path).map_err(|e| {
+            AllSourceError::StorageError(format!("Failed to open WAL file for recovery: {e}"))
+        })?;
+        if offset > 0 {
+            file.seek(SeekFrom::Start(offset)).map_err(|e| {
+                AllSourceError::StorageError(format!("Failed to seek WAL file: {e}"))
+            })?;
+        }
+        let mut entries = Vec::new();
+        let mut corrupted = 0;
+        for (line_num, line) in BufReader::new(file).lines().enumerate() {
+            let line = match line {
+                Ok(l) => l,
+                Err(e) => {
+                    tracing::warn!(
+                        "I/O error reading WAL line at {:?}:{}: {}",
+                        path,
+                        line_num + 1,
+                        e
+                    );
+                    corrupted += 1;
+                    continue;
+                }
+            };
+
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            match serde_json::from_str::<WALEntry>(&line) {
+                Ok(entry) if entry.verify() => entries.push((entry.sequence, entry.event)),
+                Ok(_) => {
+                    tracing::warn!(
+                        "Corrupted WAL entry at {:?}:{} (checksum mismatch)",
+                        path,
+                        line_num + 1
+                    );
+                    corrupted += 1;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to parse WAL entry at {:?}:{}: {}",
+                        path,
+                        line_num + 1,
+                        e
+                    );
+                    corrupted += 1;
+                }
+            }
+        }
+        Ok((entries, corrupted))
+    }
+
     fn recover_entries(&self) -> Result<Vec<(u64, Event)>> {
         tracing::info!("🔄 Starting WAL recovery...");
 
@@ -477,65 +673,16 @@ impl WriteAheadLog {
 
         for wal_file_path in &wal_files {
             tracing::debug!("Reading WAL file: {:?}", wal_file_path);
-
-            let file = File::open(wal_file_path).map_err(|e| {
-                AllSourceError::StorageError(format!("Failed to open WAL file for recovery: {e}"))
-            })?;
-
-            let reader = BufReader::new(file);
-            let corrupted_before = corrupted_entries;
-
-            for (line_num, line) in reader.lines().enumerate() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(e) => {
-                        tracing::warn!(
-                            "I/O error reading WAL line at {:?}:{}: {}",
-                            wal_file_path,
-                            line_num + 1,
-                            e
-                        );
-                        corrupted_entries += 1;
-                        continue;
-                    }
-                };
-
-                if line.trim().is_empty() {
-                    continue;
-                }
-
-                match serde_json::from_str::<WALEntry>(&line) {
-                    Ok(entry) => {
-                        // Verify checksum
-                        if !entry.verify() {
-                            tracing::warn!(
-                                "Corrupted WAL entry at {:?}:{} (checksum mismatch)",
-                                wal_file_path,
-                                line_num + 1
-                            );
-                            corrupted_entries += 1;
-                            continue;
-                        }
-
-                        max_sequence = max_sequence.max(entry.sequence);
-                        recovered.push((entry.sequence, entry.event));
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to parse WAL entry at {:?}:{}: {}",
-                            wal_file_path,
-                            line_num + 1,
-                            e
-                        );
-                        corrupted_entries += 1;
-                    }
-                }
-            }
-
-            if corrupted_entries > corrupted_before {
+            let (entries, corrupted) = Self::read_segment(wal_file_path, 0)?;
+            if corrupted > 0 {
                 self.unreadable_segments
                     .lock()
                     .insert(wal_file_path.clone());
+            }
+            corrupted_entries += corrupted;
+            for (sequence, event) in entries {
+                max_sequence = max_sequence.max(sequence);
+                recovered.push((sequence, event));
             }
         }
 

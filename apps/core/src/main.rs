@@ -14,7 +14,9 @@ use allsource_core::{
             ClusterManager, ClusterMember, GeoReplicationConfig, GeoReplicationManager, MemberRole,
         },
         di::ContainerBuilder,
-        persistence::SystemBootstrap,
+        persistence::{
+            SystemBootstrap, SystemCheckpointSettings, SystemCheckpointer, VerifyOutcome,
+        },
         repositories::InMemoryTenantRepository,
         web::boot_gate::BootGate,
     },
@@ -155,7 +157,16 @@ async fn main() -> Result<()> {
     let bootstrap_tenant = std::env::var("ALLSOURCE_BOOTSTRAP_TENANT")
         .ok()
         .filter(|s| !s.is_empty());
-    let system_repos = SystemBootstrap::try_initialize(system_data_dir, bootstrap_tenant).await;
+    let system_repos = SystemBootstrap::try_initialize_with(
+        system_data_dir,
+        bootstrap_tenant,
+        SystemCheckpointSettings::from_env(),
+    )
+    .await;
+    let checkpointer = system_repos.as_ref().map(|r| Arc::clone(&r.checkpointer));
+    if let Some(checkpointer) = &checkpointer {
+        spawn_system_checkpoints(checkpointer);
+    }
 
     // Wire durable consumer registry into EventStore before Arc wrapping
     if let Some(ref repos) = system_repos {
@@ -510,6 +521,79 @@ async fn main() -> Result<()> {
     tracing::info!("🔒 Features: Auth, Multi-tenancy, Rate Limiting");
 
     server.await??;
+    if let Some(checkpointer) = checkpointer {
+        // Handlers have drained, so the next boot's WAL tail is close to empty.
+        match tokio::task::spawn_blocking(move || checkpointer.checkpoint()).await {
+            Ok(Ok(Some(o))) => tracing::info!("Shutdown system checkpoint at {}", o.covered_seq),
+            Ok(Ok(None)) => tracing::info!("Shutdown system checkpoint already current"),
+            Ok(Err(e)) => tracing::error!("Shutdown system checkpoint failed: {e}"),
+            Err(e) => tracing::error!("Shutdown system checkpoint panicked: {e}"),
+        }
+    }
     tracing::info!("🛑 AllSource Core shutdown complete");
     Ok(())
+}
+
+/// Periodic system checkpoints bound how much of the tenant stream a crash
+/// leaves to replay; the verify pass checks the checkpoint this boot used.
+fn spawn_system_checkpoints(checkpointer: &Arc<SystemCheckpointer>) {
+    let settings = checkpointer.settings();
+    if !settings.enabled {
+        tracing::warn!("System checkpoints off: every boot replays the whole system WAL");
+        return;
+    }
+    let interval = std::env::var("ALLSOURCE_SYSTEM_CHECKPOINT_INTERVAL_SECONDS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(300);
+    if interval > 0 {
+        let checkpointer = Arc::clone(checkpointer);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(interval));
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                let checkpointer = Arc::clone(&checkpointer);
+                match tokio::task::spawn_blocking(move || checkpointer.checkpoint()).await {
+                    Ok(Ok(Some(o))) => tracing::info!(
+                        "System checkpoint at {} ({} tenant events folded)",
+                        o.covered_seq,
+                        o.tail_events
+                    ),
+                    Ok(Ok(None)) => {}
+                    Ok(Err(e)) => tracing::error!("System checkpoint failed: {e}"),
+                    Err(e) => tracing::error!("System checkpoint panicked: {e}"),
+                }
+            }
+        });
+    }
+    if settings.verify {
+        let checkpointer = Arc::clone(checkpointer);
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            match tokio::task::spawn_blocking(move || checkpointer.verify_loaded()).await {
+                Ok(Ok(VerifyOutcome::Matches {
+                    covered_seq,
+                    tenant_events,
+                })) => tracing::info!(
+                    "System checkpoint {covered_seq} matches a full replay of {tenant_events} \
+                     tenant events"
+                ),
+                Ok(Ok(VerifyOutcome::NoCheckpointLoaded)) => {
+                    tracing::info!("System checkpoint verify skipped: this boot replayed the WAL");
+                }
+                Ok(Ok(VerifyOutcome::Rejected { covered_seq, .. })) => {
+                    // The live state was built from the rejected checkpoint;
+                    // the restart replays the whole WAL.
+                    tracing::error!(
+                        "Exiting so the restart rebuilds system state without checkpoint \
+                         {covered_seq}"
+                    );
+                    std::process::exit(70);
+                }
+                Ok(Err(e)) => tracing::error!("System checkpoint verify failed to run: {e}"),
+                Err(e) => tracing::error!("System checkpoint verify panicked: {e}"),
+            }
+        });
+    }
 }

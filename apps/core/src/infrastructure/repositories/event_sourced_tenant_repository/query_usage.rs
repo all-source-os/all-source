@@ -13,11 +13,21 @@ use std::collections::HashMap;
 pub(super) const ADMITTED: &str = "query_usage_admission_v1";
 pub(super) const RESET: &str = "query_usage_reset_v1";
 
-#[derive(Default)]
+#[derive(Clone, Default, serde::Deserialize, serde::Serialize)]
 pub(super) struct QueryUsageState {
     period: u64,
     receipts: HashMap<String, QueryUsageReceipt>,
     last_reset: Option<QueryUsageResetReceipt>,
+}
+
+impl QueryUsageState {
+    /// A copy without the receipts that expired at `now`, which every reader
+    /// drops before looking.
+    pub(super) fn unexpired(&self, now: i64) -> Self {
+        let mut state = self.clone();
+        state.receipts.retain(|_, receipt| receipt.expires_at > now);
+        state
+    }
 }
 
 impl EventSourcedTenantRepository {
