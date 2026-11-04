@@ -6,6 +6,35 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-11-04
+
+A Core restart no longer fails calls. On 2026-11-01 a restart refused clients
+for 5 m 45 s; the SDK gave up on each call after about 0.6 s, and five failed
+attempts opened the circuit breaker for a further 30 s after Core was back.
+
+### Added
+
+- `RetryConfig::unavailable_window` (default 20 s). While Core is restarting,
+  a call keeps starting resends until the window is spent, then falls back to
+  the ordinary `max_retries`. The resends inside the window do not count
+  against `max_retries` or the circuit breaker. The last one can finish up to
+  one request timeout after the window.
+- `Error::is_core_restarting`: a refused connection, or a `503` whose `error`
+  (or the Query Service's `error.code`) is `not_ready` or `core_unavailable`.
+  No handler ran, so writes resend too.
+- `Error::is_egress_ledger_unavailable`: `503 egress_budget_unavailable` with
+  `reason: ledger_unavailable`. A gateway can send it after Core ran the
+  request, so only GETs wait it out.
+
+### Changed
+
+- `RetryConfig` has a new public field. Code that builds it with a struct
+  literal needs `..RetryConfig::default()`.
+- A Core that stays unreachable now costs each call `unavailable_window` plus
+  the ordinary retries before it fails. `is_core_restarting` also covers DNS
+  and TLS connect failures, so a misconfigured URL costs the same. Set the
+  window to `Duration::ZERO` for the old behaviour.
+
 ## [0.26.0] — 2026-10-27
 
 Implements the latest-state read contract

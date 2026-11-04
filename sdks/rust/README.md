@@ -6,7 +6,7 @@ Typed Rust client for the [AllSource](https://github.com/all-source-os/all-sourc
 
 ```toml
 [dependencies]
-allsource = "0.26"
+allsource = "0.27"
 ```
 
 ## Which client do I want?
@@ -130,6 +130,7 @@ The SDK defaults are tuned for typical use. A few things worth knowing:
 - **Use `ProjectionWorker` for long-lived read models** instead of polling `QueryClient::query_events`. The worker holds a WebSocket + Core-tracked cursor, so cold starts are O(events-since-last-ack) rather than O(total-events).
 - **Bootstrap the API key on Core** via `ALLSOURCE_BOOTSTRAP_API_KEY` if you go direct. Key validation becomes an in-memory DashMap hash lookup (~1μs) with zero QS roundtrip. See [AUTH_CHAIN.md](https://github.com/all-source-os/all-source/blob/main/docs/current/AUTH_CHAIN.md) for the full mechanics.
 - **Tune retry / circuit breaker** via `CoreClient::with_config(ClientConfig { retry, circuit_breaker_threshold, ... })` when your upstream SLO differs from the 3-retry / 5-failure default.
+- **Core restarts are waited out.** A refused connection, or a `503` with `not_ready` or `core_unavailable`, means no handler ran, so the call resends (writes included) for up to `retry.unavailable_window` (20s), without spending `max_retries` or tripping the breaker. Reads also wait out `egress_budget_unavailable` / `ledger_unavailable`. A Core that stays down costs each call the whole window plus the ordinary retries before it fails; `Duration::ZERO` restores the old behaviour.
 - **Real-time reads** — subscribe to the WebSocket (`ProjectionWorker` or `EventStreamClient`) rather than polling. Sub-millisecond delivery after Core's broadcast vs. whatever interval you poll at.
 
 ## API keys
@@ -240,7 +241,7 @@ See the runnable [`examples/asset_projection.rs`](examples/asset_projection.rs) 
 To build without WebSocket support (smaller dep tree):
 
 ```toml
-allsource = { version = "0.26", default-features = false, features = ["rustls"] }
+allsource = { version = "0.27", default-features = false, features = ["rustls"] }
 ```
 
 For a deeper guide on projection design, operational concerns, and migration from polling, see [`docs/use-cases/custom-projections.md`](../../docs/use-cases/custom-projections.md).
