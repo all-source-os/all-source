@@ -326,8 +326,16 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 
 // IngestResponse is the response from ingesting a single event.
 type IngestResponse struct {
-	EventID   string `json:"event_id"`
-	Timestamp string `json:"timestamp"`
+	EventID    string `json:"event_id"`
+	Timestamp  string `json:"timestamp"`
+	ValidFrom  string `json:"valid_from,omitempty"`
+	RecordedAt string `json:"recorded_at,omitempty"`
+}
+
+// ValidTime is the interval during which a fact held. Empty fields are omitted.
+type ValidTime struct {
+	From string
+	To   string
 }
 
 // BatchIngestResponse is the response from batch ingesting events.
@@ -339,10 +347,20 @@ type BatchIngestResponse struct {
 
 // Ingest sends a single event to the AllSource Event Store.
 func (c *Client) Ingest(ctx context.Context, eventType, entityID string, data map[string]any) (*IngestResponse, error) {
+	return c.IngestValidTime(ctx, eventType, entityID, data, ValidTime{})
+}
+
+func (c *Client) IngestValidTime(ctx context.Context, eventType, entityID string, data map[string]any, valid ValidTime) (*IngestResponse, error) {
 	body := map[string]any{
 		"event_type": eventType,
 		"entity_id":  entityID,
 		"payload":    data,
+	}
+	if valid.From != "" {
+		body["valid_from"] = valid.From
+	}
+	if valid.To != "" {
+		body["valid_to"] = valid.To
 	}
 	respData, _, err := c.do(ctx, http.MethodPost, "/api/v1/events", body)
 	if err != nil {
@@ -375,12 +393,16 @@ func (c *Client) IngestBatch(ctx context.Context, events []map[string]any) (*Bat
 
 // QueryOptions specifies filters for querying events.
 type QueryOptions struct {
-	EventType string
-	EntityID  string
-	Start     string // ISO-8601 timestamp, maps to "since" query param
-	End       string // ISO-8601 timestamp, maps to "until" query param
-	Limit     int
-	Offset    int
+	EventType  string
+	EntityID   string
+	Start      string // ISO-8601 timestamp, maps to "since" query param
+	End        string // ISO-8601 timestamp, maps to "until" query param
+	AsOf       string // record-axis instant, maps to "as_of"
+	AsOfValid  string // valid-axis instant, maps to "as_of_valid"
+	SinceValid string // valid-axis lower bound on valid_from, maps to "since_valid"
+	UntilValid string // valid-axis upper bound on valid_from, maps to "until_valid"
+	Limit      int
+	Offset     int
 	// IfNoneMatch is an ETag from an earlier EventList; an unchanged result
 	// returns a *NotModifiedError (errors.Is(err, ErrNotModified)).
 	IfNoneMatch string
@@ -400,6 +422,18 @@ func (c *Client) Query(ctx context.Context, opts QueryOptions) (*EventList, erro
 	}
 	if opts.End != "" {
 		params.Set("until", opts.End)
+	}
+	if opts.AsOf != "" {
+		params.Set("as_of", opts.AsOf)
+	}
+	if opts.AsOfValid != "" {
+		params.Set("as_of_valid", opts.AsOfValid)
+	}
+	if opts.SinceValid != "" {
+		params.Set("since_valid", opts.SinceValid)
+	}
+	if opts.UntilValid != "" {
+		params.Set("until_valid", opts.UntilValid)
 	}
 	if opts.Limit > 0 {
 		params.Set("limit", strconv.Itoa(opts.Limit))

@@ -36,6 +36,9 @@ fn store_with_both() -> EventStore {
 
 fn query(entity_id: Option<&str>) -> QueryEventsRequest {
     QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: entity_id.map(str::to_string),
         tenant_id: Some("tenant1".to_string()),
         ..Default::default()

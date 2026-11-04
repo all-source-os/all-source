@@ -55,6 +55,60 @@ class TestIngest:
         assert body["event_type"] == "user.signup"
         assert body["entity_id"] == "user-123"
         assert body["payload"] == {"plan": "pro"}
+        assert "valid_from" not in body
+        assert "valid_to" not in body
+
+    def test_ingest_event_sends_valid_time_when_given(
+        self, client: AllSourceClient, httpx_mock: HTTPXMock
+    ) -> None:
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/events",
+            method="POST",
+            json={
+                "event_id": "evt-1",
+                "timestamp": "2026-11-04T10:00:00Z",
+                "valid_from": "2026-09-01T00:00:00Z",
+                "recorded_at": "2026-11-04T10:00:00Z",
+                "version": 1,
+            },
+        )
+
+        event = client.ingest(
+            "skill.published",
+            "skill:abc",
+            {},
+            valid_from="2026-09-01T00:00:00Z",
+            valid_to="2026-09-30T00:00:00Z",
+        )
+
+        body = json.loads(httpx_mock.get_request().content)  # type: ignore[union-attr]
+        assert body["valid_from"] == "2026-09-01T00:00:00Z"
+        assert body["valid_to"] == "2026-09-30T00:00:00Z"
+        assert event.valid_from == "2026-09-01T00:00:00Z"
+        assert event.valid_to is None
+
+    def test_query_and_state_send_each_valid_time_bound_under_its_own_key(
+        self, client: AllSourceClient, httpx_mock: HTTPXMock
+    ) -> None:
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/events/query?as_of=2026-10-01T00%3A00%3A00Z"
+            "&as_of_valid=2026-09-15T00%3A00%3A00Z&since_valid=2026-09-01T00%3A00%3A00Z"
+            "&until_valid=2026-09-30T00%3A00%3A00Z",
+            json={"events": [], "count": 0},
+        )
+        client.query_events(
+            as_of="2026-10-01T00:00:00Z",
+            as_of_valid="2026-09-15T00:00:00Z",
+            since_valid="2026-09-01T00:00:00Z",
+            until_valid="2026-09-30T00:00:00Z",
+        )
+
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/entities/skill%3Aabc/state?as_of_valid=2026-09-15T00%3A00%3A00Z",
+            json={"entity_id": "skill:abc", "current_state": {}, "as_of_valid": "2026-09-15T00:00:00Z"},
+        )
+        state = client.entity_state("skill:abc", as_of_valid="2026-09-15T00:00:00Z")
+        assert state.as_of_valid == "2026-09-15T00:00:00Z"
 
     def test_ingest_batch(self, client: AllSourceClient, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(

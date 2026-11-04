@@ -105,6 +105,9 @@ fn bench_query_performance(c: &mut Criterion) {
     group.bench_function("query_by_entity", |b| {
         b.iter(|| {
             let request = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("entity-500".to_string()),
                 event_type: None,
                 tenant_id: None,
@@ -122,6 +125,9 @@ fn bench_query_performance(c: &mut Criterion) {
     group.bench_function("query_by_type", |b| {
         b.iter(|| {
             let request = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: Some("benchmark.test".to_string()),
                 tenant_id: None,

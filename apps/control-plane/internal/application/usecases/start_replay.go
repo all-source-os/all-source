@@ -36,7 +36,7 @@ func (uc *StartReplayUseCase) Execute(ctx context.Context, entityID string, asOf
 	now := time.Now()
 	params := map[string]any{"entity_id": entityID}
 	if asOf != nil {
-		params["as_of"] = asOf.Format(time.RFC3339)
+		params["as_of"] = asOf.Format(asOfLayout)
 	}
 
 	op := &entities.Operation{

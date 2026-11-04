@@ -14,6 +14,12 @@ pub struct IngestEventRequest {
     /// Optional optimistic concurrency control: if set, the write is rejected
     /// with 409 Conflict unless the entity's current version matches this value.
     pub expected_version: Option<u64>,
+    /// Start of the interval during which the fact is true. Defaults to the record time.
+    #[serde(default)]
+    pub valid_from: Option<DateTime<Utc>>,
+    /// End of the interval during which the fact is true. Absent means open-ended.
+    #[serde(default)]
+    pub valid_to: Option<DateTime<Utc>>,
 }
 
 /// DTO for event ingestion response
@@ -21,6 +27,10 @@ pub struct IngestEventRequest {
 pub struct IngestEventResponse {
     pub event_id: Uuid,
     pub timestamp: DateTime<Utc>,
+    /// Effective start of the valid interval (the record time when none was given)
+    pub valid_from: DateTime<Utc>,
+    /// Record time assigned by the server; the caller cannot set it
+    pub recorded_at: DateTime<Utc>,
     /// The entity's version after this event was appended
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<u64>,
@@ -31,6 +41,8 @@ impl IngestEventResponse {
         Self {
             event_id: event.id(),
             timestamp: event.timestamp(),
+            valid_from: event.effective_valid_from(),
+            recorded_at: event.timestamp(),
             version: None,
         }
     }
@@ -56,6 +68,17 @@ pub struct QueryEventsRequest {
 
     /// Get events until this timestamp
     pub until: Option<DateTime<Utc>>,
+
+    /// Valid time: keep events whose valid interval contains this instant
+    /// (`valid_from <= V` and `valid_to` unset or after `V`). Independent of
+    /// `as_of`, which bounds record time; both may be set and must both hold.
+    pub as_of_valid: Option<DateTime<Utc>>,
+
+    /// Valid time: keep events whose `valid_from` is at or after this instant.
+    pub since_valid: Option<DateTime<Utc>>,
+
+    /// Valid time: keep events whose `valid_from` is at or before this instant.
+    pub until_valid: Option<DateTime<Utc>>,
 
     /// Limit number of results
     pub limit: Option<usize>,
@@ -215,4 +238,31 @@ pub struct IngestEventsBatchResponse {
     pub ingested: usize,
     /// Individual results for each event
     pub events: Vec<IngestEventResponse>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ingest_request_without_valid_fields_deserialises() {
+        let req: IngestEventRequest =
+            serde_json::from_str(r#"{"event_type":"user.created","entity_id":"u1","payload":{}}"#)
+                .unwrap();
+        assert_eq!(req.valid_from, None);
+        assert_eq!(req.valid_to, None);
+    }
+
+    #[test]
+    fn test_ingest_request_reads_valid_fields() {
+        let req: IngestEventRequest = serde_json::from_str(
+            r#"{"event_type":"user.created","entity_id":"u1","payload":{},"valid_from":"2026-01-15T00:00:00Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            req.valid_from.unwrap().to_rfc3339(),
+            "2026-01-15T00:00:00+00:00"
+        );
+        assert_eq!(req.valid_to, None);
+    }
 }

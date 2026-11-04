@@ -255,6 +255,12 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: Echo of the record-time bound (as_of)
+        as_of_valid:
+          type: string
+          format: date-time
+          nullable: true
+          description: Echo of the valid-time bound; present only when the request set as_of_valid
         version:
           type: integer
           description: Number of this tenant's events folded into the state
@@ -306,6 +312,28 @@ components:
     AsOf:
       name: as_of
       in: query
+      description: Record-time instant. Events Core had filed by then.
+      schema:
+        type: string
+        format: date-time
+    AsOfValid:
+      name: as_of_valid
+      in: query
+      description: Valid-time instant. The state that was true then; combine with as_of to bound what was known.
+      schema:
+        type: string
+        format: date-time
+    SinceValid:
+      name: since_valid
+      in: query
+      description: Valid-time lower bound on valid_from, inclusive.
+      schema:
+        type: string
+        format: date-time
+    UntilValid:
+      name: until_valid
+      in: query
+      description: Valid-time upper bound on valid_from, inclusive.
       schema:
         type: string
         format: date-time
@@ -711,6 +739,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/EntityId"
       - $ref: "#/components/parameters/AsOf"
+      - $ref: "#/components/parameters/AsOfValid"
       - $ref: "#/components/parameters/History"
       - $ref: "#/components/parameters/IfNoneMatch"
     get:
@@ -733,6 +762,7 @@ paths:
     parameters:
       - $ref: "#/components/parameters/EntityId"
       - $ref: "#/components/parameters/AsOf"
+      - $ref: "#/components/parameters/AsOfValid"
       - $ref: "#/components/parameters/History"
       - $ref: "#/components/parameters/IfNoneMatch"
     get:

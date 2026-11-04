@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Two time axes: valid time and record time](plans/2026-11-04-bitemporal-time-axes.md): every `as_of` path, the bitemporal model, and the slices that add it.
+
 - [Core restarts without refused clients](plans/2026-11-01-core-zero-downtime-restart.md): why a Core deploy refuses clients for minutes, and the phased fix.
 
 - [Native delivery CI prerequisites](plans/2026-10-28-native-ci-prerequisites.md)

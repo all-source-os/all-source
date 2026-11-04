@@ -724,6 +724,8 @@ mod tests {
             timestamp: "2026-04-17T00:00:00Z".into(),
             version: Some(version),
             tenant_id: None,
+            valid_from: None,
+            valid_to: None,
         }
     }
 

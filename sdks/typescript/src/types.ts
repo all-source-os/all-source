@@ -44,6 +44,10 @@ export interface IngestEventInput {
   payload: Record<string, unknown>;
   /** Optional metadata (e.g., source, version, ip). */
   metadata?: Record<string, unknown>;
+  /** When the fact became true (ISO 8601). Omit to let Core default it to the record time. */
+  valid_from?: string;
+  /** When the fact stopped being true (ISO 8601). Omit for open-ended. */
+  valid_to?: string;
 }
 
 /** A stored event returned from AllSource. */
@@ -57,6 +61,10 @@ export interface Event {
   stream_id?: string;
   version?: number;
   tenant_id?: string;
+  /** Start of the valid interval. Absent from a Core without valid time. */
+  valid_from?: string;
+  /** End of the valid interval; `null` when open-ended. */
+  valid_to?: string | null;
 }
 
 /**
@@ -71,6 +79,10 @@ export interface CreatedEvent {
   timestamp: string;
   /** Monotonic version assigned by Core, when provided. */
   version?: number;
+  /** Effective start of the valid interval (the record time when none was sent). */
+  valid_from?: string;
+  /** Record time Core assigned. The caller cannot set it. */
+  recorded_at?: string;
 }
 
 /** Query parameters for filtering events. */
@@ -83,10 +95,18 @@ export interface QueryEventsParams {
   limit?: number;
   /** Number of events to skip. */
   offset?: number;
-  /** Start time filter (ISO 8601). */
+  /** Start time filter, record axis (ISO 8601). */
   since?: string;
-  /** End time filter (ISO 8601). */
+  /** End time filter, record axis (ISO 8601). */
   until?: string;
+  /** Record-time instant: only events Core had filed by then (ISO 8601). */
+  as_of?: string;
+  /** Valid-time instant: only events whose valid interval contains it (ISO 8601). */
+  as_of_valid?: string;
+  /** Valid-time lower bound on `valid_from`, inclusive (ISO 8601). */
+  since_valid?: string;
+  /** Valid-time upper bound on `valid_from`, inclusive (ISO 8601). */
+  until_valid?: string;
 }
 
 /** Response from querying events. */
@@ -118,8 +138,10 @@ export class NotModified {
 
 /** Options for `entityState`. */
 export interface EntityStateOptions extends ConditionalReadOptions {
-  /** Fold only events up to this time (ISO 8601). */
+  /** Fold only events up to this time, record axis (ISO 8601). */
   asOf?: string;
+  /** Fold the state that was true at this time, valid axis (ISO 8601). */
+  asOfValid?: string;
   /** Include the entity's `history[]`. Defaults to false. */
   history?: boolean;
 }
@@ -131,6 +153,8 @@ export interface EntityState {
   event_count: number;
   last_updated: string | null;
   as_of: string | null;
+  /** Echo of the valid-time instant; present only when the request set it. */
+  as_of_valid?: string | null;
   /** Number of this tenant's events folded into the state. */
   version: number;
   /** Present only when requested with `history: true`. */

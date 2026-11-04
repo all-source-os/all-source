@@ -1,0 +1,40 @@
+{
+  "name": "events_query_valid_time",
+  "description": "queryEvents({entityId: \"skill:abc\", asOfValid: \"2026-09-15T00:00:00Z\", sinceValid: \"2026-09-01T00:00:00Z\", limit: 1}). The valid-time bounds travel as their own keys, separate from the record-time since and until. The event carries valid_from and valid_to; valid_to is null for an open-ended fact.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/events/query",
+    "query": {
+      "entity_id": "skill:abc",
+      "as_of_valid": "2026-09-15T00:00:00Z",
+      "since_valid": "2026-09-01T00:00:00Z",
+      "limit": "1"
+    },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "ETag": "\"sha256:0a4c8e2f6b1d3975c8e0a2f4b6d8c1e3\"" },
+    "body": {
+      "events": [
+        {
+          "id": "0192f0a1-7c3e-7b10-9a2d-5e4f6a7b8c9e",
+          "event_type": "skill.published",
+          "entity_id": "skill:abc",
+          "tenant_id": "t1",
+          "payload": { "name": "x", "status": "draft" },
+          "timestamp": "2026-09-10T08:00:00Z",
+          "valid_from": "2026-09-05T00:00:00Z",
+          "valid_to": null,
+          "metadata": null,
+          "version": 2
+        }
+      ],
+      "count": 1,
+      "total_count": 1,
+      "has_more": false,
+      "entity_version": 3
+    }
+  }
+}

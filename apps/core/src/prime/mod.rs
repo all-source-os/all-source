@@ -39,6 +39,7 @@ pub mod recall;
 mod recall_degradation_tests;
 pub mod schema;
 pub mod sync;
+pub mod temporal;
 #[cfg(feature = "prime-recall")]
 pub mod tenant_cache;
 pub mod types;

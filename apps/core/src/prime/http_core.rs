@@ -15,7 +15,7 @@
 //! Feature-gated behind `prime-recall` (which enables `reqwest`).
 
 use async_trait::async_trait;
-use chrono::SecondsFormat;
+use chrono::{DateTime, SecondsFormat, Utc};
 use reqwest::Client;
 use serde::Deserialize;
 
@@ -79,13 +79,28 @@ impl HttpCore {
 #[async_trait]
 impl EventStore for HttpCore {
     async fn ingest(&self, event: IngestEvent<'_>) -> Result<()> {
-        let body = serde_json::json!({
+        EventStore::ingest_with_valid_time(self, event, None, None).await
+    }
+
+    async fn ingest_with_valid_time(
+        &self,
+        event: IngestEvent<'_>,
+        valid_from: Option<DateTime<Utc>>,
+        valid_to: Option<DateTime<Utc>>,
+    ) -> Result<()> {
+        let mut body = serde_json::json!({
             "event_type": event.event_type,
             "entity_id": event.entity_id,
             "payload": event.payload,
             "metadata": event.metadata,
             "tenant_id": self.effective_tenant(event.tenant_id),
         });
+        if let Some(from) = valid_from {
+            body["valid_from"] = serde_json::json!(from);
+        }
+        if let Some(to) = valid_to {
+            body["valid_to"] = serde_json::json!(to);
+        }
         let req = self
             .client
             .post(format!("{}/api/v1/events", self.base_url))
@@ -137,6 +152,14 @@ impl EventStore for HttpCore {
     }
 
     async fn query(&self, query: Query) -> Result<Vec<EventView>> {
+        // The remote query string has no valid-time keys yet, so a valid-time
+        // bound would be dropped and the answer silently wrong. Refuse instead.
+        if query.as_of_valid.is_some() || query.since_valid.is_some() || query.until_valid.is_some()
+        {
+            return Err(AllSourceError::InvalidInput(
+                "valid-time queries are not supported by a remote Core".to_string(),
+            ));
+        }
         let mut params: Vec<(&str, String)> = Vec::new();
         if let Some(v) = &query.entity_id {
             params.push(("entity_id", v.clone()));

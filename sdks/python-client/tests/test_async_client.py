@@ -53,6 +53,41 @@ class TestAsyncIngest:
         assert event.event_type == "user.signup"
         await client.close()
 
+    async def test_valid_time_reaches_the_wire_on_ingest_query_and_state(
+        self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock
+    ) -> None:
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/events",
+            method="POST",
+            json={
+                "event_id": "evt-1",
+                "timestamp": "2026-11-04T10:00:00Z",
+                "valid_from": "2026-09-01T00:00:00Z",
+                "version": 1,
+            },
+        )
+        event = await client.ingest(
+            "skill.published", "skill:abc", {}, valid_from="2026-09-01T00:00:00Z"
+        )
+        body = json.loads(httpx_mock.get_request().content)  # type: ignore[union-attr]
+        assert body["valid_from"] == "2026-09-01T00:00:00Z"
+        assert "valid_to" not in body
+        assert event.valid_from == "2026-09-01T00:00:00Z"
+
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/events/query?since_valid=2026-09-01T00%3A00%3A00Z",
+            json={"events": [], "count": 0},
+        )
+        await client.query_events(since_valid="2026-09-01T00:00:00Z")
+
+        httpx_mock.add_response(
+            url=f"{BASE_URL}/api/v1/entities/skill%3Aabc/state?as_of_valid=2026-09-15T00%3A00%3A00Z",
+            json={"entity_id": "skill:abc", "current_state": {}, "as_of_valid": "2026-09-15T00:00:00Z"},
+        )
+        state = await client.entity_state("skill:abc", as_of_valid="2026-09-15T00:00:00Z")
+        assert state.as_of_valid == "2026-09-15T00:00:00Z"
+        await client.close()
+
     async def test_ingest_batch(self, client: AllSourceAsyncClient, httpx_mock: HTTPXMock) -> None:
         httpx_mock.add_response(
             url=f"{BASE_URL}/api/v1/events/batch",

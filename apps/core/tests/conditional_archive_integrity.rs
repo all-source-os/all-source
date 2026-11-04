@@ -23,6 +23,9 @@ fn event() -> Event {
 fn history(store: &EventStore) -> Vec<Event> {
     store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("synthetic-entity".into()),
             tenant_id: Some(TENANT.into()),
             ..Default::default()

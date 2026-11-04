@@ -1,0 +1,24 @@
+{
+  "name": "entity_state_as_of_valid",
+  "description": "entityState(\"skill:abc\", {asOfValid: \"2026-09-15T00:00:00Z\"}) with history defaulting to false. The SDK sends only as_of_valid (no as_of, so the record bound is Core's now) and returns the folded state with as_of_valid echoed and as_of null.",
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/entities/skill%3Aabc/state",
+    "query": { "as_of_valid": "2026-09-15T00:00:00Z" },
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": { "ETag": "\"sha256:5d7b1e9a3c6f0284b1d5e7a9c3f1b6d2\"" },
+    "body": {
+      "entity_id": "skill:abc",
+      "current_state": { "name": "x", "status": "draft" },
+      "event_count": 3,
+      "last_updated": "2026-09-10T08:00:00Z",
+      "as_of": null,
+      "as_of_valid": "2026-09-15T00:00:00Z",
+      "version": 3
+    }
+  }
+}

@@ -179,6 +179,8 @@ mod tests {
             metadata: None,
             timestamp: Utc::now(),
             version: 1,
+            valid_from: None,
+            valid_to: None,
         }
     }
 

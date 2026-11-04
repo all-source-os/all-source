@@ -95,6 +95,9 @@ impl EventCoordinator {
         limit: usize,
     ) -> Result<QueryEventsResponse> {
         self.query(QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: Some(event_type.to_string()),
             tenant_id: tenant_id.map(std::string::ToString::to_string),

@@ -172,6 +172,16 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClientTest do
       result = RustCoreClient.query_events(query)
       assert_result(result)
     end
+
+    test "rejects a range operator on a time field instead of dropping it" do
+      for field <- [:since, :until, :as_of, :as_of_valid, :since_valid, :until_valid] do
+        predicate = Query.make_predicate(:gt, field, "2026-01-01T00:00:00Z")
+        query = Query.new() |> Query.add_predicate(predicate)
+
+        assert {:error, {:unsupported_time_operator, ^field, :gt}} =
+                 RustCoreClient.query_events(query)
+      end
+    end
   end
 
   describe "get_events_by_entity/1" do

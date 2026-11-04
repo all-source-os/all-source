@@ -152,6 +152,9 @@ async fn test_leader_follower_wal_replication() {
         let entity_id = format!("entity-{i}");
 
         let leader_query = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some(entity_id.clone()),
             event_type: None,
             tenant_id: None,
@@ -162,6 +165,9 @@ async fn test_leader_follower_wal_replication() {
             ..Default::default()
         };
         let follower_query = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some(entity_id.clone()),
             event_type: None,
             tenant_id: None,
@@ -217,6 +223,9 @@ async fn test_leader_follower_wal_replication() {
     follower_store.evict_tenant("default");
     assert_eq!(follower_store.total_events(), 0);
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         tenant_id: Some("default".into()),
         ..Default::default()
     };
@@ -423,6 +432,9 @@ async fn test_replication_preserves_event_data_fidelity() {
     // Verify each event's data is identical on the follower.
     for (entity_id, event_type, expected_payload) in &payloads {
         let query = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some((*entity_id).to_string()),
             event_type: None,
             tenant_id: None,

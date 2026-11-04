@@ -23,7 +23,7 @@ use crate::{
         persistence::{
             archive_budget::{ArchiveReadBudget, ArchiveReadLimits, check_cancelled},
             compaction::{CompactionConfig, CompactionManager},
-            index::{EventIndex, IndexEntry},
+            index::{EventIndex, IndexEntry, ValidWindow},
             storage::ParquetStorage,
             tenant_loader::TenantLoader,
             version_manifest::ResolvedVersion,
@@ -234,6 +234,27 @@ pub struct EventStore {
 pub struct WebhookDeliveryTask {
     pub webhook: crate::application::services::webhook::WebhookSubscription,
     pub event: Event,
+}
+
+/// Time axis a query window is ordered by.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum WindowOrder {
+    /// `(timestamp, version)`: the order every existing caller gets.
+    #[default]
+    RecordTime,
+    /// `(valid_from, timestamp, version)`.
+    ValidTime,
+}
+
+/// Window ordering shared by the resident and archive paths.
+fn compare_query_order(a: &Event, b: &Event, order: WindowOrder) -> std::cmp::Ordering {
+    let valid = match order {
+        WindowOrder::RecordTime => std::cmp::Ordering::Equal,
+        WindowOrder::ValidTime => a.effective_valid_from().cmp(&b.effective_valid_from()),
+    };
+    valid
+        .then_with(|| a.timestamp.cmp(&b.timestamp))
+        .then_with(|| a.version.cmp(&b.version))
 }
 
 /// Reduce `items` to the `offset .. offset + limit` window under `order`,
@@ -455,6 +476,7 @@ impl EventStore {
                             event.entity_id_str(),
                             event.event_type_str(),
                             event.timestamp,
+                            ValidWindow::of(&event),
                             offset,
                         ) {
                             tracing::error!("Failed to re-index WAL event {}: {}", event.id, e);
@@ -701,6 +723,7 @@ impl EventStore {
             event.entity_id_str(),
             event.event_type_str(),
             event.timestamp,
+            ValidWindow::of(event),
             offset,
         )?;
 
@@ -847,6 +870,7 @@ impl EventStore {
             event.entity_id_str(),
             event.event_type_str(),
             event.timestamp,
+            ValidWindow::of(event),
             offset,
         )?;
 
@@ -983,6 +1007,7 @@ impl EventStore {
                 event.entity_id_str(),
                 event.event_type_str(),
                 event.timestamp,
+                ValidWindow::of(&event),
                 offset,
             )?;
 
@@ -1035,6 +1060,7 @@ impl EventStore {
             event.entity_id_str(),
             event.event_type_str(),
             event.timestamp,
+            ValidWindow::of(event),
             offset,
         )?;
 
@@ -1431,6 +1457,7 @@ impl EventStore {
                 event.entity_id_str(),
                 event.event_type_str(),
                 event.timestamp,
+                ValidWindow::of(event),
                 offset,
             ) {
                 tracing::warn!(
@@ -2134,6 +2161,7 @@ impl EventStore {
                 event.entity_id_str(),
                 event.event_type_str(),
                 event.timestamp,
+                ValidWindow::of(event),
                 offset,
             ) {
                 tracing::error!(
@@ -2221,6 +2249,7 @@ impl EventStore {
             event.entity_id_str(),
             event.event_type_str(),
             event.timestamp,
+            ValidWindow::of(&event),
             offset,
         ) {
             tracing::error!("Failed to index loaded event {}: {}", event.id, e);
@@ -2362,6 +2391,24 @@ impl EventStore {
         descending: bool,
         scope: &ReadScope,
     ) -> Result<(Vec<Event>, usize)> {
+        self.query_window_scoped_ordered(
+            request,
+            offset,
+            descending,
+            scope,
+            WindowOrder::RecordTime,
+        )
+    }
+
+    /// [`Self::query_window_scoped`] ordered by `order` instead of record time.
+    pub fn query_window_scoped_ordered(
+        &self,
+        request: &QueryEventsRequest,
+        offset: usize,
+        descending: bool,
+        scope: &ReadScope,
+        order: WindowOrder,
+    ) -> Result<(Vec<Event>, usize)> {
         // Reject a payload filter that cannot be applied, BEFORE doing any
         // work. `apply_filters` parses it per event with `if let Ok(..)`, so an
         // unparseable filter degraded into NO filter: the query answered with
@@ -2410,7 +2457,8 @@ impl EventStore {
                 Err(AllSourceError::ArchiveHydrationRefused { .. })
                     if request.entity_id.is_some() =>
                 {
-                    return self.query_window_from_archive(request, offset, descending, scope);
+                    return self
+                        .query_window_from_archive(request, offset, descending, scope, order);
                 }
                 Err(error) => return Err(error),
             }
@@ -2483,18 +2531,8 @@ impl EventStore {
         // `total_count`/`has_more`.
         let total = matches.len();
 
-        // Order by timestamp ascending, with version as a deterministic
-        // tie-breaker so events that share a timestamp keep a stable,
-        // well-defined order — "the latest event" must be unambiguous
-        // (issue #177) — then by scan position, so equal (timestamp, version)
-        // pairs keep the order a stable sort gave them. `descending` is the
-        // exact reverse of that total order.
-        let order = |a: &(usize, &Event), b: &(usize, &Event)| {
-            let ascending =
-                a.1.timestamp
-                    .cmp(&b.1.timestamp)
-                    .then_with(|| a.1.version.cmp(&b.1.version))
-                    .then_with(|| a.0.cmp(&b.0));
+        let comparator = |a: &(usize, &Event), b: &(usize, &Event)| {
+            let ascending = compare_query_order(a.1, b.1, order).then_with(|| a.0.cmp(&b.0));
             if descending {
                 ascending.reverse()
             } else {
@@ -2503,7 +2541,7 @@ impl EventStore {
         };
 
         // Bounded selection (issue #251): sort only the requested window.
-        select_window(&mut matches, offset, request.limit, order);
+        select_window(&mut matches, offset, request.limit, comparator);
 
         // Apply the offset. `limit` is already accounted for: either the window
         // was truncated by `select_window`, or it covered the whole match set.
@@ -2530,8 +2568,8 @@ impl EventStore {
     /// cannot be made resident.
     ///
     /// Filters, ordering and windowing are the resident path's: the predicate
-    /// is `apply_filters` itself and the comparator is the same
-    /// `(timestamp, version, scan position)`, so the two paths cannot disagree
+    /// is `apply_filters` itself and the comparator is `compare_query_order`
+    /// with the same scan-position tie-breaker, so the two paths cannot disagree
     /// about what matches or in what order. For a single entity `version` is
     /// already unique, so the scan position never decides anything here.
     ///
@@ -2546,6 +2584,7 @@ impl EventStore {
         offset: usize,
         descending: bool,
         scope: &ReadScope,
+        order: WindowOrder,
     ) -> Result<(Vec<Event>, usize)> {
         let (Some(tenant_id), Some(entity_id)) =
             (request.tenant_id.as_deref(), request.entity_id.as_deref())
@@ -2582,19 +2621,15 @@ impl EventStore {
             .collect();
         let total = matches.len();
 
-        let order = |a: &(usize, Event), b: &(usize, Event)| {
-            let ascending =
-                a.1.timestamp
-                    .cmp(&b.1.timestamp)
-                    .then_with(|| a.1.version.cmp(&b.1.version))
-                    .then_with(|| a.0.cmp(&b.0));
+        let comparator = |a: &(usize, Event), b: &(usize, Event)| {
+            let ascending = compare_query_order(&a.1, &b.1, order).then_with(|| a.0.cmp(&b.0));
             if descending {
                 ascending.reverse()
             } else {
                 ascending
             }
         };
-        select_window(&mut matches, offset, request.limit, order);
+        select_window(&mut matches, offset, request.limit, comparator);
 
         let results: Vec<Event> = matches
             .into_iter()
@@ -2604,30 +2639,53 @@ impl EventStore {
         Ok((results, total))
     }
 
+    /// Both time axes, shared by the indexed and full-scan paths so they cannot
+    /// disagree. Record bounds (`as_of`, `since`, `until`) read `recorded`;
+    /// valid bounds read `valid`.
+    fn within_time_axes(
+        recorded: DateTime<Utc>,
+        valid: ValidWindow,
+        request: &QueryEventsRequest,
+    ) -> bool {
+        if let Some(as_of) = request.as_of
+            && recorded > as_of
+        {
+            return false;
+        }
+        if let Some(since) = request.since
+            && recorded < since
+        {
+            return false;
+        }
+        if let Some(until) = request.until
+            && recorded > until
+        {
+            return false;
+        }
+        if let Some(as_of_valid) = request.as_of_valid
+            && (valid.from > as_of_valid || valid.to.is_some_and(|to| to <= as_of_valid))
+        {
+            return false;
+        }
+        if let Some(since_valid) = request.since_valid
+            && valid.from < since_valid
+        {
+            return false;
+        }
+        if let Some(until_valid) = request.until_valid
+            && valid.from > until_valid
+        {
+            return false;
+        }
+        true
+    }
+
     /// Filter index entries based on query parameters
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn filter_entries(&self, entries: Vec<IndexEntry>, request: &QueryEventsRequest) -> Vec<usize> {
         entries
             .into_iter()
-            .filter(|entry| {
-                // Time filters
-                if let Some(as_of) = request.as_of
-                    && entry.timestamp > as_of
-                {
-                    return false;
-                }
-                if let Some(since) = request.since
-                    && entry.timestamp < since
-                {
-                    return false;
-                }
-                if let Some(until) = request.until
-                    && entry.timestamp > until
-                {
-                    return false;
-                }
-                true
-            })
+            .filter(|entry| Self::within_time_axes(entry.timestamp, entry.valid, request))
             .map(|entry| entry.offset)
             .collect()
     }
@@ -2642,28 +2700,11 @@ impl EventStore {
             return false;
         }
 
-        // Time range. Also pre-applied to index entries in `filter_entries`
-        // (cheaper — it skips the event fetch), but `filter_entries` runs ONLY
-        // on the indexed branches. A query that no index narrows — scoped by
-        // tenant alone, or by `payload_filter`/`exclude_event_type_prefix` —
-        // takes the full-scan branch and never reaches it, so without this
-        // `since`/`until`/`as_of` were silently dropped and the query answered
-        // with the entire history (`total`/`has_more` included). Re-checking
-        // here is idempotent for the indexed paths: same predicate, and an
-        // index entry's timestamp is its event's.
-        if let Some(as_of) = request.as_of
-            && event.timestamp > as_of
-        {
-            return false;
-        }
-        if let Some(since) = request.since
-            && event.timestamp < since
-        {
-            return false;
-        }
-        if let Some(until) = request.until
-            && event.timestamp > until
-        {
+        // Time ranges. `filter_entries` applies the same bounds to index entries
+        // on the indexed branches only; the full-scan branch has no index entry
+        // and must check the event itself. An index entry's window is its
+        // event's, so the re-check on indexed paths is idempotent.
+        if !Self::within_time_axes(event.timestamp, ValidWindow::of(event), request) {
             return false;
         }
 
@@ -2736,18 +2777,50 @@ impl EventStore {
         tenant_id: Option<&str>,
         include_history: bool,
     ) -> Result<serde_json::Value> {
-        let events = self.query(&QueryEventsRequest {
-            entity_id: Some(entity_id.to_string()),
-            event_type: None,
-            tenant_id: tenant_id.map(str::to_string),
-            as_of,
-            since: None,
-            until: None,
-            limit: None,
-            event_type_prefix: None,
-            exclude_event_type_prefix: None,
-            payload_filter: None,
-        })?;
+        self.entity_state_at(entity_id, as_of, None, tenant_id, include_history)
+    }
+
+    /// [`Self::entity_state`] on both time axes.
+    ///
+    /// With `as_of_valid` set, the events true at that instant are folded in
+    /// valid-time order, so a correction with an earlier `valid_from` lands at
+    /// its own position rather than at its record position. Without it the fold
+    /// is in record order, as before. `as_of_valid` with no `as_of_recorded`
+    /// bounds recording at now.
+    pub fn entity_state_at(
+        &self,
+        entity_id: &str,
+        as_of_recorded: Option<DateTime<Utc>>,
+        as_of_valid: Option<DateTime<Utc>>,
+        tenant_id: Option<&str>,
+        include_history: bool,
+    ) -> Result<serde_json::Value> {
+        let order = if as_of_valid.is_some() {
+            WindowOrder::ValidTime
+        } else {
+            WindowOrder::RecordTime
+        };
+        let (events, _) = self.query_window_scoped_ordered(
+            &QueryEventsRequest {
+                as_of_valid,
+                since_valid: None,
+                until_valid: None,
+                entity_id: Some(entity_id.to_string()),
+                event_type: None,
+                tenant_id: tenant_id.map(str::to_string),
+                as_of: as_of_recorded.or_else(|| as_of_valid.map(|_| Utc::now())),
+                since: None,
+                until: None,
+                limit: None,
+                event_type_prefix: None,
+                exclude_event_type_prefix: None,
+                payload_filter: None,
+            },
+            0,
+            false,
+            &ReadScope::unrestricted(),
+            order,
+        )?;
 
         if events.is_empty() {
             return Err(AllSourceError::EntityNotFound(entity_id.to_string()));
@@ -2768,10 +2841,13 @@ impl EventStore {
             "entity_id": entity_id,
             "last_updated": events.last().map(|e| e.timestamp),
             "event_count": events.len(),
-            "as_of": as_of,
+            "as_of": as_of_recorded,
             "current_state": merged_state,
             "version": events.len(),
         });
+        if let Some(valid) = as_of_valid {
+            state["as_of_valid"] = serde_json::json!(valid);
+        }
         if include_history {
             state["history"] = serde_json::Value::Array(
                 events
@@ -3581,6 +3657,9 @@ mod tests {
         // Query — re-load happens transparently.
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -3647,6 +3726,9 @@ mod tests {
 
         let bob_results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("bob".to_string()),
@@ -3788,6 +3870,9 @@ mod tests {
         // case.
         let alice_first = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -3807,6 +3892,9 @@ mod tests {
         // Query bob — alice will get evicted.
         let _bob = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("bob".to_string()),
@@ -3827,6 +3915,9 @@ mod tests {
         // Re-query alice — must transparently re-load.
         let alice_second = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -4033,6 +4124,9 @@ mod tests {
             let tenant = format!("tenant-{t}");
             let results = store
                 .query(&QueryEventsRequest {
+                    as_of_valid: None,
+                    since_valid: None,
+                    until_valid: None,
                     entity_id: None,
                     event_type: None,
                     tenant_id: Some(tenant.clone()),
@@ -4189,6 +4283,9 @@ mod tests {
         // First query for alice: triggers ensure_tenant_loaded.
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -4217,6 +4314,9 @@ mod tests {
         let store = EventStore::with_config(EventStoreConfig::with_persistence(temp_dir.path()));
 
         let result = store.query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: None,
             tenant_id: Some("../etc".to_string()),
@@ -4271,6 +4371,9 @@ mod tests {
             let s = store.clone();
             handles.push(std::thread::spawn(move || {
                 s.query(&QueryEventsRequest {
+                    as_of_valid: None,
+                    since_valid: None,
+                    until_valid: None,
                     entity_id: None,
                     event_type: None,
                     tenant_id: Some("alice".to_string()),
@@ -4345,6 +4448,9 @@ mod tests {
         // Query alice — bob stays cold.
         let alice = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -4365,6 +4471,9 @@ mod tests {
         // Query bob — both warm now.
         let bob = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("bob".to_string()),
@@ -4473,6 +4582,9 @@ mod tests {
         // First query: cold, hits disk.
         let _ = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -4496,6 +4608,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: Some("alice".to_string()),
@@ -4562,6 +4677,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("entity-1".to_string()),
                 event_type: None,
                 tenant_id: None,
@@ -4594,6 +4712,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: Some("user.created".to_string()),
                 tenant_id: None,
@@ -4621,6 +4742,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -4643,6 +4767,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("non-existent".to_string()),
                 event_type: None,
                 tenant_id: None,
@@ -4735,6 +4862,84 @@ mod tests {
 
         assert_eq!(state["event_count"], 250);
         assert_eq!(state["history"].as_array().unwrap().len(), 250);
+    }
+
+    #[test]
+    fn entity_state_at_answers_what_was_believed_and_what_was_true() {
+        let store = EventStore::new();
+        let base = Utc::now() - chrono::Duration::hours(24);
+        let at = |minutes: i64| base + chrono::Duration::minutes(minutes);
+
+        // Filed at 0 and true from 0: the renewal is in June.
+        let mut original = create_test_event("contract-1", "contract.renewal");
+        original.timestamp = at(0);
+        original.version = 1;
+        original.payload = serde_json::json!({"renews": "june"});
+        let original = original.with_valid_time(Some(at(0)), None).unwrap();
+        store.ingest(&original).unwrap();
+
+        // Filed at 300, same valid time: the renewal is in September.
+        let mut correction = create_test_event("contract-1", "contract.renewal");
+        correction.timestamp = at(300);
+        correction.version = 2;
+        correction.payload = serde_json::json!({"renews": "september"});
+        let correction = correction.with_valid_time(Some(at(0)), None).unwrap();
+        store.ingest(&correction).unwrap();
+
+        // What we believed at 100: only the original was on file.
+        let believed = store
+            .entity_state_at("contract-1", Some(at(100)), None, None, false)
+            .unwrap();
+        assert_eq!(believed["current_state"]["renews"], "june");
+
+        // What was true at 50, given everything filed so far.
+        let now_known = store
+            .entity_state_at("contract-1", None, Some(at(50)), None, false)
+            .unwrap();
+        assert_eq!(now_known["current_state"]["renews"], "september");
+        assert_eq!(now_known["as_of_valid"], serde_json::json!(at(50)));
+
+        // What was true at 50, as far as we knew at 100: the correction is not on file yet.
+        let both = store
+            .entity_state_at("contract-1", Some(at(100)), Some(at(50)), None, false)
+            .unwrap();
+        assert_eq!(both["current_state"]["renews"], "june");
+    }
+
+    #[test]
+    fn entity_state_at_valid_fold_orders_by_valid_from_not_record_time() {
+        let store = EventStore::new();
+        let base = Utc::now() - chrono::Duration::hours(24);
+        let at = |minutes: i64| base + chrono::Duration::minutes(minutes);
+
+        // Recorded first, but true only from 90.
+        let mut later_fact = create_test_event("contract-2", "contract.renewal");
+        later_fact.timestamp = at(0);
+        later_fact.version = 1;
+        later_fact.payload = serde_json::json!({"renews": "june"});
+        let later_fact = later_fact.with_valid_time(Some(at(90)), None).unwrap();
+        store.ingest(&later_fact).unwrap();
+
+        // Recorded last, but true from 0: it is the earlier fact.
+        let mut earlier_fact = create_test_event("contract-2", "contract.renewal");
+        earlier_fact.timestamp = at(300);
+        earlier_fact.version = 2;
+        earlier_fact.payload = serde_json::json!({"renews": "september"});
+        let earlier_fact = earlier_fact.with_valid_time(Some(at(0)), None).unwrap();
+        store.ingest(&earlier_fact).unwrap();
+
+        let by_valid = store
+            .entity_state_at("contract-2", None, Some(at(200)), None, true)
+            .unwrap();
+        assert_eq!(by_valid["current_state"]["renews"], "june");
+        assert_eq!(
+            by_valid["history"][0]["event_id"],
+            serde_json::json!(earlier_fact.id)
+        );
+
+        let by_record = store.entity_state("contract-2", None, None, true).unwrap();
+        assert_eq!(by_record["current_state"]["renews"], "september");
+        assert!(by_record.get("as_of_valid").is_none());
     }
 
     #[test]
@@ -5141,6 +5346,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("entity-1".to_string()),
                 event_type: Some("user.created".to_string()),
                 tenant_id: None,
@@ -5182,6 +5390,9 @@ mod tests {
         // Query with prefix "index." should return exactly 2
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -5217,6 +5428,9 @@ mod tests {
         // Empty prefix matches all types
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -5243,6 +5457,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -5276,6 +5493,9 @@ mod tests {
         // Query entity-1 with prefix "index." should return 1
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("entity-1".to_string()),
                 event_type: None,
                 tenant_id: None,
@@ -5305,6 +5525,9 @@ mod tests {
 
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -5341,6 +5564,9 @@ mod tests {
         // Prefix with limit
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -5385,6 +5611,9 @@ mod tests {
         // Filter for alice
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: Some("user.action".to_string()),
                 tenant_id: None,
@@ -5416,6 +5645,9 @@ mod tests {
         // Filter for a field that doesn't exist — returns 0, not error
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -5461,6 +5693,9 @@ mod tests {
         // Combine prefix + payload filter
         let results = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -6203,6 +6438,9 @@ mod tests {
 
     fn hot_request(limit: Option<usize>) -> QueryEventsRequest {
         QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("entity-hot".to_string()),
             limit,
             ..QueryEventsRequest::default()
@@ -6375,6 +6613,9 @@ mod tests {
         // nothing narrows the scan.
         let scoped = |mutate: &dyn Fn(&mut QueryEventsRequest)| {
             let mut req = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: Some("default".to_string()),
                 ..QueryEventsRequest::default()
             };
@@ -6451,6 +6692,114 @@ mod tests {
     }
 
     #[test]
+    fn valid_time_axes_agree_across_index_and_full_scan_paths() {
+        let store = EventStore::new();
+        let base = Utc::now() - chrono::Duration::hours(24);
+        let at = |minutes: i64| base + chrono::Duration::minutes(minutes);
+        // (recorded, valid_from, valid_to) in minutes from `base`. The last
+        // fact is a backdated correction: filed at 300, true from 90.
+        let facts = [
+            (0, None, None),
+            (60, Some(60), None),
+            (120, Some(0), Some(120)),
+            (240, Some(180), None),
+            (300, Some(90), None),
+        ];
+        let mut ids = Vec::new();
+        for (i, (recorded, valid_from, valid_to)) in facts.into_iter().enumerate() {
+            let mut event = create_test_event("e-1", "user.created");
+            event.timestamp = at(recorded);
+            event.version = i as i64 + 1;
+            let event = event
+                .with_valid_time(valid_from.map(&at), valid_to.map(&at))
+                .unwrap();
+            ids.push(event.id);
+            store.ingest(&event).unwrap();
+        }
+
+        // Each query runs through the entity, type, type-prefix and tenant-only
+        // (full scan) branches; all four must return the same set.
+        let paths: [fn(&mut QueryEventsRequest); 4] = [
+            |r| r.entity_id = Some("e-1".to_string()),
+            |r| r.event_type = Some("user.created".to_string()),
+            |r| r.event_type_prefix = Some("user.".to_string()),
+            |_| {},
+        ];
+        let check =
+            |label: &str, mutate: &dyn Fn(&mut QueryEventsRequest), expected: Vec<uuid::Uuid>| {
+                let mut want = expected;
+                want.sort();
+                for path in paths {
+                    let mut req = QueryEventsRequest {
+                        as_of_valid: None,
+                        since_valid: None,
+                        until_valid: None,
+                        tenant_id: Some("default".to_string()),
+                        ..QueryEventsRequest::default()
+                    };
+                    path(&mut req);
+                    mutate(&mut req);
+                    let (events, _) = store.query_window(&req, 0, false).unwrap();
+                    let mut got: Vec<uuid::Uuid> = events.iter().map(|e| e.id).collect();
+                    got.sort();
+                    assert_eq!(got, want, "{label} via {req:?}");
+                }
+            };
+
+        check(
+            "as_of_valid inside an open fact and a closed one",
+            &|r| r.as_of_valid = Some(at(72)),
+            vec![ids[0], ids[1], ids[2]],
+        );
+        check(
+            "as_of_valid excludes a fact whose valid_to equals the instant",
+            &|r| r.as_of_valid = Some(at(120)),
+            vec![ids[0], ids[1], ids[4]],
+        );
+        check(
+            "backdated correction is invisible to a record bound before it was filed",
+            &|r| {
+                r.as_of = Some(at(270));
+                r.as_of_valid = Some(at(210));
+            },
+            vec![ids[0], ids[1], ids[3]],
+        );
+        check(
+            "since_valid is inclusive on valid_from",
+            &|r| r.since_valid = Some(at(90)),
+            vec![ids[3], ids[4]],
+        );
+        check(
+            "until_valid is inclusive on valid_from",
+            &|r| r.until_valid = Some(at(60)),
+            vec![ids[0], ids[1], ids[2]],
+        );
+        check(
+            "since_valid and until_valid compose",
+            &|r| {
+                r.since_valid = Some(at(60));
+                r.until_valid = Some(at(90));
+            },
+            vec![ids[1], ids[4]],
+        );
+        check(
+            "as_of_valid at the base instant",
+            &|r| r.as_of_valid = Some(at(0)),
+            vec![ids[0], ids[2]],
+        );
+        check(
+            "record axis is unchanged: as_of bounds recorded time",
+            &|r| r.as_of = Some(at(240)),
+            vec![ids[0], ids[1], ids[2], ids[3]],
+        );
+        check(
+            "record axis is unchanged: since bounds recorded time",
+            &|r| r.since = Some(at(240)),
+            vec![ids[3], ids[4]],
+        );
+    }
+
+    #[test]
     fn query_window_bounded_selection_matches_a_full_sort() {
         // Bounded selection (partial select + sort of the window only) must be
         // observationally identical to sort-everything-then-window, including
@@ -6476,6 +6825,9 @@ mod tests {
                     let (page, total) = store
                         .query_window(
                             &QueryEventsRequest {
+                                as_of_valid: None,
+                                since_valid: None,
+                                until_valid: None,
                                 limit: Some(limit),
                                 ..QueryEventsRequest::default()
                             },

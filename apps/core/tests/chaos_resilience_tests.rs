@@ -185,6 +185,9 @@ async fn test_data_plane_continues_with_cached_metadata() {
     store.ingest(&event).unwrap();
 
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("user-1".to_string()),
         event_type: None,
         tenant_id: None,
@@ -252,6 +255,9 @@ async fn test_corrupt_system_storage_graceful_degradation() {
     store.ingest(&event).unwrap();
 
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("user-1".to_string()),
         event_type: None,
         tenant_id: None,
@@ -290,6 +296,9 @@ async fn test_separate_storage_dirs_prevent_cross_contamination() {
     }
 
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: Some("data.event".to_string()),
         tenant_id: None,
@@ -309,6 +318,9 @@ async fn test_separate_storage_dirs_prevent_cross_contamination() {
     // Data plane still works
     let results2 = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: Some("data.event".to_string()),
             tenant_id: None,

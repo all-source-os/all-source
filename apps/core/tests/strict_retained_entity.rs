@@ -96,6 +96,9 @@ fn strict_reads_refuse_partial_history_even_after_tolerant_queries() {
     assert_eq!(
         store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: Some(TENANT.into()),
                 ..Default::default()
             })
@@ -144,6 +147,9 @@ fn complete_archive_and_pending_tail_survive_flush_eviction_and_reopen() {
     );
     let generic = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             tenant_id: Some(TENANT.into()),
             entity_id: Some(ENTITY.into()),
             ..Default::default()

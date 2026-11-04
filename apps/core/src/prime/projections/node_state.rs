@@ -81,6 +81,11 @@ impl NodeStateProjection {
     /// Return all live (non-deleted) nodes.
     ///
     /// Constructs directly from internal state — no redundant DashMap lookup.
+    /// Entity ids of every node the projection has seen, tombstones included.
+    pub fn all_entity_ids(&self) -> Vec<String> {
+        self.nodes.iter().map(|entry| entry.key().clone()).collect()
+    }
+
     pub fn all_nodes(&self) -> Vec<crate::prime::types::Node> {
         self.nodes
             .iter()

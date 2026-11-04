@@ -21,6 +21,8 @@ type FeedCursor struct {
 type EntityStateOptions struct {
 	// AsOf is an RFC 3339 timestamp; empty means now.
 	AsOf string
+	// AsOfValid is an RFC 3339 valid-time instant; empty leaves it unset.
+	AsOfValid string
 	// History asks for the history[] array as well as the folded state.
 	History bool
 	// IfNoneMatch is an ETag from an earlier EntityState.
@@ -34,6 +36,7 @@ type EntityState struct {
 	EventCount   int64            `json:"event_count"`
 	LastUpdated  *string          `json:"last_updated"`
 	AsOf         *string          `json:"as_of"`
+	AsOfValid    *string          `json:"as_of_valid,omitempty"`
 	Version      int64            `json:"version"`
 	History      []map[string]any `json:"history,omitempty"`
 	ETag         string           `json:"-"`
@@ -46,6 +49,9 @@ func (c *Client) EntityState(ctx context.Context, entityID string, opts EntitySt
 	params := url.Values{}
 	if opts.AsOf != "" {
 		params.Set("as_of", opts.AsOf)
+	}
+	if opts.AsOfValid != "" {
+		params.Set("as_of_valid", opts.AsOfValid)
 	}
 	if opts.History {
 		params.Set("history", "true")

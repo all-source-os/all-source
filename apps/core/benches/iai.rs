@@ -58,6 +58,9 @@ fn bench_query_after_ingest() {
         store.ingest(e).unwrap();
     }
     let req = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("entity-0".to_string()),
         ..Default::default()
     };

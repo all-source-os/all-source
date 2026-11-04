@@ -34,7 +34,8 @@ impl IngestEventUseCase {
             tenant_id,
             request.payload,
             request.metadata,
-        )?;
+        )?
+        .with_valid_time(request.valid_from, request.valid_to)?;
 
         // Persist via repository
         self.repository.save(&event).await?;
@@ -73,7 +74,8 @@ impl IngestEventsBatchUseCase {
                 tenant_id,
                 request.payload,
                 request.metadata,
-            )?;
+            )?
+            .with_valid_time(request.valid_from, request.valid_to)?;
 
             responses.push(IngestEventResponse::from_event(&event));
             events.push(event);
@@ -89,6 +91,7 @@ impl IngestEventsBatchUseCase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::AllSourceError;
     use async_trait::async_trait;
     use chrono::Utc;
     use serde_json::json;
@@ -110,17 +113,7 @@ mod tests {
     #[async_trait]
     impl EventRepository for MockEventRepository {
         async fn save(&self, event: &Event) -> Result<()> {
-            let mut events = self.events.lock().unwrap();
-            events.push(Event::reconstruct_from_strings(
-                event.id(),
-                event.event_type_str().to_string(),
-                event.entity_id_str().to_string(),
-                event.tenant_id_str().to_string(),
-                event.payload().clone(),
-                event.timestamp(),
-                event.metadata().cloned(),
-                event.version(),
-            ));
+            self.events.lock().unwrap().push(event.clone());
             Ok(())
         }
 
@@ -211,6 +204,8 @@ mod tests {
             payload: json!({"name": "Alice"}),
             metadata: None,
             expected_version: None,
+            valid_from: None,
+            valid_to: None,
         };
 
         let response = use_case.execute(request).await;
@@ -232,6 +227,8 @@ mod tests {
             payload: json!({"amount": 100}),
             metadata: None,
             expected_version: None,
+            valid_from: None,
+            valid_to: None,
         };
 
         let response = use_case.execute(request).await;
@@ -240,6 +237,86 @@ mod tests {
         let events = repo.events.lock().unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].tenant_id_str(), "default");
+    }
+
+    #[tokio::test]
+    async fn test_ingest_without_valid_time_stores_none_and_echoes_record_time() {
+        let repo = Arc::new(MockEventRepository::new());
+        let use_case = IngestEventUseCase::new(repo.clone());
+
+        let response = use_case
+            .execute(IngestEventRequest {
+                event_type: "user.created".to_string(),
+                entity_id: "user-1".to_string(),
+                tenant_id: None,
+                payload: json!({}),
+                metadata: None,
+                expected_version: None,
+                valid_from: None,
+                valid_to: None,
+            })
+            .await
+            .unwrap();
+
+        let events = repo.events.lock().unwrap();
+        assert_eq!(events[0].valid_from, None);
+        assert_eq!(events[0].valid_to, None);
+        assert_eq!(response.valid_from, events[0].timestamp());
+        assert_eq!(response.recorded_at, events[0].timestamp());
+    }
+
+    #[tokio::test]
+    async fn test_ingest_with_valid_from_stores_it_and_echoes_it() {
+        let repo = Arc::new(MockEventRepository::new());
+        let use_case = IngestEventUseCase::new(repo.clone());
+        let filed_from = chrono::DateTime::parse_from_rfc3339("2026-01-15T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let response = use_case
+            .execute(IngestEventRequest {
+                event_type: "user.created".to_string(),
+                entity_id: "user-2".to_string(),
+                tenant_id: None,
+                payload: json!({}),
+                metadata: None,
+                expected_version: None,
+                valid_from: Some(filed_from),
+                valid_to: None,
+            })
+            .await
+            .unwrap();
+
+        let events = repo.events.lock().unwrap();
+        assert_eq!(events[0].valid_from, Some(filed_from));
+        assert_eq!(events[0].valid_to, None);
+        assert_eq!(response.valid_from, filed_from);
+        assert_ne!(response.recorded_at, filed_from);
+    }
+
+    #[tokio::test]
+    async fn test_ingest_rejects_valid_to_not_after_valid_from() {
+        let repo = Arc::new(MockEventRepository::new());
+        let use_case = IngestEventUseCase::new(repo.clone());
+        let start = chrono::DateTime::parse_from_rfc3339("2026-01-15T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let result = use_case
+            .execute(IngestEventRequest {
+                event_type: "user.created".to_string(),
+                entity_id: "user-3".to_string(),
+                tenant_id: None,
+                payload: json!({}),
+                metadata: None,
+                expected_version: None,
+                valid_from: Some(start),
+                valid_to: Some(start),
+            })
+            .await;
+
+        assert!(matches!(result, Err(AllSourceError::ValidationError(_))));
+        assert!(repo.events.lock().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -255,6 +332,8 @@ mod tests {
                 payload: json!({}),
                 metadata: None,
                 expected_version: None,
+                valid_from: None,
+                valid_to: None,
             },
             IngestEventRequest {
                 event_type: "event.2".to_string(),
@@ -263,6 +342,8 @@ mod tests {
                 payload: json!({}),
                 metadata: None,
                 expected_version: None,
+                valid_from: None,
+                valid_to: None,
             },
         ];
 

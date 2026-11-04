@@ -277,8 +277,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   def query_events(tenant_id, query, opts \\ [])
 
   def query_events(tenant_id, %Query{} = query, opts) when is_binary(tenant_id) do
-    params = compile_query(query)
-    query_events(tenant_id, params, opts)
+    case compile_query(query) do
+      {:ok, params} -> query_events(tenant_id, params, opts)
+      {:error, _reason} = error -> error
+    end
   end
 
   def query_events(tenant_id, params, opts) when is_binary(tenant_id) and is_map(params) do
@@ -363,8 +365,10 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   # Deprecated: Use query_events/2 with tenant_id for proper isolation
   @doc false
   def query_events(%Query{} = query) do
-    params = compile_query(query)
-    query_events(params)
+    case compile_query(query) do
+      {:ok, params} -> query_events(params)
+      {:error, _reason} = error -> error
+    end
   end
 
   @doc false
@@ -1425,33 +1429,48 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
   ## Private Helpers
 
   defp compile_query(%Query{} = query) do
-    params = flatten_predicate(query.where, %{})
-
-    params
-    |> maybe_put(:limit, query.limit)
-    |> maybe_put(:offset, query.offset)
+    with {:ok, params} <- flatten_predicate(query.where, %{}) do
+      {:ok,
+       params
+       |> maybe_put(:limit, query.limit)
+       |> maybe_put(:offset, query.offset)}
+    end
   end
 
-  # Flatten a predicate tree into Core-compatible flat query params.
-  # Core accepts: entity_id, event_type, since, until, as_of, limit, offset.
-  defp flatten_predicate(nil, acc), do: acc
+  # Core accepts these as `eq` filters. Time fields are listed separately: Core
+  # only ranges or pins them, so any other operator on one is an error, not a
+  # silently dropped filter.
+  @core_eq_fields [:entity_id, :event_type]
+  @core_time_fields [:since, :until, :as_of, :as_of_valid, :since_valid, :until_valid]
+
+  defp flatten_predicate(nil, acc), do: {:ok, acc}
 
   defp flatten_predicate(%{operator: :eq, field: field, value: value}, acc)
-       when field in [:entity_id, :event_type, :since, :until, :as_of] do
-    Map.put(acc, field, value)
+       when field in @core_eq_fields or field in @core_time_fields do
+    {:ok, Map.put(acc, field, value)}
+  end
+
+  defp flatten_predicate(%{operator: op, field: field}, _acc)
+       when field in @core_time_fields do
+    {:error, {:unsupported_time_operator, field, op}}
   end
 
   # Ignore unsupported predicates (Core doesn't support arbitrary field filters)
-  defp flatten_predicate(%{operator: :eq, field: _field}, acc), do: acc
+  defp flatten_predicate(%{operator: :eq, field: _field}, acc), do: {:ok, acc}
 
   # Flatten compound predicates — extract all supported fields from children
   defp flatten_predicate(%{operator: op, value: children}, acc)
        when op in [:and, :or] and is_list(children) do
-    Enum.reduce(children, acc, &flatten_predicate/2)
+    Enum.reduce_while(children, {:ok, acc}, fn child, {:ok, acc_so_far} ->
+      case flatten_predicate(child, acc_so_far) do
+        {:ok, next} -> {:cont, {:ok, next}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
   end
 
   # Catch-all for unsupported predicate types
-  defp flatten_predicate(_predicate, acc), do: acc
+  defp flatten_predicate(_predicate, acc), do: {:ok, acc}
 
   defp maybe_put(params, _key, nil), do: params
   defp maybe_put(params, key, value), do: Map.put(params, key, value)

@@ -1,6 +1,6 @@
 use crate::{
     domain::value_objects::{EntityId, EventType, TenantId},
-    error::Result,
+    error::{AllSourceError, Result},
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,12 @@ pub struct Event {
     pub timestamp: DateTime<Utc>,
     pub metadata: Option<serde_json::Value>,
     pub version: i64,
+    /// When the fact became true. `None` reads as `timestamp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<DateTime<Utc>>,
+    /// When the fact stopped being true. `None` is open-ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_to: Option<DateTime<Utc>>,
 }
 
 fn default_tenant_id() -> TenantId {
@@ -58,6 +64,8 @@ impl Clone for Event {
             timestamp,
             metadata,
             version,
+            valid_from,
+            valid_to,
         } = self;
         Event {
             id: *id,
@@ -68,6 +76,8 @@ impl Clone for Event {
             timestamp: *timestamp,
             metadata: metadata.clone(),
             version: *version,
+            valid_from: *valid_from,
+            valid_to: *valid_to,
         }
     }
 }
@@ -89,6 +99,8 @@ impl Event {
             timestamp: Utc::now(),
             metadata: None,
             version: 1,
+            valid_from: None,
+            valid_to: None,
         }
     }
 
@@ -109,6 +121,8 @@ impl Event {
             timestamp: Utc::now(),
             metadata: Some(metadata),
             version: 1,
+            valid_from: None,
+            valid_to: None,
         }
     }
 
@@ -145,6 +159,8 @@ impl Event {
             timestamp: Utc::now(),
             metadata,
             version: 1,
+            valid_from: None,
+            valid_to: None,
         })
     }
 
@@ -168,6 +184,8 @@ impl Event {
             timestamp,
             metadata,
             version,
+            valid_from: None,
+            valid_to: None,
         }
     }
 
@@ -191,7 +209,36 @@ impl Event {
             timestamp,
             metadata,
             version,
+            valid_from: None,
+            valid_to: None,
         }
+    }
+
+    /// Attach a valid-time interval to an event built from a request.
+    ///
+    /// `valid_to` must be strictly after the effective `valid_from`, which is
+    /// `valid_from` when given and `timestamp` otherwise.
+    pub fn with_valid_time(
+        mut self,
+        valid_from: Option<DateTime<Utc>>,
+        valid_to: Option<DateTime<Utc>>,
+    ) -> Result<Self> {
+        if let Some(to) = valid_to {
+            let from = valid_from.unwrap_or(self.timestamp);
+            if to <= from {
+                return Err(AllSourceError::ValidationError(format!(
+                    "valid_to ({to}) must be after valid_from ({from})"
+                )));
+            }
+        }
+        self.valid_from = valid_from;
+        self.valid_to = valid_to;
+        Ok(self)
+    }
+
+    /// Start of the valid interval, with `None` read as `timestamp`.
+    pub fn effective_valid_from(&self) -> DateTime<Utc> {
+        self.valid_from.unwrap_or(self.timestamp)
     }
 
     // Getters (Events are immutable)
@@ -616,6 +663,90 @@ mod tests {
         let deserialized = deserialized.unwrap();
         assert_eq!(deserialized.event_type_str(), "user.created");
         assert_eq!(deserialized.entity_id_str(), "user-123");
+    }
+
+    #[test]
+    fn test_event_without_valid_time_keeps_pre_axis_wire_shape() {
+        let event = Event::new(
+            test_event_type(),
+            test_entity_id(),
+            test_tenant_id(),
+            json!({}),
+        );
+        let wire = serde_json::to_string(&event).unwrap();
+        assert!(!wire.contains("valid_from"));
+        assert!(!wire.contains("valid_to"));
+
+        let old: Event = serde_json::from_str(&wire).unwrap();
+        assert_eq!(old.valid_from, None);
+        assert_eq!(old.valid_to, None);
+        assert_eq!(old.effective_valid_from(), old.timestamp());
+    }
+
+    #[test]
+    fn test_with_valid_time_round_trips_through_serde() {
+        let start = Utc::now() - chrono::Duration::days(2);
+        let end = start + chrono::Duration::days(1);
+        let event = Event::new(
+            test_event_type(),
+            test_entity_id(),
+            test_tenant_id(),
+            json!({}),
+        )
+        .with_valid_time(Some(start), Some(end))
+        .unwrap();
+
+        let wire = serde_json::to_string(&event).unwrap();
+        let back: Event = serde_json::from_str(&wire).unwrap();
+        assert_eq!(back.valid_from, Some(start));
+        assert_eq!(back.valid_to, Some(end));
+        assert_eq!(back.effective_valid_from(), start);
+    }
+
+    #[test]
+    fn test_with_valid_time_accepts_open_ended_interval() {
+        let start = Utc::now() - chrono::Duration::days(2);
+        let event = Event::new(
+            test_event_type(),
+            test_entity_id(),
+            test_tenant_id(),
+            json!({}),
+        )
+        .with_valid_time(Some(start), None)
+        .unwrap();
+
+        assert_eq!(event.valid_from, Some(start));
+        assert_eq!(event.valid_to, None);
+    }
+
+    #[test]
+    fn test_with_valid_time_rejects_valid_to_not_after_valid_from() {
+        let start = Utc::now() - chrono::Duration::days(2);
+        let before = start - chrono::Duration::hours(1);
+
+        for to in [start, before] {
+            let result = Event::new(
+                test_event_type(),
+                test_entity_id(),
+                test_tenant_id(),
+                json!({}),
+            )
+            .with_valid_time(Some(start), Some(to));
+            assert!(matches!(result, Err(AllSourceError::ValidationError(_))));
+        }
+    }
+
+    #[test]
+    fn test_with_valid_time_defaults_valid_from_to_record_time() {
+        let past = Utc::now() - chrono::Duration::hours(1);
+        let result = Event::new(
+            test_event_type(),
+            test_entity_id(),
+            test_tenant_id(),
+            json!({}),
+        )
+        .with_valid_time(None, Some(past));
+        assert!(matches!(result, Err(AllSourceError::ValidationError(_))));
     }
 
     #[test]

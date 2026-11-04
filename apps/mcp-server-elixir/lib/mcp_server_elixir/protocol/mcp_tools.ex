@@ -613,14 +613,17 @@ defmodule McpServerElixir.Protocol.McpTools do
       **Query parameter reference:**
       - `entity_id`: Exact match, e.g., "user-123", "order-456"
       - `event_type`: Exact match with dot notation, e.g., "user.created", "order.completed", "payment.failed"
-      - `since`/`until`: ISO-8601 timestamps. Supports full datetime ("2024-01-15T14:30:00Z") or date-only ("2024-01-15")
-      - `as_of`: Time-travel parameter — returns events as if queried at that timestamp (excludes events ingested after)
+      - `since`/`until`: ISO-8601 timestamps, inclusive. Supports full datetime ("2024-01-15T14:30:00Z") or date-only ("2024-01-15"). Both filter on record time (when the event was ingested)
+      - `as_of`: Time-travel on record time — returns events as the store knew them at that timestamp (excludes events ingested after it, boundary included)
+      - `as_of_valid`: Valid time — events whose valid interval (`valid_from` to `valid_to`) contains that instant. Events written without valid time count as valid from their ingest time
+      - `since_valid`/`until_valid`: Valid-time bounds on `valid_from`, inclusive. `since`/`until` stay on record time
       - `limit`: Integer, defaults to all. Start with 10-50 for exploration
 
       **Example combinations:**
       - Recent failures: `event_type: "payment.failed", since: "2024-01-01T00:00:00Z", limit: 20`
       - Entity audit: `entity_id: "user-123", limit: 100`
       - Time-travel snapshot: `entity_id: "order-456", as_of: "2024-06-15T00:00:00Z"`
+      - What was true on a date, as known now: `entity_id: "order-456", as_of_valid: "2024-03-01T00:00:00Z"`
       """,
       inputSchema: %{
         type: "object",
@@ -635,10 +638,29 @@ defmodule McpServerElixir.Protocol.McpTools do
           },
           "as_of" => %{
             type: "string",
-            description: "Time-travel: get events as of this ISO timestamp"
+            description: "Record time: events the store had filed by this ISO timestamp"
           },
-          "since" => %{type: "string", description: "Get events since this ISO timestamp"},
-          "until" => %{type: "string", description: "Get events until this ISO timestamp"},
+          "as_of_valid" => %{
+            type: "string",
+            description:
+              "Valid time: events whose valid interval contains this ISO timestamp (what was true then)"
+          },
+          "since" => %{
+            type: "string",
+            description: "Record time: events filed since this ISO timestamp"
+          },
+          "until" => %{
+            type: "string",
+            description: "Record time: events filed until this ISO timestamp"
+          },
+          "since_valid" => %{
+            type: "string",
+            description: "Valid time: events whose valid_from is at or after this ISO timestamp"
+          },
+          "until_valid" => %{
+            type: "string",
+            description: "Valid time: events whose valid_from is at or before this ISO timestamp"
+          },
           "limit" => %{type: "number", description: "Limit number of results (default: all)"},
           "format" => %{
             type: "string",
@@ -690,7 +712,7 @@ defmodule McpServerElixir.Protocol.McpTools do
           "as_of" => %{
             type: "string",
             description:
-              "Reconstruct state as of this ISO timestamp (optional, defaults to current)"
+              "Record time: the state as the store held it at this ISO timestamp (optional, defaults to current)"
           }
         },
         required: ["entity_id"]
@@ -2417,7 +2439,18 @@ defmodule McpServerElixir.Protocol.McpTools do
 
   @doc false
   def handle_query_events(args, state, format) do
-    params = Map.take(args, ["entity_id", "event_type", "as_of", "since", "until", "limit"])
+    params =
+      Map.take(args, [
+        "entity_id",
+        "event_type",
+        "as_of",
+        "as_of_valid",
+        "since",
+        "until",
+        "since_valid",
+        "until_valid",
+        "limit"
+      ])
 
     case state.backend.query_events(params) do
       {:ok, data} ->
@@ -4241,7 +4274,7 @@ defmodule McpServerElixir.Protocol.McpTools do
           %{
             pattern: "Prove state at audit date",
             approach:
-              "reconstruct_state(entity_id: 'X', as_of: '[audit_date]') → immutable proof of state"
+              "reconstruct_state(entity_id: 'X', as_of: '[audit_date]') → state as recorded by that date (record time)"
           },
           %{
             pattern: "Document all modifications",

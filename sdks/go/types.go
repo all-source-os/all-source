@@ -15,6 +15,8 @@ type Event struct {
 	TenantID  string         `json:"tenant_id,omitempty"`
 	Timestamp string         `json:"timestamp"`
 	Version   int            `json:"version"`
+	ValidFrom *string        `json:"valid_from,omitempty"`
+	ValidTo   *string        `json:"valid_to,omitempty"`
 }
 
 // EventList is a list of events with a count.

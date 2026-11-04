@@ -41,6 +41,9 @@ fn event(event_type: &str, payload: serde_json::Value) -> Event {
 fn event_types(store: &EventStore) -> Vec<String> {
     store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some(ENTITY.to_string()),
             tenant_id: Some("default".to_string()),
             limit: Some(1000),

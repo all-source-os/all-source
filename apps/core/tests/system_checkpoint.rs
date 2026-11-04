@@ -247,7 +247,7 @@ async fn writes_after_a_checkpoint_boot_survive_the_next_boot() {
     )
     .unwrap();
     let entries = store.wal().read_all_entries().unwrap();
-    let mut sequences: Vec<u64> = entries.iter().map(|(s, _)| *s).collect();
+    let mut sequences: Vec<u64> = entries.iter().map(|entry| entry.sequence).collect();
     let count = sequences.len();
     sequences.dedup();
     assert_eq!(sequences.len(), count, "no WAL sequence may be reused");

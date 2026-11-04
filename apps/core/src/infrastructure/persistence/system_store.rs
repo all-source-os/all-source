@@ -12,7 +12,7 @@ use crate::{
     error::{AllSourceError, Result},
     infrastructure::persistence::{
         system_checkpoint::{self, CHECKPOINT_DIR, FoldedStream, SystemCheckpoint},
-        wal::{CoveredSegment, WALConfig, WriteAheadLog},
+        wal::{CoveredSegment, WALConfig, WALEntry, WriteAheadLog},
     },
 };
 use chrono::{DateTime, Utc};
@@ -228,7 +228,10 @@ impl SystemMetadataStore {
         };
 
         let mut skipped = 0usize;
-        for (sequence, event) in recovered {
+        for WALEntry {
+            sequence, event, ..
+        } in recovered
+        {
             if is_system_event_type(event.event_type_str()) {
                 resident.push(sequence, event);
             } else {
@@ -353,6 +356,7 @@ impl SystemMetadataStore {
             .wal
             .read_all_entries()?
             .into_iter()
+            .map(|entry| (entry.sequence, entry.event))
             .filter(|(_, event)| in_domain(event, domain))
             .collect())
     }

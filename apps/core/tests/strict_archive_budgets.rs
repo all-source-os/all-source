@@ -48,6 +48,9 @@ fn assert_refused(limits: ArchiveReadLimits, dimension: &str) {
     assert!(subscriber.try_recv().is_err());
 
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         tenant_id: Some(TENANT.into()),
         ..Default::default()
     };

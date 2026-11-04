@@ -567,6 +567,45 @@ async fn run_case(fixture: &Fixture) {
             assert!(!views[1].ready);
             assert_eq!(views[0].revision, 62);
         }
+        "entity_state_as_of_valid" => {
+            let state = served(fixture, |c| async move {
+                c.entity_state(
+                    "skill:abc",
+                    &EntityStateParams::new().as_of_valid("2026-09-15T00:00:00Z"),
+                )
+                .await
+            })
+            .await
+            .unwrap()
+            .modified()
+            .expect("a 200 body");
+            assert_eq!(state.as_of_valid.as_deref(), Some("2026-09-15T00:00:00Z"));
+            assert_eq!(state.as_of, None);
+            assert_eq!(state.version, Some(3));
+            assert_eq!(state.etag, etag);
+        }
+        "events_query_valid_time" => {
+            let resp = served(fixture, |c| async move {
+                c.query_events(
+                    QueryEventsParams::new()
+                        .entity_id("skill:abc")
+                        .as_of_valid("2026-09-15T00:00:00Z")
+                        .since_valid("2026-09-01T00:00:00Z")
+                        .limit(1),
+                )
+                .await
+            })
+            .await
+            .unwrap();
+            assert_eq!(resp.events.len(), 1);
+            assert_eq!(
+                resp.events[0].valid_from.as_deref(),
+                Some("2026-09-05T00:00:00Z")
+            );
+            assert_eq!(resp.events[0].valid_to, None);
+            assert_eq!(resp.entity_version, Some(3));
+            assert_eq!(resp.meta.etag, etag);
+        }
         other => panic!(
             "fixture {other} has no case in tests/contract_fixtures.rs: {}",
             fixture.description

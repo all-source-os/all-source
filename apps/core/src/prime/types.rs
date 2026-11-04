@@ -93,6 +93,15 @@ pub struct Node {
     pub updated_at: DateTime<Utc>,
 }
 
+impl Node {
+    /// The instant recall ranks by recency. It is `updated_at` on the axis the
+    /// node was read on: record time for live reads, valid time for reads with
+    /// [`AsOf::valid`] set.
+    pub fn recency_instant(&self) -> DateTime<Utc> {
+        self.updated_at
+    }
+}
+
 /// A directed edge connecting two nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edge {
@@ -136,13 +145,41 @@ pub struct PrimeStats {
     pub event_count: usize,
 }
 
+/// A point in time on one or both axes.
+///
+/// `recorded` bounds what Core had filed; `valid` bounds what was true in the
+/// world. An unset bound is open: `recorded` defaults to now, and an unset
+/// `valid` reads the record-time view (what was believed at `recorded`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AsOf {
+    /// Only events filed at or before this instant.
+    pub recorded: Option<DateTime<Utc>>,
+    /// The world as it was at this instant, given what was filed by `recorded`.
+    pub valid: Option<DateTime<Utc>>,
+}
+
+impl AsOf {
+    /// Record-time view: what was believed at `at`.
+    pub fn recorded(at: DateTime<Utc>) -> Self {
+        Self {
+            recorded: Some(at),
+            valid: None,
+        }
+    }
+}
+
 /// A single entry in an entity's audit trail.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
     /// The event type (e.g. `prime.node.created`, `prime.edge.deleted`).
     pub event_type: String,
-    /// When the event occurred.
+    /// When the event occurred. Same instant as `recorded_at`, kept for
+    /// existing consumers of this field.
     pub timestamp: DateTime<Utc>,
+    /// When the fact became true (`valid_from`, or the record time when unset).
+    pub valid_at: DateTime<Utc>,
+    /// When Core filed the event.
+    pub recorded_at: DateTime<Utc>,
     /// The event payload.
     pub payload: Value,
     /// Optional source/correlation metadata.

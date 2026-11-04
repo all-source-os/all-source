@@ -156,6 +156,8 @@ interface RawCreatedEvent {
   id?: string;
   timestamp: string;
   version?: number;
+  valid_from?: string;
+  recorded_at?: string;
 }
 
 function normalizeCreated(raw: RawCreatedEvent): CreatedEvent {
@@ -163,6 +165,8 @@ function normalizeCreated(raw: RawCreatedEvent): CreatedEvent {
     id: raw.event_id ?? raw.id ?? "",
     timestamp: raw.timestamp,
     version: raw.version,
+    valid_from: raw.valid_from,
+    recorded_at: raw.recorded_at,
   };
 }
 
@@ -278,6 +282,7 @@ export class AllSourceClient {
   ): Promise<EntityState | NotModified> {
     const path = withQuery(`/api/v1/entities/${segment(entityId)}/state`, {
       as_of: options.asOf,
+      as_of_valid: options.asOfValid,
       history: options.history === true ? "true" : undefined,
     });
     const res = await this.send("GET", path, {

@@ -27,6 +27,9 @@ pub(super) async fn query(
         || request.since.is_some()
         || request.until.is_some()
         || request.as_of.is_some()
+        || request.as_of_valid.is_some()
+        || request.since_valid.is_some()
+        || request.until_valid.is_some()
     {
         return Err(AllSourceError::InvalidInput(
             "Strict retained read requires retained-entity-v1 without filters, offset or descending order"

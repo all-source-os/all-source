@@ -5,7 +5,12 @@
 
 use std::sync::OnceLock;
 
-use allsource_core::prime::{Prime, recall::RecallEngine, types::Retrieval};
+use allsource_core::prime::{
+    Prime, PrimeResult,
+    recall::RecallEngine,
+    types::{AsOf, RecallQuery, RecallResult, Retrieval},
+};
+use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 use crate::wire::{Fields, Page, node_row, paged};
@@ -97,7 +102,8 @@ pub fn tool_definitions() -> Value {
                 "type": "object",
                 "properties": {
                     "type": { "type": "string", "description": "Node type: 'person', 'concept', 'project', 'metric', 'decision', 'event', 'insight'" },
-                    "properties": { "type": "object", "description": "Node data. Always include 'name' and 'domain'. Example: {\"name\": \"Alice\", \"role\": \"engineer\", \"domain\": \"engineering\"}" }
+                    "properties": { "type": "object", "description": "Node data. Always include 'name' and 'domain'. Example: {\"name\": \"Alice\", \"role\": \"engineer\", \"domain\": \"engineering\"}" },
+                    "valid_from": { "type": "string", "description": "Optional RFC 3339 instant the node became true in the world (VALID time). Omit for a fact true from now. Set it for something that was already true before you recorded it. This does not change when it was recorded." }
                 },
                 "required": ["type", "properties"]
             }
@@ -130,7 +136,9 @@ pub fn tool_definitions() -> Value {
                     "depth": { "type": "integer", "description": "BFS depth: 1 = immediate neighbors, 2+ = multi-hop (default: 1)" },
                     "limit": { "type": "integer", "description": "Max rows to return (default: 50, max: 500)" },
                     "offset": { "type": "integer", "description": "Rows to skip — use the 'next_offset' from the previous call (default: 0)" },
-                    "fields": { "type": "string", "enum": ["summary", "full"], "description": "'summary' returns {id, type, name, at}; 'full' (default at depth 1) returns every property. Depth > 1 defaults to 'summary' because the frontier grows fast." }
+                    "fields": { "type": "string", "enum": ["summary", "full"], "description": "'summary' returns {id, type, name, at}; 'full' (default at depth 1) returns every property. Depth > 1 defaults to 'summary' because the frontier grows fast." },
+                    "as_of": { "type": "string", "description": "RFC 3339 instant on the RECORD axis: the graph as Prime had filed it by then, i.e. what was believed at that time. Omit for the current graph." },
+                    "as_of_valid": { "type": "string", "description": "RFC 3339 instant on the VALID axis: the graph as it was in the world at that time, using corrections filed later where they apply to that time. Alone, it means what was true at that instant as known now. Combines with 'as_of'." }
                 },
                 "required": ["node_id"]
             }
@@ -216,7 +224,9 @@ pub fn tool_definitions() -> Value {
                     "include_index": { "type": "boolean", "description": "Prepend compressed index excerpt (default: true, L2 only)" },
                     "max_tokens": { "type": "integer", "description": "Cap total response tokens" },
                     "tier": { "type": "string", "enum": ["L0", "L1", "L2"], "description": "Retrieval depth. L0=stats only. L1=recent conversation context. L2=full hybrid recall. Default: L2." },
-                    "conversation_id": { "type": "string", "description": "Scope L1 retrieval to this conversation's nodes. Ignored for L0/L2." }
+                    "conversation_id": { "type": "string", "description": "Scope L1 retrieval to this conversation's nodes. Ignored for L0/L2." },
+                    "as_of": { "type": "string", "description": "RFC 3339 instant on the RECORD axis: answer from what Prime had filed by then (what was believed at that time). L0 stats and the compressed index stay current." },
+                    "as_of_valid": { "type": "string", "description": "RFC 3339 instant on the VALID axis: answer from the world as it was at that time, applying corrections filed later where they apply. Alone, it means what was true at that instant as known now. Combines with 'as_of'. L0 stats and the compressed index stay current." }
                 },
                 "required": ["query"]
             }
@@ -259,7 +269,9 @@ pub fn tool_definitions() -> Value {
                     "node_type": { "type": "string", "description": "Filter to this node type only" },
                     "tenant_id": { "type": "string", "description": "Restrict results to nodes stamped with this tenant_id. Only needed when one Prime store holds several tenants' nodes; omit for a single-tenant store." },
                     "depth": { "type": "integer", "description": "Graph expansion hops from vector matches (0=vector-only, 1+=include neighbors, default: 1)" },
-                    "top_k": { "type": "integer", "description": "Max results (default: 10)" }
+                    "top_k": { "type": "integer", "description": "Max results (default: 10)" },
+                    "as_of": { "type": "string", "description": "RFC 3339 instant on the RECORD axis: rank the graph as Prime had filed it by then (what was believed at that time). Vector matches are not time-travelled; the nodes and graph expansion are." },
+                    "as_of_valid": { "type": "string", "description": "RFC 3339 instant on the VALID axis: rank the graph as it was in the world at that time, applying corrections filed later where they apply to that time. Alone, it means what was true at that instant as known now. Combines with 'as_of'." }
                 }
             }
         },
@@ -436,7 +448,7 @@ pub async fn call_tool(prime: &Prime, recall: &RecallEngine, name: &str, args: &
     match name {
         "prime_add_node" => call_add_node(prime, args).await,
         "prime_add_edge" => call_add_edge(prime, args).await,
-        "prime_neighbors" => call_neighbors(prime, args),
+        "prime_neighbors" => call_neighbors(prime, args).await,
         "prime_search" => call_search(prime, args),
         "prime_shortest_path" => call_shortest_path(prime, args),
         "prime_forget" => call_forget(prime, args).await,
@@ -791,8 +803,16 @@ async fn call_add_node(prime: &Prime, args: &Value) -> Value {
         .and_then(Value::as_str)
         .unwrap_or("unknown");
     let properties = args.get("properties").cloned().unwrap_or(json!({}));
+    let valid_from = match parse_instant(args, "valid_from") {
+        Ok(v) => v,
+        Err(e) => return tool_error(&e),
+    };
 
-    match prime.add_node(node_type, properties).await {
+    let added = match valid_from {
+        Some(from) => prime.add_node_valid(node_type, properties, from).await,
+        None => prime.add_node(node_type, properties).await,
+    };
+    match added {
         Ok(id) => {
             let entity_id = allsource_core::prime::EntityId::node(node_type, id.as_str()).to_wire();
             tool_result(json!({ "node_id": id.as_str(), "entity_id": entity_id }))
@@ -828,7 +848,37 @@ async fn call_add_edge(prime: &Prime, args: &Value) -> Value {
     }
 }
 
-fn call_neighbors(prime: &Prime, args: &Value) -> Value {
+/// Read an optional RFC 3339 instant argument. Absent means open.
+fn parse_instant(args: &Value, key: &str) -> Result<Option<DateTime<Utc>>, String> {
+    match args.get(key).and_then(Value::as_str) {
+        None => Ok(None),
+        Some(text) => DateTime::parse_from_rfc3339(text)
+            .map(|t| Some(t.with_timezone(&Utc)))
+            .map_err(|e| format!("invalid '{key}': {e}. Use RFC 3339, e.g. 2026-01-15T00:00:00Z")),
+    }
+}
+
+/// The optional `as_of` (record axis) and `as_of_valid` (valid axis) arguments.
+/// `None` when neither is given, so the call keeps its current-state answer.
+fn parse_as_of(args: &Value) -> Result<Option<AsOf>, String> {
+    let recorded = parse_instant(args, "as_of")?;
+    let valid = parse_instant(args, "as_of_valid")?;
+    Ok((recorded.is_some() || valid.is_some()).then_some(AsOf { recorded, valid }))
+}
+
+/// [`Prime::recall`], or [`Prime::recall_at`] when a point in time is given.
+async fn recall_maybe_at(
+    prime: &Prime,
+    query: RecallQuery,
+    at: Option<AsOf>,
+) -> PrimeResult<RecallResult> {
+    match at {
+        Some(at) => prime.recall_at(query, at).await,
+        None => prime.recall(query).await,
+    }
+}
+
+async fn call_neighbors(prime: &Prime, args: &Value) -> Value {
     let Some(node_id) = args.get("node_id").and_then(Value::as_str) else {
         return tool_error("missing 'node_id'");
     };
@@ -839,18 +889,49 @@ fn call_neighbors(prime: &Prime, args: &Value) -> Value {
         _ => allsource_core::prime::Direction::Both,
     };
     let depth = args.get("depth").and_then(Value::as_u64).unwrap_or(1) as usize;
+    let at = match parse_as_of(args) {
+        Ok(at) => at,
+        Err(e) => return tool_error(&e),
+    };
 
     let page = Page::from_args(args);
 
     if depth <= 1 {
         let fields = Fields::from_args(args, Fields::Full);
-        let (nodes, total) = page.apply(prime.neighbors(node_id, relation, direction));
+        let neighbors = match at {
+            Some(at) => prime
+                .neighbors_within_at(node_id, 1, relation, direction, at)
+                .await
+                .map(|within| {
+                    within
+                        .into_iter()
+                        .filter_map(|(n, d)| (d == 1).then_some(n))
+                        .collect()
+                }),
+            None => Ok(prime.neighbors(node_id, relation, direction)),
+        };
+        let neighbors = match neighbors {
+            Ok(n) => n,
+            Err(e) => return tool_error(&e.to_string()),
+        };
+        let (nodes, total) = page.apply(neighbors);
         let nodes_json: Vec<Value> = nodes.iter().map(|n| node_row(n, fields)).collect();
         tool_result(paged("nodes", nodes_json, page, total))
     } else {
         let fields = Fields::from_args(args, Fields::Summary);
-        let (results, total) =
-            page.apply(prime.neighbors_within(node_id, depth, relation, direction));
+        let within = match at {
+            Some(at) => {
+                prime
+                    .neighbors_within_at(node_id, depth, relation, direction, at)
+                    .await
+            }
+            None => Ok(prime.neighbors_within(node_id, depth, relation, direction)),
+        };
+        let within = match within {
+            Ok(w) => w,
+            Err(e) => return tool_error(&e.to_string()),
+        };
+        let (results, total) = page.apply(within);
         let nodes_json: Vec<Value> = results
             .iter()
             .map(|(n, d)| {
@@ -1234,8 +1315,6 @@ fn call_similar(prime: &Prime, args: &Value) -> Value {
 }
 
 async fn call_recall(prime: &Prime, args: &Value) -> Value {
-    use allsource_core::prime::types::RecallQuery;
-
     let text = args.get("text").and_then(Value::as_str).map(String::from);
     let node_type = args
         .get("node_type")
@@ -1270,6 +1349,10 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
             "missing input — supply 'text', 'vector', or 'node_type' so recall has something to search on",
         );
     }
+    let at = match parse_as_of(args) {
+        Ok(at) => at,
+        Err(e) => return tool_error(&e),
+    };
 
     let query = RecallQuery {
         text,
@@ -1290,7 +1373,7 @@ async fn call_recall(prime: &Prime, args: &Value) -> Value {
         ..RecallQuery::default()
     };
 
-    match prime.recall(query).await {
+    match recall_maybe_at(prime, query, at).await {
         Ok(result) => {
             let fields = Fields::from_args(args, Fields::Full);
             let nodes_json: Vec<Value> = result
@@ -1377,6 +1460,11 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
         Some(other) => return tool_error(&format!("invalid tier: {other}. Use L0, L1, or L2")),
     };
 
+    let at = match parse_as_of(args) {
+        Ok(at) => at,
+        Err(e) => return tool_error(&e),
+    };
+
     // Keep the query for the L2 vector arm below (the struct moves `query`).
     let query_for_recall = query.clone();
 
@@ -1387,7 +1475,7 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
             .and_then(Value::as_str)
             .map(String::from),
         top_k,
-        as_of: None,
+        as_of: at,
         include_index: args
             .get("include_index")
             .and_then(Value::as_bool)
@@ -1400,7 +1488,10 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
             .map(String::from),
     };
 
-    let ctx = recall.context(ctx_query).await;
+    let ctx = match recall.context(ctx_query).await {
+        Ok(ctx) => ctx,
+        Err(e) => return tool_error(&e.to_string()),
+    };
 
     // L2 is "full hybrid recall" — index + vectors + graph. The RecallEngine
     // owns the compressed index but not the vector store, so its `vectors`/`nodes`
@@ -1409,7 +1500,6 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
     // query in-process, HNSW vector search + graph expansion). L0/L1 don't do
     // vector recall, so leave them untouched.
     let (vectors_json, nodes_json) = if matches!(tier, ContextTier::L2) {
-        use allsource_core::prime::types::RecallQuery;
         match prime.embed_text(&query_for_recall) {
             Ok(vector) => {
                 let rq = RecallQuery {
@@ -1418,7 +1508,7 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
                     top_k,
                     ..RecallQuery::default()
                 };
-                match prime.recall(rq).await {
+                match recall_maybe_at(prime, rq, at).await {
                     Ok(result) => {
                         let v: Vec<Value> = result
                             .vectors
@@ -1839,6 +1929,77 @@ mod tests {
         serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap()
     }
 
+    /// A node filed with a past `valid_from` is absent from the graph before
+    /// that instant and present after it, through both recall and context.
+    #[tokio::test]
+    async fn as_of_valid_reads_the_graph_at_the_fact_s_valid_time() {
+        let prime = Prime::open_in_memory().await.unwrap();
+        parse_result(
+            &call_add_node(
+                &prime,
+                &json!({
+                    "type": "person",
+                    "properties": { "name": "Alice" },
+                    "valid_from": "2026-01-01T00:00:00Z",
+                }),
+            )
+            .await,
+        );
+
+        let before = parse_result(
+            &call_recall(
+                &prime,
+                &json!({ "node_type": "person", "as_of_valid": "2025-06-01T00:00:00Z" }),
+            )
+            .await,
+        );
+        assert_eq!(before["nodes"].as_array().unwrap().len(), 0);
+
+        let after = parse_result(
+            &call_recall(
+                &prime,
+                &json!({ "node_type": "person", "as_of_valid": "2026-01-15T00:00:00Z" }),
+            )
+            .await,
+        );
+        assert_eq!(after["nodes"].as_array().unwrap().len(), 1);
+
+        let recall = RecallEngine::with_deps(
+            prime.recall_deps(),
+            &allsource_core::prime::recall::IndexConfig::default(),
+        );
+        let ctx_before = parse_result(
+            &call_context(
+                &prime,
+                &recall,
+                &json!({ "query": "who", "tier": "L1", "as_of_valid": "2025-06-01T00:00:00Z" }),
+            )
+            .await,
+        );
+        assert_eq!(ctx_before["nodes"].as_array().unwrap().len(), 0);
+
+        let ctx_after = parse_result(
+            &call_context(
+                &prime,
+                &recall,
+                &json!({ "query": "who", "tier": "L1", "as_of_valid": "2026-01-15T00:00:00Z" }),
+            )
+            .await,
+        );
+        assert_eq!(ctx_after["nodes"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn as_of_rejects_a_value_that_is_not_rfc3339() {
+        let prime = Prime::open_in_memory().await.unwrap();
+        let result = call_recall(
+            &prime,
+            &json!({ "node_type": "person", "as_of": "last tuesday" }),
+        )
+        .await;
+        assert_eq!(result["isError"], json!(true), "{result}");
+    }
+
     #[tokio::test]
     async fn search_caps_rows_but_reports_the_true_total() {
         let prime = prime_with_symbols(120).await;
@@ -1873,7 +2034,9 @@ mod tests {
 
         assert!(id.starts_with("node:function:"), "not a wire id: {id}");
         assert_ne!(
-            call_neighbors(&prime, &json!({ "node_id": id })).get("isError"),
+            call_neighbors(&prime, &json!({ "node_id": id }))
+                .await
+                .get("isError"),
             Some(&json!(true)),
             "the id search returned was rejected by prime_neighbors"
         );

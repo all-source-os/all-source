@@ -31,6 +31,9 @@ pub struct Query {
     pub(crate) limit: Option<usize>,
     pub(crate) since: Option<DateTime<Utc>>,
     pub(crate) until: Option<DateTime<Utc>>,
+    pub(crate) as_of_valid: Option<DateTime<Utc>>,
+    pub(crate) since_valid: Option<DateTime<Utc>>,
+    pub(crate) until_valid: Option<DateTime<Utc>>,
     pub(crate) offset: usize,
     pub(crate) descending: bool,
 }
@@ -82,6 +85,25 @@ impl Query {
         self
     }
 
+    /// Keep events whose valid interval contains `t`: `valid_from <= t` and
+    /// `valid_to` unset or after `t`. Combines with the record-time bounds.
+    pub fn valid_as_of(mut self, t: DateTime<Utc>) -> Self {
+        self.as_of_valid = Some(t);
+        self
+    }
+
+    /// Keep events whose `valid_from` is at or after `t`.
+    pub fn valid_since(mut self, t: DateTime<Utc>) -> Self {
+        self.since_valid = Some(t);
+        self
+    }
+
+    /// Keep events whose `valid_from` is at or before `t`.
+    pub fn valid_until(mut self, t: DateTime<Utc>) -> Self {
+        self.until_valid = Some(t);
+        self
+    }
+
     /// Skip the first `n` matching events after stable ordering.
     pub fn offset(mut self, n: usize) -> Self {
         self.offset = n;
@@ -106,8 +128,15 @@ pub struct EventView {
     pub tenant_id: String,
     pub payload: serde_json::Value,
     pub metadata: Option<serde_json::Value>,
+    /// Record time (`timestamp`) is when Core filed the event.
     pub timestamp: DateTime<Utc>,
     pub version: i64,
+    /// When the fact became true. Unset means the same as `timestamp`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<DateTime<Utc>>,
+    /// When the fact stopped being true. Unset means open-ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_to: Option<DateTime<Utc>>,
 }
 
 /// Stable, bounded query page with truthful continuation metadata.
@@ -161,6 +190,8 @@ impl From<&crate::domain::entities::Event> for EventView {
             metadata: e.metadata().cloned(),
             timestamp: e.timestamp(),
             version: e.version(),
+            valid_from: e.valid_from,
+            valid_to: e.valid_to,
         }
     }
 }

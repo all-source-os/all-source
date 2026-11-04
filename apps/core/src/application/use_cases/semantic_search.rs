@@ -751,6 +751,8 @@ mod tests {
                 payload: json!({"name": "Alice", "role": "admin"}),
                 metadata: None,
                 expected_version: None,
+                valid_from: None,
+                valid_to: None,
             })
             .await
             .unwrap();
@@ -763,6 +765,8 @@ mod tests {
                 payload: json!({"amount": 99.99, "item": "widget"}),
                 metadata: None,
                 expected_version: None,
+                valid_from: None,
+                valid_to: None,
             })
             .await
             .unwrap();
@@ -775,6 +779,8 @@ mod tests {
                 payload: json!({"name": "Alice", "role": "superadmin"}),
                 metadata: None,
                 expected_version: None,
+                valid_from: None,
+                valid_to: None,
             })
             .await
             .unwrap();

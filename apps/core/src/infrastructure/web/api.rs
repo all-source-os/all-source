@@ -264,21 +264,19 @@ pub async fn ingest_event(
         tenant_id,
         req.payload,
         req.metadata,
-    )?;
+    )?
+    .with_valid_time(req.valid_from, req.valid_to)?;
 
+    let mut response = IngestEventResponse::from_event(&event);
     let event_id = event.id;
-    let timestamp = event.timestamp;
 
     let new_version =
         super::archive_work::append(Arc::clone(&store), event, expected_version).await?;
 
     tracing::info!("Event ingested: {}", event_id);
 
-    Ok(Json(IngestEventResponse {
-        event_id,
-        timestamp,
-        version: Some(new_version),
-    }))
+    response.version = Some(new_version);
+    Ok(Json(response))
 }
 
 /// Ingest a single event with semi-sync/sync replication ACK waiting.
@@ -380,14 +378,15 @@ pub async fn ingest_event_v1(
         tenant_id.clone(),
         req.payload,
         req.metadata,
-    )?;
+    )?
+    .with_valid_time(req.valid_from, req.valid_to)?;
 
     // Per-tenant schema enforcement (Permissive is the fast path — no
     // tenant lookup, no schema query). See neotoma-gaps bead t-0795.
     enforce_schema_if_configured(&state, &tenant_id, &event).await?;
 
+    let mut response = IngestEventResponse::from_event(&event);
     let event_id = event.id;
-    let timestamp = event.timestamp;
 
     let new_version =
         super::archive_work::append(Arc::clone(&state.store), event, expected_version).await?;
@@ -397,11 +396,8 @@ pub async fn ingest_event_v1(
 
     tracing::info!("Event ingested: {}", event_id);
 
-    Ok(Json(IngestEventResponse {
-        event_id,
-        timestamp,
-        version: Some(new_version),
-    }))
+    response.version = Some(new_version);
+    Ok(Json(response))
 }
 
 /// Batch ingest multiple events in a single request
@@ -428,24 +424,21 @@ pub async fn ingest_events_batch(
             tenant_id,
             event_req.payload,
             event_req.metadata,
-        )?;
+        )?
+        .with_valid_time(event_req.valid_from, event_req.valid_to)?;
 
         // Note: the non-v1 batch path uses State<SharedStore>, not AppState,
         // so it has no tenant_repo to check enforcement against. Schema
         // enforcement is wired through the v1 batch handler below — this
         // path remains permissive (it predates the tenant_repo wiring).
 
-        let event_id = event.id;
-        let timestamp = event.timestamp;
+        let mut response = IngestEventResponse::from_event(&event);
 
         let new_version =
             super::archive_work::append(Arc::clone(&store), event, expected_version).await?;
 
-        ingested_events.push(IngestEventResponse {
-            event_id,
-            timestamp,
-            version: Some(new_version),
-        });
+        response.version = Some(new_version);
+        ingested_events.push(response);
     }
 
     let ingested = ingested_events.len();
@@ -483,21 +476,18 @@ pub async fn ingest_events_batch_v1(
             tenant_id.clone(),
             event_req.payload,
             event_req.metadata,
-        )?;
+        )?
+        .with_valid_time(event_req.valid_from, event_req.valid_to)?;
 
         enforce_schema_if_configured(&state, &tenant_id, &event).await?;
 
-        let event_id = event.id;
-        let timestamp = event.timestamp;
+        let mut response = IngestEventResponse::from_event(&event);
 
         let new_version =
             super::archive_work::append(Arc::clone(&state.store), event, expected_version).await?;
 
-        ingested_events.push(IngestEventResponse {
-            event_id,
-            timestamp,
-            version: Some(new_version),
-        });
+        response.version = Some(new_version);
+        ingested_events.push(response);
     }
 
     // Semi-sync/sync: wait for follower ACK(s) after all events are ingested
@@ -606,6 +596,9 @@ pub async fn query_events_json(
         return super::retained_query::query(
             store,
             QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: enforced_tenant,
                 ..req
             },
@@ -647,6 +640,9 @@ pub async fn query_events_json(
     // one extra round trip and nothing else.
     let requested_limit = req.limit;
     let scoped_req = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         tenant_id: enforced_tenant,
         limit: Some(req.limit.unwrap_or(MAX_QUERY_PAGE).min(MAX_QUERY_PAGE)),
         ..req
@@ -697,6 +693,9 @@ pub async fn list_entities(
 
     // Get all events matching the filters
     let query_req = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: None,
         tenant_id: None,
@@ -792,6 +791,9 @@ pub async fn detect_duplicates(
 
     // Query events scoped by the required prefix
     let query_req = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: None,
         tenant_id: None,
@@ -881,7 +883,11 @@ pub async fn detect_duplicates(
 
 #[derive(Deserialize)]
 pub struct EntityStateParams {
+    /// Record-time instant. `as_of_recorded` is the same bound under its explicit name.
+    #[serde(alias = "as_of_recorded")]
     as_of: Option<chrono::DateTime<chrono::Utc>>,
+    /// Valid-time instant: the state of what was true at this time.
+    as_of_valid: Option<chrono::DateTime<chrono::Utc>>,
     /// Tenant to scope to (the gateway injects the authenticated tenant).
     ///
     /// When present, reconstruction folds only that tenant's events (#230).
@@ -897,9 +903,10 @@ pub async fn get_entity_state(
     Path(entity_id): Path<String>,
     Query(params): Query<EntityStateParams>,
 ) -> Result<Response> {
-    let state = store.entity_state(
+    let state = store.entity_state_at(
         &entity_id,
         params.as_of,
+        params.as_of_valid,
         params.tenant_id.as_deref(),
         params.history,
     )?;
@@ -1861,6 +1868,9 @@ pub async fn graphql_query(
         match field.name.as_str() {
             "events" => {
                 let request = crate::application::dto::QueryEventsRequest {
+                    as_of_valid: None,
+                    since_valid: None,
+                    until_valid: None,
                     entity_id: field.arguments.get("entity_id").cloned(),
                     event_type: field.arguments.get("event_type").cloned(),
                     tenant_id: field.arguments.get("tenant_id").cloned(),
@@ -2063,6 +2073,9 @@ pub async fn sync_pull_handler(
         .and_then(|ms| chrono::DateTime::from_timestamp_millis(ms as i64));
 
     let events = store.query(&crate::application::dto::QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: None,
         tenant_id: None,
@@ -2323,6 +2336,9 @@ mod tests {
 
         // Query with limit=10 — should get has_more=true, total_count=50
         let req = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: None,
             tenant_id: None,
@@ -2337,8 +2353,14 @@ mod tests {
 
         let requested_limit = req.limit;
         let unlimited_req = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             limit: None,
             ..QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: req.entity_id,
                 event_type: req.event_type,
                 tenant_id: req.tenant_id,
@@ -2445,6 +2467,88 @@ mod tests {
         assert!(!past.has_more, "offset beyond the match set is exhausted");
     }
 
+    async fn post_ingest(
+        store: &SharedStore,
+        body: serde_json::Value,
+    ) -> (axum::http::StatusCode, serde_json::Value) {
+        use axum::{
+            body::{Body, to_bytes},
+            http::{Request, header},
+            routing::post,
+        };
+        use tower::ServiceExt;
+
+        let app = Router::new()
+            .route("/api/v1/events", post(ingest_event))
+            .with_state(store.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/v1/events")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+        )
+    }
+
+    #[tokio::test]
+    async fn ingest_response_echoes_defaulted_valid_from_and_record_time() {
+        let store = create_test_store();
+        let (status, body) = post_ingest(
+            &store,
+            serde_json::json!({"event_type": "user.created", "entity_id": "u-1", "payload": {}}),
+        )
+        .await;
+
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(body["valid_from"], body["recorded_at"]);
+        assert_eq!(body["recorded_at"], body["timestamp"]);
+    }
+
+    #[tokio::test]
+    async fn ingest_with_valid_from_echoes_it_and_keeps_record_time_server_assigned() {
+        let store = create_test_store();
+        let (status, body) = post_ingest(
+            &store,
+            serde_json::json!({
+                "event_type": "user.created",
+                "entity_id": "u-2",
+                "payload": {},
+                "valid_from": "2026-01-15T00:00:00Z",
+                "recorded_at": "2020-01-01T00:00:00Z",
+            }),
+        )
+        .await;
+
+        assert_eq!(status, axum::http::StatusCode::OK);
+        assert_eq!(body["valid_from"], "2026-01-15T00:00:00Z");
+        assert_ne!(body["recorded_at"], "2020-01-01T00:00:00Z");
+        assert_eq!(body["recorded_at"], body["timestamp"]);
+    }
+
+    #[tokio::test]
+    async fn ingest_rejects_valid_to_not_after_valid_from_with_400() {
+        let store = create_test_store();
+        let (status, _) = post_ingest(
+            &store,
+            serde_json::json!({
+                "event_type": "user.created",
+                "entity_id": "u-3",
+                "payload": {},
+                "valid_from": "2026-01-15T00:00:00Z",
+                "valid_to": "2026-01-14T00:00:00Z",
+            }),
+        )
+        .await;
+
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    }
+
     /// Router carrying the latest-state routes, driven end to end so query
     /// parsing, headers and status codes are all exercised.
     fn latest_state_app(store: &SharedStore) -> Router {
@@ -2532,6 +2636,73 @@ mod tests {
 
         assert_eq!(body["history"].as_array().unwrap().len(), 2);
         assert_eq!(body["version"], 2);
+    }
+
+    #[tokio::test]
+    async fn entity_state_takes_record_and_valid_time_axes() {
+        use chrono::TimeZone;
+
+        let store = create_test_store();
+        let base = chrono::Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap();
+        let at = |minutes: i64| base + chrono::Duration::minutes(minutes);
+        let secs = |minutes: i64| at(minutes).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+        let mut original = create_test_event("contract-1", "contract.renewal");
+        original.timestamp = at(0);
+        original.version = 1;
+        original.payload = serde_json::json!({"renews": "june"});
+        store
+            .ingest(&original.with_valid_time(Some(at(0)), None).unwrap())
+            .unwrap();
+
+        let mut correction = create_test_event("contract-1", "contract.renewal");
+        correction.timestamp = at(300);
+        correction.version = 2;
+        correction.payload = serde_json::json!({"renews": "september"});
+        store
+            .ingest(&correction.with_valid_time(Some(at(0)), None).unwrap())
+            .unwrap();
+
+        let app = latest_state_app(&store);
+        let believed = format!("/api/v1/entities/contract-1/state?as_of={}", secs(100));
+        let believed_by_name = format!(
+            "/api/v1/entities/contract-1/state?as_of_recorded={}",
+            secs(100)
+        );
+        let true_now = format!("/api/v1/entities/contract-1/state?as_of_valid={}", secs(50));
+        let both = format!(
+            "/api/v1/entities/contract-1/state?as_of_valid={}&as_of={}",
+            secs(50),
+            secs(100)
+        );
+
+        for uri in [believed, believed_by_name] {
+            let (_, _, body) = send(&app, &uri, None).await;
+            assert_eq!(
+                json_body(&body)["current_state"]["renews"],
+                "june",
+                "GET {uri}"
+            );
+        }
+
+        let (_, _, body) = send(&app, &true_now, None).await;
+        let body = json_body(&body);
+        assert_eq!(body["current_state"]["renews"], "september");
+        assert_eq!(body["as_of_valid"], serde_json::json!(at(50)));
+
+        let (_, _, body) = send(&app, &both, None).await;
+        assert_eq!(json_body(&body)["current_state"]["renews"], "june");
+
+        let duplicated = format!(
+            "/api/v1/entities/contract-1/state?as_of={0}&as_of_recorded={0}",
+            secs(100)
+        );
+        let (status, _, _) = send(&app, &duplicated, None).await;
+        assert_eq!(
+            status,
+            axum::http::StatusCode::BAD_REQUEST,
+            "GET {duplicated}"
+        );
     }
 
     #[tokio::test]
@@ -3028,6 +3199,9 @@ mod tests {
         let scoped = query_events_json(
             OptionalAuth(None),
             Query(QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: Some("test-stream".to_string()),
                 ..QueryEventsRequest::default()
             }),
@@ -3140,6 +3314,9 @@ mod tests {
         // Query with limit=100 — should get has_more=false, total_count=5
         let all_events = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -3313,6 +3490,9 @@ mod tests {
             ..Default::default()
         };
         let query_req = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: None,
             tenant_id: None,
@@ -3483,6 +3663,9 @@ mod tests {
 
         // Group by name — should find 2 groups: "S&P 500" (idx-1, idx-2) and "NASDAQ" (idx-3, idx-4)
         let query_req = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: None,
             tenant_id: None,
@@ -3560,6 +3743,9 @@ mod tests {
             .unwrap();
 
         let query_req = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: None,
             tenant_id: None,
@@ -3627,6 +3813,9 @@ mod tests {
             .unwrap();
 
         let query_req = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: None,
             tenant_id: None,

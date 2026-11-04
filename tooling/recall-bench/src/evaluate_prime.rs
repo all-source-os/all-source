@@ -491,8 +491,8 @@ async fn run_prime_eval(
 
             let retrieved: Vec<(String, String)> = match q_type.as_str() {
                 // ---------------------------------------------------------
-                // TEMPORAL: use recall() + sort by session_date + filter
-                // Prime's temporal APIs (history, as_of) for ordering
+                // TEMPORAL: recall() retrieves, then order by the caller's
+                // session_date. The store has no valid-time axis to order by.
                 // ---------------------------------------------------------
                 "temporal-reasoning" => {
                     // Use recall() for semantic + graph retrieval
