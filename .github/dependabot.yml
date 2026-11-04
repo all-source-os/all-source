@@ -29,6 +29,10 @@ updates:
       - "ci"
     reviewers:
       - "all-source-os/maintainers"
+    ignore:
+      # The action's tag names the Rust release it installs; Dependabot
+      # bumps it to tags that are not Rust releases (1.120.0 is a 404).
+      - dependency-name: "dtolnay/rust-toolchain"
     groups:
       github-actions:
         patterns:

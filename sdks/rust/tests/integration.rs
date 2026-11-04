@@ -397,6 +397,7 @@ async fn test_fold_empty_entity() {
 async fn test_connection_refused() {
     let mut config = ClientConfig::new("http://127.0.0.1:19999", "key");
     config.retry.max_retries = 0;
+    config.retry.unavailable_window = Duration::ZERO;
     let client = CoreClient::with_config(config).unwrap();
 
     let err = client.health().await.unwrap_err();
@@ -411,6 +412,7 @@ async fn test_connection_refused() {
 async fn test_circuit_breaker_trips() {
     let mut config = ClientConfig::new("http://127.0.0.1:19999", "key");
     config.retry.max_retries = 0;
+    config.retry.unavailable_window = Duration::ZERO;
     config.circuit_breaker_threshold = 2;
     config.circuit_breaker_recovery = Duration::from_mins(1);
     let client = CoreClient::with_config(config).unwrap();

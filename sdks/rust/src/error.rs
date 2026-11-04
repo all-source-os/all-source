@@ -140,6 +140,32 @@ impl Error {
         matches!(self, Error::CircuitOpen { .. })
     }
 
+    /// Returns true when Core is restarting and no handler can have run: the
+    /// connection was refused, or Core or a gateway answered `503` with
+    /// `not_ready` or `core_unavailable`. Resending is safe for any method.
+    pub fn is_core_restarting(&self) -> bool {
+        match self {
+            Error::Http(e) => e.is_connect(),
+            Error::Api {
+                status: 503,
+                body: Some(body),
+                ..
+            } => matches!(error_code(body), Some("not_ready" | "core_unavailable")),
+            _ => false,
+        }
+    }
+
+    /// Returns true when a gateway's egress ledger was unreachable. A gateway
+    /// can report this after Core ran the request, so only reads resend it.
+    pub fn is_egress_ledger_unavailable(&self) -> bool {
+        matches!(
+            self,
+            Error::Api { status: 503, body: Some(body), .. }
+                if error_code(body) == Some("egress_budget_unavailable")
+                    && body.get("reason").and_then(Value::as_str) == Some("ledger_unavailable")
+        )
+    }
+
     /// Returns true if this is a transient error that might succeed on retry.
     pub fn is_retryable(&self) -> bool {
         match self {
@@ -148,4 +174,13 @@ impl Error {
             _ => false,
         }
     }
+}
+
+/// The refusal code: `{"error": "<code>"}` from Core and the control plane,
+/// `{"error": {"code": "<code>"}}` from the Query Service.
+fn error_code(body: &Value) -> Option<&str> {
+    let error = body.get("error")?;
+    error
+        .as_str()
+        .or_else(|| error.get("code").and_then(Value::as_str))
 }

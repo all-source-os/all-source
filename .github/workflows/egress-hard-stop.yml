@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         timeout-minutes: 5
-      - uses: dtolnay/rust-toolchain@1.120.0
+      - uses: dtolnay/rust-toolchain@1.95.0
         timeout-minutes: 5
       - uses: Swatinem/rust-cache@v2
         timeout-minutes: 5

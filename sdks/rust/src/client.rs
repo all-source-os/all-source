@@ -29,6 +29,13 @@ pub struct RetryConfig {
     pub backoff_factor: f64,
     /// Maximum delay between retries. Default: 10s.
     pub max_delay: Duration,
+    /// How long a call keeps starting resends while Core is restarting
+    /// ([`Error::is_core_restarting`]). These resends do not count against
+    /// `max_retries` or the circuit breaker; once the window is spent the
+    /// ordinary retries follow. The last resend can finish up to one request
+    /// timeout after the window. Default: 20s, which covers a machine swap
+    /// behind a gateway that holds each attempt for 6s.
+    pub unavailable_window: Duration,
 }
 
 impl Default for RetryConfig {
@@ -38,8 +45,16 @@ impl Default for RetryConfig {
             base_delay: Duration::from_millis(200),
             backoff_factor: 2.0,
             max_delay: Duration::from_secs(10),
+            unavailable_window: Duration::from_secs(20),
         }
     }
+}
+
+const RESTART_FIRST_DELAY: Duration = Duration::from_millis(250);
+const RESTART_MAX_DELAY: Duration = Duration::from_secs(2);
+
+fn rides_through_restart(err: &Error, idempotent: bool) -> bool {
+    err.is_core_restarting() || (idempotent && err.is_egress_ledger_unavailable())
 }
 
 /// Full configuration for building a client.
@@ -165,7 +180,7 @@ impl HttpTransport {
         query: &[(&str, String)],
         if_none_match: Option<&str>,
     ) -> Result<(Option<T>, ResponseMeta), Error> {
-        self.with_retry(|| async {
+        self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
             let mut req = self.http.get(&url).query(query);
             if let Some(etag) = if_none_match {
@@ -183,7 +198,7 @@ impl HttpTransport {
     }
 
     pub(crate) async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, Error> {
-        self.with_retry(|| async {
+        self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
             let resp = self.http.get(&url).send().await?;
             self.handle_response(resp).await
@@ -196,7 +211,7 @@ impl HttpTransport {
         path: &str,
         query: &[(&str, String)],
     ) -> Result<T, Error> {
-        self.with_retry(|| async {
+        self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
             let resp = self.http.get(&url).query(query).send().await?;
             self.handle_response(resp).await
@@ -209,7 +224,7 @@ impl HttpTransport {
         path: &str,
         body: &B,
     ) -> Result<T, Error> {
-        self.with_retry(|| async {
+        self.with_retry(false, || async {
             let url = format!("{}{}", self.base_url, path);
             let resp = self.http.post(&url).json(body).send().await?;
             self.handle_response(resp).await
@@ -222,7 +237,7 @@ impl HttpTransport {
         path: &str,
         body: &B,
     ) -> Result<T, Error> {
-        self.with_retry(|| async {
+        self.with_retry(false, || async {
             let url = format!("{}{}", self.base_url, path);
             let resp = self.http.put(&url).json(body).send().await?;
             self.handle_response(resp).await
@@ -232,7 +247,7 @@ impl HttpTransport {
 
     /// DELETE that ignores the response body, so an empty `200` or `204` succeeds.
     pub(crate) async fn delete(&self, path: &str) -> Result<(), Error> {
-        self.with_retry(|| async {
+        self.with_retry(false, || async {
             let url = format!("{}{}", self.base_url, path);
             let resp = self.http.delete(&url).send().await?;
             if resp.status().is_success() {
@@ -251,7 +266,7 @@ impl HttpTransport {
         &self,
         path: &str,
     ) -> Result<Option<T>, Error> {
-        self.with_retry(|| async {
+        self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
             let resp = self.http.get(&url).send().await?;
             if resp.status().as_u16() == 404 {
@@ -263,7 +278,10 @@ impl HttpTransport {
         .await
     }
 
-    async fn with_retry<T, F, Fut>(&self, f: F) -> Result<T, Error>
+    /// `idempotent` is true only for GETs: it lets a call also wait out an
+    /// egress-ledger outage, which a gateway can report after Core has run
+    /// the handler.
+    async fn with_retry<T, F, Fut>(&self, idempotent: bool, f: F) -> Result<T, Error>
     where
         F: Fn() -> Fut,
         Fut: std::future::Future<Output = Result<T, Error>>,
@@ -276,24 +294,13 @@ impl HttpTransport {
             .acquire()
             .map_err(|retry_after_secs| Error::CircuitOpen { retry_after_secs })?;
         // A half-open probe is one request, not one request plus its retries.
-        let max_retries = if permit.is_probe() {
-            0
-        } else {
-            self.retry.max_retries
-        };
+        let probe = permit.is_probe();
+        let max_retries = if probe { 0 } else { self.retry.max_retries };
 
-        let mut last_error = None;
-        for attempt in 0..=max_retries {
-            if attempt > 0 {
-                let delay = self
-                    .retry
-                    .base_delay
-                    .mul_f64(self.retry.backoff_factor.powi(attempt as i32 - 1));
-                let delay = delay.min(self.retry.max_delay);
-                tracing::debug!(attempt, delay_ms = delay.as_millis(), "retrying request");
-                tokio::time::sleep(delay).await;
-            }
-
+        let started = Instant::now();
+        let mut restart_delay = RESTART_FIRST_DELAY;
+        let mut attempt = 0;
+        loop {
             match f().await {
                 Ok(result) => {
                     self.circuit_breaker.record_success();
@@ -303,10 +310,30 @@ impl HttpTransport {
                     self.note_rate_limit(&e);
                     return Err(e);
                 }
+                Err(e)
+                    if !probe
+                        && rides_through_restart(&e, idempotent)
+                        && started.elapsed() + restart_delay <= self.retry.unavailable_window =>
+                {
+                    tracing::warn!(
+                        delay_ms = restart_delay.as_millis(),
+                        error = %e,
+                        "core is restarting, will resend"
+                    );
+                    tokio::time::sleep(restart_delay).await;
+                    restart_delay = (restart_delay * 2).min(RESTART_MAX_DELAY);
+                }
                 Err(e) if e.is_retryable() && attempt < max_retries => {
                     tracing::warn!(attempt, error = %e, "transient error, will retry");
                     self.circuit_breaker.record_failure();
-                    last_error = Some(e);
+                    attempt += 1;
+                    let delay = self
+                        .retry
+                        .base_delay
+                        .mul_f64(self.retry.backoff_factor.powi(attempt as i32 - 1))
+                        .min(self.retry.max_delay);
+                    tracing::debug!(attempt, delay_ms = delay.as_millis(), "retrying request");
+                    tokio::time::sleep(delay).await;
                 }
                 Err(e) => {
                     if e.is_server_error() || matches!(e, Error::Http(_)) {
@@ -316,8 +343,6 @@ impl HttpTransport {
                 }
             }
         }
-
-        Err(last_error.unwrap_or_else(|| Error::Config("retry exhausted".into())))
     }
 
     async fn handle_response<T: for<'de> Deserialize<'de>>(
