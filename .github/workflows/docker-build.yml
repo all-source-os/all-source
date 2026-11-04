@@ -223,6 +223,24 @@ jobs:
           cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
           seed: ${{ needs.compiler-seed.outputs.image }}
 
+      - name: Resume Core dependencies (second pass)
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps-resume2
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Resume Core dependencies (third pass)
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps-resume3
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
       - name: Cache remaining Core dependencies
         if: startsWith(matrix.name, 'core')
         uses: ./.github/actions/core-build-phase
