@@ -40,9 +40,11 @@ type contractFixture struct {
 
 var fixtureRunners = map[string]func(t *testing.T, fx contractFixture){
 	"entity_state":                     runEntityState,
+	"entity_state_as_of_valid":         runEntityStateAsOfValid,
 	"entity_state_not_modified":        runEntityStateNotModified,
 	"event_feed":                       runEventFeed,
 	"event_feed_epoch_changed":         runEventFeedEpochChanged,
+	"events_query_valid_time":          runEventsQueryValidTime,
 	"events_query_with_entity_version": runEventsQueryWithEntityVersion,
 	"rate_limited_retry_after":         runRateLimitedRetryAfter,
 	"read_model_commit":                runReadModelCommit,
@@ -225,6 +227,45 @@ func runEntityState(t *testing.T, fx contractFixture) {
 	}
 	if st.ETag != fx.Response.Headers["ETag"] {
 		t.Errorf("ETag %q, want %q", st.ETag, fx.Response.Headers["ETag"])
+	}
+}
+
+func runEntityStateAsOfValid(t *testing.T, fx contractFixture) {
+	c, _ := fixtureClient(t, fx)
+	st, err := c.EntityState(context.Background(), "skill:abc", EntityStateOptions{AsOfValid: "2026-09-15T00:00:00Z"})
+	if err != nil {
+		t.Fatalf("EntityState: %v", err)
+	}
+	if st.AsOfValid == nil || *st.AsOfValid != "2026-09-15T00:00:00Z" {
+		t.Errorf("unexpected as_of_valid %v", st.AsOfValid)
+	}
+	if st.AsOf != nil {
+		t.Errorf("expected as_of nil, got %v", *st.AsOf)
+	}
+	if st.Version != 3 || st.ETag != fx.Response.Headers["ETag"] {
+		t.Errorf("unexpected state %+v", st)
+	}
+}
+
+func runEventsQueryValidTime(t *testing.T, fx contractFixture) {
+	c, _ := fixtureClient(t, fx)
+	list, err := c.Query(context.Background(), QueryOptions{
+		EntityID:   "skill:abc",
+		AsOfValid:  "2026-09-15T00:00:00Z",
+		SinceValid: "2026-09-01T00:00:00Z",
+		Limit:      1,
+	})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(list.Events) != 1 || list.Events[0].ValidFrom == nil || *list.Events[0].ValidFrom != "2026-09-05T00:00:00Z" {
+		t.Errorf("unexpected events %+v", list.Events)
+	}
+	if list.Events[0].ValidTo != nil {
+		t.Errorf("expected valid_to nil, got %v", *list.Events[0].ValidTo)
+	}
+	if list.EntityVersion == nil || *list.EntityVersion != 3 {
+		t.Errorf("unexpected entity_version %v", list.EntityVersion)
 	}
 }
 

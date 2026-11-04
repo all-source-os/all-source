@@ -121,9 +121,18 @@ class AllSourceClient:
         event_type: str,
         entity_id: str,
         data: Dict[str, Any],
+        *,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
     ) -> Event:
-        """Ingest a single event into the store."""
-        request = proto.ingest_request(event_type, entity_id, data)
+        """Ingest a single event into the store.
+
+        `valid_from` and `valid_to` (RFC 3339) say when the fact held; Core
+        assigns the record time and the caller cannot set it.
+        """
+        request = proto.ingest_request(
+            event_type, entity_id, data, valid_from=valid_from, valid_to=valid_to
+        )
         return proto.parse_ingest(self._send(request), request.body or {})
 
     def ingest_batch(
@@ -145,6 +154,9 @@ class AllSourceClient:
         since: Optional[str] = None,
         until: Optional[str] = None,
         as_of: Optional[str] = None,
+        as_of_valid: Optional[str] = None,
+        since_valid: Optional[str] = None,
+        until_valid: Optional[str] = None,
         payload_filter: Optional[Mapping[str, Any]] = None,
         order: Optional[str] = None,
         limit: Optional[int] = None,
@@ -153,6 +165,7 @@ class AllSourceClient:
     ) -> Union[EventList, NotModified]:
         """Query events. `entity_version` is set when filtering by `entity_id`.
 
+        `since`, `until` and `as_of` bound record time; the `*_valid` arguments bound valid time.
         Returns `NotModified` when `if_none_match` still matches.
         """
         request = proto.query_events_request(
@@ -162,6 +175,9 @@ class AllSourceClient:
             since=since,
             until=until,
             as_of=as_of,
+            as_of_valid=as_of_valid,
+            since_valid=since_valid,
+            until_valid=until_valid,
             payload_filter=payload_filter,
             order=order,
             limit=limit,
@@ -231,12 +247,17 @@ class AllSourceClient:
         entity_id: str,
         *,
         as_of: Optional[str] = None,
+        as_of_valid: Optional[str] = None,
         history: bool = False,
         if_none_match: Optional[str] = None,
     ) -> Union[EntityState, NotModified]:
         """Folded state of one entity, without history unless `history=True`."""
         request = proto.entity_state_request(
-            entity_id, as_of=as_of, history=history, if_none_match=if_none_match
+            entity_id,
+            as_of=as_of,
+            as_of_valid=as_of_valid,
+            history=history,
+            if_none_match=if_none_match,
         )
         return proto.parse_entity_state(self._send(request))
 

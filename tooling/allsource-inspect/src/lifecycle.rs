@@ -104,6 +104,8 @@ mod tests {
                 .single()
                 .expect("valid time"),
             version: 1,
+            valid_from: None,
+            valid_to: None,
         }
     }
 

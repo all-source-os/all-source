@@ -566,6 +566,8 @@ impl HostedPrime {
             metadata: Some(json!({ "embedding": vector })),
             timestamp: chrono::Utc::now(),
             version: 0,
+            valid_from: None,
+            valid_to: None,
         }
     }
 
@@ -729,6 +731,8 @@ impl HostedPrime {
             metadata: None,
             timestamp: chrono::Utc::now(),
             version: 0,
+            valid_from: None,
+            valid_to: None,
         }
     }
 }

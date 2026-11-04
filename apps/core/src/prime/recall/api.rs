@@ -3,7 +3,7 @@
 //! Provides the user-facing agent memory API that combines compressed index,
 //! vector search results, and graph context into a single retrieval call.
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -15,11 +15,14 @@ use super::{
 use crate::{
     application::services::projection::Projection,
     prime::{
+        error::{PrimeError, PrimeResult},
+        event_store::EventStore,
         projections::{
             AdjacencyListProjection, CrossDomainProjection, DomainIndexProjection,
             GraphStatsProjection, NodeStateProjection,
         },
-        types::{Node, PrimeStats},
+        temporal,
+        types::{AsOf, Edge, EdgeId, Node, NodeId, PrimeStats, node_entity_id},
     },
 };
 
@@ -36,8 +39,11 @@ pub struct RecallContextQuery {
     pub agent_id: Option<String>,
     /// Max number of vector results (default: 5).
     pub top_k: usize,
-    /// Time-travel: only consider knowledge that existed at this timestamp.
-    pub as_of: Option<DateTime<Utc>>,
+    /// Time-travel. L1 candidates, peers and edges are read at this point on
+    /// the given axes. L0 stats and the L2 compressed index are current state;
+    /// the L2 vector and graph arms follow it when the caller uses
+    /// [`Prime::recall_at`](crate::prime::Prime::recall_at).
+    pub as_of: Option<AsOf>,
     /// Whether to include the compressed index excerpt in the response.
     pub include_index: bool,
     /// Max total tokens in the response (truncate if exceeded).
@@ -77,6 +83,9 @@ pub struct RecallDeps {
     pub node_state: Option<Arc<NodeStateProjection>>,
     pub adjacency: Option<Arc<AdjacencyListProjection>>,
     pub graph_stats: Option<Arc<GraphStatsProjection>>,
+    /// Event store for reads at a point in time. Without it, `as_of` on a
+    /// context query is an error rather than a silent current-state answer.
+    pub core: Option<Arc<dyn EventStore>>,
 }
 
 // =============================================================================
@@ -96,6 +105,7 @@ pub struct RecallEngine {
     node_state: Option<Arc<NodeStateProjection>>,
     adjacency: Option<Arc<AdjacencyListProjection>>,
     graph_stats: Option<Arc<GraphStatsProjection>>,
+    core: Option<Arc<dyn EventStore>>,
     compressor: IndexCompressor,
 }
 
@@ -129,6 +139,7 @@ impl RecallEngine {
             node_state: None,
             adjacency: None,
             graph_stats: None,
+            core: None,
             compressor: IndexCompressor::new(
                 llm_backend,
                 config.refresh_interval_events,
@@ -162,6 +173,7 @@ impl RecallEngine {
             node_state: deps.node_state,
             adjacency: deps.adjacency,
             graph_stats: deps.graph_stats,
+            core: deps.core,
             compressor: IndexCompressor::new(
                 llm_backend,
                 config.refresh_interval_events,
@@ -182,6 +194,7 @@ impl RecallEngine {
             node_state: None,
             adjacency: None,
             graph_stats: None,
+            core: None,
             compressor,
         }
     }
@@ -204,12 +217,15 @@ impl RecallEngine {
     /// - `L0`: stats only — no index generation, no vector search.
     /// - `L1`: stats + recent conversation nodes + 1-hop edges.
     /// - `L2`: full hybrid recall (compressed index + vectors + graph expansion).
-    pub async fn context(&self, query: RecallContextQuery) -> RecallContext {
-        match query.tier {
+    pub async fn context(&self, query: RecallContextQuery) -> PrimeResult<RecallContext> {
+        Ok(match query.tier {
             ContextTier::L0 => self.context_l0(&query),
-            ContextTier::L1 => self.context_l1(&query),
+            ContextTier::L1 => match query.as_of {
+                None => self.context_l1(&query),
+                Some(at) => self.context_l1_at(&query, at).await?,
+            },
             ContextTier::L2 => self.context_l2(&query).await,
-        }
+        })
     }
 
     /// L0: stats-only retrieval. No I/O, no compression.
@@ -238,7 +254,6 @@ impl RecallEngine {
         let stats = self.build_stats();
         let mut nodes: Vec<Node> = Vec::new();
         let mut edges: Vec<crate::prime::types::Edge> = Vec::new();
-        let mut token_count = 0usize;
 
         // Get recent nodes from node_state projection
         if let Some(ref node_state) = self.node_state {
@@ -298,6 +313,80 @@ impl RecallEngine {
             nodes.splice(0..0, candidate_nodes);
         }
 
+        Self::finish_l1(query, stats, nodes, edges)
+    }
+
+    /// L1 read at `at`. Candidates, peers and edges are folded from the store,
+    /// so the nodes carry their values at `at`. The projections hold only
+    /// current state and are not consulted.
+    async fn context_l1_at(
+        &self,
+        query: &RecallContextQuery,
+        at: AsOf,
+    ) -> PrimeResult<RecallContext> {
+        let core: &dyn EventStore = self.core.as_deref().ok_or_else(|| {
+            PrimeError::ValidationFailed(
+                "as_of needs a recall engine built from Prime's deps".to_string(),
+            )
+        })?;
+        let stats = self.build_stats();
+        let mut nodes: Vec<Node> = Vec::new();
+        let mut edges: Vec<Edge> = Vec::new();
+
+        let mut candidates: Vec<Node> = Vec::new();
+        if let Some(ref node_state) = self.node_state {
+            for entity_id in node_state.all_entity_ids() {
+                if let Some(node) = temporal::node_at(core, &entity_id, at).await? {
+                    candidates.push(node);
+                }
+            }
+        }
+        if let Some(conv_id) = query.conversation_id.as_deref() {
+            candidates.retain(|n| {
+                n.properties
+                    .get("conversation_id")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|id| id == conv_id)
+            });
+        }
+        candidates.sort_by_key(|n| std::cmp::Reverse(n.recency_instant()));
+        candidates.truncate(20);
+
+        let live = temporal::live_edges_at(core, at).await?;
+        for node in &candidates {
+            let entity_id = node_entity_id(&node.node_type, node.id.as_str());
+            for edge in live.iter().filter(|e| e.source == entity_id) {
+                if let Some(target) = temporal::node_at(core, &edge.target, at).await?
+                    && !nodes.iter().any(|n| n.id == target.id)
+                    && !candidates.iter().any(|n| n.id == target.id)
+                {
+                    nodes.push(target);
+                }
+                edges.push(Edge {
+                    id: EdgeId::new(&edge.id),
+                    source: node.id.clone(),
+                    target: NodeId::new(&edge.target),
+                    relation: edge.relation.clone(),
+                    properties: None,
+                    weight: None,
+                    deleted: false,
+                    created_at: chrono::Utc::now(),
+                });
+            }
+        }
+        nodes.splice(0..0, candidates);
+
+        Ok(Self::finish_l1(query, stats, nodes, edges))
+    }
+
+    /// Size the L1 answer and enforce `max_tokens` by dropping the oldest nodes.
+    fn finish_l1(
+        query: &RecallContextQuery,
+        stats: PrimeStats,
+        mut nodes: Vec<Node>,
+        edges: Vec<Edge>,
+    ) -> RecallContext {
+        let mut token_count = 0usize;
         // Estimate token count
         let stats_json = serde_json::to_string(&stats).unwrap_or_default();
         token_count += super::types::estimate_tokens(&stats_json);
@@ -518,7 +607,7 @@ mod tests {
             ..Default::default()
         };
 
-        let ctx = engine.context(query).await;
+        let ctx = engine.context(query).await.unwrap();
 
         assert!(!ctx.index.is_empty());
         assert!(ctx.token_count > 0);
@@ -534,7 +623,7 @@ mod tests {
             ..Default::default()
         };
 
-        let ctx = engine.context(query).await;
+        let ctx = engine.context(query).await.unwrap();
 
         assert!(ctx.index.is_empty());
         assert_eq!(ctx.token_count, 0);
@@ -551,7 +640,7 @@ mod tests {
             ..Default::default()
         };
 
-        let ctx = engine.context(query).await;
+        let ctx = engine.context(query).await.unwrap();
 
         assert!(ctx.token_count <= 10);
         assert!(ctx.index.contains("truncated"));
@@ -568,7 +657,7 @@ mod tests {
             ..Default::default()
         };
 
-        let ctx = engine.context(query).await;
+        let ctx = engine.context(query).await.unwrap();
 
         assert_eq!(ctx.tier, ContextTier::L0);
         assert!(ctx.index.is_empty(), "L0 should not generate index");
@@ -595,6 +684,7 @@ mod tests {
             node_state: Some(node_state.clone()),
             adjacency: Some(adjacency.clone()),
             graph_stats: Some(graph_stats.clone()),
+            core: None,
             compressor,
         };
 
@@ -623,7 +713,7 @@ mod tests {
             ..Default::default()
         };
 
-        let ctx = engine.context(query).await;
+        let ctx = engine.context(query).await.unwrap();
 
         assert_eq!(ctx.tier, ContextTier::L1);
         assert!(ctx.index.is_empty(), "L1 should not generate index");
@@ -641,13 +731,15 @@ mod tests {
                 tier: ContextTier::L0,
                 ..Default::default()
             })
-            .await;
+            .await
+            .unwrap();
         let l2_ctx = engine
             .context(RecallContextQuery {
                 include_index: true,
                 ..Default::default()
             })
-            .await;
+            .await
+            .unwrap();
 
         assert!(
             l0_ctx.token_count < l2_ctx.token_count,

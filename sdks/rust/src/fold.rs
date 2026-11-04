@@ -137,6 +137,8 @@ mod tests {
             timestamp: "2026-01-01T00:00:00Z".into(),
             version: Some(1),
             tenant_id: None,
+            valid_from: None,
+            valid_to: None,
         }
     }
 

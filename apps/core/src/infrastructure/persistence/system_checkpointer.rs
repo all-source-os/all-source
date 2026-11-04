@@ -258,7 +258,11 @@ impl SystemCheckpointer {
         let folded = self.store.options().folded;
         let mut tenant_events: Vec<Event> = Vec::new();
         let mut verbatim: Vec<(u64, String)> = Vec::new();
-        for (sequence, event) in wal.into_iter().filter(|(s, _)| *s <= covered_seq) {
+        for (sequence, event) in wal
+            .into_iter()
+            .map(|entry| (entry.sequence, entry.event))
+            .filter(|(s, _)| *s <= covered_seq)
+        {
             if !crate::domain::value_objects::system_stream::is_system_event_type(
                 event.event_type_str(),
             ) {

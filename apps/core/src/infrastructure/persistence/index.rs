@@ -1,7 +1,24 @@
-use crate::error::Result;
+use crate::{domain::entities::Event, error::Result};
 use dashmap::DashMap;
 use std::sync::Arc;
 use uuid::Uuid;
+
+/// Valid-time interval of an indexed event. `from` is the effective start
+/// (`valid_from`, or record time when unset); `to` is `None` when open-ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValidWindow {
+    pub from: chrono::DateTime<chrono::Utc>,
+    pub to: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl ValidWindow {
+    pub fn of(event: &Event) -> Self {
+        Self {
+            from: event.effective_valid_from(),
+            to: event.valid_to,
+        }
+    }
+}
 
 /// Event index entry
 #[derive(Debug, Clone)]
@@ -9,6 +26,7 @@ pub struct IndexEntry {
     pub event_id: Uuid,
     pub offset: usize,
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub valid: ValidWindow,
 }
 
 /// High-performance concurrent index for fast event lookups
@@ -44,12 +62,14 @@ impl EventIndex {
         entity_id: &str,
         event_type: &str,
         timestamp: chrono::DateTime<chrono::Utc>,
+        valid: ValidWindow,
         offset: usize,
     ) -> Result<()> {
         let entry = IndexEntry {
             event_id,
             offset,
             timestamp,
+            valid,
         };
 
         // Index by entity_id
@@ -171,6 +191,10 @@ pub struct IndexStats {
 mod tests {
     use super::*;
 
+    fn open(from: chrono::DateTime<chrono::Utc>) -> ValidWindow {
+        ValidWindow { from, to: None }
+    }
+
     #[test]
     fn test_index_event() {
         let index = EventIndex::new();
@@ -178,7 +202,14 @@ mod tests {
         let timestamp = chrono::Utc::now();
 
         index
-            .index_event(event_id, "user-123", "user.created", timestamp, 0)
+            .index_event(
+                event_id,
+                "user-123",
+                "user.created",
+                timestamp,
+                open(timestamp),
+                0,
+            )
             .unwrap();
 
         assert_eq!(index.stats().total_events, 1);
@@ -193,7 +224,14 @@ mod tests {
         let timestamp = chrono::Utc::now();
 
         index
-            .index_event(event_id, "user-123", "user.created", timestamp, 0)
+            .index_event(
+                event_id,
+                "user-123",
+                "user.created",
+                timestamp,
+                open(timestamp),
+                0,
+            )
             .unwrap();
 
         let entries = index.get_by_entity("user-123").unwrap();
@@ -208,7 +246,14 @@ mod tests {
         let timestamp = chrono::Utc::now();
 
         index
-            .index_event(event_id, "user-123", "user.created", timestamp, 0)
+            .index_event(
+                event_id,
+                "user-123",
+                "user.created",
+                timestamp,
+                open(timestamp),
+                0,
+            )
             .unwrap();
 
         let entries = index.get_by_type("user.created").unwrap();
@@ -222,13 +267,13 @@ mod tests {
         let ts = chrono::Utc::now();
 
         index
-            .index_event(Uuid::new_v4(), "e-1", "index.created", ts, 0)
+            .index_event(Uuid::new_v4(), "e-1", "index.created", ts, open(ts), 0)
             .unwrap();
         index
-            .index_event(Uuid::new_v4(), "e-2", "index.updated", ts, 1)
+            .index_event(Uuid::new_v4(), "e-2", "index.updated", ts, open(ts), 1)
             .unwrap();
         index
-            .index_event(Uuid::new_v4(), "e-3", "trade.created", ts, 2)
+            .index_event(Uuid::new_v4(), "e-3", "trade.created", ts, open(ts), 2)
             .unwrap();
 
         let entries = index.get_by_type_prefix("index.");

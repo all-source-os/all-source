@@ -121,6 +121,9 @@ fn test_embedded_event_querying() {
     // Query by entity_id
     let order1_events = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("order-001".to_string()),
             event_type: None,
             tenant_id: None,
@@ -137,6 +140,9 @@ fn test_embedded_event_querying() {
     // Query by event_type
     let created_events = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: Some("order.created".to_string()),
             tenant_id: None,
@@ -301,6 +307,9 @@ async fn test_embedded_multi_tenant_isolation() {
     // Verify tenant isolation in queries
     let all_events = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("entity-1".to_string()),
             event_type: None,
             tenant_id: None,
@@ -640,6 +649,9 @@ async fn test_embedded_full_workflow() {
     // 6. Query order history
     let order_events = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("order-workflow-1".to_string()),
             event_type: None,
             tenant_id: None,

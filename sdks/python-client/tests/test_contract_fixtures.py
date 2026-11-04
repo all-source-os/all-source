@@ -91,6 +91,37 @@ def events_query_with_entity_version(
     _only_request(httpx_mock, fx)
 
 
+def entity_state_as_of_valid(
+    client: AllSourceClient, httpx_mock: HTTPXMock, fx: Dict[str, Any]
+) -> None:
+    respond(httpx_mock, fx)
+    state = client.entity_state("skill:abc", as_of_valid="2026-09-15T00:00:00Z")
+    assert isinstance(state, EntityState)
+    assert state.as_of_valid == "2026-09-15T00:00:00Z"
+    assert state.as_of is None
+    assert state.version == 3
+    assert state.etag == fx["response"]["headers"]["ETag"]
+    _only_request(httpx_mock, fx)
+
+
+def events_query_valid_time(
+    client: AllSourceClient, httpx_mock: HTTPXMock, fx: Dict[str, Any]
+) -> None:
+    respond(httpx_mock, fx)
+    result = client.query_events(
+        entity_id="skill:abc",
+        as_of_valid="2026-09-15T00:00:00Z",
+        since_valid="2026-09-01T00:00:00Z",
+        limit=1,
+    )
+    assert isinstance(result, EventList)
+    assert result.events[0].valid_from == "2026-09-05T00:00:00Z"
+    assert result.events[0].valid_to is None
+    assert result.entity_version == 3
+    assert result.etag == fx["response"]["headers"]["ETag"]
+    _only_request(httpx_mock, fx)
+
+
 def rate_limited_retry_after(
     client: AllSourceClient, httpx_mock: HTTPXMock, fx: Dict[str, Any]
 ) -> None:
@@ -283,9 +314,11 @@ def views_list(client: AllSourceClient, httpx_mock: HTTPXMock, fx: Dict[str, Any
 
 DRIVERS: Dict[str, Driver] = {
     "entity_state": entity_state,
+    "entity_state_as_of_valid": entity_state_as_of_valid,
     "entity_state_not_modified": entity_state_not_modified,
     "event_feed": event_feed,
     "event_feed_epoch_changed": event_feed_epoch_changed,
+    "events_query_valid_time": events_query_valid_time,
     "events_query_with_entity_version": events_query_with_entity_version,
     "rate_limited_retry_after": rate_limited_retry_after,
     "read_model_commit": read_model_commit,

@@ -1,5 +1,8 @@
 use crate::{
-    domain::value_objects::system_stream::{SystemDomain, config_events, system_entity_id_value},
+    domain::{
+        entities::Event,
+        value_objects::system_stream::{SystemDomain, config_events, system_entity_id_value},
+    },
     error::{AllSourceError, Result},
     infrastructure::persistence::SystemMetadataStore,
 };
@@ -219,13 +222,17 @@ impl EventSourcedConfigRepository {
     /// Replays config events up to the given timestamp to determine
     /// what the value was at that time.
     pub fn get_at(&self, key: &str, as_of: DateTime<Utc>) -> Option<serde_json::Value> {
-        let events = self.system_store.read_entity(SystemDomain::Config, key);
+        let mut events: Vec<_> = self
+            .system_store
+            .read_entity(SystemDomain::Config, key)
+            .into_iter()
+            .filter(|event| event.timestamp() <= as_of)
+            .collect();
+        // Append order is not timestamp order once a replicated event lands.
+        events.sort_by_key(Event::timestamp);
         let mut current_value: Option<serde_json::Value> = None;
 
         for event in events {
-            if event.timestamp() > as_of {
-                break;
-            }
             match event.event_type_str() {
                 t if t == config_events::SET => {
                     current_value = event.payload().get("value").cloned();
@@ -372,5 +379,31 @@ mod tests {
         // Value at point in time
         let past_value = repo.get_at("key1", after_v1);
         assert_eq!(past_value, Some(serde_json::json!("v1")));
+    }
+
+    #[test]
+    fn get_at_reads_a_value_stored_after_a_later_event() {
+        let (repo, _dir) = create_test_repo();
+
+        let later = repo
+            .system_store
+            .append_system_event(
+                config_events::SET,
+                system_entity_id_value(SystemDomain::Config, "key1"),
+                serde_json::json!({"value": "later"}),
+                None,
+            )
+            .unwrap();
+        let mut earlier = later.clone();
+        earlier.id = Uuid::new_v4();
+        earlier.timestamp = later.timestamp - chrono::Duration::hours(1);
+        earlier.payload = serde_json::json!({"value": "earlier"});
+        repo.system_store.append(earlier.clone()).unwrap();
+
+        let as_of = earlier.timestamp + chrono::Duration::minutes(1);
+        assert_eq!(
+            repo.get_at("key1", as_of),
+            Some(serde_json::json!("earlier"))
+        );
     }
 }

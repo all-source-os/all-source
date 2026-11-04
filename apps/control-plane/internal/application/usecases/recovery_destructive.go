@@ -3,11 +3,28 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/allsource/control-plane/internal/domain"
 	"github.com/allsource/control-plane/internal/domain/entities"
 	"github.com/allsource/control-plane/internal/infrastructure/clients"
 )
+
+// asOfLayout is shared by the operation record and the Core request.
+const asOfLayout = time.RFC3339Nano
+
+// ParseAsOf rejects malformed input: a nil result widens the replay to all history.
+func ParseAsOf(raw string) (*time.Time, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(asOfLayout, raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: as_of %q is not RFC3339", domain.ErrInvalidInput, raw)
+	}
+	return &t, nil
+}
 
 // ----------------------------------------------------------------------------
 // Destructive: rotate_keys (confirm_token)
@@ -175,11 +192,10 @@ func (uc *RecoveryUseCase) Restore(ctx context.Context, tenantID string, req Rec
 	// snapshot_id is optional in Extra; absent or non-string means "no snapshot
 	// pinned", which downstream handles.
 	snapshotID, _ := req.Extra["snapshot_id"].(string) //nolint:forcetypeassert,errcheck // optional field, zero value is meaningful
-	var asOf *time.Time
-	if v, ok := req.Extra["as_of"].(string); ok && v != "" {
-		if parsed, perr := time.Parse(time.RFC3339, v); perr == nil {
-			asOf = &parsed
-		}
+	rawAsOf, _ := req.Extra["as_of"].(string)          //nolint:forcetypeassert,errcheck // absent means no point in time
+	asOf, err := ParseAsOf(rawAsOf)
+	if err != nil {
+		return nil, err
 	}
 	// The replay entity scope. Default to the tenant id (Core replays a tenant's
 	// stream when given the tenant as the entity); callers may target one entity.

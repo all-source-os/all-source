@@ -57,6 +57,9 @@ fn unreadable_partition_cannot_authorize_append_even_after_tolerant_query() {
             assert!(
                 store
                     .query(&QueryEventsRequest {
+                        as_of_valid: None,
+                        since_valid: None,
+                        until_valid: None,
                         tenant_id: Some(TENANT.into()),
                         ..Default::default()
                     })

@@ -112,6 +112,9 @@ fn later_batch_failure_cannot_authorize_a_conditional_append() {
         drop(storage);
         let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
         let query = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some(ENTITY.into()),
             tenant_id: Some(TENANT.into()),
             ..Default::default()

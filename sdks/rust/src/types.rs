@@ -32,6 +32,13 @@ pub struct IngestEventInput {
     /// Core reads the field per event, not per request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_version: Option<u64>,
+    /// Valid time: when the fact became true, RFC 3339. Set with
+    /// [`Self::with_valid_from`]. The record time is always Core's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<String>,
+    /// Valid time: when the fact stopped being true, RFC 3339.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_to: Option<String>,
 }
 
 impl IngestEventInput {
@@ -47,6 +54,8 @@ impl IngestEventInput {
             payload,
             metadata: None,
             expected_version: None,
+            valid_from: None,
+            valid_to: None,
         }
     }
 
@@ -65,6 +74,22 @@ impl IngestEventInput {
         self.expected_version = Some(version);
         self
     }
+
+    /// Start of the interval during which the fact is true (RFC 3339).
+    /// Without it Core uses the record time.
+    #[must_use]
+    pub fn with_valid_from(mut self, timestamp: &str) -> Self {
+        self.valid_from = Some(timestamp.to_string());
+        self
+    }
+
+    /// End of the interval during which the fact is true (RFC 3339).
+    /// Without it the fact stays true until a later event says otherwise.
+    #[must_use]
+    pub fn with_valid_to(mut self, timestamp: &str) -> Self {
+        self.valid_to = Some(timestamp.to_string());
+        self
+    }
 }
 
 /// A stored event returned from AllSource.
@@ -81,6 +106,12 @@ pub struct Event {
     pub version: Option<i64>,
     #[serde(default)]
     pub tenant_id: Option<String>,
+    /// Start of the valid interval. Absent from a Core without valid time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<String>,
+    /// End of the valid interval; `None` when open-ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_to: Option<String>,
 }
 
 /// Sort order for [`QueryEventsParams`] results.
@@ -150,8 +181,17 @@ pub struct QueryEventsParams {
     pub event_type_prefix: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+    /// Record-time bounds. `since` and `until` are the record axis, as before.
     pub since: Option<String>,
     pub until: Option<String>,
+    /// Record-time instant: events Core had filed by then. `as_of` is the record axis.
+    pub as_of: Option<String>,
+    /// Valid-time instant: events whose valid interval contains it.
+    pub as_of_valid: Option<String>,
+    /// Valid-time lower bound on `valid_from`, inclusive.
+    pub since_valid: Option<String>,
+    /// Valid-time upper bound on `valid_from`, inclusive.
+    pub until_valid: Option<String>,
     /// Filter by payload fields. Keys and values are matched exactly against top-level payload fields.
     /// Multiple entries use AND logic (all must match).
     pub payload_filter: Option<std::collections::HashMap<String, String>>,
@@ -203,6 +243,30 @@ impl QueryEventsParams {
 
     pub fn until(mut self, ts: &str) -> Self {
         self.until = Some(ts.to_string());
+        self
+    }
+
+    /// Record-time instant: only events Core had filed by `ts`.
+    pub fn as_of(mut self, ts: &str) -> Self {
+        self.as_of = Some(ts.to_string());
+        self
+    }
+
+    /// Valid-time instant: only events whose valid interval contains `ts`.
+    pub fn as_of_valid(mut self, ts: &str) -> Self {
+        self.as_of_valid = Some(ts.to_string());
+        self
+    }
+
+    /// Valid-time lower bound on `valid_from`, inclusive.
+    pub fn since_valid(mut self, ts: &str) -> Self {
+        self.since_valid = Some(ts.to_string());
+        self
+    }
+
+    /// Valid-time upper bound on `valid_from`, inclusive.
+    pub fn until_valid(mut self, ts: &str) -> Self {
+        self.until_valid = Some(ts.to_string());
         self
     }
 
@@ -261,6 +325,18 @@ impl QueryEventsParams {
         }
         if let Some(ref v) = self.until {
             pairs.push(("until", v.clone()));
+        }
+        if let Some(ref v) = self.as_of {
+            pairs.push(("as_of", v.clone()));
+        }
+        if let Some(ref v) = self.as_of_valid {
+            pairs.push(("as_of_valid", v.clone()));
+        }
+        if let Some(ref v) = self.since_valid {
+            pairs.push(("since_valid", v.clone()));
+        }
+        if let Some(ref v) = self.until_valid {
+            pairs.push(("until_valid", v.clone()));
         }
         if let Some(ref v) = self.payload_filter {
             if let Ok(json) = serde_json::to_string(v) {
@@ -450,6 +526,13 @@ pub struct IngestResponse {
     /// to report it.
     #[serde(default)]
     pub version: Option<u64>,
+    /// Effective start of the valid interval: the sent `valid_from`, or the
+    /// record time when none was sent. `None` from a Core without valid time.
+    #[serde(default)]
+    pub valid_from: Option<String>,
+    /// Record time Core assigned. The caller cannot set it.
+    #[serde(default)]
+    pub recorded_at: Option<String>,
 }
 
 /// Response from batch ingesting events via Core.
@@ -697,6 +780,69 @@ mod tests {
             !pairs.iter().any(|(k, _)| *k == "order"),
             "order must not be sent unless set, so Core's default applies"
         );
+    }
+
+    #[test]
+    fn test_query_params_valid_time_axes_are_separate_keys() {
+        let params = QueryEventsParams::new()
+            .as_of("2026-10-01T00:00:00Z")
+            .as_of_valid("2026-09-01T00:00:00Z")
+            .since_valid("2026-08-01T00:00:00Z")
+            .until_valid("2026-08-31T00:00:00Z")
+            .since("2026-01-01T00:00:00Z");
+        let pairs = params.to_query_pairs();
+        for (key, value) in [
+            ("as_of", "2026-10-01T00:00:00Z"),
+            ("as_of_valid", "2026-09-01T00:00:00Z"),
+            ("since_valid", "2026-08-01T00:00:00Z"),
+            ("until_valid", "2026-08-31T00:00:00Z"),
+            ("since", "2026-01-01T00:00:00Z"),
+        ] {
+            assert!(
+                pairs.iter().any(|(k, v)| *k == key && v == value),
+                "missing {key}={value}"
+            );
+        }
+        assert!(!pairs.iter().any(|(k, _)| *k == "until"));
+    }
+
+    #[test]
+    fn test_query_params_omit_valid_time_by_default() {
+        let params = QueryEventsParams::new().entity_id("e1");
+        let pairs = params.to_query_pairs();
+        assert!(!pairs
+            .iter()
+            .any(|(k, _)| k.contains("valid") || *k == "as_of"));
+    }
+
+    #[test]
+    fn test_ingest_input_valid_time_serialized_only_when_set() {
+        let plain = serde_json::to_value(IngestEventInput::new("a.b", "e1", serde_json::json!({})))
+            .unwrap();
+        assert!(plain.get("valid_from").is_none());
+        assert!(plain.get("valid_to").is_none());
+
+        let dated = IngestEventInput::new("a.b", "e1", serde_json::json!({}))
+            .with_valid_from("2026-09-01T00:00:00Z")
+            .with_valid_to("2026-09-30T00:00:00Z");
+        let sent = serde_json::to_value(dated).unwrap();
+        assert_eq!(sent["valid_from"], "2026-09-01T00:00:00Z");
+        assert_eq!(sent["valid_to"], "2026-09-30T00:00:00Z");
+    }
+
+    #[test]
+    fn test_ingest_response_reads_valid_time_and_tolerates_old_core() {
+        let new: IngestResponse = serde_json::from_str(
+            r#"{"event_id":"a","timestamp":"t1","valid_from":"t0","recorded_at":"t1"}"#,
+        )
+        .unwrap();
+        assert_eq!(new.valid_from.as_deref(), Some("t0"));
+        assert_eq!(new.recorded_at.as_deref(), Some("t1"));
+
+        let old: IngestResponse =
+            serde_json::from_str(r#"{"event_id":"a","timestamp":"t1"}"#).unwrap();
+        assert!(old.valid_from.is_none());
+        assert!(old.recorded_at.is_none());
     }
 
     #[test]

@@ -218,6 +218,9 @@ impl AnalyticsEngine {
 
         // Query events in the time range
         let events = store.query(&crate::application::dto::QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: request.entity_id.clone(),
             event_type: request.event_type.clone(),
             tenant_id: None,
@@ -323,6 +326,9 @@ impl AnalyticsEngine {
     ) -> Result<StatsSummaryResponse> {
         // Query events based on filters
         let events = store.query(&crate::application::dto::QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: request.entity_id.clone(),
             event_type: request.event_type.clone(),
             tenant_id: None,
@@ -415,6 +421,9 @@ impl AnalyticsEngine {
     ) -> Result<CorrelationResponse> {
         // Query both event types
         let events_a = store.query(&crate::application::dto::QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: Some(request.event_type_a.clone()),
             tenant_id: None,
@@ -428,6 +437,9 @@ impl AnalyticsEngine {
         })?;
 
         let events_b = store.query(&crate::application::dto::QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: None,
             event_type: Some(request.event_type_b.clone()),
             tenant_id: None,

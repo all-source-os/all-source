@@ -184,6 +184,9 @@ fn distinct_ids_after_reopen(data_dir: &Path) -> HashSet<uuid::Uuid> {
     store.hydrate_all_from_storage().expect("hydrate");
     store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             tenant_id: Some("default".to_string()),
             limit: Some(100_000),
             ..Default::default()

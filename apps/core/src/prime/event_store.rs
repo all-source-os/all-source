@@ -11,6 +11,8 @@
 //! [`EmbeddedCore`] before it is wrapped behind the trait — see
 //! [`Prime::from_core`](super::facade::Prime).
 
+use chrono::{DateTime, Utc};
+
 use crate::{
     embedded::{EmbeddedCore, EventView, IngestEvent, Query},
     error::Result,
@@ -30,6 +32,15 @@ pub trait EventStore: Send + Sync {
     /// See [`EmbeddedCore::ingest_batch`].
     async fn ingest_batch(&self, events: Vec<IngestEvent<'_>>) -> Result<()>;
 
+    /// Ingest an event with an explicit valid interval.
+    /// See [`EmbeddedCore::ingest_with_valid_time`].
+    async fn ingest_with_valid_time(
+        &self,
+        event: IngestEvent<'_>,
+        valid_from: Option<DateTime<Utc>>,
+        valid_to: Option<DateTime<Utc>>,
+    ) -> Result<()>;
+
     /// Query events. See [`EmbeddedCore::query`].
     async fn query(&self, query: Query) -> Result<Vec<EventView>>;
 
@@ -45,6 +56,15 @@ impl EventStore for EmbeddedCore {
 
     async fn ingest_batch(&self, events: Vec<IngestEvent<'_>>) -> Result<()> {
         EmbeddedCore::ingest_batch(self, events).await
+    }
+
+    async fn ingest_with_valid_time(
+        &self,
+        event: IngestEvent<'_>,
+        valid_from: Option<DateTime<Utc>>,
+        valid_to: Option<DateTime<Utc>>,
+    ) -> Result<()> {
+        EmbeddedCore::ingest_with_valid_time(self, event, valid_from, valid_to).await
     }
 
     async fn query(&self, query: Query) -> Result<Vec<EventView>> {

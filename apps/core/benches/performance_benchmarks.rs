@@ -67,6 +67,9 @@ fn bench_query_performance(c: &mut Criterion) {
     group.bench_function("query_all_entity_events", |b| {
         b.iter(|| {
             let query = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("entity-42".to_string()),
                 event_type: None,
                 tenant_id: None,
@@ -83,6 +86,9 @@ fn bench_query_performance(c: &mut Criterion) {
     group.bench_function("query_by_type", |b| {
         b.iter(|| {
             let query = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: Some("query.test".to_string()),
                 tenant_id: None,
@@ -188,6 +194,9 @@ fn bench_index_lookups(c: &mut Criterion) {
     group.bench_function("entity_index_lookup", |b| {
         b.iter(|| {
             let query = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: Some("indexed-entity-50".to_string()),
                 event_type: None,
                 tenant_id: None,
@@ -204,6 +213,9 @@ fn bench_index_lookups(c: &mut Criterion) {
     group.bench_function("type_index_lookup", |b| {
         b.iter(|| {
             let query = QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: Some("event.type.5".to_string()),
                 tenant_id: None,

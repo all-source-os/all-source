@@ -74,6 +74,11 @@ pub enum MergePolicy {
 pub struct Observation {
     /// When this fact became true. Used by `MergePolicy::LastWrite`.
     pub observed_at: DateTime<Utc>,
+    /// When the observation was filed. Breaks `observed_at` ties under
+    /// `MergePolicy::LastWrite`, so a correction filed later with the same
+    /// valid time wins. Unset observations sort before filed ones.
+    #[serde(default)]
+    pub recorded_at: Option<DateTime<Utc>>,
     /// Source quality / trust level. Higher = more authoritative. Used by
     /// `MergePolicy::HighestPriority`. Convention: user correction = 1000,
     /// structured agent write = 100, AI extraction = 0.
@@ -167,6 +172,7 @@ fn apply_policy_with_source<'a>(
         MergePolicy::LastWrite => pick_observation(observations, field, |a, b| {
             a.observed_at
                 .cmp(&b.observed_at)
+                .then_with(|| a.recorded_at.cmp(&b.recorded_at))
                 // Stable tiebreak: when two observations share observed_at,
                 // prefer the one with the lexicographically smaller
                 // source_event_id so input order can't change the result.
@@ -351,6 +357,7 @@ mod tests {
             .collect();
         Observation {
             observed_at: Utc.timestamp_opt(ts, 0).single().unwrap(),
+            recorded_at: None,
             source_priority: priority,
             specificity_score: specificity,
             source_event_id: id.to_string(),
@@ -621,6 +628,7 @@ mod tests {
                 fields.insert("f".to_string(), val);
                 Observation {
                     observed_at: Utc.timestamp_opt(ts, 0).single().unwrap(),
+                    recorded_at: None,
                     source_priority: prio,
                     specificity_score: spec,
                     source_event_id: id,

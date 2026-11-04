@@ -107,6 +107,8 @@ class Event:
     version: int
     tenant_id: Optional[str] = None
     metadata: Optional[Any] = None
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> Event:
@@ -119,6 +121,8 @@ class Event:
             version=data.get("version", 0),
             tenant_id=data.get("tenant_id"),
             metadata=data.get("metadata"),
+            valid_from=data.get("valid_from"),
+            valid_to=data.get("valid_to"),
         )
 
 
@@ -158,6 +162,7 @@ class EntityState:
     version: int
     etag: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
+    as_of_valid: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], etag: Optional[str] = None) -> EntityState:
@@ -171,6 +176,7 @@ class EntityState:
             version=data.get("version", event_count),
             etag=etag,
             history=data.get("history"),
+            as_of_valid=data.get("as_of_valid"),
         )
 
 

@@ -146,6 +146,9 @@ impl ReplayManager {
 
         // Query events to replay
         let query = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: request.entity_id.clone(),
             event_type: request.event_type.clone(),
             tenant_id: None,

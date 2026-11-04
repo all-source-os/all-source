@@ -182,12 +182,20 @@ def _data(result: Any) -> Any:
 # --- Events ---
 
 
-def ingest_request(event_type: str, entity_id: str, payload: Dict[str, Any]) -> Request:
-    return Request(
-        "POST",
-        "/api/v1/events",
-        body={"event_type": event_type, "entity_id": entity_id, "payload": payload},
-    )
+def ingest_request(
+    event_type: str,
+    entity_id: str,
+    payload: Dict[str, Any],
+    *,
+    valid_from: Optional[str] = None,
+    valid_to: Optional[str] = None,
+) -> Request:
+    body: Dict[str, Any] = {"event_type": event_type, "entity_id": entity_id, "payload": payload}
+    if valid_from is not None:
+        body["valid_from"] = valid_from
+    if valid_to is not None:
+        body["valid_to"] = valid_to
+    return Request("POST", "/api/v1/events", body=body)
 
 
 def _event_from_ack(ack: Mapping[str, Any], sent: Mapping[str, Any]) -> Event:
@@ -200,6 +208,7 @@ def _event_from_ack(ack: Mapping[str, Any], sent: Mapping[str, Any]) -> Event:
         payload=dict(sent.get("payload") or {}),
         timestamp=str(ack.get("timestamp", "")),
         version=_int(ack.get("version")),
+        valid_from=ack.get("valid_from"),
     )
 
 
@@ -228,6 +237,9 @@ def query_events_request(
     since: Optional[str] = None,
     until: Optional[str] = None,
     as_of: Optional[str] = None,
+    as_of_valid: Optional[str] = None,
+    since_valid: Optional[str] = None,
+    until_valid: Optional[str] = None,
     payload_filter: Optional[Mapping[str, Any]] = None,
     order: Optional[str] = None,
     limit: Optional[int] = None,
@@ -247,6 +259,12 @@ def query_events_request(
         params["until"] = until
     if as_of is not None:
         params["as_of"] = as_of
+    if as_of_valid is not None:
+        params["as_of_valid"] = as_of_valid
+    if since_valid is not None:
+        params["since_valid"] = since_valid
+    if until_valid is not None:
+        params["until_valid"] = until_valid
     if payload_filter is not None:
         params["payload_filter"] = json.dumps(payload_filter, separators=(",", ":"))
     if order is not None:
@@ -271,12 +289,15 @@ def entity_state_request(
     entity_id: str,
     *,
     as_of: Optional[str] = None,
+    as_of_valid: Optional[str] = None,
     history: bool = False,
     if_none_match: Optional[str] = None,
 ) -> Request:
     params: Dict[str, str] = {}
     if as_of is not None:
         params["as_of"] = as_of
+    if as_of_valid is not None:
+        params["as_of_valid"] = as_of_valid
     if history:
         params["history"] = _flag(True)
     return Request(

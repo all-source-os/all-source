@@ -463,7 +463,7 @@ impl WriteAheadLog {
         Ok(self
             .recover_entries()?
             .into_iter()
-            .map(|(_, event)| event)
+            .map(|entry| entry.event)
             .collect())
     }
 
@@ -472,9 +472,9 @@ impl WriteAheadLog {
     pub fn recover_for_append(&self) -> Result<Vec<Event>> {
         let mut recovered = self.recover_entries()?;
         // An older segment can end with entries appended after a restart.
-        recovered.sort_by_key(|(sequence, _)| *sequence);
+        recovered.sort_by_key(|entry| entry.sequence);
         self.seal()?;
-        Ok(recovered.into_iter().map(|(_, event)| event).collect())
+        Ok(recovered.into_iter().map(|entry| entry.event).collect())
     }
 
     /// Recover only what a system checkpoint does not cover, then move the
@@ -489,7 +489,7 @@ impl WriteAheadLog {
         &self,
         covered_seq: u64,
         covered: &[CoveredSegment],
-    ) -> Result<Vec<(u64, Event)>> {
+    ) -> Result<Vec<WALEntry>> {
         let mut wal_files = self.list_wal_files()?;
         wal_files.sort();
         let mut recovered = Vec::new();
@@ -524,20 +524,21 @@ impl WriteAheadLog {
             if corrupted > 0 {
                 self.unreadable_segments.lock().insert(path.clone());
             }
-            for (sequence, event) in entries {
-                if sequence <= covered_seq {
+            for entry in entries {
+                if entry.sequence <= covered_seq {
                     return Err(AllSourceError::StorageError(format!(
-                        "WAL segment {name} holds sequence {sequence} at or below checkpoint \
-                         sequence {covered_seq} outside the bytes it covered"
+                        "WAL segment {name} holds sequence {} at or below checkpoint \
+                         sequence {covered_seq} outside the bytes it covered",
+                        entry.sequence
                     )));
                 }
-                max_sequence = max_sequence.max(sequence);
-                recovered.push((sequence, event));
+                max_sequence = max_sequence.max(entry.sequence);
+                recovered.push(entry);
             }
         }
         *self.sequence.write() = max_sequence;
         self.stats.write().recovery_count += 1;
-        recovered.sort_by_key(|(sequence, _)| *sequence);
+        recovered.sort_by_key(|entry| entry.sequence);
         self.seal()?;
         tracing::info!(
             "✅ WAL recovery after checkpoint {covered_seq}: {} segments skipped, {} events \
@@ -548,29 +549,30 @@ impl WriteAheadLog {
         Ok(recovered)
     }
 
-    /// [`Self::recover_for_append`], keeping each event's sequence. The next
-    /// sequence is above `floor` even if no entry reaches it.
-    pub fn recover_entries_for_append(&self, floor: u64) -> Result<Vec<(u64, Event)>> {
+    /// [`Self::recover_for_append`], keeping each entry's sequence and
+    /// `wal_timestamp`. The next sequence is above `floor` even if no entry
+    /// reaches it.
+    pub fn recover_entries_for_append(&self, floor: u64) -> Result<Vec<WALEntry>> {
         let mut recovered = self.recover_entries()?;
         {
             let mut sequence = self.sequence.write();
             *sequence = (*sequence).max(floor);
         }
-        recovered.sort_by_key(|(sequence, _)| *sequence);
+        recovered.sort_by_key(|entry| entry.sequence);
         self.seal()?;
         Ok(recovered)
     }
 
     /// Every readable entry, in sequence order, without moving the writer or
     /// marking segments.
-    pub fn read_all_entries(&self) -> Result<Vec<(u64, Event)>> {
+    pub fn read_all_entries(&self) -> Result<Vec<WALEntry>> {
         let mut wal_files = self.list_wal_files()?;
         wal_files.sort();
         let mut entries = Vec::new();
         for path in &wal_files {
             entries.extend(Self::read_segment(path, 0)?.0);
         }
-        entries.sort_by_key(|(sequence, _)| *sequence);
+        entries.sort_by_key(|entry| entry.sequence);
         Ok(entries)
     }
 
@@ -607,7 +609,7 @@ impl WriteAheadLog {
 
     /// Readable entries of one segment from `offset`, and how many lines
     /// could not be read.
-    fn read_segment(path: &Path, offset: u64) -> Result<(Vec<(u64, Event)>, usize)> {
+    fn read_segment(path: &Path, offset: u64) -> Result<(Vec<WALEntry>, usize)> {
         let mut file = File::open(path).map_err(|e| {
             AllSourceError::StorageError(format!("Failed to open WAL file for recovery: {e}"))
         })?;
@@ -638,7 +640,7 @@ impl WriteAheadLog {
             }
 
             match serde_json::from_str::<WALEntry>(&line) {
-                Ok(entry) if entry.verify() => entries.push((entry.sequence, entry.event)),
+                Ok(entry) if entry.verify() => entries.push(entry),
                 Ok(_) => {
                     tracing::warn!(
                         "Corrupted WAL entry at {:?}:{} (checksum mismatch)",
@@ -661,7 +663,7 @@ impl WriteAheadLog {
         Ok((entries, corrupted))
     }
 
-    fn recover_entries(&self) -> Result<Vec<(u64, Event)>> {
+    fn recover_entries(&self) -> Result<Vec<WALEntry>> {
         tracing::info!("🔄 Starting WAL recovery...");
 
         let mut wal_files = self.list_wal_files()?;
@@ -680,9 +682,9 @@ impl WriteAheadLog {
                     .insert(wal_file_path.clone());
             }
             corrupted_entries += corrupted;
-            for (sequence, event) in entries {
-                max_sequence = max_sequence.max(sequence);
-                recovered.push((sequence, event));
+            for entry in entries {
+                max_sequence = max_sequence.max(entry.sequence);
+                recovered.push(entry);
             }
         }
 
@@ -930,6 +932,55 @@ mod tests {
     }
 
     #[test]
+    fn test_recovery_keeps_wal_timestamp() {
+        let temp_dir = TempDir::new().unwrap();
+        let wal = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        for _ in 0..3 {
+            wal.append(create_test_event()).unwrap();
+        }
+        wal.flush().unwrap();
+
+        let written: Vec<WALEntry> =
+            std::fs::read_to_string(temp_dir.path().join("wal-0000000000000000.log"))
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+
+        let wal2 = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        let recovered = wal2.recover_entries_for_append(0).unwrap();
+
+        assert_eq!(recovered.len(), 3);
+        for (entry, on_disk) in recovered.iter().zip(&written) {
+            assert_eq!(entry.sequence, on_disk.sequence);
+            assert_eq!(entry.wal_timestamp, on_disk.wal_timestamp);
+        }
+    }
+
+    #[test]
+    fn test_wal_round_trips_valid_time_and_reads_pre_axis_lines() {
+        let temp_dir = TempDir::new().unwrap();
+        let valid_from = Utc::now() - chrono::Duration::days(3);
+        let dated = create_test_event()
+            .with_valid_time(Some(valid_from), None)
+            .unwrap();
+
+        let wal = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        wal.append(create_test_event()).unwrap();
+        wal.append(dated).unwrap();
+        wal.flush().unwrap();
+
+        let wal2 = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        let recovered = wal2.recover_entries_for_append(0).unwrap();
+
+        assert_eq!(recovered.len(), 2);
+        assert_eq!(recovered[0].event.valid_from, None);
+        assert_eq!(recovered[0].event.valid_to, None);
+        assert_eq!(recovered[1].event.valid_from, Some(valid_from));
+        assert_eq!(recovered[1].event.valid_to, None);
+    }
+
+    #[test]
     fn test_wal_recovery_with_partial_write() {
         let temp_dir = TempDir::new().unwrap();
         let wal = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
@@ -1145,5 +1196,47 @@ mod tests {
         // Verify recovery returns empty
         let recovered = wal.recover().unwrap();
         assert_eq!(recovered.len(), 0);
+    }
+
+    #[test]
+    fn valid_time_survives_a_restart() {
+        let temp_dir = TempDir::new().unwrap();
+        let wal = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+
+        let mut event = create_test_event();
+        let valid_from = Utc::now() - chrono::Duration::days(30);
+        let valid_to = Utc::now() + chrono::Duration::days(1);
+        event.valid_from = Some(valid_from);
+        event.valid_to = Some(valid_to);
+        wal.append(event.clone()).unwrap();
+        wal.flush().unwrap();
+        drop(wal);
+
+        let wal2 = WriteAheadLog::new(temp_dir.path(), WALConfig::default()).unwrap();
+        let recovered = wal2.recover().unwrap();
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(recovered[0].valid_from, Some(valid_from));
+        assert_eq!(recovered[0].valid_to, Some(valid_to));
+        assert_eq!(recovered[0], event);
+    }
+
+    #[test]
+    fn a_wal_line_without_valid_time_reads_back_unset() {
+        let event = create_test_event();
+        let line = serde_json::json!({
+            "sequence": 1,
+            "wal_timestamp": Utc::now(),
+            "event": serde_json::to_value(&event).unwrap(),
+            "checksum": 0,
+        });
+        assert!(
+            line["event"].get("valid_from").is_none() && line["event"].get("valid_to").is_none(),
+            "an event with no valid time must not write the keys"
+        );
+
+        let entry: WALEntry = serde_json::from_value(line).unwrap();
+        assert_eq!(entry.event.valid_from, None);
+        assert_eq!(entry.event.valid_to, None);
+        assert_eq!(entry.event, event);
     }
 }

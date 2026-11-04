@@ -182,7 +182,7 @@ async fn main() -> anyhow::Result<()> {
             max_tokens: Some(500),
             ..RecallContextQuery::default()
         })
-        .await;
+        .await?;
 
     println!("Context retrieved ({} tokens):", ctx.token_count);
     if !ctx.index.is_empty() {

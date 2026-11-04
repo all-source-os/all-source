@@ -38,6 +38,9 @@ fn test_full_lifecycle_in_memory() {
 
     // Query all events
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("user-1".to_string()),
         event_type: None,
         tenant_id: None,
@@ -159,6 +162,9 @@ fn test_wal_durability_and_recovery() {
 
         // Verify specific entity exists
         let query = QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("user-2".to_string()),
             event_type: None,
             tenant_id: None,
@@ -253,6 +259,9 @@ fn test_multi_entity_queries() {
 
     // Query specific user
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("user-3".to_string()),
         event_type: None,
         tenant_id: None,
@@ -267,6 +276,9 @@ fn test_multi_entity_queries() {
 
     // Query all events of specific type
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: Some("activity.logged".to_string()),
         tenant_id: None,
@@ -399,6 +411,9 @@ fn test_event_stream_ordering() {
     }
 
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("ordered-entity".to_string()),
         event_type: None,
         tenant_id: None,
@@ -473,6 +488,9 @@ fn test_entity_not_found_error() {
 
     // Query should return empty for non-existent entity
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("non-existent".to_string()),
         event_type: None,
         tenant_id: None,
@@ -548,6 +566,9 @@ fn test_metadata_preservation() {
     store.ingest(&event).unwrap();
 
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some("meta-entity".to_string()),
         event_type: None,
         tenant_id: None,

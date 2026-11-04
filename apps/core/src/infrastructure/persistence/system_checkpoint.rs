@@ -270,6 +270,6 @@ pub fn reject_all(dir: &Path) -> Result<usize> {
     Ok(moved)
 }
 
-pub(crate) const fn format() -> u32 {
+pub const fn format() -> u32 {
     FORMAT
 }

@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use std::path::Path;
 
+use chrono::{DateTime, Utc};
+
 use crate::{
     application::dto::QueryEventsRequest,
     domain::entities::Event,
@@ -190,6 +192,18 @@ impl EmbeddedCore {
     ///
     /// The blocking store write is offloaded to `spawn_blocking`.
     pub async fn ingest(&self, event: IngestEvent<'_>) -> Result<()> {
+        self.ingest_with_valid_time(event, None, None).await
+    }
+
+    /// Ingest an event that became true at `valid_from` and stopped at
+    /// `valid_to`. Record time is still assigned by Core. `None` bounds mean
+    /// what [`Self::ingest`] means: valid from the record time, open-ended.
+    pub async fn ingest_with_valid_time(
+        &self,
+        event: IngestEvent<'_>,
+        valid_from: Option<DateTime<Utc>>,
+        valid_to: Option<DateTime<Utc>>,
+    ) -> Result<()> {
         let tenant_id = self.effective_tenant_id(event.tenant_id);
         let domain_event = Event::from_strings(
             event.event_type.to_string(),
@@ -197,7 +211,8 @@ impl EmbeddedCore {
             tenant_id,
             event.payload,
             event.metadata,
-        )?;
+        )?
+        .with_valid_time(valid_from, valid_to)?;
 
         // If sync is enabled, stamp the event and mark it as seen
         if let (Some(hlc), Some(resolver)) = (&self.hlc, &self.resolver) {
@@ -289,6 +304,7 @@ impl EmbeddedCore {
         tokio::task::spawn_blocking(move || {
             // Query all token events for this entity
             let all_events = store.query(&QueryEventsRequest {
+                    as_of_valid: None, since_valid: None, until_valid: None,
                 entity_id: Some(entity_id.clone()),
                 event_type: Some("workflow.token".to_string()),
                 tenant_id: None,
@@ -386,6 +402,9 @@ impl EmbeddedCore {
         let self_store = Arc::clone(&self.store);
         let all_events = tokio::task::spawn_blocking(move || {
             self_store.query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,
@@ -462,6 +481,9 @@ impl EmbeddedCore {
     /// Query events. Returns `Vec<EventView>` with plain string fields.
     pub async fn query(&self, query: Query) -> Result<Vec<EventView>> {
         let request = QueryEventsRequest {
+            as_of_valid: query.as_of_valid,
+            since_valid: query.since_valid,
+            until_valid: query.until_valid,
             entity_id: query.entity_id,
             event_type: query.event_type,
             tenant_id: query.tenant_id,
@@ -494,6 +516,9 @@ impl EmbeddedCore {
         let descending = query.descending;
         let requested_limit = query.limit;
         let request = QueryEventsRequest {
+            as_of_valid: query.as_of_valid,
+            since_valid: query.since_valid,
+            until_valid: query.until_valid,
             entity_id: query.entity_id,
             event_type: query.event_type,
             tenant_id: query.tenant_id,
@@ -737,9 +762,19 @@ impl EmbeddedCore {
                         .cloned()
                         .unwrap_or(serde_json::json!({}));
                     let metadata = event_data.get("metadata").cloned();
+                    let instant = |key: &str| {
+                        event_data
+                            .get(key)
+                            .and_then(|v| serde_json::from_value::<DateTime<Utc>>(v.clone()).ok())
+                    };
+                    // Record time is the receive time here, so an unset valid_from
+                    // is pinned to the origin's record time to keep the fact's interval.
+                    let valid_from = instant("valid_from").or_else(|| instant("timestamp"));
+                    let valid_to = instant("valid_to");
 
                     let domain_event =
-                        Event::from_strings(event_type, entity_id, tenant_id, payload, metadata)?;
+                        Event::from_strings(event_type, entity_id, tenant_id, payload, metadata)?
+                            .with_valid_time(valid_from, valid_to)?;
                     store.ingest(&domain_event)?;
                 }
                 Ok::<(), crate::error::AllSourceError>(())
@@ -782,6 +817,9 @@ impl EmbeddedCore {
         let store = Arc::clone(&self.store);
         let all_events = tokio::task::spawn_blocking(move || {
             store.query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 entity_id: None,
                 event_type: None,
                 tenant_id: None,

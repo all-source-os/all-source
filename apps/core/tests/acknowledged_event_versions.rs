@@ -23,6 +23,9 @@ fn event(entity: &str) -> Event {
 fn versions(store: &EventStore, entity: &str) -> Vec<i64> {
     let mut versions: Vec<_> = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some(entity.into()),
             tenant_id: Some("synthetic-run-tenant".into()),
             ..Default::default()

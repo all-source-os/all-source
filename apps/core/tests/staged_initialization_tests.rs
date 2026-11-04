@@ -178,6 +178,9 @@ async fn test_static_stability_data_plane_uses_cache() {
     // Verify data plane works
     let events = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("order-1".to_string()),
             event_type: None,
             tenant_id: None,

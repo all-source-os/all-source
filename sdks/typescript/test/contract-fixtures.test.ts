@@ -9,6 +9,7 @@ import { join } from "node:path";
 import {
   AllSourceClient,
   EpochChangedError,
+  type EntityState,
   InvalidViewError,
   NotModified,
   VersionConflictError,
@@ -190,6 +191,33 @@ const runners: Record<string, Runner> = {
     expectRequest(calls[0], fx);
     expect(result.entity_version).toBe(12);
     expect(result.events).toHaveLength(1);
+    expect(result.etag).toBe(etagOf(fx));
+  },
+
+  async entity_state_as_of_valid(fx) {
+    const { client, calls } = stub([fx]);
+    const result = await client.entityState("skill:abc", { asOfValid: "2026-09-15T00:00:00Z" });
+    expectRequest(calls[0], fx);
+    expect(result).not.toBeInstanceOf(NotModified);
+    expect((result as EntityState).as_of_valid).toBe("2026-09-15T00:00:00Z");
+    expect((result as EntityState).as_of).toBeNull();
+    expect((result as EntityState).version).toBe(3);
+    expect((result as EntityState).etag).toBe(etagOf(fx));
+  },
+
+  async events_query_valid_time(fx) {
+    const { client, calls } = stub([fx]);
+    const result = await client.queryEvents({
+      entity_id: "skill:abc",
+      as_of_valid: "2026-09-15T00:00:00Z",
+      since_valid: "2026-09-01T00:00:00Z",
+      limit: 1,
+    });
+    expectRequest(calls[0], fx);
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]!.valid_from).toBe("2026-09-05T00:00:00Z");
+    expect(result.events[0]!.valid_to).toBeNull();
+    expect(result.entity_version).toBe(3);
     expect(result.etag).toBe(etagOf(fx));
   },
 

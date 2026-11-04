@@ -52,6 +52,36 @@ pub(super) fn decoded_text_bytes(batch: &RecordBatch) -> u64 {
         .sum()
 }
 
+/// `None` when the file predates the column.
+fn optional_timestamp_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a TimestampMicrosecondArray>> {
+    let Ok(index) = batch.schema().index_of(name) else {
+        return Ok(None);
+    };
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<TimestampMicrosecondArray>()
+        .map(Some)
+        .ok_or_else(|| AllSourceError::StorageError(format!("Invalid {name} column")))
+}
+
+fn valid_time_at(
+    column: Option<&TimestampMicrosecondArray>,
+    row: usize,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    match column {
+        Some(values) if values.is_valid(row) => {
+            chrono::DateTime::from_timestamp_micros(values.value(row))
+                .map(Some)
+                .ok_or_else(|| AllSourceError::StorageError("Invalid valid time".to_string()))
+        }
+        _ => Ok(None),
+    }
+}
+
 /// Position of `entity_id` in the event schema. All fields are flat
 /// primitives, so this is both the field index and the Parquet leaf index.
 const ENTITY_ID_COLUMN: usize = 2;
@@ -64,6 +94,11 @@ const METADATA_COLUMN: usize = 5;
 
 /// Position of `version` in the event schema. See [`ENTITY_ID_COLUMN`].
 const VERSION_COLUMN: usize = 6;
+
+/// Nullable valid-time columns, resolved by name on read. Null or absent means
+/// the event's valid time is its record time (`timestamp`) and open-ended.
+const VALID_FROM_COLUMN: &str = "valid_from";
+const VALID_TO_COLUMN: &str = "valid_to";
 
 /// Default batch size for Parquet writes (10,000 events as per US-023)
 pub const DEFAULT_BATCH_SIZE: usize = 10_000;
@@ -218,6 +253,8 @@ impl ParquetStorage {
 
         // Define Arrow schema for events.
         // ENTITY_ID_COLUMN / VERSION_COLUMN index into this field order.
+        // valid_from / valid_to are appended last and read by name, so files
+        // written before they existed still load.
         let schema = Arc::new(Schema::new(vec![
             Field::new("event_id", DataType::Utf8, false),
             Field::new("event_type", DataType::Utf8, false),
@@ -230,6 +267,16 @@ impl ParquetStorage {
             ),
             Field::new("metadata", DataType::Utf8, true),
             Field::new("version", DataType::UInt64, false),
+            Field::new(
+                VALID_FROM_COLUMN,
+                DataType::Timestamp(TimeUnit::Microsecond, None),
+                true,
+            ),
+            Field::new(
+                VALID_TO_COLUMN,
+                DataType::Timestamp(TimeUnit::Microsecond, None),
+                true,
+            ),
         ]));
 
         let storage = Self {
@@ -844,6 +891,8 @@ impl ParquetStorage {
         let mut timestamp_builder = TimestampMicrosecondBuilder::new();
         let mut metadata_builder = StringBuilder::new();
         let mut version_builder = UInt64Builder::new();
+        let mut valid_from_builder = TimestampMicrosecondBuilder::new();
+        let mut valid_to_builder = TimestampMicrosecondBuilder::new();
 
         for event in events {
             event_id_builder.append_value(event.id.to_string());
@@ -862,6 +911,8 @@ impl ParquetStorage {
             }
 
             version_builder.append_value(event.version as u64);
+            valid_from_builder.append_option(event.valid_from.map(|t| t.timestamp_micros()));
+            valid_to_builder.append_option(event.valid_to.map(|t| t.timestamp_micros()));
         }
 
         let arrays: Vec<ArrayRef> = vec![
@@ -872,6 +923,8 @@ impl ParquetStorage {
             Arc::new(timestamp_builder.finish()),
             Arc::new(metadata_builder.finish()),
             Arc::new(version_builder.finish()),
+            Arc::new(valid_from_builder.finish()),
+            Arc::new(valid_to_builder.finish()),
         ];
 
         let record_batch = RecordBatch::try_new(self.schema.clone(), arrays)?;
@@ -1145,6 +1198,9 @@ impl ParquetStorage {
             .downcast_ref::<arrow::array::UInt64Array>()
             .ok_or_else(|| AllSourceError::StorageError("Invalid version column".to_string()))?;
 
+        let valid_froms = optional_timestamp_column(batch, VALID_FROM_COLUMN)?;
+        let valid_tos = optional_timestamp_column(batch, VALID_TO_COLUMN)?;
+
         let mut events = Vec::new();
 
         for i in 0..batch.num_rows() {
@@ -1160,7 +1216,7 @@ impl ParquetStorage {
                 Some(serde_json::from_str(metadatas.value(i))?)
             };
 
-            let event = Event::reconstruct_from_strings(
+            let mut event = Event::reconstruct_from_strings(
                 id,
                 event_types.value(i).to_string(),
                 entity_ids.value(i).to_string(),
@@ -1170,6 +1226,8 @@ impl ParquetStorage {
                 metadata,
                 versions.value(i) as i64,
             );
+            event.valid_from = valid_time_at(valid_froms, i)?;
+            event.valid_to = valid_time_at(valid_tos, i)?;
 
             events.push(event);
         }
@@ -1993,6 +2051,90 @@ mod tests {
             None,
             1,
         )
+    }
+
+    #[test]
+    fn valid_time_round_trips_through_parquet() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ParquetStorage::new(temp_dir.path()).unwrap();
+        let valid_from = chrono::DateTime::from_timestamp_micros(1_700_000_000_123_456).unwrap();
+        let valid_to = chrono::DateTime::from_timestamp_micros(1_700_000_900_000_001).unwrap();
+
+        let mut event = create_test_event("entity-valid");
+        event.valid_from = Some(valid_from);
+        event.valid_to = Some(valid_to);
+        let mut open_ended = create_test_event("entity-open");
+        open_ended.valid_from = Some(valid_from);
+        storage.append_event(event).unwrap();
+        storage.append_event(open_ended).unwrap();
+        storage.flush().unwrap();
+
+        let mut loaded = storage.load_all_events().unwrap();
+        loaded.sort_by(|a, b| a.entity_id_str().cmp(b.entity_id_str()));
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].entity_id_str(), "entity-open");
+        assert_eq!(loaded[0].valid_from, Some(valid_from));
+        assert_eq!(loaded[0].valid_to, None);
+        assert_eq!(loaded[1].valid_from, Some(valid_from));
+        assert_eq!(loaded[1].valid_to, Some(valid_to));
+    }
+
+    /// A file written before `valid_from` / `valid_to` existed: seven columns,
+    /// the old names and types, nothing appended.
+    #[test]
+    fn a_parquet_file_without_valid_time_columns_reads_back_unset() {
+        use arrow::array::{StringArray, TimestampMicrosecondArray, UInt64Array};
+        use parquet::arrow::ArrowWriter;
+
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("pre-valid-time.parquet");
+        let ids = [
+            uuid::Uuid::new_v4().to_string(),
+            uuid::Uuid::new_v4().to_string(),
+        ];
+        let timestamps = [1_700_000_000_000_000_i64, 1_700_000_100_000_000_i64];
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("event_id", DataType::Utf8, false),
+            Field::new("event_type", DataType::Utf8, false),
+            Field::new("entity_id", DataType::Utf8, false),
+            Field::new("payload", DataType::Utf8, false),
+            Field::new(
+                "timestamp",
+                DataType::Timestamp(TimeUnit::Microsecond, None),
+                false,
+            ),
+            Field::new("metadata", DataType::Utf8, true),
+            Field::new("version", DataType::UInt64, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec![ids[0].as_str(), ids[1].as_str()])),
+                Arc::new(StringArray::from(vec!["test.event", "test.event"])),
+                Arc::new(StringArray::from(vec!["entity-a", "entity-b"])),
+                Arc::new(StringArray::from(vec!["{}", "{}"])),
+                Arc::new(TimestampMicrosecondArray::from(timestamps.to_vec())),
+                Arc::new(StringArray::from(vec![None::<&str>, None])),
+                Arc::new(UInt64Array::from(vec![1_u64, 2])),
+            ],
+        )
+        .unwrap();
+        let mut writer = ArrowWriter::try_new(File::create(&path).unwrap(), schema, None).unwrap();
+        writer.write(&batch).unwrap();
+        writer.close().unwrap();
+
+        let storage = ParquetStorage::new(temp_dir.path()).unwrap();
+        let loaded = storage
+            .load_events_from_file_path(&path, "default")
+            .unwrap();
+
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].id.to_string(), ids[0]);
+        assert_eq!(loaded[0].timestamp.timestamp_micros(), timestamps[0]);
+        assert_eq!(loaded[0].valid_from, None);
+        assert_eq!(loaded[0].valid_to, None);
+        assert_eq!(loaded[1].valid_from, None);
+        assert_eq!(loaded[1].valid_to, None);
     }
 
     #[test]

@@ -103,7 +103,19 @@ RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p all
     if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
     exit "$status"
 
-FROM builder-deps-resume AS builder-deps
+FROM builder-deps-resume AS builder-deps-resume2
+RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps-resume2 AS builder-deps-resume3
+RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps-resume3 AS builder-deps
 RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics
 
 FROM builder-deps AS builder-base

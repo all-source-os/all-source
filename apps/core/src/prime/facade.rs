@@ -32,8 +32,9 @@ use super::{
         NodeTypeIndexProjection, ReverseIndexProjection,
     },
     schema::SchemaProjection,
+    temporal,
     types::{
-        Direction, Edge, EdgeId, Node, NodeId, PrimeStats, edge_entity_id, event_types,
+        AsOf, Direction, Edge, EdgeId, Node, NodeId, PrimeStats, edge_entity_id, event_types,
         node_entity_id,
     },
 };
@@ -357,6 +358,7 @@ impl Prime {
             node_state: Some(Arc::clone(&self.node_state)),
             adjacency: Some(Arc::clone(&self.adjacency)),
             graph_stats: Some(Arc::clone(&self.graph_stats)),
+            core: Some(Arc::clone(&self.core)),
         }
     }
 
@@ -439,23 +441,49 @@ impl Prime {
         node_type: &str,
         properties: serde_json::Value,
     ) -> PrimeResult<NodeId> {
+        self.add_node_inner(node_type, properties, None).await
+    }
+
+    /// Create a node that became true at `valid_from`. Record time is still
+    /// the moment of this call; use it for facts that were true before they
+    /// were written down.
+    pub async fn add_node_valid(
+        &self,
+        node_type: &str,
+        properties: serde_json::Value,
+        valid_from: DateTime<Utc>,
+    ) -> PrimeResult<NodeId> {
+        self.add_node_inner(node_type, properties, Some(valid_from))
+            .await
+    }
+
+    async fn add_node_inner(
+        &self,
+        node_type: &str,
+        properties: serde_json::Value,
+        valid_from: Option<DateTime<Utc>>,
+    ) -> PrimeResult<NodeId> {
         self.schema.validate_node(node_type, &properties)?;
 
         let id = uuid::Uuid::new_v4().to_string();
         let entity_id = node_entity_id(node_type, &id);
 
         self.core
-            .ingest(IngestEvent {
-                entity_id: &entity_id,
-                event_type: event_types::NODE_CREATED,
-                payload: json!({
-                    "id": id,
-                    "node_type": node_type,
-                    "properties": properties,
-                }),
-                metadata: None,
-                tenant_id: None,
-            })
+            .ingest_with_valid_time(
+                IngestEvent {
+                    entity_id: &entity_id,
+                    event_type: event_types::NODE_CREATED,
+                    payload: json!({
+                        "id": id,
+                        "node_type": node_type,
+                        "properties": properties,
+                    }),
+                    metadata: None,
+                    tenant_id: None,
+                },
+                valid_from,
+                None,
+            )
             .await?;
 
         Ok(NodeId::new(id))
@@ -482,6 +510,28 @@ impl Prime {
         entity_id: &str,
         properties: serde_json::Value,
     ) -> PrimeResult<()> {
+        self.update_node_inner(entity_id, properties, None).await
+    }
+
+    /// Correct a node as of `valid_from`: the new properties hold from that
+    /// instant, even though the correction is filed now. Read it back with
+    /// [`Self::get_node_at`] and an `AsOf` whose `valid` is set.
+    pub async fn update_node_valid(
+        &self,
+        entity_id: &str,
+        properties: serde_json::Value,
+        valid_from: DateTime<Utc>,
+    ) -> PrimeResult<()> {
+        self.update_node_inner(entity_id, properties, Some(valid_from))
+            .await
+    }
+
+    async fn update_node_inner(
+        &self,
+        entity_id: &str,
+        properties: serde_json::Value,
+        valid_from: Option<DateTime<Utc>>,
+    ) -> PrimeResult<()> {
         let node = self
             .node_state
             .get_node(entity_id)
@@ -498,13 +548,17 @@ impl Prime {
         self.schema.validate_node(&node.node_type, &merged)?;
 
         self.core
-            .ingest(IngestEvent {
-                entity_id,
-                event_type: event_types::NODE_UPDATED,
-                payload: json!({ "properties": properties }),
-                metadata: None,
-                tenant_id: None,
-            })
+            .ingest_with_valid_time(
+                IngestEvent {
+                    entity_id,
+                    event_type: event_types::NODE_UPDATED,
+                    payload: json!({ "properties": properties }),
+                    metadata: None,
+                    tenant_id: None,
+                },
+                valid_from,
+                None,
+            )
             .await?;
 
         Ok(())
@@ -1412,6 +1466,28 @@ impl Prime {
         &self,
         query: super::types::RecallQuery,
     ) -> PrimeResult<super::types::RecallResult> {
+        self.recall_inner(query, None).await
+    }
+
+    /// [`Self::recall`] over the graph as it stood at `at`. Candidates, seeds
+    /// and graph expansion are all read through the same fold, so a node
+    /// corrected after `at` is scored on its value at `at`. Vector hits are
+    /// not time-travelled: embeddings are stored as current state.
+    #[cfg(feature = "prime-vectors")]
+    pub async fn recall_at(
+        &self,
+        query: super::types::RecallQuery,
+        at: AsOf,
+    ) -> PrimeResult<super::types::RecallResult> {
+        self.recall_inner(query, Some(at)).await
+    }
+
+    #[cfg(feature = "prime-vectors")]
+    async fn recall_inner(
+        &self,
+        query: super::types::RecallQuery,
+        at: Option<AsOf>,
+    ) -> PrimeResult<super::types::RecallResult> {
         use super::types::{RecallResult, Retrieval, ScoreComponents, ScoredNode};
         use std::collections::HashMap;
 
@@ -1458,10 +1534,11 @@ impl Prime {
                 // Vector entity_id is "vec:{graph_entity_id}" — strip prefix
                 let graph_id = hit.id.strip_prefix("vec:").unwrap_or(&hit.id);
                 if let Some(node) = self
-                    .get_node(graph_id)
+                    .recall_node(graph_id, at)
+                    .await?
                     .filter(|n| Self::node_in_tenant(n, tenant))
                 {
-                    let recency = recency_score(node.updated_at, now);
+                    let recency = recency_score(node.recency_instant(), now);
                     let components = ScoreComponents {
                         similarity: hit.score,
                         proximity: 1.0, // depth 0 = max proximity
@@ -1491,13 +1568,12 @@ impl Prime {
                 .map(super::lexical::terms)
                 .unwrap_or_default();
 
-            let candidates: Vec<Node> = match query.node_type {
-                Some(ref nt) => self.nodes_by_type(nt),
-                None => self.node_state.all_nodes(),
-            }
-            .into_iter()
-            .filter(|n| Self::node_in_tenant(n, tenant))
-            .collect();
+            let candidates: Vec<Node> = self
+                .recall_candidates(query.node_type.as_deref(), at)
+                .await?
+                .into_iter()
+                .filter(|n| Self::node_in_tenant(n, tenant))
+                .collect();
 
             let mut hits: Vec<(f64, Node)> = if terms.is_empty() {
                 Vec::new()
@@ -1517,7 +1593,7 @@ impl Prime {
                 if query.node_type.is_some() {
                     retrieval = Retrieval::TypeScan;
                     hits = candidates.into_iter().map(|n| (0.0, n)).collect();
-                    hits.sort_by_key(|hit| std::cmp::Reverse(hit.1.updated_at));
+                    hits.sort_by_key(|hit| std::cmp::Reverse(hit.1.recency_instant()));
                 }
             } else {
                 retrieval = Retrieval::Lexical;
@@ -1526,7 +1602,7 @@ impl Prime {
 
             for (similarity, node) in hits.into_iter().take(seed_cap) {
                 let entity_id = node_entity_id(&node.node_type, node.id.as_str());
-                let recency = recency_score(node.updated_at, now);
+                let recency = recency_score(node.recency_instant(), now);
                 let components = ScoreComponents {
                     similarity,
                     proximity: 1.0,
@@ -1549,8 +1625,7 @@ impl Prime {
         if query.depth > 0 {
             let seeds: Vec<String> = scored.keys().cloned().collect();
             for seed_id in &seeds {
-                let bfs_results =
-                    self.neighbors_within(seed_id, query.depth, None, Direction::Both);
+                let bfs_results = self.recall_neighbors(seed_id, query.depth, at).await?;
                 for (node, depth) in bfs_results {
                     if depth == 0 {
                         continue; // Already scored
@@ -1571,7 +1646,7 @@ impl Prime {
                         continue;
                     }
                     let proximity = 1.0 / (1.0 + depth as f64);
-                    let recency = recency_score(node.updated_at, now);
+                    let recency = recency_score(node.recency_instant(), now);
                     let components = ScoreComponents {
                         similarity: 0.0, // No direct vector match
                         proximity,
@@ -1881,20 +1956,7 @@ impl Prime {
     pub async fn history(&self, entity_id: &str) -> PrimeResult<Vec<super::types::HistoryEntry>> {
         let events = self.core.query(Query::new().entity_id(entity_id)).await?;
 
-        let entries = events
-            .iter()
-            .map(|e| super::types::HistoryEntry {
-                event_type: e.event_type.clone(),
-                timestamp: e.timestamp,
-                payload: e.payload.clone(),
-                source: e
-                    .metadata
-                    .as_ref()
-                    .and_then(|m| m.get("source"))
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-            })
-            .collect();
+        let entries = events.iter().map(temporal::history_entry).collect();
 
         Ok(entries)
     }
@@ -1907,7 +1969,8 @@ impl Prime {
     /// Only `prime.node.created` and `prime.node.updated` events contribute
     /// observations — deletes are out of scope for the fold (the snapshot
     /// represents the live state of a node). Each observation carries:
-    /// - `observed_at` from the event's timestamp
+    /// - `observed_at` from the event's `valid_from` (its record time when unset)
+    /// - `recorded_at` from the event's record time
     /// - `source_event_id` from the event's id (load-bearing for provenance)
     /// - `source_priority` and `specificity_score` from the event metadata,
     ///   defaulting to 0 when absent — writers are expected to set these
@@ -1951,7 +2014,8 @@ impl Prime {
                     .and_then(serde_json::Value::as_i64)
                     .map_or(0, |i| i as i32);
                 Observation {
-                    observed_at: e.timestamp,
+                    observed_at: temporal::valid_from(e),
+                    recorded_at: Some(e.timestamp),
                     source_priority,
                     specificity_score,
                     source_event_id: e.id.to_string(),
@@ -2104,20 +2168,7 @@ impl Prime {
 
         let events = self.core.query(query).await?;
 
-        let entries = events
-            .iter()
-            .map(|e| super::types::HistoryEntry {
-                event_type: e.event_type.clone(),
-                timestamp: e.timestamp,
-                payload: e.payload.clone(),
-                source: e
-                    .metadata
-                    .as_ref()
-                    .and_then(|m| m.get("source"))
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-            })
-            .collect();
+        let entries = events.iter().map(temporal::history_entry).collect();
 
         Ok(entries)
     }
@@ -2155,17 +2206,7 @@ impl Prime {
                     .and_then(|v| v.as_str())
                     == Some(conversation_id)
             })
-            .map(|e| super::types::HistoryEntry {
-                event_type: e.event_type.clone(),
-                timestamp: e.timestamp,
-                payload: e.payload.clone(),
-                source: e
-                    .metadata
-                    .as_ref()
-                    .and_then(|m| m.get("source"))
-                    .and_then(|v| v.as_str())
-                    .map(String::from),
-            })
+            .map(temporal::history_entry)
             .collect();
 
         Ok(entries)
@@ -2230,98 +2271,17 @@ impl Prime {
         entity_id: &str,
         as_of: DateTime<Utc>,
     ) -> PrimeResult<Option<Node>> {
-        let events = self
-            .core
-            .query(Query::new().entity_id(entity_id).until(as_of))
-            .await?;
+        self.get_node_at(entity_id, AsOf::recorded(as_of)).await
+    }
 
-        if events.is_empty() {
-            return Ok(None);
-        }
-
-        let mut node_type = String::new();
-        let mut properties = serde_json::Map::new();
-        let mut domain: Option<String> = None;
-        let mut labels: Vec<String> = Vec::new();
-        let mut deleted = false;
-        let mut created_at = as_of;
-
-        for event in &events {
-            match event.event_type.as_str() {
-                event_types::NODE_CREATED => {
-                    node_type = event
-                        .payload
-                        .get("node_type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown")
-                        .to_string();
-                    if let Some(serde_json::Value::Object(props)) = event.payload.get("properties")
-                    {
-                        properties = props.clone();
-                    }
-                    domain = event
-                        .payload
-                        .get("domain")
-                        .and_then(|v| v.as_str())
-                        .map(String::from);
-                    labels = event
-                        .payload
-                        .get("labels")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(String::from))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    deleted = false;
-                    created_at = event.timestamp;
-                }
-                event_types::NODE_UPDATED => {
-                    if let Some(serde_json::Value::Object(updates)) =
-                        event.payload.get("properties")
-                    {
-                        for (key, value) in updates {
-                            properties.insert(key.clone(), value.clone());
-                        }
-                    }
-                    if let Some(d) = event.payload.get("domain") {
-                        domain = d.as_str().map(String::from);
-                    }
-                    if let Some(l) = event
-                        .payload
-                        .get("labels")
-                        .and_then(serde_json::Value::as_array)
-                    {
-                        labels = l
-                            .iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect();
-                    }
-                }
-                event_types::NODE_DELETED => {
-                    deleted = true;
-                }
-                _ => {}
-            }
-        }
-
-        if deleted || node_type.is_empty() {
-            return Ok(None);
-        }
-
-        let id = entity_id.split(':').nth(2).unwrap_or(entity_id).to_string();
-
-        Ok(Some(Node {
-            id: NodeId::new(id),
-            node_type,
-            properties: serde_json::Value::Object(properties),
-            domain,
-            labels,
-            deleted: false,
-            created_at,
-            updated_at: events.last().map_or(created_at, |e| e.timestamp),
-        }))
+    /// Get the state of a node at a point on either or both time axes.
+    ///
+    /// With only `recorded` set this is the record-time view: what Core had
+    /// filed by then. With `valid` set, it is the state of the world at `valid`
+    /// given what was filed by `recorded`, so a correction filed after `valid`
+    /// applies when its `valid_from` places it before `valid`.
+    pub async fn get_node_at(&self, entity_id: &str, at: AsOf) -> PrimeResult<Option<Node>> {
+        temporal::node_at(&*self.core, entity_id, at).await
     }
 
     /// Get 1-hop neighbors of a node as the graph existed at `as_of` timestamp.
@@ -2333,72 +2293,93 @@ impl Prime {
         relation: Option<&str>,
         as_of: DateTime<Utc>,
     ) -> PrimeResult<Vec<Node>> {
-        // Get all prime edge events up to as_of
-        let all_events = self
-            .core
-            .query(Query::new().event_type_prefix("prime.edge.").until(as_of))
-            .await?;
+        self.neighbors_at(entity_id, relation, AsOf::recorded(as_of))
+            .await
+    }
 
-        // Build live outgoing edges from entity_id at as_of
-        let mut live_targets: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new(); // edge_id -> target
-        let mut deleted_edges: std::collections::HashSet<String> = std::collections::HashSet::new();
+    /// Get 1-hop neighbors of a node at a point on either or both time axes.
+    /// See [`Self::get_node_at`] for how `at` is read.
+    pub async fn neighbors_at(
+        &self,
+        entity_id: &str,
+        relation: Option<&str>,
+        at: AsOf,
+    ) -> PrimeResult<Vec<Node>> {
+        temporal::neighbors_at(&*self.core, entity_id, relation, at).await
+    }
 
-        for event in &all_events {
-            match event.event_type.as_str() {
-                event_types::EDGE_CREATED => {
-                    let source = event
-                        .payload
-                        .get("source")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    if source != entity_id {
-                        continue;
-                    }
-                    let rel = event
-                        .payload
-                        .get("relation")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    if relation.is_some() && relation != Some(rel) {
-                        continue;
-                    }
-                    if let Some(edge_id) = event.payload.get("id").and_then(|v| v.as_str()) {
-                        let target = event
-                            .payload
-                            .get("target")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        live_targets.insert(edge_id.to_string(), target);
-                    }
-                }
-                event_types::EDGE_DELETED => {
-                    if let Some(edge_id) = event.payload.get("id").and_then(|v| v.as_str()) {
-                        deleted_edges.insert(edge_id.to_string());
-                    }
-                }
-                _ => {}
-            }
+    /// Breadth-first neighbourhood of `entity_id` at a point on either or both
+    /// axes, with each node's hop distance. The start node is at depth 0.
+    /// Mirrors [`Self::neighbors_within`], which reads the live graph.
+    pub async fn neighbors_within_at(
+        &self,
+        entity_id: &str,
+        depth: usize,
+        relation: Option<&str>,
+        direction: Direction,
+        at: AsOf,
+    ) -> PrimeResult<Vec<(Node, usize)>> {
+        temporal::neighbors_within_at(&*self.core, entity_id, depth, relation, direction, at).await
+    }
+
+    /// Node as recall sees it: the live projection, or the fold at `at`.
+    #[cfg(feature = "prime-vectors")]
+    async fn recall_node(&self, entity_id: &str, at: Option<AsOf>) -> PrimeResult<Option<Node>> {
+        match at {
+            None => Ok(self.get_node(entity_id)),
+            Some(at) => self.get_node_at(entity_id, at).await,
         }
+    }
 
-        // Remove deleted edges
-        for deleted in &deleted_edges {
-            live_targets.remove(deleted);
-        }
-
-        // Resolve targets to Nodes at as_of
-        let mut neighbors = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        for target in live_targets.values() {
-            if seen.insert(target.clone())
-                && let Some(node) = Box::pin(self.get_node_as_of(target, as_of)).await?
+    /// Nodes recall may seed from, optionally of one type. The `at` path
+    /// resolves every node the projection has ever seen, so a node deleted
+    /// after `at` is still a candidate.
+    #[cfg(feature = "prime-vectors")]
+    async fn recall_candidates(
+        &self,
+        node_type: Option<&str>,
+        at: Option<AsOf>,
+    ) -> PrimeResult<Vec<Node>> {
+        let Some(at) = at else {
+            return Ok(match node_type {
+                Some(nt) => self.nodes_by_type(nt),
+                None => self.node_state.all_nodes(),
+            });
+        };
+        let mut nodes = Vec::new();
+        for entity_id in self.node_state.all_entity_ids() {
+            if let Some(node) = self.get_node_at(&entity_id, at).await?
+                && node_type.is_none_or(|nt| node.node_type == nt)
             {
-                neighbors.push(node);
+                nodes.push(node);
             }
         }
+        Ok(nodes)
+    }
 
-        Ok(neighbors)
+    /// Nodes within `depth` hops of `entity_id`, both directions, as recall
+    /// expands from its seeds.
+    #[cfg(feature = "prime-vectors")]
+    async fn recall_neighbors(
+        &self,
+        entity_id: &str,
+        depth: usize,
+        at: Option<AsOf>,
+    ) -> PrimeResult<Vec<(Node, usize)>> {
+        match at {
+            None => Ok(self.neighbors_within(entity_id, depth, None, Direction::Both)),
+            Some(at) => {
+                temporal::neighbors_within_at(
+                    &*self.core,
+                    entity_id,
+                    depth,
+                    None,
+                    Direction::Both,
+                    at,
+                )
+                .await
+            }
+        }
     }
 
     /// Helper: get raw peer IDs without resolving to Node objects.
@@ -3733,6 +3714,157 @@ mod tests {
         // At now (after deletion), node should be gone
         let node_now = prime.get_node_as_of(&ae, chrono::Utc::now()).await.unwrap();
         assert!(node_now.is_none());
+
+        prime.shutdown().await.unwrap();
+    }
+
+    fn instant(rfc3339: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(rfc3339)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    /// Alice is true from 2026-01-01. Filed later, a correction says the name
+    /// was Alicia from the same day. Each axis answers its own question.
+    async fn seeded_correction() -> (Prime, String, DateTime<Utc>, DateTime<Utc>) {
+        let prime = Prime::open_in_memory().await.unwrap();
+        let jan1 = instant("2026-01-01T00:00:00Z");
+        let a = prime
+            .add_node_valid("n", json!({"name": "Alice"}), jan1)
+            .await
+            .unwrap();
+        let ae = node_entity_id("n", a.as_str());
+
+        let filed_original = Utc::now();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        prime
+            .update_node_valid(&ae, json!({"name": "Alicia"}), jan1)
+            .await
+            .unwrap();
+        (prime, ae, jan1, filed_original)
+    }
+
+    #[tokio::test]
+    async fn test_valid_axis_applies_correction_only_to_valid_reads() {
+        let (prime, ae, jan1, filed_original) = seeded_correction().await;
+        let mid_jan = instant("2026-01-15T00:00:00Z");
+        let dec = instant("2025-12-31T00:00:00Z");
+
+        let knew_then = prime
+            .get_node_at(
+                &ae,
+                AsOf {
+                    recorded: Some(filed_original),
+                    valid: Some(mid_jan),
+                },
+            )
+            .await
+            .unwrap()
+            .expect("alice was true in mid-January");
+        assert_eq!(knew_then.properties["name"], "Alice");
+        assert_eq!(knew_then.created_at, jan1);
+
+        let knows_now = prime
+            .get_node_at(
+                &ae,
+                AsOf {
+                    recorded: None,
+                    valid: Some(mid_jan),
+                },
+            )
+            .await
+            .unwrap()
+            .expect("node exists at valid time");
+        assert_eq!(knows_now.properties["name"], "Alicia");
+
+        let before_valid_start = prime
+            .get_node_at(
+                &ae,
+                AsOf {
+                    recorded: None,
+                    valid: Some(dec),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(before_valid_start.is_none());
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_record_axis_is_unchanged_by_valid_time() {
+        let (prime, ae, _jan1, filed_original) = seeded_correction().await;
+
+        let believed_then = prime.get_node_as_of(&ae, filed_original).await.unwrap();
+        assert_eq!(believed_then.unwrap().properties["name"], "Alice");
+
+        let believed_now = prime.get_node_as_of(&ae, Utc::now()).await.unwrap();
+        assert_eq!(believed_now.unwrap().properties["name"], "Alicia");
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_correction_reaches_last_write_projection_by_valid_time() {
+        use super::super::projections::declarative::{MergePolicy, ProjectionDef, fold};
+
+        let (prime, ae, _jan1, _filed_original) = seeded_correction().await;
+
+        let observations = prime.observations(&ae).await.unwrap();
+        assert_eq!(observations.len(), 2);
+        assert!(observations.iter().all(|o| o.recorded_at.is_some()));
+
+        let def = ProjectionDef::new("n", [("name".to_string(), MergePolicy::LastWrite)]);
+        let snapshot = fold(&observations, &def);
+        assert_eq!(snapshot.fields["name"], "Alicia");
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_history_carries_both_instants() {
+        let (prime, ae, jan1, _filed_original) = seeded_correction().await;
+
+        let entries = prime.history(&ae).await.unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].valid_at, jan1);
+        assert_eq!(entries[1].valid_at, jan1);
+        assert_eq!(entries[1].recorded_at, entries[1].timestamp);
+        assert!(entries[1].recorded_at > entries[0].recorded_at);
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[cfg(feature = "prime-vectors")]
+    #[tokio::test]
+    async fn test_recall_at_reads_candidates_on_the_requested_axis() {
+        use super::super::types::RecallQuery;
+
+        let (prime, _ae, _jan1, filed_original) = seeded_correction().await;
+        let query = RecallQuery {
+            text: Some("no lexical match here".to_string()),
+            node_type: Some("n".to_string()),
+            top_k: 5,
+            ..RecallQuery::default()
+        };
+
+        let then = prime
+            .recall_at(
+                query.clone(),
+                AsOf {
+                    recorded: Some(filed_original),
+                    valid: Some(instant("2026-01-15T00:00:00Z")),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(then.nodes.len(), 1);
+        assert_eq!(then.nodes[0].node.properties["name"], "Alice");
+
+        let now = prime.recall_at(query, AsOf::default()).await.unwrap();
+        assert_eq!(now.nodes[0].node.properties["name"], "Alicia");
 
         prime.shutdown().await.unwrap();
     }

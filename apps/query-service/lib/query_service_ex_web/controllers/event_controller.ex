@@ -105,7 +105,7 @@ defmodule QueryServiceExWeb.EventController do
   # gateway as it does against Core directly (issue #252).
   @core_compat_filters ~w(
     entity_id event_type event_type_prefix exclude_event_type_prefix
-    payload_filter since until as_of order
+    payload_filter since until as_of order as_of_valid since_valid until_valid
   )a
 
   @doc """

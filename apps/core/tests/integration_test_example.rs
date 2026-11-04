@@ -159,6 +159,9 @@ fn test_event_store_with_tenants() {
 
     // Query by entity using query method
     let query = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: Some(event1_entity_id),
         event_type: None,
         tenant_id: None,

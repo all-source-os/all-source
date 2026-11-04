@@ -100,8 +100,11 @@ impl<T> Conditional<T> {
 /// Parameters for [`QueryClient::entity_state`].
 #[derive(Debug, Clone, Default)]
 pub struct EntityStateParams {
-    /// Fold only events at or before this RFC 3339 timestamp.
+    /// Fold only events Core had filed by this RFC 3339 instant (record time).
     pub as_of: Option<String>,
+    /// Fold the state that was true at this RFC 3339 instant (valid time),
+    /// given the events filed by `as_of` when that is also set.
+    pub as_of_valid: Option<String>,
     /// Ask Core for the `history` array as well. Off by default.
     pub history: bool,
     /// Sent as the `If-None-Match` header.
@@ -116,6 +119,12 @@ impl EntityStateParams {
     #[must_use]
     pub fn as_of(mut self, timestamp: &str) -> Self {
         self.as_of = Some(timestamp.to_string());
+        self
+    }
+
+    #[must_use]
+    pub fn as_of_valid(mut self, timestamp: &str) -> Self {
+        self.as_of_valid = Some(timestamp.to_string());
         self
     }
 
@@ -137,6 +146,9 @@ impl EntityStateParams {
         if let Some(as_of) = &self.as_of {
             query.push(("as_of", as_of.clone()));
         }
+        if let Some(as_of_valid) = &self.as_of_valid {
+            query.push(("as_of_valid", as_of_valid.clone()));
+        }
         if self.history {
             query.push(("history", "true".to_string()));
         }
@@ -156,6 +168,9 @@ pub struct EntityState {
     pub last_updated: Option<String>,
     #[serde(default)]
     pub as_of: Option<String>,
+    /// Echo of the valid-time instant, present only when the request set it.
+    #[serde(default)]
+    pub as_of_valid: Option<String>,
     /// Number of this tenant's events folded into the state. `None` from a
     /// Core that predates the field.
     #[serde(default)]

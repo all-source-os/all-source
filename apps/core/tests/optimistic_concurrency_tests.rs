@@ -229,6 +229,9 @@ fn test_query_by_entity_includes_entity_version() {
 
     let events = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             entity_id: Some("e1".to_string()),
             ..Default::default()
         })

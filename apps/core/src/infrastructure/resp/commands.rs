@@ -219,6 +219,9 @@ fn handle_xrange(
 
     // Parse stream_key into query filters
     let mut request = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: None,
         tenant_id: None,
@@ -309,6 +312,9 @@ fn handle_xlen(
     // `limit: Some(0)` plus `query_window`'s pre-window `total` gives the count
     // with an empty window, so XLEN clones nothing.
     let mut request = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: None,
         tenant_id: None,

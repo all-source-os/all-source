@@ -17,13 +17,22 @@ fn cold_archive_window_reports_version_before_filtering_and_paging() {
     let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
     assert_eq!(store.get_entity_version("synthetic-entity"), 0);
     let request = QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         tenant_id: Some(TENANT.into()),
         entity_id: Some("synthetic-entity".into()),
         limit: Some(1),
         ..Default::default()
     };
     let (events, total) = store
-        .query_window_from_archive(&request, 0, false, &ReadScope::unrestricted())
+        .query_window_from_archive(
+            &request,
+            0,
+            false,
+            &ReadScope::unrestricted(),
+            WindowOrder::RecordTime,
+        )
         .unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].version, 1);
@@ -36,12 +45,16 @@ fn cold_archive_window_reports_version_before_filtering_and_paging() {
     let (events, total) = store
         .query_window_from_archive(
             &QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 event_type: Some("synthetic.absent".into()),
                 ..request
             },
             0,
             false,
             &ReadScope::unrestricted(),
+            WindowOrder::RecordTime,
         )
         .unwrap();
     assert!(events.is_empty());
@@ -81,6 +94,9 @@ fn eviction_cannot_erase_an_unflushed_conditional_predecessor() {
     assert_eq!(
         store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: Some(TENANT.into()),
                 ..Default::default()
             })
@@ -135,6 +151,9 @@ fn replicated_history_reaches_parquet_before_it_can_be_evicted() {
     assert_eq!(store.total_events(), 0);
     let restored = store
         .query(&QueryEventsRequest {
+            as_of_valid: None,
+            since_valid: None,
+            until_valid: None,
             tenant_id: Some(TENANT.into()),
             ..Default::default()
         })
@@ -248,6 +267,9 @@ fn ingest_persists_the_version_it_reports() {
         }
         let stored = store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: Some(TENANT.into()),
                 ..Default::default()
             })
@@ -314,6 +336,70 @@ fn resident_counter_counts_only_the_new_batch() {
     assert_eq!(store.total_events(), 5);
 }
 
+#[test]
+fn resident_and_archive_windows_agree_in_record_and_valid_order() {
+    use chrono::TimeZone;
+    let valid_on = |day: u32| chrono::Utc.with_ymd_and_hms(2026, 1, day, 0, 0, 0).unwrap();
+    let fact = |valid_from| {
+        Event::from_strings(
+            "synthetic.fact".into(),
+            "synthetic-fact".into(),
+            TENANT.into(),
+            serde_json::json!({}),
+            None,
+        )
+        .unwrap()
+        .with_valid_time(valid_from, None)
+        .unwrap()
+    };
+    // Recorded A, B, C. Valid order is B, A, C: A is a correction whose
+    // valid_from precedes its record time, and C has no valid_from.
+    let (a, b, c) = (
+        fact(Some(valid_on(10))),
+        fact(Some(valid_on(1))),
+        fact(None),
+    );
+    let (id_a, id_b, id_c) = (a.id(), b.id(), c.id());
+    let directory = TempDir::new().unwrap();
+    {
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        for event in [&a, &b, &c] {
+            store.ingest(event).unwrap();
+        }
+        store.flush_storage().unwrap();
+    }
+    let request = QueryEventsRequest {
+        tenant_id: Some(TENANT.into()),
+        entity_id: Some("synthetic-fact".into()),
+        ..Default::default()
+    };
+    let scope = ReadScope::unrestricted();
+    let cases = [
+        (WindowOrder::RecordTime, false, vec![id_a, id_b, id_c]),
+        (WindowOrder::RecordTime, true, vec![id_c, id_b, id_a]),
+        (WindowOrder::ValidTime, false, vec![id_b, id_a, id_c]),
+        (WindowOrder::ValidTime, true, vec![id_c, id_a, id_b]),
+    ];
+    for (order, descending, expected) in cases {
+        let resident =
+            EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        let (events, total) = resident
+            .query_window_scoped_ordered(&request, 0, descending, &scope, order)
+            .unwrap();
+        assert_eq!(total, 3);
+        let ids: Vec<_> = events.iter().map(Event::id).collect();
+        assert_eq!(ids, expected, "resident {order:?} descending={descending}");
+
+        let cold = EventStore::with_config(EventStoreConfig::with_persistence(directory.path()));
+        let (events, total) = cold
+            .query_window_from_archive(&request, 0, descending, &scope, order)
+            .unwrap();
+        assert_eq!(total, 3);
+        let ids: Vec<_> = events.iter().map(Event::id).collect();
+        assert_eq!(ids, expected, "archive {order:?} descending={descending}");
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn eviction_between_hydration_and_version_check_cannot_authorize_a_stale_write() {
     let directory = TempDir::new().unwrap();
@@ -371,6 +457,9 @@ async fn eviction_between_hydration_and_version_check_cannot_authorize_a_stale_w
     assert_eq!(
         store
             .query(&QueryEventsRequest {
+                as_of_valid: None,
+                since_valid: None,
+                until_valid: None,
                 tenant_id: Some(TENANT.into()),
                 ..Default::default()
             })

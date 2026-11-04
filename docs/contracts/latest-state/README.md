@@ -24,8 +24,11 @@ so the four SDKs and Core agree on one set of bodies.
 
 ## 2. Entity state without history
 
-`GET /api/v1/entities/{entity_id}/state?as_of&history`
+`GET /api/v1/entities/{entity_id}/state?as_of&as_of_valid&history`
 
+- `as_of` is the record-time bound. `as_of_valid` is the valid-time bound; it
+  is echoed as `as_of_valid` only when sent, so responses without it are
+  byte-identical to before.
 - `history` defaults to `false`. `history=true` restores the `history[]` array
   exactly as before.
 - Response (`history=false`):

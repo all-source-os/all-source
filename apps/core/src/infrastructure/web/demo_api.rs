@@ -21,6 +21,9 @@ const EMBEDDING_DIM: usize = 384;
 pub async fn demo_seed_handler(State(state): State<AppState>) -> Result<Json<serde_json::Value>> {
     // Idempotency check: look for our marker event
     let existing = state.store.query(&QueryEventsRequest {
+        as_of_valid: None,
+        since_valid: None,
+        until_valid: None,
         entity_id: None,
         event_type: Some(DEMO_SEED_MARKER.to_string()),
         tenant_id: None,
