@@ -608,7 +608,8 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync('/tmp/iai-output.txt', 'utf8');
+            // CARGO_TERM_COLOR=always colours the runner's output; a PR comment shows the escapes raw.
+            const body = fs.readFileSync('/tmp/iai-output.txt', 'utf8').replace(/\x1b\[[0-9;]*m/g, '');
             const truncated = body.length > 60000 ? body.slice(0, 60000) + '\n... (truncated)' : body;
             const marker = '<!-- iai-perf:${{ matrix.package }} -->';
             const commentBody = `${marker}\n### iai-callgrind — \`${{ matrix.package }}/iai\`\n\n\`\`\`\n${truncated}\n\`\`\``;
