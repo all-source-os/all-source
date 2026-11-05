@@ -164,7 +164,7 @@ impl instant_distance::Point for VectorPoint {
 pub struct VectorSearchEngine {
     config: VectorSearchEngineConfig,
     #[cfg(feature = "vector-search")]
-    embedding_model: Arc<parking_lot::Mutex<TextEmbedding>>,
+    embedding_model: Option<Arc<parking_lot::Mutex<TextEmbedding>>>,
     #[cfg(feature = "vector-search")]
     hnsw_index: Arc<RwLock<Option<HnswMap<VectorPoint, Uuid>>>>,
     /// Metadata storage: event_id -> IndexedVector
@@ -202,15 +202,35 @@ impl VectorSearchEngine {
             AllSourceError::InternalError(format!("Failed to load embedding model: {e}"))
         })?;
 
-        Ok(Self {
+        let mut engine = Self::with_external_embeddings(config);
+        engine.embedding_model = Some(Arc::new(parking_lot::Mutex::new(model)));
+        Ok(engine)
+    }
+
+    /// An engine that never loads a model: callers index and query with
+    /// vectors they computed themselves, and `embed_text` refuses.
+    #[cfg(feature = "vector-search")]
+    pub fn with_external_embeddings(config: VectorSearchEngineConfig) -> Self {
+        Self {
             config,
-            embedding_model: Arc::new(parking_lot::Mutex::new(model)),
+            embedding_model: None,
             hnsw_index: Arc::new(RwLock::new(None)),
             vectors: Arc::new(RwLock::new(HashMap::new())),
             tenant_index: Arc::new(RwLock::new(HashMap::new())),
             index_sender: None,
             stats: Arc::new(RwLock::new(EngineStats::default())),
-        })
+        }
+    }
+
+    #[cfg(not(feature = "vector-search"))]
+    pub fn with_external_embeddings(config: VectorSearchEngineConfig) -> Self {
+        Self {
+            config,
+            vectors: Arc::new(RwLock::new(HashMap::new())),
+            tenant_index: Arc::new(RwLock::new(HashMap::new())),
+            index_sender: None,
+            stats: Arc::new(RwLock::new(EngineStats::default())),
+        }
     }
 
     /// Create a VectorSearchEngine without the embedding model (for testing)
@@ -221,13 +241,7 @@ impl VectorSearchEngine {
 
     #[cfg(not(feature = "vector-search"))]
     pub fn with_config(config: VectorSearchEngineConfig) -> Result<Self> {
-        Ok(Self {
-            config,
-            vectors: Arc::new(RwLock::new(HashMap::new())),
-            tenant_index: Arc::new(RwLock::new(HashMap::new())),
-            index_sender: None,
-            stats: Arc::new(RwLock::new(EngineStats::default())),
-        })
+        Ok(Self::with_external_embeddings(config))
     }
 
     /// Get the engine configuration
@@ -238,13 +252,14 @@ impl VectorSearchEngine {
     /// Generate embedding from text using fastembed
     #[cfg(feature = "vector-search")]
     pub fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
-        let embeddings = self
-            .embedding_model
-            .lock()
-            .embed(vec![text], None)
-            .map_err(|e| {
-                AllSourceError::InternalError(format!("Embedding generation failed: {e}"))
-            })?;
+        let model = self.embedding_model.as_ref().ok_or_else(|| {
+            AllSourceError::InternalError(
+                "This vector engine has no embedding model; supply embeddings".to_string(),
+            )
+        })?;
+        let embeddings = model.lock().embed(vec![text], None).map_err(|e| {
+            AllSourceError::InternalError(format!("Embedding generation failed: {e}"))
+        })?;
 
         let embedding = embeddings
             .into_iter()
@@ -282,7 +297,7 @@ impl VectorSearchEngine {
     }
 
     /// Extract text content from a JSON payload for embedding
-    fn extract_text_from_payload(payload: &serde_json::Value) -> String {
+    pub(crate) fn extract_text_from_payload(payload: &serde_json::Value) -> String {
         let mut text_parts = Vec::new();
 
         match payload {
@@ -379,6 +394,31 @@ impl VectorSearchEngine {
             stats.total_indexed += 1;
         }
 
+        Ok(())
+    }
+
+    /// Index many vectors and rebuild the HNSW index once for the whole batch.
+    pub fn index_batch(&self, entries: Vec<IndexedVector>) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let added = entries.len() as u64;
+        {
+            let mut vectors = self.vectors.write();
+            let mut tenant_idx = self.tenant_index.write();
+            for entry in entries {
+                tenant_idx
+                    .entry(entry.tenant_id.clone())
+                    .or_default()
+                    .push(entry.event_id);
+                vectors.insert(entry.event_id, entry);
+            }
+        }
+
+        #[cfg(feature = "vector-search")]
+        self.rebuild_hnsw_index()?;
+
+        self.stats.write().total_indexed += added;
         Ok(())
     }
 

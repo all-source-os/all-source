@@ -10,6 +10,10 @@ readme = "README.md"
 # large blobs live in the package. Keep the published source tiny.
 exclude = ["*.onnx", "models/"]
 
+# Excluded from the root workspace; its own root so cargo stops here even when
+# this checkout sits inside another one (an Allstack build workspace).
+[workspace]
+
 [lib]
 path = "src/lib.rs"
 

@@ -18,6 +18,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 - [Native delivery CI prerequisites](plans/2026-10-28-native-ci-prerequisites.md)
 
+- [Prime typed writes and provenance request](./reference/prime-typed-provenance-request.md): typed node and edge kinds, the assertion write contract, search reachability, stub tools, hosted tenant scope and Prime OpenAPI.
+
 - [Prime TOON control-value integrity (2026-10-28)](./plans/2026-10-28-prime-toon-control-values.md): accepted encoder repair, retained-memory reproduction and native Codex/Claude acceptance.
 - [Prime control-value native verification](./reports/2026-10-28-prime-toon-values-verification.md): frozen baseline/candidate execution, independent real-host QA and retained-memory compatibility.
 - [Prime control-value delivery request](./reference/prime-toon-values-request.md): accepted application job, compatibility boundary and publication authority.
@@ -310,3 +312,5 @@ Use relative paths for internal links:
 - [Allstack delivery plan d3f36c01-447b-4640-904c-13571a14aaa7](plans/allstack-d3f36c01-447b-4640-904c-13571a14aaa7.md)
 
 - [Allstack delivery plan eb5af30a-ba11-49c9-b3be-328a66a6f7af](plans/allstack-eb5af30a-ba11-49c9-b3be-328a66a6f7af.md)
+
+- [Allstack delivery plan 1a9c09ae-98ab-4120-bbe0-72342e530296](plans/allstack-1a9c09ae-98ab-4120-bbe0-72342e530296.md)

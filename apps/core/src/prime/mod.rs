@@ -20,6 +20,7 @@
 //! let team = prime.neighbors(&project, None, Direction::Incoming).await?;
 //! ```
 
+pub mod assertion;
 pub mod error;
 pub mod event_store;
 pub mod facade;
@@ -47,11 +48,13 @@ pub mod types;
 pub mod vectors;
 
 // Re-export commonly used types
+pub use assertion::{Assertion, AssertionInput, AssertionSource};
 pub use error::{PrimeError, PrimeResult};
 pub use event_store::EventStore;
 pub use facade::{ConversationScope, Prime};
 #[cfg(feature = "prime-recall")]
 pub use http_core::HttpCore;
+pub use schema::{EnforcementMode, SchemaEntry, SchemaKind, Violation};
 pub use types::{
     Direction, Edge, EdgeId, EntityId, GraphDiff, HistoryEntry, Node, NodeId, PrimeStats, SubGraph,
     edge_entity_id, event_types, node_entity_id,

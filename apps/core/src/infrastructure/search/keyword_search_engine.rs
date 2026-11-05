@@ -19,7 +19,9 @@ use tantivy::{
     },
 };
 
-use crate::error::{AllSourceError, Result};
+#[cfg(feature = "keyword-search")]
+use crate::error::AllSourceError;
+use crate::error::Result;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -134,6 +136,8 @@ pub struct KeywordSearchEngine {
     writer: Arc<RwLock<IndexWriter>>,
     #[cfg(feature = "keyword-search")]
     reader: IndexReader,
+    #[cfg(not(feature = "keyword-search"))]
+    fallback: super::keyword_fallback::InMemoryKeywordIndex,
     /// Document count per tenant
     tenant_counts: Arc<RwLock<HashMap<String, usize>>>,
     /// Statistics
@@ -266,7 +270,8 @@ impl KeywordSearchEngine {
         })
     }
 
-    /// Create a stub engine when feature is not enabled
+    /// Without `keyword-search` the engine ranks with an in-memory BM25 index
+    /// instead of Tantivy; plain terms only, no query syntax.
     #[cfg(not(feature = "keyword-search"))]
     pub fn new() -> Result<Self> {
         Self::with_config(KeywordSearchEngineConfig::default())
@@ -276,6 +281,7 @@ impl KeywordSearchEngine {
     pub fn with_config(config: KeywordSearchEngineConfig) -> Result<Self> {
         Ok(Self {
             config,
+            fallback: super::keyword_fallback::InMemoryKeywordIndex::default(),
             tenant_counts: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(RwLock::new(EngineStats::default())),
         })
@@ -348,16 +354,29 @@ impl KeywordSearchEngine {
     #[cfg(not(feature = "keyword-search"))]
     pub fn index_event(
         &self,
-        _event_id: Uuid,
-        _tenant_id: &str,
-        _event_type: &str,
-        _entity_id: Option<&str>,
-        _payload: &serde_json::Value,
+        event_id: Uuid,
+        tenant_id: &str,
+        event_type: &str,
+        entity_id: Option<&str>,
+        payload: &serde_json::Value,
     ) -> Result<()> {
-        Err(AllSourceError::InternalError(
-            "Keyword search feature not enabled. Enable 'keyword-search' feature in Cargo.toml"
-                .to_string(),
-        ))
+        let payload_text = self.extract_text_from_payload(payload);
+        let is_new = self.fallback.insert(IndexedDocument {
+            event_id,
+            tenant_id: tenant_id.to_string(),
+            event_type: event_type.to_string(),
+            entity_id: entity_id.map(str::to_string),
+            payload_text,
+        });
+        if is_new {
+            *self
+                .tenant_counts
+                .write()
+                .entry(tenant_id.to_string())
+                .or_insert(0) += 1;
+        }
+        self.stats.write().total_indexed += 1;
+        Ok(())
     }
 
     /// Commit pending changes to the index
@@ -489,11 +508,9 @@ impl KeywordSearchEngine {
     }
 
     #[cfg(not(feature = "keyword-search"))]
-    pub fn search_keywords(&self, _query: &KeywordQuery) -> Result<Vec<KeywordSearchResult>> {
-        Err(AllSourceError::InternalError(
-            "Keyword search feature not enabled. Enable 'keyword-search' feature in Cargo.toml"
-                .to_string(),
-        ))
+    pub fn search_keywords(&self, query: &KeywordQuery) -> Result<Vec<KeywordSearchResult>> {
+        self.stats.write().total_searches += 1;
+        Ok(self.fallback.search(query))
     }
 
     /// Delete an event from the index by event_id
@@ -524,10 +541,14 @@ impl KeywordSearchEngine {
     }
 
     #[cfg(not(feature = "keyword-search"))]
-    pub fn delete_event(&self, _event_id: Uuid) -> Result<()> {
-        Err(AllSourceError::InternalError(
-            "Keyword search feature not enabled".to_string(),
-        ))
+    pub fn delete_event(&self, event_id: Uuid) -> Result<()> {
+        if let Some(tenant_id) = self.fallback.remove(event_id)
+            && let Some(count) = self.tenant_counts.write().get_mut(&tenant_id)
+        {
+            *count = count.saturating_sub(1);
+        }
+        self.stats.write().total_deleted += 1;
+        Ok(())
     }
 
     /// Delete all events for a tenant
@@ -563,10 +584,11 @@ impl KeywordSearchEngine {
     }
 
     #[cfg(not(feature = "keyword-search"))]
-    pub fn delete_by_tenant(&self, _tenant_id: &str) -> Result<usize> {
-        Err(AllSourceError::InternalError(
-            "Keyword search feature not enabled".to_string(),
-        ))
+    pub fn delete_by_tenant(&self, tenant_id: &str) -> Result<usize> {
+        let removed = self.fallback.remove_tenant(tenant_id);
+        self.tenant_counts.write().remove(tenant_id);
+        self.stats.write().total_deleted += removed as u64;
+        Ok(removed)
     }
 
     /// Get the number of indexed documents
@@ -756,24 +778,92 @@ mod tests {
     }
 
     #[test]
-    fn test_index_event_without_feature() {
+    fn indexed_event_is_found_by_payload_term_without_tantivy() {
         let engine = create_test_engine();
-        let result = engine.index_event(
-            Uuid::new_v4(),
-            "tenant-1",
-            "UserCreated",
-            Some("user-123"),
-            &json!({"name": "test"}),
-        );
-        assert!(result.is_err());
+        let event_id = Uuid::new_v4();
+        engine
+            .index_event(
+                event_id,
+                "tenant-1",
+                "UserCreated",
+                Some("user-123"),
+                &json!({"name": "Ada Lovelace"}),
+            )
+            .unwrap();
+
+        let results = engine
+            .search_keywords(&KeywordQuery::new("lovelace").with_tenant("tenant-1"))
+            .unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].event_id, event_id);
+        assert_eq!(results[0].event_type, "UserCreated");
+        assert_eq!(results[0].entity_id.as_deref(), Some("user-123"));
+        assert!(results[0].score > 0.0);
+        assert_eq!(engine.count(Some("tenant-1")), 1);
     }
 
     #[test]
-    fn test_search_without_feature() {
+    fn keyword_search_without_tantivy_never_returns_another_tenants_event() {
         let engine = create_test_engine();
-        let query = KeywordQuery::new("test");
-        let result = engine.search_keywords(&query);
-        assert!(result.is_err());
+        engine
+            .index_event(
+                Uuid::new_v4(),
+                "tenant-a",
+                "Note",
+                None,
+                &json!({"text": "shared secret"}),
+            )
+            .unwrap();
+
+        let results = engine
+            .search_keywords(&KeywordQuery::new("secret").with_tenant("tenant-b"))
+            .unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn rarer_term_ranks_its_event_first_without_tantivy() {
+        let engine = create_test_engine();
+        let common = Uuid::new_v4();
+        let rare = Uuid::new_v4();
+        engine
+            .index_event(common, "t", "Note", None, &json!({"text": "order shipped"}))
+            .unwrap();
+        engine
+            .index_event(
+                rare,
+                "t",
+                "Note",
+                None,
+                &json!({"text": "order refunded refunded"}),
+            )
+            .unwrap();
+
+        let results = engine
+            .search_keywords(&KeywordQuery::new("order refunded").with_tenant("t"))
+            .unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].event_id, rare);
+    }
+
+    #[test]
+    fn deleted_event_is_no_longer_found_without_tantivy() {
+        let engine = create_test_engine();
+        let event_id = Uuid::new_v4();
+        engine
+            .index_event(event_id, "t", "Note", None, &json!({"text": "ephemeral"}))
+            .unwrap();
+        engine.delete_event(event_id).unwrap();
+
+        let results = engine
+            .search_keywords(&KeywordQuery::new("ephemeral"))
+            .unwrap();
+
+        assert!(results.is_empty());
+        assert_eq!(engine.count(Some("t")), 0);
     }
 }
 

@@ -11,6 +11,10 @@ keywords = ["mcp", "agent-memory", "allsource", "prime", "mcp-server"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 
+# Excluded from the root workspace; its own root so cargo stops here even when
+# this checkout sits inside another one (an Allstack build workspace).
+[workspace]
+
 [[bin]]
 name = "allsource-prime"
 path = "src/main.rs"
@@ -48,6 +52,7 @@ pprof = { package = "rpprof", version = "0.18.1", default-features = false, feat
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"

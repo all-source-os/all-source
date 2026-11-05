@@ -24,6 +24,7 @@ use crate::{
 };
 
 use super::{
+    assertion::{self, Assertion},
     error::{PrimeError, PrimeResult},
     event_store::EventStore,
     projections::{
@@ -31,7 +32,10 @@ use super::{
         CrossDomainProjection, DomainIndexProjection, GraphStatsProjection, NodeStateProjection,
         NodeTypeIndexProjection, ReverseIndexProjection,
     },
-    schema::SchemaProjection,
+    schema::{
+        DEFAULT_TENANT, ENFORCEMENT_SET, EnforcementMode, ProjectionLookup, SCHEMA_REGISTERED,
+        SchemaEntry, SchemaKind, SchemaProjection, WriteCheck,
+    },
     temporal,
     types::{
         AsOf, Direction, Edge, EdgeId, Node, NodeId, PrimeStats, edge_entity_id, event_types,
@@ -82,6 +86,12 @@ pub struct Prime {
     /// every write. Kept as its own flag rather than derived from the lock:
     /// an in-memory instance also has no lock and is perfectly writable.
     read_only: bool,
+    /// Held across check-then-append for `cardinality: one` edges so two
+    /// concurrent writers cannot both see "no target yet".
+    exclusive_edge_gate: tokio::sync::Mutex<()>,
+    /// Held across plan-then-append for kind registration so two concurrent
+    /// registrations cannot both claim the same next version.
+    kind_gate: tokio::sync::Mutex<()>,
 }
 
 /// RAII guard holding an exclusive advisory lock on a Prime data-dir.
@@ -253,6 +263,15 @@ impl Prime {
         #[cfg(feature = "prime-vectors")]
         let vector_index = Self::register_vector_projection(&store);
 
+        for relation in schema.exclusive_relations(DEFAULT_TENANT) {
+            contradiction.configure_exclusive(&relation);
+            contradiction.backfill_exclusive(
+                &relation,
+                &adjacency,
+                &node_type_index.all_entity_ids(),
+            );
+        }
+
         Self {
             core: Arc::new(core) as Arc<dyn EventStore>,
             node_state,
@@ -270,6 +289,8 @@ impl Prime {
             embedder: OnceLock::new(),
             _data_dir_lock: data_dir_lock,
             read_only,
+            exclusive_edge_gate: tokio::sync::Mutex::new(()),
+            kind_gate: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -366,27 +387,76 @@ impl Prime {
     // Schema Enforcement
     // =========================================================================
 
-    /// Register a JSON schema for a node type. Properties will be validated
-    /// on `add_node()` and `update_node()`. Stored as an event for durability.
+    /// Register a JSON schema for a node type or edge relation. Equivalent to
+    /// [`register_kind`](Self::register_kind) with the result discarded.
     pub async fn register_schema(
         &self,
         type_name: &str,
-        kind: super::schema::SchemaKind,
+        kind: SchemaKind,
         schema: Value,
     ) -> PrimeResult<()> {
+        self.register_kind(kind, type_name, schema)
+            .await
+            .map(|_| ())
+    }
+
+    /// Register or re-register a node or edge kind. A re-registration that
+    /// would refuse a write the current version accepts is refused; an
+    /// accepted one gets the next version. Edge kinds with
+    /// `cardinality: one` mark the relation exclusive.
+    pub async fn register_kind(
+        &self,
+        kind: SchemaKind,
+        type_name: &str,
+        schema: Value,
+    ) -> PrimeResult<SchemaEntry> {
+        let _gate = self.kind_gate.lock().await;
+        let version = self
+            .schema
+            .plan_registration(DEFAULT_TENANT, kind, type_name, &schema)?;
         let entity_id = format!("schema:{type_name}");
         self.core
             .ingest(IngestEvent {
                 entity_id: &entity_id,
-                event_type: super::schema::SCHEMA_REGISTERED,
+                event_type: SCHEMA_REGISTERED,
                 payload: json!({
                     "type_name": type_name,
-                    "kind": match kind {
-                        super::schema::SchemaKind::Node => "node",
-                        super::schema::SchemaKind::Edge => "edge",
-                    },
+                    "kind": kind.as_str(),
                     "schema": schema,
+                    "version": version,
+                    "compatibility": format!("{:?}", super::schema::KIND_COMPATIBILITY).to_lowercase(),
                 }),
+                metadata: None,
+                tenant_id: None,
+            })
+            .await?;
+        if kind == SchemaKind::Edge
+            && self
+                .schema
+                .exclusive_relations(DEFAULT_TENANT)
+                .iter()
+                .any(|r| r == type_name)
+            && !self.contradiction.is_exclusive(type_name)
+        {
+            self.configure_exclusive(type_name);
+        }
+        self.schema
+            .kind(DEFAULT_TENANT, kind, type_name)
+            .ok_or_else(|| PrimeError::ProjectionError(format!("kind {type_name} not folded")))
+    }
+
+    /// List all registered schemas.
+    pub fn schemas(&self) -> Vec<SchemaEntry> {
+        self.schema.schemas()
+    }
+
+    /// Persist the store's enforcement mode. The latest event wins on replay.
+    pub async fn set_enforcement(&self, mode: EnforcementMode) -> PrimeResult<()> {
+        self.core
+            .ingest(IngestEvent {
+                entity_id: "prime:enforcement",
+                event_type: ENFORCEMENT_SET,
+                payload: json!({ "mode": mode.as_str() }),
                 metadata: None,
                 tenant_id: None,
             })
@@ -394,9 +464,16 @@ impl Prime {
         Ok(())
     }
 
-    /// List all registered schemas.
-    pub fn schemas(&self) -> Vec<super::schema::SchemaEntry> {
-        self.schema.schemas()
+    /// The store's enforcement mode; `open` until one is set.
+    pub fn enforcement(&self) -> EnforcementMode {
+        self.schema.enforcement(DEFAULT_TENANT)
+    }
+
+    fn lookup(&self) -> ProjectionLookup<'_> {
+        ProjectionLookup {
+            node_state: &self.node_state,
+            adjacency: &self.adjacency,
+        }
     }
 
     // =========================================================================
@@ -435,13 +512,14 @@ impl Prime {
 
     /// Create a new graph node. Returns the generated [`NodeId`].
     ///
-    /// If a schema is registered for `node_type`, properties are validated first.
+    /// Recorded as an agent assertion. If a kind is registered for
+    /// `node_type`, properties are validated first.
     pub async fn add_node(
         &self,
         node_type: &str,
         properties: serde_json::Value,
     ) -> PrimeResult<NodeId> {
-        self.add_node_inner(node_type, properties, None).await
+        self.add_node_asserted(node_type, properties, None).await
     }
 
     /// Create a node that became true at `valid_from`. Record time is still
@@ -453,17 +531,54 @@ impl Prime {
         properties: serde_json::Value,
         valid_from: DateTime<Utc>,
     ) -> PrimeResult<NodeId> {
-        self.add_node_inner(node_type, properties, Some(valid_from))
+        self.add_node_inner(node_type, properties, None, None, Some(valid_from))
+            .await
+    }
+
+    /// Create a node with an explicit assertion. `None` records an agent
+    /// assertion, as [`add_node`](Self::add_node) does.
+    pub async fn add_node_asserted(
+        &self,
+        node_type: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+    ) -> PrimeResult<NodeId> {
+        self.add_node_inner(node_type, properties, assertion, None, None)
+            .await
+    }
+
+    /// Create a node with an explicit assertion that became true at
+    /// `valid_from` (`None` means the record time).
+    pub async fn add_node_asserted_valid(
+        &self,
+        node_type: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+        valid_from: Option<DateTime<Utc>>,
+    ) -> PrimeResult<NodeId> {
+        self.add_node_inner(node_type, properties, assertion, None, valid_from)
             .await
     }
 
     async fn add_node_inner(
         &self,
         node_type: &str,
-        properties: serde_json::Value,
+        properties: Value,
+        assertion: Option<Assertion>,
+        extra_metadata: Option<Value>,
         valid_from: Option<DateTime<Utc>>,
     ) -> PrimeResult<NodeId> {
-        self.schema.validate_node(node_type, &properties)?;
+        if let Some(a) = &assertion {
+            a.validate()?;
+        }
+        let check = self.schema.check_node_write(
+            DEFAULT_TENANT,
+            node_type,
+            &properties,
+            &properties,
+            assertion.as_ref(),
+            &self.lookup(),
+        )?;
 
         let id = uuid::Uuid::new_v4().to_string();
         let entity_id = node_entity_id(node_type, &id);
@@ -478,7 +593,7 @@ impl Prime {
                         "node_type": node_type,
                         "properties": properties,
                     }),
-                    metadata: None,
+                    metadata: Some(write_metadata(assertion, &check, extra_metadata.as_ref())),
                     tenant_id: None,
                 },
                 valid_from,
@@ -500,7 +615,7 @@ impl Prime {
 
     /// Update a node's properties (deep merge).
     ///
-    /// Validates the merged result against any registered schema.
+    /// Validates the merged result against any registered kind.
     ///
     /// **Eventual consistency:** Between the existence check and the ingest,
     /// another task could delete this node. The update event will be a no-op
@@ -510,7 +625,7 @@ impl Prime {
         entity_id: &str,
         properties: serde_json::Value,
     ) -> PrimeResult<()> {
-        self.update_node_inner(entity_id, properties, None).await
+        self.update_node_asserted(entity_id, properties, None).await
     }
 
     /// Correct a node as of `valid_from`: the new properties hold from that
@@ -522,30 +637,66 @@ impl Prime {
         properties: serde_json::Value,
         valid_from: DateTime<Utc>,
     ) -> PrimeResult<()> {
-        self.update_node_inner(entity_id, properties, Some(valid_from))
+        self.update_node_inner(entity_id, properties, None, None, Some(valid_from))
+            .await
+    }
+
+    /// Update a node with an explicit assertion. `None` records an agent
+    /// assertion, as [`update_node`](Self::update_node) does.
+    pub async fn update_node_asserted(
+        &self,
+        entity_id: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+    ) -> PrimeResult<()> {
+        self.update_node_inner(entity_id, properties, assertion, None, None)
+            .await
+    }
+
+    /// Update a node with an explicit assertion, the new values holding from
+    /// `valid_from` (`None` means the record time).
+    pub async fn update_node_asserted_valid(
+        &self,
+        entity_id: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+        valid_from: Option<DateTime<Utc>>,
+    ) -> PrimeResult<()> {
+        self.update_node_inner(entity_id, properties, assertion, None, valid_from)
             .await
     }
 
     async fn update_node_inner(
         &self,
         entity_id: &str,
-        properties: serde_json::Value,
+        properties: Value,
+        assertion: Option<Assertion>,
+        extra_metadata: Option<Value>,
         valid_from: Option<DateTime<Utc>>,
     ) -> PrimeResult<()> {
+        if let Some(a) = &assertion {
+            a.validate()?;
+        }
         let node = self
             .node_state
             .get_node(entity_id)
             .filter(|n| !n.deleted)
             .ok_or_else(|| PrimeError::NodeNotFound(entity_id.to_string()))?;
 
-        // Validate the merged properties against the schema
         let mut merged = node.properties.clone();
         if let (Value::Object(base), Value::Object(update)) = (&mut merged, &properties) {
             for (k, v) in update {
                 base.insert(k.clone(), v.clone());
             }
         }
-        self.schema.validate_node(&node.node_type, &merged)?;
+        let check = self.schema.check_node_write(
+            DEFAULT_TENANT,
+            &node.node_type,
+            &merged,
+            &properties,
+            assertion.as_ref(),
+            &self.lookup(),
+        )?;
 
         self.core
             .ingest_with_valid_time(
@@ -553,7 +704,7 @@ impl Prime {
                     entity_id,
                     event_type: event_types::NODE_UPDATED,
                     payload: json!({ "properties": properties }),
-                    metadata: None,
+                    metadata: Some(write_metadata(assertion, &check, extra_metadata.as_ref())),
                     tenant_id: None,
                 },
                 valid_from,
@@ -847,7 +998,7 @@ impl Prime {
         relation: &str,
         properties: Option<serde_json::Value>,
     ) -> PrimeResult<EdgeId> {
-        self.add_edge_inner(source, target, relation, None, properties)
+        self.add_edge_asserted(source, target, relation, None, properties, None)
             .await
     }
 
@@ -860,10 +1011,28 @@ impl Prime {
         weight: f64,
         properties: Option<serde_json::Value>,
     ) -> PrimeResult<EdgeId> {
-        self.add_edge_inner(source, target, relation, Some(weight), properties)
+        self.add_edge_asserted(source, target, relation, Some(weight), properties, None)
             .await
     }
 
+    /// Create an edge with an explicit assertion. `None` records an agent
+    /// assertion.
+    pub async fn add_edge_asserted(
+        &self,
+        source: &str,
+        target: &str,
+        relation: &str,
+        weight: Option<f64>,
+        properties: Option<serde_json::Value>,
+        assertion: Option<Assertion>,
+    ) -> PrimeResult<EdgeId> {
+        self.add_edge_inner(
+            source, target, relation, weight, properties, assertion, None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn add_edge_inner(
         &self,
         source: &str,
@@ -871,10 +1040,14 @@ impl Prime {
         relation: &str,
         weight: Option<f64>,
         properties: Option<serde_json::Value>,
+        assertion: Option<Assertion>,
+        extra_metadata: Option<Value>,
     ) -> PrimeResult<EdgeId> {
-        // Validate source and target exist and are not deleted.
-        // Note: eventual consistency — node could be deleted between check and
-        // ingest. The edge event is harmless in that case (ADR-016).
+        if let Some(a) = &assertion {
+            a.validate()?;
+        }
+        // Eventual consistency: a node deleted between this check and the
+        // ingest leaves a harmless edge event (ADR-016).
         if !self.node_state.is_live(source) {
             return Err(PrimeError::NodeNotFound(source.to_string()));
         }
@@ -882,8 +1055,20 @@ impl Prime {
             return Err(PrimeError::NodeNotFound(target.to_string()));
         }
 
-        // Validate edge properties against registered schema
-        self.schema.validate_edge(relation, properties.as_ref())?;
+        let _gate = if self.contradiction.is_exclusive(relation) {
+            Some(self.exclusive_edge_gate.lock().await)
+        } else {
+            None
+        };
+        let check = self.schema.check_edge_write(
+            DEFAULT_TENANT,
+            relation,
+            source,
+            target,
+            properties.as_ref(),
+            assertion.as_ref(),
+            &self.lookup(),
+        )?;
 
         let id = uuid::Uuid::new_v4().to_string();
         let entity_id = edge_entity_id(&id);
@@ -907,7 +1092,7 @@ impl Prime {
                 entity_id: &entity_id,
                 event_type: event_types::EDGE_CREATED,
                 payload,
-                metadata: None,
+                metadata: Some(write_metadata(assertion, &check, extra_metadata.as_ref())),
                 tenant_id: None,
             })
             .await?;
@@ -976,23 +1161,22 @@ impl Prime {
             .get_node(target_entity_id)
             .ok_or_else(|| PrimeError::NodeNotFound(target_entity_id.to_string()))?;
 
-        // Collect properties from all sources for merging
-        let mut merged_properties = target_node.properties.clone();
+        // Only the gap-filled keys are written, so the target's own fields keep
+        // their asserting events in provenance.
+        let mut filled = serde_json::Map::new();
         let mut merged_source_ids = Vec::new();
 
         for &source_id in source_entity_ids {
             let source_node = self
                 .get_node(source_id)
                 .ok_or_else(|| PrimeError::NodeNotFound(source_id.to_string()))?;
+            let edge_metadata = compaction_metadata(vec![source_id.to_string()]);
 
-            // Merge properties: source values fill gaps, target values win on conflict
-            if let (Value::Object(target_map), Value::Object(source_map)) =
-                (&mut merged_properties, &source_node.properties)
-            {
+            if let Value::Object(source_map) = &source_node.properties {
                 for (key, value) in source_map {
-                    target_map
-                        .entry(key.clone())
-                        .or_insert_with(|| value.clone());
+                    if target_node.properties.get(key).is_none() {
+                        filled.entry(key.clone()).or_insert_with(|| value.clone());
+                    }
                 }
             }
 
@@ -1023,7 +1207,7 @@ impl Prime {
                                 "target": entry.peer,
                                 "relation": entry.relation,
                             }),
-                            metadata: None,
+                            metadata: Some(edge_metadata.clone()),
                             tenant_id: None,
                         })
                         .await?;
@@ -1064,7 +1248,7 @@ impl Prime {
                                 "target": target_entity_id,
                                 "relation": entry.relation,
                             }),
-                            metadata: None,
+                            metadata: Some(edge_metadata.clone()),
                             tenant_id: None,
                         })
                         .await?;
@@ -1094,18 +1278,17 @@ impl Prime {
                 .await?;
         }
 
-        // Update target with merged properties
-        self.core
-            .ingest(IngestEvent {
-                entity_id: target_entity_id,
-                event_type: event_types::NODE_UPDATED,
-                payload: json!({
-                    "properties": merged_properties,
-                }),
-                metadata: None,
-                tenant_id: None,
-            })
-            .await?;
+        if !filled.is_empty() {
+            self.core
+                .ingest(IngestEvent {
+                    entity_id: target_entity_id,
+                    event_type: event_types::NODE_UPDATED,
+                    payload: json!({ "properties": filled }),
+                    metadata: Some(compaction_metadata(merged_source_ids.clone())),
+                    tenant_id: None,
+                })
+                .await?;
+        }
 
         // Emit compaction event for audit trail
         self.core
@@ -1972,59 +2155,18 @@ impl Prime {
     /// - `observed_at` from the event's `valid_from` (its record time when unset)
     /// - `recorded_at` from the event's record time
     /// - `source_event_id` from the event's id (load-bearing for provenance)
-    /// - `source_priority` and `specificity_score` from the event metadata,
-    ///   defaulting to 0 when absent — writers are expected to set these
-    ///   when they care about projection precedence (see the convention
-    ///   in `MergePolicy::HighestPriority`)
+    /// - `source_priority` and `specificity_score` from the event metadata;
+    ///   priority falls back to the assertion's derived priority, 0 for a
+    ///   legacy event
+    /// - `assertion` from `metadata.assertion`, `source: unknown` when absent
     /// - `fields` from `payload.properties` (the canonical node-property
     ///   bag emitted by `add_node` / `update_node`)
     pub async fn observations(
         &self,
         entity_id: &str,
     ) -> PrimeResult<Vec<super::projections::declarative::Observation>> {
-        use super::projections::declarative::Observation;
-        use std::collections::BTreeMap;
-
         let events = self.core.query(Query::new().entity_id(entity_id)).await?;
-
-        let observations = events
-            .iter()
-            .filter(|e| {
-                e.event_type.as_str() == event_types::NODE_CREATED
-                    || e.event_type.as_str() == event_types::NODE_UPDATED
-            })
-            .map(|e| {
-                let fields = e
-                    .payload
-                    .get("properties")
-                    .and_then(|p| p.as_object())
-                    .map(|obj| {
-                        obj.iter()
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect::<BTreeMap<_, _>>()
-                    })
-                    .unwrap_or_default();
-                let metadata = e.metadata.as_ref();
-                let source_priority = metadata
-                    .and_then(|m| m.get("source_priority"))
-                    .and_then(serde_json::Value::as_i64)
-                    .map_or(0, |i| i as i32);
-                let specificity_score = metadata
-                    .and_then(|m| m.get("specificity_score"))
-                    .and_then(serde_json::Value::as_i64)
-                    .map_or(0, |i| i as i32);
-                Observation {
-                    observed_at: temporal::valid_from(e),
-                    recorded_at: Some(e.timestamp),
-                    source_priority,
-                    specificity_score,
-                    source_event_id: e.id.to_string(),
-                    fields,
-                }
-            })
-            .collect();
-
-        Ok(observations)
+        Ok(assertion::observations_from_events(&events))
     }
 
     /// Persist a declarative projection definition as a
@@ -2070,42 +2212,11 @@ impl Prime {
     pub async fn load_projection_defs(
         &self,
     ) -> PrimeResult<Vec<super::projections::declarative::ProjectionDef>> {
-        use super::projections::declarative::ProjectionDef;
-        use std::collections::HashMap;
-
         let events = self
             .core
             .query(Query::new().event_type(event_types::PROJECTION_DEFINED))
             .await?;
-
-        // Latest-by-timestamp per entity_id. HashMap dedupes; insertion
-        // order is preserved because we iterate events in their natural
-        // (chronological) order from the WAL.
-        let mut latest: HashMap<String, (chrono::DateTime<Utc>, ProjectionDef)> = HashMap::new();
-        for event in &events {
-            let def: ProjectionDef = match serde_json::from_value(event.payload.clone()) {
-                Ok(d) => d,
-                Err(e) => {
-                    tracing::warn!(
-                        entity_id = %event.entity_id,
-                        error = %e,
-                        "skipping malformed prime.projection.defined event during replay"
-                    );
-                    continue;
-                }
-            };
-            latest
-                .entry(event.entity_id.clone())
-                .and_modify(|(ts, existing)| {
-                    if event.timestamp >= *ts {
-                        *ts = event.timestamp;
-                        *existing = def.clone();
-                    }
-                })
-                .or_insert((event.timestamp, def));
-        }
-
-        Ok(latest.into_values().map(|(_, def)| def).collect())
+        Ok(assertion::latest_projection_defs(&events))
     }
 
     /// Get what changed in the graph between two timestamps.
@@ -2454,26 +2565,25 @@ impl ConversationScope<'_> {
         node_type: &str,
         properties: serde_json::Value,
     ) -> PrimeResult<NodeId> {
-        let id = uuid::Uuid::new_v4().to_string();
-        #[allow(deprecated)]
-        let entity_id = node_entity_id(node_type, &id);
+        self.add_node_asserted(node_type, properties, None).await
+    }
 
+    /// Create a node within this conversation with an explicit assertion.
+    pub async fn add_node_asserted(
+        &self,
+        node_type: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+    ) -> PrimeResult<NodeId> {
         self.prime
-            .core
-            .ingest(IngestEvent {
-                entity_id: &entity_id,
-                event_type: event_types::NODE_CREATED,
-                payload: json!({
-                    "id": id,
-                    "node_type": node_type,
-                    "properties": properties,
-                }),
-                metadata: Some(self.metadata()),
-                tenant_id: None,
-            })
-            .await?;
-
-        Ok(NodeId::new(id))
+            .add_node_inner(
+                node_type,
+                properties,
+                assertion,
+                Some(self.metadata()),
+                None,
+            )
+            .await
     }
 
     /// Create an edge within this conversation.
@@ -2484,39 +2594,30 @@ impl ConversationScope<'_> {
         relation: &str,
         properties: Option<serde_json::Value>,
     ) -> PrimeResult<EdgeId> {
-        if !self.prime.node_state.is_live(source) {
-            return Err(PrimeError::NodeNotFound(source.to_string()));
-        }
-        if !self.prime.node_state.is_live(target) {
-            return Err(PrimeError::NodeNotFound(target.to_string()));
-        }
+        self.add_edge_asserted(source, target, relation, properties, None)
+            .await
+    }
 
-        let id = uuid::Uuid::new_v4().to_string();
-        #[allow(deprecated)]
-        let entity_id = edge_entity_id(&id);
-
-        let mut payload = json!({
-            "id": id,
-            "source": source,
-            "target": target,
-            "relation": relation,
-        });
-        if let Some(props) = properties {
-            payload["properties"] = props;
-        }
-
+    /// Create an edge within this conversation with an explicit assertion.
+    pub async fn add_edge_asserted(
+        &self,
+        source: &str,
+        target: &str,
+        relation: &str,
+        properties: Option<serde_json::Value>,
+        assertion: Option<Assertion>,
+    ) -> PrimeResult<EdgeId> {
         self.prime
-            .core
-            .ingest(IngestEvent {
-                entity_id: &entity_id,
-                event_type: event_types::EDGE_CREATED,
-                payload,
-                metadata: Some(self.metadata()),
-                tenant_id: None,
-            })
-            .await?;
-
-        Ok(EdgeId::new(id))
+            .add_edge_inner(
+                source,
+                target,
+                relation,
+                None,
+                properties,
+                assertion,
+                Some(self.metadata()),
+            )
+            .await
     }
 
     /// Update a node within this conversation.
@@ -2525,22 +2626,25 @@ impl ConversationScope<'_> {
         entity_id: &str,
         properties: serde_json::Value,
     ) -> PrimeResult<()> {
-        if !self.prime.node_state.is_live(entity_id) {
-            return Err(PrimeError::NodeNotFound(entity_id.to_string()));
-        }
+        self.update_node_asserted(entity_id, properties, None).await
+    }
 
+    /// Update a node within this conversation with an explicit assertion.
+    pub async fn update_node_asserted(
+        &self,
+        entity_id: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+    ) -> PrimeResult<()> {
         self.prime
-            .core
-            .ingest(IngestEvent {
+            .update_node_inner(
                 entity_id,
-                event_type: event_types::NODE_UPDATED,
-                payload: json!({ "properties": properties }),
-                metadata: Some(self.metadata()),
-                tenant_id: None,
-            })
-            .await?;
-
-        Ok(())
+                properties,
+                assertion,
+                Some(self.metadata()),
+                None,
+            )
+            .await
     }
 
     /// Delete a node within this conversation (delegates to Prime::delete_node).
@@ -2634,6 +2738,30 @@ fn mmr_rerank(nodes: &mut Vec<super::types::ScoredNode>, top_k: usize, lambda: f
     *nodes = selected;
 }
 
+/// Event metadata for an accepted node or edge write; `None` records an
+/// agent assertion.
+fn write_metadata(
+    assertion: Option<Assertion>,
+    check: &WriteCheck,
+    extra: Option<&Value>,
+) -> Value {
+    assertion::write_metadata(
+        &assertion.unwrap_or_else(Assertion::agent),
+        check.kind_version,
+        &check.warnings,
+        extra,
+    )
+}
+
+/// Metadata for the node and edge writes `compact` makes on behalf of the
+/// merged source nodes.
+fn compaction_metadata(derived_from: Vec<String>) -> Value {
+    let assertion = Assertion::agent()
+        .with_actor("prime.compact")
+        .with_derived_from(derived_from);
+    assertion::write_metadata(&assertion, None, &[], None)
+}
+
 fn edge_from_event(event: &crate::embedded::EventView) -> Option<Edge> {
     let payload = &event.payload;
     let id = payload.get("id")?.as_str()?.to_string();
@@ -2715,6 +2843,10 @@ fn node_from_state(entity_id: &str, state: &serde_json::Value) -> Option<Node> {
         updated_at,
     })
 }
+
+#[cfg(test)]
+#[path = "facade_contract_tests.rs"]
+mod contract_tests;
 
 #[cfg(test)]
 mod tests {
@@ -3970,6 +4102,42 @@ mod tests {
                 .unwrap()
                 .contains(&json!(b_e))
         );
+
+        prime.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn compact_keeps_target_field_provenance_and_asserts_filled_fields() {
+        use crate::prime::assertion::{Assertion, AssertionSource};
+
+        let prime = Prime::open_in_memory().await.unwrap();
+
+        let a = prime
+            .add_node_asserted("person", json!({"name": "Alice"}), Some(Assertion::user()))
+            .await
+            .unwrap();
+        let b = prime
+            .add_node("person", json!({"email": "alice@example.com"}))
+            .await
+            .unwrap();
+        let a_e = node_entity_id("person", a.as_str());
+        let b_e = node_entity_id("person", b.as_str());
+
+        prime.compact(&a_e, &[&b_e]).await.unwrap();
+
+        let observations = prime.observations(&a_e).await.unwrap();
+        let compaction = observations.last().unwrap();
+        assert_eq!(compaction.fields.keys().collect::<Vec<_>>(), ["email"]);
+        assert_eq!(compaction.assertion.source, AssertionSource::Agent);
+        assert_eq!(compaction.assertion.actor.as_deref(), Some("prime.compact"));
+        assert_eq!(compaction.assertion.derived_from, vec![b_e.clone()]);
+
+        let name_writers: Vec<_> = observations
+            .iter()
+            .filter(|o| o.fields.contains_key("name"))
+            .map(|o| o.assertion.source)
+            .collect();
+        assert_eq!(name_writers, [AssertionSource::User]);
 
         prime.shutdown().await.unwrap();
     }

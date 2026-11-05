@@ -509,6 +509,10 @@ pub async fn serve_v1(
         .route("/api/v1/sync/pull", post(super::api::sync_pull_handler))
         .route("/api/v1/sync/push", post(super::api::sync_push_handler));
 
+    let app = app.merge(super::search_api::router(super::search_api::start(
+        Arc::clone(&app_state.store),
+    )));
+
     let app = app
         .with_state(app_state.clone())
         // IMPORTANT: Middleware layers execute from bottom to top in Tower/Axum

@@ -269,70 +269,117 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
     end
   end
 
+  @semantic_search_path "/api/v1/search/semantic"
+  @semantic_search_params ["query", "limit", "event_type", "min_similarity"]
+  @semantic_hit_keys ["event_id", "score", "event_type", "entity_id", "timestamp"]
+
+  @hybrid_search_path "/api/v1/search/hybrid"
+  @hybrid_search_params [
+    "query",
+    "limit",
+    "event_type",
+    "entity_id",
+    "semantic_weight",
+    "keyword_weight"
+  ]
+  @hybrid_hit_keys @semantic_hit_keys ++ ["semantic_score", "keyword_score"]
+
   @doc """
-  Perform semantic (vector) search on events.
+  Semantic (vector) search over events: `GET /api/v1/search/semantic`.
 
-  Uses embeddings to find semantically similar events based on natural language queries.
+  Sends only `query` (required), `limit`, `event_type` and `min_similarity`
+  as query parameters. The tenant comes from the credential, never a parameter.
 
-  ## Parameters
-    - `query` - Natural language search query
-    - `limit` - Maximum number of results (default: 100)
-    - `threshold` - Minimum similarity threshold 0.0-1.0 (default: 0.7)
+  Returns `{:ok, %{"results" => hits, "count" => n}}`, each hit holding exactly
+  `event_id`, `score`, `event_type`, `entity_id` and `timestamp`. Every non-200
+  answer is an error, including 503 when Core's embedding engine or index is
+  unavailable, and so is a 200 whose body does not have that shape.
   """
   @impl true
   def semantic_search(params) when is_map(params) do
-    query_params =
-      params
-      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-      |> Enum.into(%{})
-
-    case get("/api/v1/search/semantic", query: query_params) do
-      {:ok, %Tesla.Env{status: 200, body: body}} ->
-        {:ok, body}
-
-      {:ok, %Tesla.Env{status: status, body: body}} ->
-        {:error, "HTTP #{status}: #{inspect(body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, query} <- search_request(params, @semantic_search_params) do
+      @semantic_search_path
+      |> get(query: Map.to_list(query))
+      |> decode_search("GET", @semantic_search_path, @semantic_hit_keys)
     end
   end
 
   @doc """
-  Perform hybrid search combining semantic and keyword search.
+  Hybrid (semantic + keyword) search over events: `POST /api/v1/search/hybrid`.
 
-  Uses both vector similarity (semantic) and BM25 (keyword) scoring with
-  Reciprocal Rank Fusion (RRF) for optimal results.
+  Sends a JSON body of `query` (required), `limit`, `event_type`, `entity_id`,
+  `semantic_weight` and `keyword_weight`.
 
-  ## Parameters
-    - `semantic_query` - Natural language query for semantic search (optional)
-    - `keywords` - Keywords for BM25 search (optional)
-    - `filters` - Object with optional filters:
-      - `event_type` - Filter by event type
-      - `entity_id` - Filter by entity ID
-      - `time_from` - Filter events after this ISO timestamp
-      - `time_to` - Filter events before this ISO timestamp
-    - `limit` - Maximum number of results (default: 100)
+  Returns `{:ok, %{"results" => hits, "count" => n}}`, each hit holding exactly
+  `event_id`, `score`, `semantic_score` and `keyword_score` (number or nil),
+  `event_type`, `entity_id` and `timestamp`. Errors as `semantic_search/1`.
   """
   @impl true
   def hybrid_search(params) when is_map(params) do
-    # Build the request body, filtering out nil values
-    body =
-      params
-      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-      |> Enum.into(%{})
-
-    case post("/api/v1/search/hybrid", body) do
-      {:ok, %Tesla.Env{status: 200, body: response_body}} ->
-        {:ok, response_body}
-
-      {:ok, %Tesla.Env{status: status, body: response_body}} ->
-        {:error, "HTTP #{status}: #{inspect(response_body)}"}
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, body} <- search_request(params, @hybrid_search_params) do
+      @hybrid_search_path
+      |> post(body)
+      |> decode_search("POST", @hybrid_search_path, @hybrid_hit_keys)
     end
   end
+
+  defp search_request(params, allowed) do
+    case Map.get(params, "query") do
+      query when is_binary(query) ->
+        if String.trim(query) == "",
+          do: {:error, "search query must not be empty"},
+          else: {:ok, params |> Map.take(allowed) |> compact()}
+
+      _ ->
+        {:error, "search query is required"}
+    end
+  end
+
+  defp decode_search({:ok, %Tesla.Env{status: 200, body: body}}, method, path, keys) do
+    with %{"results" => results, "count" => count} when is_list(results) and is_integer(count) <-
+           body,
+         hits when is_list(hits) <- decode_hits(results, keys) do
+      {:ok, %{"results" => hits, "count" => count}}
+    else
+      _ -> {:error, "#{method} #{path} returned an unexpected body: #{inspect(body)}"}
+    end
+  end
+
+  defp decode_search({:ok, %Tesla.Env{status: 503, body: body}}, method, path, _keys) do
+    {:error, "Core search is unavailable (#{method} #{path}, HTTP 503): #{error_detail(body)}"}
+  end
+
+  defp decode_search({:ok, %Tesla.Env{status: status, body: body}}, method, path, _keys) do
+    {:error, "#{method} #{path} returned HTTP #{status}: #{error_detail(body)}"}
+  end
+
+  defp decode_search({:error, reason}, _method, _path, _keys), do: {:error, reason}
+
+  defp decode_hits(results, keys) do
+    Enum.reduce_while(results, [], fn
+      hit, acc when is_map(hit) ->
+        if Enum.all?(keys, &Map.has_key?(hit, &1)) and valid_hit?(hit),
+          do: {:cont, [Map.take(hit, keys) | acc]},
+          else: {:halt, :invalid}
+
+      _hit, _acc ->
+        {:halt, :invalid}
+    end)
+    |> case do
+      :invalid -> :invalid
+      hits -> Enum.reverse(hits)
+    end
+  end
+
+  defp valid_hit?(hit) do
+    is_binary(hit["event_id"]) and is_number(hit["score"]) and
+      Enum.all?(["semantic_score", "keyword_score"], fn key ->
+        is_nil(hit[key]) or is_number(hit[key])
+      end)
+  end
+
+  defp error_detail(%{"error" => message}) when is_binary(message), do: message
+  defp error_detail(body), do: inspect(body)
 
   # ============================================================================
   # Operational Endpoints
@@ -411,27 +458,6 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
     end
   end
 
-  @doc "Create a backup snapshot — not yet implemented in Core"
-  @impl true
-  def backup_create(_params \\ %{}) do
-    {:error,
-     "Backup API is not yet implemented in AllSource Core. Use WAL + Parquet files on disk for manual backups."}
-  end
-
-  @doc "Restore from a backup snapshot — not yet implemented in Core"
-  @impl true
-  def backup_restore(_params) do
-    {:error,
-     "Backup restore API is not yet implemented in AllSource Core. Restore by replacing WAL/Parquet data directory and restarting."}
-  end
-
-  @doc "List available backup snapshots — not yet implemented in Core"
-  @impl true
-  def backup_list(_params \\ %{}) do
-    {:error,
-     "Backup API is not yet implemented in AllSource Core. Check the data directory for WAL and Parquet files."}
-  end
-
   @doc "Deep health check — uses Core's /health endpoint which includes system streams and replication"
   @impl true
   def health_deep do
@@ -447,7 +473,7 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
     end
   end
 
-  @doc "Get performance metrics — not yet implemented as a dedicated endpoint"
+  @doc "Get performance metrics, answered from event store statistics"
   @impl true
   def performance_report(_params \\ %{}) do
     # Core exposes Prometheus metrics at /metrics but not a JSON summary.
@@ -458,7 +484,7 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
          %{
            "source" => "event_store_stats",
            "note" =>
-             "Dedicated performance endpoint not yet available. Showing event store statistics. For detailed metrics, scrape /metrics (Prometheus format).",
+             "Core has no JSON performance endpoint; these are event store statistics. For detailed metrics, scrape /metrics (Prometheus format).",
            "stats" => stats
          }}
 

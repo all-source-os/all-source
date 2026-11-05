@@ -239,7 +239,8 @@ defmodule McpServerElixir.Server do
     config = %{
       read_only: Map.get(state, :read_only, false),
       control_plane_enabled: Map.get(state, :control_plane_enabled, false),
-      system_admin: Map.get(state, :system_admin, false)
+      system_admin: Map.get(state, :system_admin, false),
+      backend: Map.get(state, :backend)
     }
 
     tools = McpTools.list_tools(config)

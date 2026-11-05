@@ -17,6 +17,7 @@ pub mod prime_api;
 pub mod read_model_api;
 pub mod response_limit;
 mod retained_query;
+pub mod search_api;
 #[cfg(feature = "multi-tenant")]
 pub mod tenant_api;
 pub mod tenant_egress_api;

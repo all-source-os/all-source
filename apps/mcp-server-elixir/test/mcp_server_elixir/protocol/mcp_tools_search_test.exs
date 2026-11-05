@@ -47,10 +47,11 @@ defmodule McpServerElixir.Protocol.McpToolsSearchTest do
       assert schema.properties["query"].type == "string"
     end
 
-    test "has optional limit parameter", %{tool: tool} do
-      schema = tool.inputSchema
-      assert Map.has_key?(schema.properties, "limit")
-      assert schema.properties["limit"].type == "number"
+    test "has an optional limit within Core's 1..100 bound", %{tool: tool} do
+      limit = tool.inputSchema.properties["limit"]
+      assert limit.type == "integer"
+      assert {limit.minimum, limit.maximum} == {1, 100}
+      refute "limit" in Map.get(tool.inputSchema, :required, [])
     end
 
     test "has optional threshold parameter", %{tool: tool} do
@@ -104,38 +105,22 @@ defmodule McpServerElixir.Protocol.McpToolsSearchTest do
       assert schema.properties["keywords"].description =~ "BM25"
     end
 
-    test "has filters object with nested properties", %{tool: tool} do
-      schema = tool.inputSchema
-      assert Map.has_key?(schema.properties, "filters")
-      assert schema.properties["filters"].type == "object"
+    test "advertises exactly the filters and weights Core's hybrid route accepts", %{tool: tool} do
+      properties = tool.inputSchema.properties
 
-      filters = schema.properties["filters"]
-      assert Map.has_key?(filters.properties, "event_type")
-      assert Map.has_key?(filters.properties, "entity_id")
-      assert Map.has_key?(filters.properties, "time_from")
-      assert Map.has_key?(filters.properties, "time_to")
+      assert properties["query"].type == "string"
+      assert properties["event_type"].type == "string"
+      assert properties["entity_id"].type == "string"
+      assert properties["semantic_weight"].type == "number"
+      assert properties["keyword_weight"].type == "number"
+      refute Map.has_key?(properties, "filters")
     end
 
-    test "filters have correct types", %{tool: tool} do
-      filters = tool.inputSchema.properties["filters"].properties
-
-      assert filters["event_type"].type == "string"
-      assert filters["entity_id"].type == "string"
-      assert filters["time_from"].type == "string"
-      assert filters["time_to"].type == "string"
-    end
-
-    test "time filters mention ISO timestamp format", %{tool: tool} do
-      filters = tool.inputSchema.properties["filters"].properties
-
-      assert filters["time_from"].description =~ "ISO"
-      assert filters["time_to"].description =~ "ISO"
-    end
-
-    test "has optional limit parameter", %{tool: tool} do
-      schema = tool.inputSchema
-      assert Map.has_key?(schema.properties, "limit")
-      assert schema.properties["limit"].type == "number"
+    test "has an optional limit within Core's 1..100 bound", %{tool: tool} do
+      limit = tool.inputSchema.properties["limit"]
+      assert limit.type == "integer"
+      assert {limit.minimum, limit.maximum} == {1, 100}
+      refute "limit" in Map.get(tool.inputSchema, :required, [])
     end
 
     test "has optional format parameter", %{tool: tool} do
@@ -154,9 +139,9 @@ defmodule McpServerElixir.Protocol.McpToolsSearchTest do
   end
 
   describe "tool count" do
-    test "list_tools returns 67 tools (43 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read + 3 view)" do
+    test "list_tools returns 64 tools (40 previous + 6 schema + 8 analytics + 4 developer + 3 fleet-read + 3 view)" do
       tools = McpTools.list_tools(%{control_plane_enabled: true})
-      assert length(tools) == 67
+      assert length(tools) == 64
     end
   end
 end

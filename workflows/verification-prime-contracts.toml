@@ -1,0 +1,50 @@
+command_seconds = 235
+environment = ["PATH", "HOME", "RUSTUP_TOOLCHAIN", "RUSTFLAGS", "RUSTC_WRAPPER", "CARGO_TARGET_DIR", "CARGO_PROFILE_DEV_DEBUG", "CARGO_PROFILE_TEST_DEBUG", "CARGO_BUILD_JOBS", "MIX_HOME", "HEX_HOME"]
+
+[[gates]]
+name = "format-workspace"
+argv = ["cargo", "fmt", "--all", "--check"]
+
+[[gates]]
+name = "format-prime-mcp"
+argv = ["cargo", "fmt", "--manifest-path", "apps/prime-mcp/Cargo.toml", "--check"]
+
+[[gates]]
+name = "core-prime-tests"
+argv = ["cargo", "test", "--locked", "-p", "allsource-core", "--features", "prime-recall,prime-vectors", "--lib", "prime"]
+success_marker = "test result: ok."
+test = true
+compile = true
+
+[[gates]]
+name = "core-search-tests"
+argv = ["cargo", "test", "--locked", "-p", "allsource-core", "--features", "prime-recall,prime-vectors", "--lib", "search"]
+success_marker = "test result: ok."
+test = true
+compile = true
+
+[[gates]]
+name = "core-lint"
+argv = ["cargo", "clippy", "--locked", "-p", "allsource-core", "--features", "prime-recall,prime-vectors", "--lib", "--tests", "--", "-D", "warnings"]
+compile = true
+
+[[gates]]
+name = "prime-mcp-tests"
+argv = ["cargo", "test", "--locked", "--manifest-path", "apps/prime-mcp/Cargo.toml", "--no-default-features", "--bins", "--tests"]
+success_marker = "test result: ok."
+test = true
+compile = true
+
+[[gates]]
+name = "prime-mcp-lint"
+argv = ["cargo", "clippy", "--locked", "--manifest-path", "apps/prime-mcp/Cargo.toml", "--no-default-features", "--all-targets", "--", "-D", "warnings"]
+compile = true
+
+[[gates]]
+name = "elixir-mcp-tests"
+argv = ["/bin/sh", "-c", "cd apps/mcp-server-elixir && MIX_ENV=test mix test"]
+success_marker = " 0 failures"
+
+[[gates]]
+name = "diff"
+argv = ["git", "diff", "--check", "origin/main", "HEAD"]

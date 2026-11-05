@@ -15,6 +15,11 @@ if System.get_env("CORE_MODE") == "embedded" do
       McpServerElixir.Infrastructure.CoreEmbedded.Supervisor.resource()
     end
 
+    @impl true
+    def unsupported_tools do
+      ["get_cluster_status", "partition_info", "performance_report", "audit_log"]
+    end
+
     # ============================================================================
     # Query & State
     # ============================================================================
@@ -92,21 +97,6 @@ if System.get_env("CORE_MODE") == "embedded" do
     @impl true
     def wal_status do
       CoreNif.nif_wal_status(resource())
-    end
-
-    @impl true
-    def backup_create(_params) do
-      {:error, "not supported in embedded mode"}
-    end
-
-    @impl true
-    def backup_restore(_params) do
-      {:error, "not supported in embedded mode"}
-    end
-
-    @impl true
-    def backup_list(_params) do
-      {:error, "not supported in embedded mode"}
     end
 
     @impl true

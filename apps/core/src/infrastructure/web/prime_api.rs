@@ -11,59 +11,376 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, patch, post},
+    routing::{MethodRouter, delete, get, patch, post, put},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::prime::{Direction, Prime};
+use crate::prime::{
+    AssertionInput, Direction, EnforcementMode, Prime, PrimeError, SchemaEntry, SchemaKind,
+};
 
 /// Shared Prime state, initialized once during server startup.
 pub struct PrimeState {
     pub prime: Prime,
 }
 
+/// One routed Prime endpoint. [`prime_router`] and [`openapi_document`] are
+/// both built from [`prime_routes`], so a route cannot be served without
+/// being documented.
+pub struct PrimeRoute {
+    /// Path relative to `/api/v1/prime`, in axum/OpenAPI `{param}` form.
+    pub path: &'static str,
+    /// Lower-case HTTP method.
+    pub method: &'static str,
+    pub summary: &'static str,
+    /// Status code of a successful response.
+    pub success: u16,
+    /// JSON Schema of the request body, if the route takes one.
+    pub request: Option<Value>,
+    handler: MethodRouter<Arc<PrimeState>>,
+}
+
+impl PrimeRoute {
+    fn new(
+        method: &'static str,
+        path: &'static str,
+        summary: &'static str,
+        success: u16,
+        handler: MethodRouter<Arc<PrimeState>>,
+    ) -> Self {
+        Self {
+            path,
+            method,
+            summary,
+            success,
+            request: None,
+            handler,
+        }
+    }
+
+    fn body(mut self, schema: Value) -> Self {
+        self.request = Some(schema);
+        self
+    }
+}
+
+fn assertion_schema_properties() -> Value {
+    json!({
+        "source": {"type": "string", "enum": ["user", "agent", "extraction", "import"]},
+        "actor": {"type": "string"},
+        "model": {"type": "string"},
+        "run_id": {"type": "string"},
+        "derived_from": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "source_priority": {"type": "integer"}
+    })
+}
+
+fn with_assertion(mut schema: Value) -> Value {
+    if let (Some(props), Value::Object(extra)) = (
+        schema.get_mut("properties").and_then(Value::as_object_mut),
+        assertion_schema_properties(),
+    ) {
+        props.extend(extra);
+    }
+    schema
+}
+
+/// Every Prime route, in registration order.
+pub fn prime_routes() -> Vec<PrimeRoute> {
+    #[cfg_attr(not(feature = "prime-vectors"), allow(unused_mut))]
+    let mut routes = vec![
+        PrimeRoute::new("post", "/nodes", "Create a node", 201, post(create_node)).body(
+            with_assertion(json!({
+                "type": "object",
+                "required": ["type", "properties"],
+                "properties": {"type": {"type": "string"}, "properties": {"type": "object"}}
+            })),
+        ),
+        PrimeRoute::new("get", "/nodes/{id}", "Get a node", 200, get(get_node)),
+        PrimeRoute::new(
+            "patch",
+            "/nodes/{id}",
+            "Update a node",
+            200,
+            patch(update_node),
+        )
+        .body(with_assertion(json!({
+            "type": "object",
+            "required": ["properties"],
+            "properties": {"properties": {"type": "object"}}
+        }))),
+        PrimeRoute::new(
+            "delete",
+            "/nodes/{id}",
+            "Delete a node",
+            200,
+            delete(delete_node),
+        ),
+        PrimeRoute::new(
+            "get",
+            "/nodes/{id}/neighbors",
+            "Neighbors of a node",
+            200,
+            get(get_neighbors),
+        ),
+        PrimeRoute::new(
+            "get",
+            "/nodes/{id}/history",
+            "Event history of a node",
+            200,
+            get(get_history),
+        ),
+        PrimeRoute::new("post", "/edges", "Create an edge", 201, post(create_edge)).body(
+            with_assertion(json!({
+                "type": "object",
+                "required": ["source", "target", "relation"],
+                "properties": {
+                    "source": {"type": "string"},
+                    "target": {"type": "string"},
+                    "relation": {"type": "string"},
+                    "properties": {"type": "object"},
+                    "weight": {"type": "number"}
+                }
+            })),
+        ),
+        PrimeRoute::new(
+            "delete",
+            "/edges/{id}",
+            "Delete an edge",
+            200,
+            delete(delete_edge_handler),
+        ),
+        PrimeRoute::new(
+            "post",
+            "/projections",
+            "Define a declarative projection",
+            201,
+            post(define_projection),
+        )
+        .body(json!({
+            "type": "object",
+            "required": ["entity_type", "field_policies"],
+            "properties": {
+                "entity_type": {"type": "string"},
+                "field_policies": {"type": "object", "additionalProperties": {
+                    "type": "string",
+                    "enum": ["last_write", "highest_priority", "most_specific", "merge_array"]
+                }}
+            }
+        })),
+        PrimeRoute::new(
+            "get",
+            "/projections",
+            "List projections",
+            200,
+            get(list_projections),
+        ),
+        PrimeRoute::new(
+            "post",
+            "/nodes/{id}/project",
+            "Fold a node through its projection",
+            200,
+            post(project_node),
+        ),
+        PrimeRoute::new(
+            "get",
+            "/nodes/{id}/fields/{field}/provenance",
+            "Provenance of one projected field",
+            200,
+            get(field_provenance),
+        ),
+        PrimeRoute::new(
+            "post",
+            "/types",
+            "Register or re-register a node or edge kind",
+            201,
+            post(define_type),
+        )
+        .body(json!({
+            "type": "object",
+            "required": ["type_name", "kind", "schema"],
+            "properties": {
+                "type_name": {"type": "string"},
+                "kind": {"type": "string", "enum": ["node", "edge"]},
+                "schema": {"type": "object"}
+            }
+        })),
+        PrimeRoute::new(
+            "get",
+            "/types",
+            "List registered kinds",
+            200,
+            get(list_types),
+        ),
+        PrimeRoute::new(
+            "put",
+            "/enforcement",
+            "Set the enforcement mode",
+            200,
+            put(set_enforcement),
+        )
+        .body(json!({
+            "type": "object",
+            "required": ["mode"],
+            "properties": {"mode": {"type": "string", "enum": ["open", "warn", "strict"]}}
+        })),
+        PrimeRoute::new(
+            "get",
+            "/enforcement",
+            "Current enforcement mode",
+            200,
+            get(get_enforcement),
+        ),
+        PrimeRoute::new("get", "/stats", "Graph statistics", 200, get(get_stats)),
+        PrimeRoute::new(
+            "get",
+            "/graph",
+            "Full materialized graph",
+            200,
+            get(get_full_graph),
+        ),
+        PrimeRoute::new(
+            "get",
+            "/openapi.json",
+            "This OpenAPI document",
+            200,
+            get(openapi_json),
+        ),
+    ];
+
+    #[cfg(feature = "prime-vectors")]
+    routes.extend([
+        PrimeRoute::new(
+            "post",
+            "/vectors",
+            "Store a vector",
+            201,
+            post(store_vector),
+        )
+        .body(json!({
+            "type": "object",
+            "required": ["id", "vector"],
+            "properties": {
+                "id": {"type": "string"},
+                "text": {"type": "string"},
+                "vector": {"type": "array", "items": {"type": "number"}},
+                "metadata": {"type": "object"}
+            }
+        })),
+        PrimeRoute::new(
+            "post",
+            "/vectors/search",
+            "Vector similarity search",
+            200,
+            post(search_vectors),
+        )
+        .body(json!({
+            "type": "object",
+            "required": ["vector"],
+            "properties": {
+                "vector": {"type": "array", "items": {"type": "number"}},
+                "top_k": {"type": "integer"}
+            }
+        })),
+        PrimeRoute::new(
+            "delete",
+            "/vectors/{id}",
+            "Delete a vector",
+            200,
+            delete(delete_vector),
+        ),
+        PrimeRoute::new("post", "/recall", "Hybrid recall", 200, post(recall)).body(json!({
+            "type": "object",
+            "properties": {
+                "vector": {"type": "array", "items": {"type": "number"}},
+                "node_type": {"type": "string"},
+                "depth": {"type": "integer"},
+                "top_k": {"type": "integer"},
+                "tenant_id": {"type": "string"}
+            }
+        })),
+    ]);
+
+    routes
+}
+
 /// Build the Prime API router.
 ///
 /// All routes are nested under `/api/v1/prime` by the caller.
 pub fn prime_router() -> Router<Arc<PrimeState>> {
-    let router = Router::new()
-        // Nodes
-        .route("/nodes", post(create_node))
-        .route("/nodes/{id}", get(get_node))
-        .route("/nodes/{id}", patch(update_node))
-        .route("/nodes/{id}", delete(delete_node))
-        .route("/nodes/{id}/neighbors", get(get_neighbors))
-        .route("/nodes/{id}/history", get(get_history))
-        // Edges
-        .route("/edges", post(create_edge))
-        .route("/edges/{id}", delete(delete_edge_handler))
-        // Declarative projections + per-field provenance.
-        // These mirror the MCP tools (prime_define_projection,
-        // prime_list_projections, prime_project_node, prime_node_provenance)
-        // so SDK/REST callers reach the same Neotoma-parity primitives the
-        // MCP layer already exposes.
-        .route("/projections", post(define_projection))
-        .route("/projections", get(list_projections))
-        .route("/nodes/{id}/project", post(project_node))
-        .route(
-            "/nodes/{id}/fields/{field}/provenance",
-            get(field_provenance),
-        )
-        // Stats (always available)
-        .route("/stats", get(get_stats))
-        // Full graph read (always available)
-        .route("/graph", get(get_full_graph));
+    prime_routes()
+        .into_iter()
+        .fold(Router::new(), |router, r| router.route(r.path, r.handler))
+}
 
-    // Vector and recall routes require prime-vectors feature
-    #[cfg(feature = "prime-vectors")]
-    let router = router
-        .route("/vectors", post(store_vector))
-        .route("/vectors/search", post(search_vectors))
-        .route("/vectors/{id}", delete(delete_vector))
-        .route("/recall", post(recall));
+/// OpenAPI 3.1 document for every route in [`prime_routes`], with paths
+/// prefixed by `/api/v1/prime`.
+pub fn openapi_document() -> Value {
+    let mut paths = serde_json::Map::new();
+    for r in prime_routes() {
+        let parameters: Vec<Value> = r
+            .path
+            .split('/')
+            .filter_map(|seg| seg.strip_prefix('{').and_then(|p| p.strip_suffix('}')))
+            .map(|name| {
+                json!({"name": name, "in": "path", "required": true, "schema": {"type": "string"}})
+            })
+            .collect();
+        let mut op = json!({
+            "summary": r.summary,
+            "operationId": format!("{}{}", r.method, r.path.replace(['/', '{', '}', '.'], "_")),
+            "responses": {
+                r.success.to_string(): {"description": "Success", "content": {"application/json": {"schema": {"type": "object"}}}},
+                "400": {"description": "Invalid request or refused write; a typed refusal carries `violation` {type_name, field, expected, received}"}
+            }
+        });
+        if !parameters.is_empty() {
+            op["parameters"] = Value::Array(parameters);
+        }
+        if let Some(schema) = r.request {
+            op["requestBody"] =
+                json!({"required": true, "content": {"application/json": {"schema": schema}}});
+        }
+        let entry = paths
+            .entry(format!("/api/v1/prime{}", r.path))
+            .or_insert_with(|| json!({}));
+        entry[r.method] = op;
+    }
+    json!({
+        "openapi": "3.1.0",
+        "info": {"title": "AllSource Prime API", "version": env!("CARGO_PKG_VERSION")},
+        "paths": paths
+    })
+}
 
-    router
+async fn openapi_json() -> impl IntoResponse {
+    Json(openapi_document())
+}
+
+/// Client-error body for a refused write, with the structured violation
+/// when the refusal came from a typed kind.
+fn refusal_body(e: &PrimeError) -> Json<Value> {
+    match e {
+        PrimeError::SchemaViolation(v) => Json(json!({"error": e.to_string(), "violation": v})),
+        _ => Json(json!({"error": e.to_string()})),
+    }
+}
+
+fn write_error(e: &PrimeError) -> (StatusCode, Json<Value>) {
+    let status = match e {
+        PrimeError::NodeNotFound(_) | PrimeError::EdgeNotFound(_) => StatusCode::NOT_FOUND,
+        PrimeError::ValidationFailed(_) | PrimeError::SchemaViolation(_) => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (status, refusal_body(e))
+}
+
+fn assertion_of(
+    input: AssertionInput,
+) -> Result<Option<crate::prime::Assertion>, (StatusCode, Json<Value>)> {
+    input.into_assertion().map_err(|e| write_error(&e))
 }
 
 // =============================================================================
@@ -75,11 +392,15 @@ struct CreateNodeReq {
     #[serde(rename = "type")]
     node_type: String,
     properties: Value,
+    #[serde(flatten)]
+    assertion: AssertionInput,
 }
 
 #[derive(Deserialize)]
 struct UpdateNodeReq {
     properties: Value,
+    #[serde(flatten)]
+    assertion: AssertionInput,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +410,20 @@ struct CreateEdgeReq {
     relation: String,
     properties: Option<Value>,
     weight: Option<f64>,
+    #[serde(flatten)]
+    assertion: AssertionInput,
+}
+
+#[derive(Deserialize)]
+struct DefineTypeReq {
+    type_name: String,
+    kind: String,
+    schema: Value,
+}
+
+#[derive(Deserialize)]
+struct SetEnforcementReq {
+    mode: String,
 }
 
 #[cfg(feature = "prime-vectors")]
@@ -138,7 +473,15 @@ async fn create_node(
     State(state): State<Arc<PrimeState>>,
     Json(req): Json<CreateNodeReq>,
 ) -> impl IntoResponse {
-    match state.prime.add_node(&req.node_type, req.properties).await {
+    let assertion = match assertion_of(req.assertion) {
+        Ok(a) => a,
+        Err(resp) => return resp,
+    };
+    match state
+        .prime
+        .add_node_asserted(&req.node_type, req.properties, assertion)
+        .await
+    {
         Ok(id) => {
             let entity_id = crate::prime::EntityId::node(&req.node_type, id.as_str()).to_wire();
             (
@@ -146,10 +489,7 @@ async fn create_node(
                 Json(json!({"node_id": id.as_str(), "entity_id": entity_id})),
             )
         }
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e.to_string()})),
-        ),
+        Err(e) => (StatusCode::BAD_REQUEST, refusal_body(&e)),
     }
 }
 
@@ -181,9 +521,17 @@ async fn update_node(
     Path(id): Path<String>,
     Json(req): Json<UpdateNodeReq>,
 ) -> impl IntoResponse {
-    match state.prime.update_node(&id, req.properties).await {
+    let assertion = match assertion_of(req.assertion) {
+        Ok(a) => a,
+        Err(resp) => return resp,
+    };
+    match state
+        .prime
+        .update_node_asserted(&id, req.properties, assertion)
+        .await
+    {
         Ok(()) => (StatusCode::OK, Json(json!({"updated": true}))),
-        Err(e) => (StatusCode::NOT_FOUND, Json(json!({"error": e.to_string()}))),
+        Err(e) => write_error(&e),
     }
 }
 
@@ -238,24 +586,86 @@ async fn create_edge(
     State(state): State<Arc<PrimeState>>,
     Json(req): Json<CreateEdgeReq>,
 ) -> impl IntoResponse {
-    let result = if let Some(w) = req.weight {
-        state
-            .prime
-            .add_edge_weighted(&req.source, &req.target, &req.relation, w, req.properties)
-            .await
-    } else {
-        state
-            .prime
-            .add_edge(&req.source, &req.target, &req.relation, req.properties)
-            .await
+    let assertion = match assertion_of(req.assertion) {
+        Ok(a) => a,
+        Err(resp) => return resp,
     };
+    let result = state
+        .prime
+        .add_edge_asserted(
+            &req.source,
+            &req.target,
+            &req.relation,
+            req.weight,
+            req.properties,
+            assertion,
+        )
+        .await;
     match result {
         Ok(id) => (StatusCode::CREATED, Json(json!({"edge_id": id.as_str()}))),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e.to_string()})),
-        ),
+        Err(e) => (StatusCode::BAD_REQUEST, refusal_body(&e)),
     }
+}
+
+fn kind_json(e: &SchemaEntry) -> Value {
+    json!({
+        "type_name": e.type_name,
+        "kind": e.kind.as_str(),
+        "version": e.version,
+        "schema": e.schema,
+    })
+}
+
+async fn define_type(
+    State(state): State<Arc<PrimeState>>,
+    Json(req): Json<DefineTypeReq>,
+) -> impl IntoResponse {
+    let Some(kind) = SchemaKind::parse(&req.kind) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({"error": format!("kind: expected node or edge, received {}", json!(req.kind))}),
+            ),
+        );
+    };
+    match state
+        .prime
+        .register_kind(kind, &req.type_name, req.schema)
+        .await
+    {
+        Ok(entry) => (StatusCode::CREATED, Json(kind_json(&entry))),
+        Err(e) if e.to_string().contains("re-registration refused") => {
+            (StatusCode::CONFLICT, refusal_body(&e))
+        }
+        Err(e) => write_error(&e),
+    }
+}
+
+async fn list_types(State(state): State<Arc<PrimeState>>) -> impl IntoResponse {
+    let types: Vec<Value> = state.prime.schemas().iter().map(kind_json).collect();
+    Json(json!({"total": types.len(), "types": types}))
+}
+
+async fn set_enforcement(
+    State(state): State<Arc<PrimeState>>,
+    Json(req): Json<SetEnforcementReq>,
+) -> impl IntoResponse {
+    let Some(mode) = EnforcementMode::parse(&req.mode) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({"error": format!("mode: expected open, warn or strict, received {}", json!(req.mode))}),
+            ),
+        );
+    };
+    match state.prime.set_enforcement(mode).await {
+        Ok(()) => (StatusCode::OK, Json(json!({"mode": mode.as_str()}))),
+        Err(e) => write_error(&e),
+    }
+}
+
+async fn get_enforcement(State(state): State<Arc<PrimeState>>) -> impl IntoResponse {
+    Json(json!({"mode": state.prime.enforcement().as_str()}))
 }
 
 async fn delete_edge_handler(
@@ -505,7 +915,9 @@ async fn field_provenance(
     State(state): State<Arc<PrimeState>>,
     Path((id, field)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    use crate::prime::projections::declarative::provenance_for_field;
+    use crate::prime::projections::declarative::{
+        MergePolicy, ProjectionDef, provenance_for_field,
+    };
 
     let Some(entity_type) = entity_type_from_node_id(&id) else {
         return (
@@ -513,16 +925,14 @@ async fn field_provenance(
             Json(json!({"error": format!("node_id must be 'node:{{type}}:{{id}}', got: {id}")})),
         );
     };
-    let def = match load_def(&state, entity_type).await {
-        Ok(Some(d)) => d,
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": format!(
-                    "no projection defined for entity_type '{entity_type}' — POST /projections first"
-                )})),
-            );
-        }
+    // A field outside any registered projection is answered under
+    // `last_write`, matching prime-mcp's route of the same path.
+    let (def, policy_source) = match load_def(&state, entity_type).await {
+        Ok(Some(d)) if d.field_policies.contains_key(&field) => (d, "projection"),
+        Ok(_) => (
+            ProjectionDef::new(entity_type, [(field.clone(), MergePolicy::LastWrite)]),
+            "default",
+        ),
         Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))),
     };
     let observations = match state.prime.observations(&id).await {
@@ -543,12 +953,16 @@ async fn field_provenance(
                 "source_event_id": p.source_event_id,
                 "source_event_at": p.source_event_at,
                 "merge_policy_applied": p.merge_policy_applied,
+                "policy_source": policy_source,
+                "source_priority": p.source_priority,
+                "assertion": p.assertion,
+                "contributors": p.contributors,
             })),
         ),
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({"error": format!(
-                "no provenance for field '{field}' on {id} (missing, not in projection, or merge_array policy — union has no single source)"
+                "no provenance for field '{field}' on {id}: no observation sets it"
             )})),
         ),
     }
@@ -657,6 +1071,10 @@ async fn get_stats(State(state): State<Arc<PrimeState>>) -> impl IntoResponse {
 // tools expose (bead t-2ac8 acceptance: REST returns what the MCP path does).
 // =============================================================================
 #[cfg(test)]
+#[path = "prime_api_contract_tests.rs"]
+mod contract_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::prime::{EntityId, Prime};
@@ -756,15 +1174,15 @@ mod tests {
                 .is_some_and(|s| !s.is_empty())
         );
 
-        // merge_array fields have no single source → 404.
-        let (status, _) = send(
+        let (status, body) = send(
             &app,
             "GET",
             &format!("/nodes/{entity_id}/fields/tags/provenance"),
             None,
         )
         .await;
-        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["contributors"].as_array().map(Vec::len), Some(1));
     }
 
     #[tokio::test]
