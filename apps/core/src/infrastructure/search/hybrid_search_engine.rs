@@ -127,6 +127,14 @@ pub struct SearchQuery {
     pub filters: MetadataFilters,
     /// Minimum similarity threshold for semantic search (0.0 to 1.0)
     pub min_similarity: Option<f32>,
+    /// Precomputed embedding of `query`; when absent the vector engine embeds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_embedding: Option<Vec<f32>>,
+    /// Per-query overrides of the configured fusion weights.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_weight: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyword_weight: Option<f32>,
 }
 
 impl SearchQuery {
@@ -138,7 +146,21 @@ impl SearchQuery {
             mode: SearchMode::Hybrid,
             filters: MetadataFilters::default(),
             min_similarity: None,
+            query_embedding: None,
+            semantic_weight: None,
+            keyword_weight: None,
         }
+    }
+
+    pub fn with_query_embedding(mut self, embedding: Vec<f32>) -> Self {
+        self.query_embedding = Some(embedding);
+        self
+    }
+
+    pub fn with_weights(mut self, semantic: Option<f32>, keyword: Option<f32>) -> Self {
+        self.semantic_weight = semantic;
+        self.keyword_weight = keyword;
+        self
     }
 
     pub fn with_limit(mut self, limit: usize) -> Self {
@@ -218,6 +240,18 @@ pub struct EventMetadata {
     pub event_type: Option<String>,
     pub entity_id: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,
+}
+
+/// An event plus its precomputed embedding, for [`HybridSearchEngine::index_embedded`].
+#[derive(Debug, Clone)]
+pub struct EmbeddedEvent {
+    pub event_id: Uuid,
+    pub tenant_id: String,
+    pub event_type: String,
+    pub entity_id: Option<String>,
+    pub payload: serde_json::Value,
+    pub timestamp: DateTime<Utc>,
+    pub embedding: Option<Vec<f32>>,
 }
 
 /// HybridSearchEngine - Orchestrates semantic and keyword search
@@ -346,6 +380,40 @@ impl HybridSearchEngine {
             self.store_metadata(event_id, metadata);
             Ok(())
         })
+    }
+
+    /// Index events whose embeddings the caller already computed, then commit.
+    ///
+    /// An event without an embedding is still keyword-searchable.
+    pub fn index_embedded(&self, events: Vec<EmbeddedEvent>) -> Result<()> {
+        let mut vectors = Vec::with_capacity(events.len());
+        for event in events {
+            self.keyword_engine.index_event(
+                event.event_id,
+                &event.tenant_id,
+                &event.event_type,
+                event.entity_id.as_deref(),
+                &event.payload,
+            )?;
+            if let Some(embedding) = event.embedding {
+                vectors.push(super::IndexedVector {
+                    event_id: event.event_id,
+                    tenant_id: event.tenant_id,
+                    embedding,
+                    source_text: extract_source_text(&event.payload),
+                });
+            }
+            self.store_metadata(
+                event.event_id,
+                EventMetadata {
+                    event_type: Some(event.event_type),
+                    entity_id: event.entity_id,
+                    timestamp: Some(event.timestamp),
+                },
+            );
+        }
+        self.vector_engine.index_batch(vectors)?;
+        self.commit()
     }
 
     /// Commit changes to both engines
@@ -482,13 +550,16 @@ impl HybridSearchEngine {
         let semantic_results = self.run_semantic_search(query, fetch_limit)?;
         let keyword_results = self.run_keyword_search(query, fetch_limit)?;
 
+        let semantic_weight = query.semantic_weight.unwrap_or(self.config.semantic_weight);
+        let keyword_weight = query.keyword_weight.unwrap_or(self.config.keyword_weight);
+
         // Build score maps with ranks
         let mut combined_scores: HashMap<Uuid, HybridSearchResult> = HashMap::new();
 
         // Process semantic results
         for (rank, result) in semantic_results.into_iter().enumerate() {
             let rrf_score = 1.0 / (self.config.rrf_k + rank as f32 + 1.0);
-            let weighted_score = rrf_score * self.config.semantic_weight;
+            let weighted_score = rrf_score * semantic_weight;
 
             combined_scores.insert(
                 result.event_id,
@@ -507,7 +578,7 @@ impl HybridSearchEngine {
         // Process keyword results and combine with semantic
         for (rank, result) in keyword_results.into_iter().enumerate() {
             let rrf_score = 1.0 / (self.config.rrf_k + rank as f32 + 1.0);
-            let weighted_score = rrf_score * self.config.keyword_weight;
+            let weighted_score = rrf_score * keyword_weight;
 
             if let Some(existing) = combined_scores.get_mut(&result.event_id) {
                 // Combine scores
@@ -558,8 +629,10 @@ impl HybridSearchEngine {
         query: &SearchQuery,
         limit: usize,
     ) -> Result<Vec<SimilarityResult>> {
-        // Generate query embedding
-        let query_embedding = self.vector_engine.embed_text(&query.query)?;
+        let query_embedding = match &query.query_embedding {
+            Some(embedding) => embedding.clone(),
+            None => self.vector_engine.embed_text(&query.query)?,
+        };
 
         let similarity_query = SimilarityQuery::new(query_embedding, limit)
             .with_min_similarity(query.min_similarity.unwrap_or(0.0));
@@ -695,7 +768,6 @@ impl HybridSearchEngine {
 }
 
 /// Extract source text from a payload for the vector search engine
-#[cfg(feature = "vector-search")]
 fn extract_source_text(payload: &serde_json::Value) -> Option<String> {
     let priority_fields = [
         "content",

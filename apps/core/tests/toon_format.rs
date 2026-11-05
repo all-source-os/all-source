@@ -188,7 +188,7 @@ mod tests {
             .await
             .unwrap();
 
-        let opts = toon_format::DecodeOptions::new().with_coerce_types(true);
+        let opts = toon_format::DecodeOptions::new();
         let decoded: serde_json::Value = toon_format::decode(&toon, &opts).expect("Should decode");
         let event = &decoded.as_array().unwrap()[0];
 

@@ -84,12 +84,14 @@ defmodule McpServerElixir.Integration.EmbeddedModeTest do
     refute Map.get(result, :isError, false)
   end
 
-  test "unsupported tool returns error", %{state: state} do
-    {:ok, result} = McpTools.call_tool("backup_create", %{}, state)
+  test "tools the embedded backend cannot serve are neither listed nor dispatched", %{
+    state: state
+  } do
+    names = McpTools.list_tools(state) |> Enum.map(& &1.name)
 
-    text = hd(result.content).text
-
-    assert text =~ "not supported" || text =~ "Not Yet Available" || text =~ "not available" ||
-             text =~ "not yet implemented" || text =~ "error"
+    for tool <- state.backend.unsupported_tools() do
+      refute tool in names
+      assert {:error, "Unknown tool: " <> ^tool} = McpTools.call_tool(tool, %{}, state)
+    end
   end
 end

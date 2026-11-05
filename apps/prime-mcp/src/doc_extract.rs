@@ -12,18 +12,27 @@
 //!
 //! Extractions are tagged INFERRED (weight 0.6) — they are a model's reading of
 //! the text, not AST-certain like code.
+//!
+//! Each call is one extraction run: a `prime.extraction.run` event records it as
+//! `started` before the first write and `completed` or `failed` after the last,
+//! and every node and edge it writes carries an extraction assertion naming the
+//! run, so facts written before a failure stay attributable to it.
 
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
 
-use allsource_core::prime::Prime;
+use allsource_core::prime::{Assertion, Prime};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 const MAX_CHUNK: usize = 6000;
+
+/// Event type recording an extraction run's lifecycle.
+pub const RUN_EVENT: &str = "prime.extraction.run";
 
 const SYSTEM_PROMPT: &str = "You build a knowledge graph from documentation. \
 Read the text and return ONLY a JSON object of the form \
@@ -76,6 +85,9 @@ pub struct Entity {
     pub kind: String,
     #[serde(default)]
     pub summary: String,
+    /// Set only when the extractor reports one.
+    #[serde(default)]
+    pub confidence: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,10 +96,65 @@ pub struct Relationship {
     pub to: String,
     #[serde(default)]
     pub relation: String,
+    #[serde(default)]
+    pub confidence: Option<f64>,
+}
+
+/// Identity of one extraction run.
+#[derive(Debug, Clone)]
+pub struct ExtractionRun {
+    pub id: String,
+    pub model: String,
+    pub input_source: String,
+}
+
+impl ExtractionRun {
+    fn new(model: &str, root: &Path) -> Self {
+        Self {
+            id: format!("extraction-{}", uuid::Uuid::new_v4()),
+            model: model.to_string(),
+            input_source: root.display().to_string(),
+        }
+    }
+
+    fn entity_id(&self) -> String {
+        format!("extraction_run:{}", self.id)
+    }
+
+    /// The assertion stamped on a fact this run writes. An out-of-range or
+    /// non-finite extractor confidence is dropped rather than refusing the fact.
+    fn assertion(&self, doc_path: &str, confidence: Option<f64>) -> Assertion {
+        let a = Assertion::extraction()
+            .with_run_id(self.id.clone())
+            .with_model(self.model.clone())
+            .with_derived_from(vec![doc_path.to_string()]);
+        match confidence {
+            Some(c) if c.is_finite() && (0.0..=1.0).contains(&c) => a.with_confidence(c),
+            Some(c) => {
+                tracing::warn!(run_id = %self.id, confidence = c, "Hound docs: ignoring out-of-range extractor confidence");
+                a
+            }
+            None => a,
+        }
+    }
+}
+
+/// `sha256:<hex>` of the extraction system prompt, recorded on every run so a
+/// prompt change is visible in the run history.
+pub fn prompt_digest() -> String {
+    use std::fmt::Write as _;
+    Sha256::digest(SYSTEM_PROMPT.as_bytes())
+        .iter()
+        .fold(String::from("sha256:"), |mut out, b| {
+            let _ = write!(out, "{b:02x}");
+            out
+        })
 }
 
 #[derive(Debug, Default)]
 pub struct DocSummary {
+    /// Id of the extraction run that produced this summary.
+    pub run_id: String,
     pub files: usize,
     pub chunks: usize,
     pub entities: usize,
@@ -313,13 +380,18 @@ async fn call_llm(
 /// so it is unit-testable on its own.
 async fn fold(
     prime: &Prime,
+    run: &ExtractionRun,
     doc_path: &str,
     ex: &Extraction,
     embed: bool,
     s: &mut DocSummary,
 ) -> Result<()> {
     let doc_uuid = prime
-        .add_node("document", json!({ "path": doc_path, "domain": "docs" }))
+        .add_node_asserted(
+            "document",
+            json!({ "path": doc_path, "domain": "docs" }),
+            Some(run.assertion(doc_path, None)),
+        )
         .await?;
     let doc_wire = format!("node:document:{}", doc_uuid.as_str());
 
@@ -330,21 +402,23 @@ async fn fold(
         }
         let kind = safe_token(&e.kind, "concept");
         let uuid = prime
-            .add_node(
+            .add_node_asserted(
                 &kind,
                 json!({ "name": e.name, "summary": e.summary, "source": doc_path, "domain": "docs" }),
+                Some(run.assertion(doc_path, e.confidence)),
             )
             .await?;
         let wire = format!("node:{kind}:{}", uuid.as_str());
         s.entities += 1;
 
         prime
-            .add_edge_weighted(
+            .add_edge_asserted(
                 &doc_wire,
                 &wire,
                 "mentions",
-                0.6,
+                Some(0.6),
                 Some(json!({ "confidence": "INFERRED" })),
+                Some(run.assertion(doc_path, None)),
             )
             .await?;
 
@@ -366,12 +440,13 @@ async fn fold(
         if let (Some(from), Some(to)) = (by_name.get(&r.from), by_name.get(&r.to)) {
             let rel = safe_token(&r.relation, "related_to");
             prime
-                .add_edge_weighted(
+                .add_edge_asserted(
                     from,
                     to,
                     &rel,
-                    0.6,
+                    Some(0.6),
                     Some(json!({ "confidence": "INFERRED" })),
+                    Some(run.assertion(doc_path, r.confidence)),
                 )
                 .await?;
             s.relationships += 1;
@@ -409,11 +484,51 @@ pub async fn extract_docs_with(
         })?;
     }
 
+    let run = ExtractionRun::new(&cfg.model, root);
+    let mut s = DocSummary {
+        run_id: run.id.clone(),
+        ..DocSummary::default()
+    };
+    record_run(prime, &run, "started", &s, None)
+        .await
+        .with_context(|| format!("could not record extraction run {}", run.id))?;
+
+    if let Err(e) = extract_into(prime, root, embed, cfg, transcribe_cmd, &run, &mut s).await {
+        let message = format!("{e:#}");
+        if let Err(record_err) = record_run(prime, &run, "failed", &s, Some(&message)).await {
+            tracing::warn!(run_id = %run.id, error = %record_err, "Hound docs: failed to record extraction run failure");
+        }
+        return Err(e.context(format!(
+            "extraction run {} failed; facts it wrote before the failure carry its run_id",
+            run.id
+        )));
+    }
+    record_run(prime, &run, "completed", &s, None)
+        .await
+        .with_context(|| format!("could not record completion of extraction run {}", run.id))?;
+
+    // Record the metered unit (LLM calls/tokens) as a durable event the
+    // control-plane can bill hosted extraction off. Tenant attribution rides the
+    // sync API key. Best-effort — never fails the extraction.
+    if s.llm_calls > 0 {
+        emit_usage(prime, &run, &s).await;
+    }
+    Ok(s)
+}
+
+async fn extract_into(
+    prime: &Prime,
+    root: &Path,
+    embed: bool,
+    cfg: &LlmConfig,
+    transcribe_cmd: Option<&str>,
+    run: &ExtractionRun,
+    s: &mut DocSummary,
+) -> Result<()> {
     let mut files = Vec::new();
     find_docs(root, &mut files);
 
     let http = reqwest::Client::new();
-    let mut s = DocSummary::default();
     for path in files {
         let text = match read_doc_text(&path, transcribe_cmd) {
             Ok(t) => t,
@@ -439,21 +554,59 @@ pub async fn extract_docs_with(
             s.prompt_tokens += usage.prompt;
             s.completion_tokens += usage.completion;
             s.total_tokens += usage.total;
-            fold(prime, &rel, &ex, embed, &mut s).await?;
+            fold(prime, run, &rel, &ex, embed, s).await?;
         }
     }
+    Ok(())
+}
 
-    // Record the metered unit (LLM calls/tokens) as a durable event the
-    // control-plane can bill hosted extraction off. Tenant attribution rides the
-    // sync API key. Best-effort — never fails the extraction.
-    if s.llm_calls > 0 {
-        emit_usage(prime, &cfg.model, &s).await;
+/// Append one `prime.extraction.run` lifecycle event (`started`, `completed`
+/// or `failed`) on the run's entity.
+async fn record_run(
+    prime: &Prime,
+    run: &ExtractionRun,
+    status: &str,
+    s: &DocSummary,
+    error: Option<&str>,
+) -> Result<()> {
+    use allsource_core::embedded::IngestEvent;
+    let entity_id = run.entity_id();
+    let mut payload = json!({
+        "run_id": run.id,
+        "status": status,
+        "kind": "doc_extraction",
+        "model": run.model,
+        "input_source": run.input_source,
+        "prompt_digest": prompt_digest(),
+        "files": s.files,
+        "chunks": s.chunks,
+        "entities": s.entities,
+        "relationships": s.relationships,
+        "usage": {
+            "llm_calls": s.llm_calls,
+            "prompt_tokens": s.prompt_tokens,
+            "completion_tokens": s.completion_tokens,
+            "total_tokens": s.total_tokens,
+        },
+    });
+    if let Some(e) = error {
+        payload["error"] = json!(e);
     }
-    Ok(s)
+    prime
+        .core()
+        .ingest(IngestEvent {
+            entity_id: &entity_id,
+            event_type: RUN_EVENT,
+            payload,
+            metadata: None,
+            tenant_id: None,
+        })
+        .await?;
+    Ok(())
 }
 
 /// Emit a `prime.extraction.usage` event for the control-plane's billing.
-async fn emit_usage(prime: &Prime, model: &str, s: &DocSummary) {
+async fn emit_usage(prime: &Prime, run: &ExtractionRun, s: &DocSummary) {
     use allsource_core::embedded::IngestEvent;
     let entity_id = format!("usage:{}", uuid::Uuid::new_v4());
     let event = IngestEvent {
@@ -461,7 +614,8 @@ async fn emit_usage(prime: &Prime, model: &str, s: &DocSummary) {
         event_type: "prime.extraction.usage",
         payload: json!({
             "kind": "doc_extraction",
-            "model": model,
+            "model": run.model,
+            "run_id": run.id,
             "files": s.files,
             "llm_calls": s.llm_calls,
             "prompt_tokens": s.prompt_tokens,
@@ -526,21 +680,27 @@ mod tests {
                     name: "LoginForm".into(),
                     kind: "component".into(),
                     summary: "the UI".into(),
+                    confidence: None,
                 },
                 Entity {
                     name: "AuthService".into(),
                     kind: "service".into(),
                     summary: "auth".into(),
+                    confidence: None,
                 },
             ],
             relationships: vec![Relationship {
                 from: "LoginForm".into(),
                 to: "AuthService".into(),
                 relation: "calls".into(),
+                confidence: None,
             }],
         };
         let mut s = DocSummary::default();
-        fold(&prime, "README.md", &ex, false, &mut s).await.unwrap();
+        let run = ExtractionRun::new("m", Path::new("."));
+        fold(&prime, &run, "README.md", &ex, false, &mut s)
+            .await
+            .unwrap();
         assert_eq!(s.entities, 2);
         assert_eq!(s.relationships, 1);
         // 1 document + 2 entities = 3 nodes; 2 mentions + 1 calls = 3 edges.
@@ -758,11 +918,16 @@ mod tests {
         // And recorded as a durable, billable event.
         let events = prime
             .core()
-            .query(Query::new().event_type_prefix("prime.extraction"))
+            .query(Query::new().event_type("prime.extraction.usage"))
             .await
             .unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].payload["total_tokens"], 150);
         assert_eq!(events[0].payload["model"], "meter-model");
+        assert_eq!(events[0].payload["run_id"], json!(s.run_id));
     }
 }
+
+#[cfg(test)]
+#[path = "doc_extract_run_tests.rs"]
+mod run_tests;

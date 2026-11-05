@@ -93,6 +93,27 @@ pub fn sync_status_json() -> Value {
 
 /// Return MCP tool definitions (for `tools/list`).
 pub fn tool_definitions() -> Value {
+    let Value::Array(tools) = base_tool_definitions() else {
+        return Value::Array(Vec::new());
+    };
+    Value::Array(
+        tools
+            .into_iter()
+            .map(|tool| match tool["name"].as_str() {
+                Some("prime_add_node" | "prime_update_node") => {
+                    crate::contract::with_assertion_schema(tool, "source")
+                }
+                Some("prime_add_edge") => crate::contract::with_assertion_schema(
+                    tool,
+                    crate::contract::ASSERTION_SOURCE_KEY,
+                ),
+                _ => tool,
+            })
+            .collect(),
+    )
+}
+
+fn base_tool_definitions() -> Value {
     json!([
         // ─── Graph CRUD ─────────────────────────────────────────────
         {
@@ -110,7 +131,7 @@ pub fn tool_definitions() -> Value {
         },
         {
             "name": "prime_add_edge",
-            "description": "Create a directed relationship between two nodes. Use when you discover how entities connect: causes, depends_on, works_on, impacts, requires. Cross-domain edges (connecting nodes in different domains) are especially valuable — they power the compressed index's cross-reference section.",
+            "description": "Create a directed relationship between two nodes. Use when you discover how entities connect: causes, depends_on, works_on, impacts, requires. Cross-domain edges (connecting nodes in different domains) are especially valuable — they power the compressed index's cross-reference section. Here 'source' is the source node; the assertion source goes in 'assertion_source'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -121,6 +142,19 @@ pub fn tool_definitions() -> Value {
                     "weight": { "type": "number", "description": "Optional confidence/strength (0.0-1.0)" }
                 },
                 "required": ["source", "target", "relation"]
+            }
+        },
+        {
+            "name": "prime_update_node",
+            "description": "Merge new property values into an existing node. Use when a fact about a known entity changes or is corrected. Pass source='user' for a human correction so it outranks AI extractions under the highest_priority projection policy. The write is validated against the node type's registered kind.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "node_id": { "type": "string", "description": "Node entity_id (format: node:{type}:{id})" },
+                    "properties": { "type": "object", "description": "Properties to set; unnamed properties keep their current values." },
+                    "valid_from": { "type": "string", "description": "Optional RFC 3339 instant the corrected values became true in the world (VALID time). Omit for a change true from now. This does not change when it was recorded." }
+                },
+                "required": ["node_id", "properties"]
             }
         },
         // ─── Graph Queries ───────────────────────────────────────────
@@ -310,7 +344,7 @@ pub fn tool_definitions() -> Value {
         },
         {
             "name": "prime_node_provenance",
-            "description": "Answer 'where did this field's value come from?' for a single field on a node. Returns the source event_id, timestamp, value, and the merge policy that picked it. Surfaces the audit trail without manual event-history scanning. Returns an error for fields whose policy is 'merge_array' (no single source — value is a union of many events). Requires a projection defined for the node's entity type.",
+            "description": "Answer 'where did this field's value come from?' for a single field on a node. Returns the winning event_id, timestamp and value, the merge policy that picked it, the assertion behind it (source user/agent/extraction/import/unknown, actor, model, run_id, derived_from, confidence), its source_priority, and every contributing event. A field with no registered projection policy is answered under 'last_write' (policy_source: 'default'). Events written before assertions existed report source 'unknown'.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -318,6 +352,36 @@ pub fn tool_definitions() -> Value {
                     "field": { "type": "string", "description": "Field name to query provenance for" }
                 },
                 "required": ["node_id", "field"]
+            }
+        },
+        // ─── Typed kinds ───────────────────────────────────────────────
+        {
+            "name": "prime_define_type",
+            "description": "Register or re-register a node or edge kind. Node kinds declare typed properties: {\"properties\": {\"age\": {\"kind\": \"integer\", \"min\": 0}, \"status\": {\"kind\": \"enum\", \"values\": [\"open\", \"closed\"], \"required\": true}}}; property kinds are string, number, integer, boolean, datetime, node_ref, enum, with required, min, max, max_length, values, node_types and requires_assertion. Edge kinds declare {\"from_types\": [...], \"to_types\": [...], \"cardinality\": \"one\"|\"many\"}. A legacy {\"required\": [...]} schema still works. A re-registration that would refuse writes the current version accepts is refused; an accepted one gets the next version. Constraints are enforced per prime_set_enforcement.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "type_name": { "type": "string", "description": "Node type or edge relation the kind applies to" },
+                    "kind": { "type": "string", "enum": ["node", "edge"] },
+                    "schema": { "type": "object", "description": "Kind definition" }
+                },
+                "required": ["type_name", "kind", "schema"]
+            }
+        },
+        {
+            "name": "prime_list_types",
+            "description": "List every registered node and edge kind with its version and definition, plus the current enforcement mode. Call before prime_define_type to extend a kind instead of replacing it.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "prime_set_enforcement",
+            "description": "Set how registered kinds are enforced: 'open' (default; only legacy required fields are checked), 'warn' (violations are recorded on the accepted write) or 'strict' (violations and unregistered types are refused with the field, expected kind and received value). The latest setting wins.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "mode": { "type": "string", "enum": ["open", "warn", "strict"] }
+                },
+                "required": ["mode"]
             }
         },
         // ─── Entity Templates ──────────────────────────────────────────
@@ -448,6 +512,10 @@ pub async fn call_tool(prime: &Prime, recall: &RecallEngine, name: &str, args: &
     match name {
         "prime_add_node" => call_add_node(prime, args).await,
         "prime_add_edge" => call_add_edge(prime, args).await,
+        "prime_update_node" => call_update_node(prime, args).await,
+        "prime_define_type" => call_define_type(prime, args).await,
+        "prime_list_types" => call_list_types(prime),
+        "prime_set_enforcement" => call_set_enforcement(prime, args).await,
         "prime_neighbors" => call_neighbors(prime, args).await,
         "prime_search" => call_search(prime, args),
         "prime_shortest_path" => call_shortest_path(prime, args),
@@ -607,8 +675,6 @@ async fn call_project_node(prime: &Prime, args: &Value) -> Value {
 }
 
 async fn call_node_provenance(prime: &Prime, args: &Value) -> Value {
-    use allsource_core::prime::projections::provenance_for_field;
-
     let Some(node_id) = args.get("node_id").and_then(Value::as_str) else {
         return tool_error("missing required argument: node_id");
     };
@@ -620,27 +686,73 @@ async fn call_node_provenance(prime: &Prime, args: &Value) -> Value {
             "node_id must be in 'node:{{type}}:{{id}}' format, got: {node_id}"
         ));
     };
-    let Some(def) = crate::projection_registry::get(entity_type) else {
-        return tool_error(&format!(
-            "no projection defined for entity_type '{entity_type}' — register one with prime_define_projection first"
-        ));
-    };
+    let def = crate::projection_registry::get(entity_type);
     let observations = match prime.observations(node_id).await {
         Ok(o) => o,
         Err(e) => return tool_error(&format!("failed to load observations: {e}")),
     };
-    match provenance_for_field(&observations, &def, field) {
-        Some(p) => tool_result(json!({
-            "field": p.field,
-            "value": p.value,
-            "source_event_id": p.source_event_id,
-            "source_event_at": p.source_event_at,
-            "merge_policy_applied": p.merge_policy_applied,
-        })),
-        None => tool_error(&format!(
-            "no provenance available for field '{field}' on {node_id} \
-             (field may be missing, not in the projection, or have a merge_array policy which has no single source)"
-        )),
+    match crate::contract::provenance_json(node_id, field, &observations, def) {
+        Ok(v) => tool_result(v),
+        Err(e) => tool_error(&e),
+    }
+}
+
+async fn call_update_node(prime: &Prime, args: &Value) -> Value {
+    let Some(node_id) = args.get("node_id").and_then(Value::as_str) else {
+        return tool_error("missing 'node_id'");
+    };
+    let Some(properties) = args.get("properties").filter(|p| p.is_object()).cloned() else {
+        return tool_error("missing 'properties' (object)");
+    };
+    let valid_from = match parse_instant(args, "valid_from") {
+        Ok(v) => v,
+        Err(e) => return tool_error(&e),
+    };
+    let assertion = match crate::contract::assertion_from_args(args, "source") {
+        Ok(a) => a,
+        Err(e) => return tool_error(&e),
+    };
+    match prime
+        .update_node_asserted_valid(node_id, properties, assertion, valid_from)
+        .await
+    {
+        Ok(()) => tool_result(json!({ "updated": true, "node_id": node_id })),
+        Err(e) => tool_error(&crate::contract::prime_error_text(&e)),
+    }
+}
+
+async fn call_define_type(prime: &Prime, args: &Value) -> Value {
+    let Some(type_name) = args.get("type_name").and_then(Value::as_str) else {
+        return tool_error("missing 'type_name'");
+    };
+    let kind = match crate::contract::parse_kind(args) {
+        Ok(k) => k,
+        Err(e) => return tool_error(&e),
+    };
+    let Some(schema) = args.get("schema").filter(|s| s.is_object()).cloned() else {
+        return tool_error("missing 'schema' (object)");
+    };
+    match prime.register_kind(kind, type_name, schema).await {
+        Ok(entry) => tool_result(crate::contract::kind_json(&entry)),
+        Err(e) => tool_error(&crate::contract::prime_error_text(&e)),
+    }
+}
+
+fn call_list_types(prime: &Prime) -> Value {
+    tool_result(crate::contract::kinds_json(
+        &prime.schemas(),
+        prime.enforcement(),
+    ))
+}
+
+async fn call_set_enforcement(prime: &Prime, args: &Value) -> Value {
+    let mode = match crate::contract::parse_mode(args) {
+        Ok(m) => m,
+        Err(e) => return tool_error(&e),
+    };
+    match prime.set_enforcement(mode).await {
+        Ok(()) => tool_result(json!({ "mode": prime.enforcement().as_str() })),
+        Err(e) => tool_error(&crate::contract::prime_error_text(&e)),
     }
 }
 
@@ -807,17 +919,20 @@ async fn call_add_node(prime: &Prime, args: &Value) -> Value {
         Ok(v) => v,
         Err(e) => return tool_error(&e),
     };
-
-    let added = match valid_from {
-        Some(from) => prime.add_node_valid(node_type, properties, from).await,
-        None => prime.add_node(node_type, properties).await,
+    let assertion = match crate::contract::assertion_from_args(args, "source") {
+        Ok(a) => a,
+        Err(e) => return tool_error(&e),
     };
-    match added {
+
+    match prime
+        .add_node_asserted_valid(node_type, properties, assertion, valid_from)
+        .await
+    {
         Ok(id) => {
             let entity_id = allsource_core::prime::EntityId::node(node_type, id.as_str()).to_wire();
             tool_result(json!({ "node_id": id.as_str(), "entity_id": entity_id }))
         }
-        Err(e) => tool_error(&e.to_string()),
+        Err(e) => tool_error(&crate::contract::prime_error_text(&e)),
     }
 }
 
@@ -833,18 +948,18 @@ async fn call_add_edge(prime: &Prime, args: &Value) -> Value {
     };
     let properties = args.get("properties").cloned();
     let weight = args.get("weight").and_then(serde_json::Value::as_f64);
+    let assertion =
+        match crate::contract::assertion_from_args(args, crate::contract::ASSERTION_SOURCE_KEY) {
+            Ok(a) => a,
+            Err(e) => return tool_error(&e),
+        };
 
-    let result = if let Some(w) = weight {
-        prime
-            .add_edge_weighted(source, target, relation, w, properties)
-            .await
-    } else {
-        prime.add_edge(source, target, relation, properties).await
-    };
-
-    match result {
+    match prime
+        .add_edge_asserted(source, target, relation, weight, properties, assertion)
+        .await
+    {
         Ok(id) => tool_result(json!({ "edge_id": id.as_str() })),
-        Err(e) => tool_error(&e.to_string()),
+        Err(e) => tool_error(&crate::contract::prime_error_text(&e)),
     }
 }
 
@@ -1088,6 +1203,7 @@ async fn call_hound_ingest_docs(prime: &Prime, args: &Value) -> Value {
     let embed = args.get("embed").and_then(Value::as_bool).unwrap_or(false);
     match crate::doc_extract::extract_docs(prime, std::path::Path::new(path), embed).await {
         Ok(s) => tool_result(json!({
+            "run_id": s.run_id,
             "files": s.files,
             "chunks": s.chunks,
             "entities": s.entities,
@@ -1550,6 +1666,10 @@ async fn call_context(prime: &Prime, recall: &RecallEngine, args: &Value) -> Val
 }
 
 #[cfg(test)]
+#[path = "tools_contract_tests.rs"]
+mod contract_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1987,6 +2107,56 @@ mod tests {
             .await,
         );
         assert_eq!(ctx_after["nodes"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_node_files_a_correction_at_its_valid_time() {
+        use allsource_core::prime::types::AsOf;
+
+        let prime = Prime::open_in_memory().await.unwrap();
+        let added = parse_result(
+            &call_add_node(
+                &prime,
+                &json!({
+                    "type": "person",
+                    "properties": { "name": "Alice", "role": "engineer" },
+                    "valid_from": "2026-01-01T00:00:00Z",
+                }),
+            )
+            .await,
+        );
+        let entity_id = added["entity_id"].as_str().unwrap();
+        parse_result(
+            &call_update_node(
+                &prime,
+                &json!({
+                    "node_id": entity_id,
+                    "properties": { "role": "lead" },
+                    "valid_from": "2026-03-01T00:00:00Z",
+                    "source": "user",
+                }),
+            )
+            .await,
+        );
+
+        let role_at = |instant: &str| {
+            let at = AsOf {
+                recorded: None,
+                valid: Some(instant.parse().unwrap()),
+            };
+            let prime = &prime;
+            async move {
+                prime
+                    .get_node_at(entity_id, at)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .properties["role"]
+                    .clone()
+            }
+        };
+        assert_eq!(role_at("2026-02-01T00:00:00Z").await, "engineer");
+        assert_eq!(role_at("2026-04-01T00:00:00Z").await, "lead");
     }
 
     #[tokio::test]

@@ -19,6 +19,8 @@ pub enum PrimeError {
     CoreError(anyhow::Error),
     /// Schema validation failed (missing required fields, type mismatch, etc.)
     ValidationFailed(String),
+    /// A write broke a typed kind constraint under `strict` enforcement.
+    SchemaViolation(Box<super::schema::Violation>),
 }
 
 impl fmt::Display for PrimeError {
@@ -31,6 +33,20 @@ impl fmt::Display for PrimeError {
             Self::ProjectionError(msg) => write!(f, "projection error: {msg}"),
             Self::CoreError(e) => write!(f, "core error: {e}"),
             Self::ValidationFailed(msg) => write!(f, "validation failed: {msg}"),
+            Self::SchemaViolation(v) => write!(f, "validation failed: {v}"),
+        }
+    }
+}
+
+impl PrimeError {
+    /// The message of a validation refusal, without the `validation failed: `
+    /// prefix; `None` for every other error. Hosted writes carry exactly this
+    /// text so both paths report the same refusal.
+    pub fn validation_message(&self) -> Option<String> {
+        match self {
+            Self::ValidationFailed(msg) => Some(msg.clone()),
+            Self::SchemaViolation(v) => Some(v.to_string()),
+            _ => None,
         }
     }
 }

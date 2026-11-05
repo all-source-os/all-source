@@ -45,12 +45,34 @@ impl Respond for Ingest {
     }
 }
 
-/// `GET /api/v1/events/query` — return every stored event. Tests are single-tenant
-/// and write a couple of events (< any batch limit), so one query suffices.
+/// `GET /api/v1/events/query` — return the stored events matching the
+/// `entity_id`, `event_type`, `event_type_prefix` and `tenant_id` filters Core
+/// applies. Tests write a few events (< any batch limit), so one query suffices.
 struct Query(CoreEvents);
 impl Respond for Query {
-    fn respond(&self, _req: &Request) -> ResponseTemplate {
-        let events = self.0.events.lock().unwrap().clone();
+    fn respond(&self, req: &Request) -> ResponseTemplate {
+        let filters: Vec<(String, String)> = req
+            .url
+            .query_pairs()
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+        let events: Vec<Value> = self
+            .0
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| {
+                filters.iter().all(|(k, v)| match k.as_str() {
+                    "entity_id" | "event_type" | "tenant_id" => e[k.as_str()] == *v,
+                    "event_type_prefix" => e["event_type"]
+                        .as_str()
+                        .is_some_and(|t| t.starts_with(v.as_str())),
+                    _ => true,
+                })
+            })
+            .cloned()
+            .collect();
         let count = events.len();
         ResponseTemplate::new(200).set_body_json(json!({ "events": events, "count": count }))
     }

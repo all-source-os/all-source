@@ -75,6 +75,12 @@ impl ContradictionDetectionProjection {
             .insert(relation.to_string());
     }
 
+    pub fn is_exclusive(&self, relation: &str) -> bool {
+        self.exclusive_relations
+            .read()
+            .is_ok_and(|set| set.contains(relation))
+    }
+
     /// Backfill contradiction detection for a newly-configured exclusive relation.
     ///
     /// Scans the adjacency projection for all edges with the given relation,

@@ -11,7 +11,13 @@
 //! Tenant identity is always an explicit argument supplied by the trusted
 //! caller (the gateway), never inferred — so one `HostedPrime` serves every
 //! tenant with strict isolation (each tenant's events are queried and folded
-//! separately; see the cross-tenant test in [`super::tenant_cache`]).
+//! separately; see the cross-tenant test in [`super::tenant_cache`]). A blank
+//! tenant is refused before any Core call: an unscoped Core query spans every
+//! tenant.
+//!
+//! Writes validate against the tenant's kinds through the same
+//! [`SchemaProjection`](super::schema::SchemaProjection) checks the embedded
+//! path uses, and carry the same assertion metadata.
 //!
 //! Deliberately a distinct type from the embedded `Prime` (not a new variant of
 //! it) so the embedded local-first path and `facade.rs` are untouched. The
@@ -22,15 +28,22 @@
 
 use std::{sync::Arc, time::Duration};
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::{
     embedded::{EventView, IngestEvent, Query},
-    error::Result,
+    error::{AllSourceError, Result},
     prime::{
+        assertion::{self, Assertion},
+        error::PrimeError,
         event_store::EventStore,
         http_core::HttpCore,
         projection_bundle::GraphProjections,
+        projections::declarative::{Observation, ProjectionDef},
+        schema::{
+            ENFORCEMENT_SET, EnforcementMode, ProjectionLookup, SCHEMA_REGISTERED, SchemaEntry,
+            SchemaKind, WriteCheck,
+        },
         tenant_cache::TenantProjectionCache,
         types::{
             Direction, EdgeId, Node, NodeId, PrimeStats, edge_entity_id, event_types,
@@ -49,6 +62,54 @@ pub struct HostedPrime {
     /// Mirrors the embedded `Prime::embedder` OnceLock (facade.rs).
     #[cfg(feature = "prime-vectors")]
     embedder: std::sync::OnceLock<Arc<crate::prime::vectors::TextEmbedder>>,
+    /// Serializes check-then-append for `cardinality: one` edges within this
+    /// process. Another instance writing the same tenant is not covered.
+    exclusive_edge_gate: tokio::sync::Mutex<()>,
+    /// Serializes plan-then-append for kind registration within this process.
+    kind_gate: tokio::sync::Mutex<()>,
+}
+
+/// Refuse a blank tenant before any Core call.
+fn scoped(tenant: &str) -> Result<&str> {
+    if tenant.trim().is_empty() {
+        return Err(AllSourceError::InvalidInput(
+            "hosted Prime requires the authenticated tenant; refusing a tenant-less request"
+                .to_string(),
+        ));
+    }
+    Ok(tenant)
+}
+
+/// Map a shared-validator refusal onto the hosted error type, keeping the
+/// refusal text identical to the embedded path's.
+fn refusal(e: PrimeError) -> AllSourceError {
+    match e {
+        PrimeError::NodeNotFound(id) => AllSourceError::EntityNotFound(id),
+        other => match other.validation_message() {
+            Some(msg) => AllSourceError::ValidationError(msg),
+            None => AllSourceError::InternalError(other.to_string()),
+        },
+    }
+}
+
+fn lookup(g: &GraphProjections) -> ProjectionLookup<'_> {
+    ProjectionLookup {
+        node_state: &g.node_state,
+        adjacency: &g.adjacency,
+    }
+}
+
+fn write_metadata(assertion: Option<Assertion>, check: &WriteCheck) -> Value {
+    assertion::write_metadata(
+        &assertion.unwrap_or_else(Assertion::agent),
+        check.kind_version,
+        &check.warnings,
+        None,
+    )
+}
+
+fn validate_assertion(assertion: Option<&Assertion>) -> Result<()> {
+    assertion.map_or(Ok(()), |a| a.validate().map_err(refusal))
 }
 
 impl HostedPrime {
@@ -68,7 +129,17 @@ impl HostedPrime {
             cache,
             #[cfg(feature = "prime-vectors")]
             embedder: std::sync::OnceLock::new(),
+            exclusive_edge_gate: tokio::sync::Mutex::new(()),
+            kind_gate: tokio::sync::Mutex::new(()),
         }
+    }
+
+    /// The tenant's bundle re-read from Core, ignoring the TTL. Used where a
+    /// stale bundle would give a wrong answer rather than an old one: kind
+    /// registration, enforcement changes, and a node another instance wrote.
+    async fn fresh_graph(&self, tenant: &str) -> Result<Arc<GraphProjections>> {
+        self.cache.invalidate(tenant);
+        self.cache.get_or_hydrate(tenant).await
     }
 
     /// An [`HttpCore`] scoped to `tenant`, for writes.
@@ -84,13 +155,13 @@ impl HostedPrime {
 
     /// The tenant's warm graph-projection bundle (hydrated on demand).
     pub async fn tenant_graph(&self, tenant: &str) -> Result<Arc<GraphProjections>> {
-        self.cache.get_or_hydrate(tenant).await
+        self.cache.get_or_hydrate(scoped(tenant)?).await
     }
 
     /// Get a node by entity_id within a tenant's graph. `None` if absent or
     /// soft-deleted.
     pub async fn get_node(&self, tenant: &str, entity_id: &str) -> Result<Option<Node>> {
-        let graph = self.cache.get_or_hydrate(tenant).await?;
+        let graph = self.tenant_graph(tenant).await?;
         Ok(graph.node_state.get_node(entity_id).filter(|n| !n.deleted))
     }
 
@@ -98,13 +169,42 @@ impl HostedPrime {
 
     /// Create a node: ingest a `prime.node.created` event to the remote Core
     /// (tenant-stamped) and apply it to the tenant's warm bundle so subsequent
-    /// reads reflect it without a re-query.
+    /// reads reflect it without a re-query. Recorded as an agent assertion.
     pub async fn add_node(
         &self,
         tenant: &str,
         node_type: &str,
         properties: serde_json::Value,
     ) -> Result<NodeId> {
+        self.add_node_asserted(tenant, node_type, properties, None)
+            .await
+    }
+
+    /// Create a node with an explicit assertion, validated against the
+    /// tenant's kinds. The bundle is hydrated before the ingest so the
+    /// following `apply` folds the event exactly once.
+    pub async fn add_node_asserted(
+        &self,
+        tenant: &str,
+        node_type: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+    ) -> Result<NodeId> {
+        let tenant = scoped(tenant)?;
+        validate_assertion(assertion.as_ref())?;
+        let g = self.cache.get_or_hydrate(tenant).await?;
+        let check = g
+            .schema
+            .check_node_write(
+                tenant,
+                node_type,
+                &properties,
+                &properties,
+                assertion.as_ref(),
+                &lookup(&g),
+            )
+            .map_err(refusal)?;
+
         let id = uuid::Uuid::new_v4().to_string();
         let entity_id = node_entity_id(node_type, &id);
         let payload = json!({
@@ -112,26 +212,27 @@ impl HostedPrime {
             "node_type": node_type,
             "properties": properties,
         });
+        let metadata = write_metadata(assertion, &check);
 
         self.core_for(tenant)
             .ingest(IngestEvent {
                 entity_id: &entity_id,
                 event_type: event_types::NODE_CREATED,
                 payload: payload.clone(),
-                metadata: None,
+                metadata: Some(metadata.clone()),
                 tenant_id: Some(tenant),
             })
             .await?;
 
-        // Update the tenant's warm bundle in place IF it is cached, so an
-        // in-process read reflects the write without a re-query. If the tenant
-        // is cold, cache.apply no-ops and the next read hydrates from Core
-        // (which now has this event). We deliberately do NOT hydrate-then-apply:
-        // that would fold the just-ingested event in twice, inflating
-        // count-based projections like graph_stats.
         self.cache.apply(
             tenant,
-            &self.synth_view_typed(tenant, event_types::NODE_CREATED, &entity_id, payload),
+            &self.synth_view(
+                tenant,
+                event_types::NODE_CREATED,
+                &entity_id,
+                payload,
+                Some(metadata),
+            ),
         );
 
         Ok(NodeId::new(id))
@@ -175,6 +276,54 @@ impl HostedPrime {
         weight: Option<f64>,
         properties: Option<serde_json::Value>,
     ) -> Result<EdgeId> {
+        self.add_edge_asserted(tenant, source, target, relation, weight, properties, None)
+            .await
+    }
+
+    /// Create an edge with an explicit assertion, validated against the
+    /// tenant's kinds. When the relation has a kind or enforcement is not
+    /// `open`, both endpoints must be live nodes of this tenant.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_edge_asserted(
+        &self,
+        tenant: &str,
+        source: &str,
+        target: &str,
+        relation: &str,
+        weight: Option<f64>,
+        properties: Option<serde_json::Value>,
+        assertion: Option<Assertion>,
+    ) -> Result<EdgeId> {
+        let tenant = scoped(tenant)?;
+        validate_assertion(assertion.as_ref())?;
+        let g = self.cache.get_or_hydrate(tenant).await?;
+        let typed = g.schema.kind(tenant, SchemaKind::Edge, relation).is_some()
+            || g.schema.enforcement(tenant) != EnforcementMode::Open;
+        if typed {
+            for end in [source, target] {
+                if !g.node_state.is_live(end) {
+                    return Err(AllSourceError::EntityNotFound(end.to_string()));
+                }
+            }
+        }
+        let _gate = if g.contradiction.is_exclusive(relation) {
+            Some(self.exclusive_edge_gate.lock().await)
+        } else {
+            None
+        };
+        let check = g
+            .schema
+            .check_edge_write(
+                tenant,
+                relation,
+                source,
+                target,
+                properties.as_ref(),
+                assertion.as_ref(),
+                &lookup(&g),
+            )
+            .map_err(refusal)?;
+
         let id = uuid::Uuid::new_v4().to_string();
         let entity_id = edge_entity_id(&id);
 
@@ -190,20 +339,27 @@ impl HostedPrime {
         if let Some(props) = properties {
             payload["properties"] = props;
         }
+        let metadata = write_metadata(assertion, &check);
 
         self.core_for(tenant)
             .ingest(IngestEvent {
                 entity_id: &entity_id,
                 event_type: event_types::EDGE_CREATED,
                 payload: payload.clone(),
-                metadata: None,
+                metadata: Some(metadata.clone()),
                 tenant_id: Some(tenant),
             })
             .await?;
 
         self.cache.apply(
             tenant,
-            &self.synth_view_typed(tenant, event_types::EDGE_CREATED, &entity_id, payload),
+            &self.synth_view(
+                tenant,
+                event_types::EDGE_CREATED,
+                &entity_id,
+                payload,
+                Some(metadata),
+            ),
         );
 
         Ok(EdgeId::new(id))
@@ -214,6 +370,7 @@ impl HostedPrime {
     /// without a re-query. Mirrors the embedded `Prime::delete_node` node-delete
     /// event shape (connected edges are reconciled on the next hydrate).
     pub async fn delete_node(&self, tenant: &str, entity_id: &str) -> Result<()> {
+        let tenant = scoped(tenant)?;
         self.core_for(tenant)
             .ingest(IngestEvent {
                 entity_id,
@@ -242,7 +399,7 @@ impl HostedPrime {
         relation: Option<&str>,
         direction: Direction,
     ) -> Result<Vec<Node>> {
-        let g = self.cache.get_or_hydrate(tenant).await?;
+        let g = self.tenant_graph(tenant).await?;
 
         let mut peer_ids: Vec<String> = Vec::new();
         let matches = |entry_relation: &str| relation.is_none_or(|r| r == entry_relation);
@@ -286,7 +443,7 @@ impl HostedPrime {
     /// All live nodes of a given type. Mirrors the embedded `Prime::nodes_by_type`
     /// (reads `node_type_index` + `node_state`).
     pub async fn search(&self, tenant: &str, node_type: &str) -> Result<Vec<Node>> {
-        let g = self.cache.get_or_hydrate(tenant).await?;
+        let g = self.tenant_graph(tenant).await?;
         Ok(g.node_type_index
             .nodes_by_type(node_type)
             .iter()
@@ -296,51 +453,208 @@ impl HostedPrime {
 
     /// Statistics about the tenant's graph (O(1) via the `graph_stats` projection).
     pub async fn stats(&self, tenant: &str) -> Result<PrimeStats> {
-        let g = self.cache.get_or_hydrate(tenant).await?;
+        let g = self.tenant_graph(tenant).await?;
         Ok(g.graph_stats.stats())
     }
 
     /// The full audit trail for an entity, read straight from the remote Core.
     /// Returns raw events (no projection); empty if the entity never existed.
     pub async fn history(&self, tenant: &str, entity_id: &str) -> Result<Vec<EventView>> {
-        self.core_for(tenant)
+        self.core_for(scoped(tenant)?)
             .query(Query::new().entity_id(entity_id))
             .await
     }
 
     /// Update a node's properties (deep-merged by the projection): ingest a
     /// `prime.node.updated` event (tenant-stamped) and apply it to the warm
-    /// bundle. Mirrors the embedded `Prime::update_node` payload — the raw update
-    /// `{properties}` is emitted; node_state merges on `process`. (Schema
-    /// validation, which the embedded path does pre-ingest, is deferred here.)
+    /// bundle. Recorded as an agent assertion.
     pub async fn update_node(
         &self,
         tenant: &str,
         entity_id: &str,
         properties: serde_json::Value,
     ) -> Result<()> {
+        self.update_node_asserted(tenant, entity_id, properties, None)
+            .await
+    }
+
+    /// Update a node with an explicit assertion, validating the merged
+    /// properties against the tenant's kinds.
+    pub async fn update_node_asserted(
+        &self,
+        tenant: &str,
+        entity_id: &str,
+        properties: serde_json::Value,
+        assertion: Option<Assertion>,
+    ) -> Result<()> {
+        let tenant = scoped(tenant)?;
+        validate_assertion(assertion.as_ref())?;
+        let mut g = self.cache.get_or_hydrate(tenant).await?;
+        if !g.node_state.is_live(entity_id) {
+            g = self.fresh_graph(tenant).await?;
+        }
+        let node = g
+            .node_state
+            .get_node(entity_id)
+            .filter(|n| !n.deleted)
+            .ok_or_else(|| AllSourceError::EntityNotFound(entity_id.to_string()))?;
+        let mut merged = node.properties.clone();
+        if let (Value::Object(base), Value::Object(update)) = (&mut merged, &properties) {
+            for (k, v) in update {
+                base.insert(k.clone(), v.clone());
+            }
+        }
+        let check = g
+            .schema
+            .check_node_write(
+                tenant,
+                &node.node_type,
+                &merged,
+                &properties,
+                assertion.as_ref(),
+                &lookup(&g),
+            )
+            .map_err(refusal)?;
+
         let payload = json!({ "properties": properties });
+        let metadata = write_metadata(assertion, &check);
         self.core_for(tenant)
             .ingest(IngestEvent {
                 entity_id,
                 event_type: event_types::NODE_UPDATED,
                 payload: payload.clone(),
+                metadata: Some(metadata.clone()),
+                tenant_id: Some(tenant),
+            })
+            .await?;
+        self.cache.apply(
+            tenant,
+            &self.synth_view(
+                tenant,
+                event_types::NODE_UPDATED,
+                entity_id,
+                payload,
+                Some(metadata),
+            ),
+        );
+        Ok(())
+    }
+
+    // ── Kinds, enforcement, provenance ───────────────────────────────────
+
+    /// Register or re-register a kind for `tenant`. Breaking re-registrations
+    /// are refused; accepted ones get the next version.
+    pub async fn register_kind(
+        &self,
+        tenant: &str,
+        kind: SchemaKind,
+        type_name: &str,
+        schema: Value,
+    ) -> Result<SchemaEntry> {
+        let tenant = scoped(tenant)?;
+        let _gate = self.kind_gate.lock().await;
+        let g = self.fresh_graph(tenant).await?;
+        let version = g
+            .schema
+            .plan_registration(tenant, kind, type_name, &schema)
+            .map_err(refusal)?;
+        let entity_id = format!("schema:{type_name}");
+        let payload = json!({
+            "type_name": type_name,
+            "kind": kind.as_str(),
+            "schema": schema,
+            "version": version,
+            "compatibility": format!("{:?}", crate::prime::schema::KIND_COMPATIBILITY).to_lowercase(),
+        });
+        self.core_for(tenant)
+            .ingest(IngestEvent {
+                entity_id: &entity_id,
+                event_type: SCHEMA_REGISTERED,
+                payload: payload.clone(),
                 metadata: None,
                 tenant_id: Some(tenant),
             })
             .await?;
-        self.cache.get_or_hydrate(tenant).await?;
         self.cache.apply(
             tenant,
-            &self.synth_view_typed(tenant, event_types::NODE_UPDATED, entity_id, payload),
+            &self.synth_view(tenant, SCHEMA_REGISTERED, &entity_id, payload, None),
+        );
+        let g = self.cache.get_or_hydrate(tenant).await?;
+        g.schema
+            .kind(tenant, kind, type_name)
+            .ok_or_else(|| AllSourceError::InternalError(format!("kind {type_name} not folded")))
+    }
+
+    /// The tenant's registered kinds.
+    pub async fn kinds(&self, tenant: &str) -> Result<Vec<SchemaEntry>> {
+        let tenant = scoped(tenant)?;
+        let g = self.cache.get_or_hydrate(tenant).await?;
+        Ok(g.schema.schemas_for(tenant))
+    }
+
+    /// Persist the tenant's enforcement mode; the latest event wins on replay.
+    pub async fn set_enforcement(&self, tenant: &str, mode: EnforcementMode) -> Result<()> {
+        let tenant = scoped(tenant)?;
+        self.fresh_graph(tenant).await?;
+        let payload = json!({ "mode": mode.as_str() });
+        self.core_for(tenant)
+            .ingest(IngestEvent {
+                entity_id: "prime:enforcement",
+                event_type: ENFORCEMENT_SET,
+                payload: payload.clone(),
+                metadata: None,
+                tenant_id: Some(tenant),
+            })
+            .await?;
+        self.cache.apply(
+            tenant,
+            &self.synth_view(tenant, ENFORCEMENT_SET, "prime:enforcement", payload, None),
         );
         Ok(())
+    }
+
+    /// The tenant's enforcement mode; `open` until one is set.
+    pub async fn enforcement(&self, tenant: &str) -> Result<EnforcementMode> {
+        let tenant = scoped(tenant)?;
+        let g = self.cache.get_or_hydrate(tenant).await?;
+        Ok(g.schema.enforcement(tenant))
+    }
+
+    /// A node's observations, with assertions, read from the remote Core.
+    pub async fn observations(&self, tenant: &str, entity_id: &str) -> Result<Vec<Observation>> {
+        let events = self.history(tenant, entity_id).await?;
+        Ok(assertion::observations_from_events(&events))
+    }
+
+    /// Persist a declarative projection definition for the tenant.
+    pub async fn define_projection(&self, tenant: &str, def: &ProjectionDef) -> Result<()> {
+        let tenant = scoped(tenant)?;
+        let entity_id = format!("projection:{}", def.entity_type);
+        self.core_for(tenant)
+            .ingest(IngestEvent {
+                entity_id: &entity_id,
+                event_type: event_types::PROJECTION_DEFINED,
+                payload: serde_json::to_value(def)?,
+                metadata: None,
+                tenant_id: Some(tenant),
+            })
+            .await
+    }
+
+    /// The tenant's latest projection definition per entity type.
+    pub async fn projection_defs(&self, tenant: &str) -> Result<Vec<ProjectionDef>> {
+        let events = self
+            .core_for(scoped(tenant)?)
+            .query(Query::new().event_type(event_types::PROJECTION_DEFINED))
+            .await?;
+        Ok(assertion::latest_projection_defs(&events))
     }
 
     /// Delete an edge: ingest a `prime.edge.deleted` event (tenant-stamped) and
     /// apply it so `neighbors` stops returning it without a re-query. Mirrors the
     /// embedded `Prime::delete_edge` shape (`edge:{id}` entity, payload `{id}`).
     pub async fn delete_edge(&self, tenant: &str, edge_id: &str) -> Result<()> {
+        let tenant = scoped(tenant)?;
         let entity_id = edge_entity_id(edge_id);
         let payload = json!({ "id": edge_id });
         self.core_for(tenant)
@@ -372,7 +686,7 @@ impl HostedPrime {
     ) -> Result<Option<Vec<Node>>> {
         use std::collections::{HashMap, VecDeque};
 
-        let g = self.cache.get_or_hydrate(tenant).await?;
+        let g = self.tenant_graph(tenant).await?;
         let get_node = |id: &str| g.node_state.get_node(id).filter(|n| !n.deleted);
 
         if from == to {
@@ -440,6 +754,7 @@ impl HostedPrime {
         let entity_id = vector_entity_id(node_entity_id);
         let dimensions = vector.len();
 
+        let tenant = scoped(tenant)?;
         // Dimension guard: a store holds one dimension. Reject a mismatch before
         // it corrupts the HNSW index (mirrors facade's embed_with_metadata).
         let graph = self.cache.get_or_hydrate(tenant).await?;
@@ -530,7 +845,7 @@ impl HostedPrime {
         query_vector: Vec<f32>,
         top_k: usize,
     ) -> Result<Vec<(Node, f64)>> {
-        let g = self.cache.get_or_hydrate(tenant).await?;
+        let g = self.tenant_graph(tenant).await?;
 
         let hits = g.vector_index.search(&query_vector, top_k);
         let mut out = Vec::with_capacity(hits.len());
@@ -576,6 +891,7 @@ impl HostedPrime {
     /// embedded `Prime::delete_vector` (`vec:{node_entity_id}` entity, `{}` payload).
     #[cfg(feature = "prime-vectors")]
     pub async fn delete_vector(&self, tenant: &str, node_entity_id: &str) -> Result<()> {
+        let tenant = scoped(tenant)?;
         let entity_id = crate::prime::vectors::vector_entity_id(node_entity_id);
         self.core_for(tenant)
             .ingest(IngestEvent {
@@ -612,7 +928,7 @@ impl HostedPrime {
         use crate::prime::types::{EntityId, FullGraph, GraphEdge, GraphNode, GraphStats};
         use std::collections::{BTreeMap, HashSet};
 
-        let g = self.cache.get_or_hydrate(tenant).await?;
+        let g = self.tenant_graph(tenant).await?;
 
         let mut live: Vec<Node> = g
             .node_state
@@ -722,13 +1038,26 @@ impl HostedPrime {
         entity_id: &str,
         payload: serde_json::Value,
     ) -> EventView {
+        self.synth_view(tenant, event_type, entity_id, payload, None)
+    }
+
+    /// [`synth_view_typed`](Self::synth_view_typed) carrying the metadata the
+    /// ingested event carries, so warm reads see the same assertion as replay.
+    fn synth_view(
+        &self,
+        tenant: &str,
+        event_type: &str,
+        entity_id: &str,
+        payload: serde_json::Value,
+        metadata: Option<Value>,
+    ) -> EventView {
         EventView {
             id: uuid::Uuid::new_v4(),
             event_type: event_type.to_string(),
             entity_id: entity_id.to_string(),
             tenant_id: tenant.to_string(),
             payload,
-            metadata: None,
+            metadata,
             timestamp: chrono::Utc::now(),
             version: 0,
             valid_from: None,
@@ -736,6 +1065,10 @@ impl HostedPrime {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "hosted_contract_tests.rs"]
+mod contract_tests;
 
 #[cfg(test)]
 mod tests {

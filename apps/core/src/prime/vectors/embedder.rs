@@ -217,9 +217,7 @@ fn cache_dir() -> String {
 /// implements it was compiled out — otherwise the env var silently does nothing.
 #[cfg(not(feature = "prime-remote-embed"))]
 fn warn_if_remote_requested() {
-    let set = std::env::var("PRIME_EMBED_ENDPOINT")
-        .ok()
-        .is_some_and(|s| !s.trim().is_empty());
+    let set = std::env::var("PRIME_EMBED_ENDPOINT").is_ok_and(|s| !s.trim().is_empty());
     if set {
         tracing::warn!(
             "PRIME_EMBED_ENDPOINT is set but this binary was built without the \

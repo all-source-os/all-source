@@ -38,6 +38,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::prime::assertion::Assertion;
+
 /// How to reconcile multiple observations of the same field.
 ///
 /// Declarative — chosen per field, never inline code. This is what makes the
@@ -94,6 +96,9 @@ pub struct Observation {
     pub source_event_id: String,
     /// The observed field values.
     pub fields: BTreeMap<String, Value>,
+    /// Who asserted this observation. Never consulted by any merge policy.
+    #[serde(default)]
+    pub assertion: Assertion,
 }
 
 /// Per-entity-type folding rules.
@@ -253,19 +258,34 @@ fn merge_array(observations: &[Observation], field: &str) -> Option<Value> {
 }
 
 // ─── Provenance ───────────────────────────────────────────────────────────
-//
-// Closes neotoma-gaps bead t-af6f: "where did this field's value come from?"
-// is a first-class query against the projection layer rather than something
-// callers reconstruct manually by scanning event history.
+
+/// One event that contributed to a field's value.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Contributor {
+    pub source_event_id: String,
+    pub observed_at: DateTime<Utc>,
+    pub source_priority: i32,
+    pub assertion: Assertion,
+}
+
+impl From<&Observation> for Contributor {
+    fn from(o: &Observation) -> Self {
+        Self {
+            source_event_id: o.source_event_id.clone(),
+            observed_at: o.observed_at,
+            source_priority: o.source_priority,
+            assertion: o.assertion.clone(),
+        }
+    }
+}
 
 /// Provenance for a single field's value in a projected snapshot.
 ///
-/// `MergeArray` policy fields do NOT produce provenance entries — the value
-/// is a union of many observations, so there's no single answer to "where
-/// did this come from?" Callers asking for provenance on a MergeArray field
-/// receive `None`. (Future: a `ProvenanceSource::Union` variant could carry
-/// the contributor list, but the bead's wire shape calls for a single
-/// source_event_id, so we keep it simple.)
+/// For single-winner policies `source_event_id` is the winning event and
+/// `contributors` holds just that event. For `MergeArray` the value is a
+/// union: `contributors` lists every event carrying the field, ordered by
+/// `(observed_at, source_event_id)`, and the single-source fields describe the
+/// most recent of them.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Provenance {
     /// Field whose provenance this describes.
@@ -279,44 +299,64 @@ pub struct Provenance {
     /// Which merge policy was in effect — useful for debugging "why did this
     /// value win over that one?" without re-reading the projection def.
     pub merge_policy_applied: MergePolicy,
+    #[serde(default)]
+    pub source_priority: i32,
+    #[serde(default)]
+    pub assertion: Assertion,
+    #[serde(default)]
+    pub contributors: Vec<Contributor>,
 }
 
 /// Per-field provenance for an entire snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvenanceSnapshot {
     pub entity_type: String,
-    /// Provenance per field. Fields with `MergeArray` policy are absent
-    /// here — see the note on [`Provenance`].
     pub fields: BTreeMap<String, Provenance>,
 }
 
 /// Return the provenance for a single field. `None` if the field has no
-/// observations, the field isn't in the projection def, or the field's
-/// policy is `MergeArray` (union has no single source).
+/// observations or isn't in the projection def.
 pub fn provenance_for_field(
     observations: &[Observation],
     def: &ProjectionDef,
     field: &str,
 ) -> Option<Provenance> {
     let policy = *def.field_policies.get(field)?;
-    let (value, source) = apply_policy_with_source(policy, field, observations)?;
-    let source = source?; // MergeArray returns None here — no provenance entry
+    let (value, winner) = apply_policy_with_source(policy, field, observations)?;
+    let (head, contributors) = if let Some(w) = winner {
+        (w, vec![Contributor::from(w)])
+    } else {
+        let mut carrying: Vec<&Observation> = observations
+            .iter()
+            .filter(|o| o.fields.contains_key(field))
+            .collect();
+        carrying.sort_by(|a, b| {
+            a.observed_at
+                .cmp(&b.observed_at)
+                .then_with(|| a.source_event_id.cmp(&b.source_event_id))
+        });
+        carrying.dedup_by(|a, b| a.source_event_id == b.source_event_id);
+        let head = pick_observation(observations, field, |a, b| {
+            a.observed_at
+                .cmp(&b.observed_at)
+                .then_with(|| b.source_event_id.cmp(&a.source_event_id))
+        })?;
+        (head, carrying.into_iter().map(Contributor::from).collect())
+    };
     Some(Provenance {
         field: field.to_string(),
         value,
-        source_event_id: source.source_event_id.clone(),
-        source_event_at: source.observed_at,
+        source_event_id: head.source_event_id.clone(),
+        source_event_at: head.observed_at,
         merge_policy_applied: policy,
+        source_priority: head.source_priority,
+        assertion: head.assertion.clone(),
+        contributors,
     })
 }
 
-/// Fold observations into a snapshot AND record provenance for every
-/// single-source field. MergeArray fields appear in the value snapshot
-/// (via [`fold`]) but are absent from the provenance map.
-///
-/// This is the function the future REST endpoint
-/// `GET /api/v1/prime/nodes/{id}/fields/{field}/provenance` will look up
-/// and project from.
+/// Fold observations into a snapshot AND record provenance for every field
+/// in the definition that has observations.
 pub fn fold_with_provenance(
     observations: &[Observation],
     def: &ProjectionDef,
@@ -362,6 +402,7 @@ mod tests {
             specificity_score: specificity,
             source_event_id: id.to_string(),
             fields: map,
+            assertion: Assertion::default(),
         }
     }
 
@@ -529,15 +570,29 @@ mod tests {
     }
 
     #[test]
-    fn provenance_skips_merge_array_fields() {
-        // MergeArray has no single source — the bead's wire shape calls for
-        // one source_event_id, so we deliberately return None here.
+    fn merge_array_provenance_lists_every_contributing_event_in_order() {
         let obs = vec![
-            obs(100, 0, 0, "e1", json!({"tags": "rust"})),
             obs(200, 0, 0, "e2", json!({"tags": "agents"})),
+            obs(100, 0, 0, "e1", json!({"tags": "rust"})),
+            obs(150, 0, 0, "e3", json!({"other": "x"})),
         ];
         let d = def("tags", MergePolicy::MergeArray);
-        assert!(provenance_for_field(&obs, &d, "tags").is_none());
+        let p = provenance_for_field(&obs, &d, "tags").expect("union has provenance");
+        assert_eq!(p.value, json!(["agents", "rust"]));
+        let ids: Vec<&str> = p
+            .contributors
+            .iter()
+            .map(|c| c.source_event_id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["e1", "e2"]);
+        assert_eq!(p.source_event_id, "e2");
+
+        let reversed: Vec<Observation> = obs.into_iter().rev().collect();
+        assert_eq!(
+            provenance_for_field(&reversed, &d, "tags").unwrap(),
+            p,
+            "contributors must not depend on input order"
+        );
     }
 
     #[test]
@@ -555,7 +610,7 @@ mod tests {
     }
 
     #[test]
-    fn fold_with_provenance_covers_every_single_source_field() {
+    fn fold_with_provenance_covers_every_observed_field() {
         let mut policies = BTreeMap::new();
         policies.insert("status".to_string(), MergePolicy::LastWrite);
         policies.insert("name".to_string(), MergePolicy::HighestPriority);
@@ -570,13 +625,11 @@ mod tests {
             obs(150, 0, 0, "e3", json!({"status": "warm"})),
         ];
         let snap = fold_with_provenance(&obs, &def);
-        // status (LastWrite) and name (HighestPriority) get provenance entries
-        assert_eq!(snap.fields.len(), 2);
+        assert_eq!(snap.fields.len(), 3);
         assert_eq!(snap.fields["status"].source_event_id, "e3");
         assert_eq!(snap.fields["status"].value, json!("warm"));
         assert_eq!(snap.fields["name"].source_event_id, "e2");
-        // tags (MergeArray) is intentionally absent
-        assert!(!snap.fields.contains_key("tags"));
+        assert_eq!(snap.fields["tags"].contributors.len(), 2);
     }
 
     /// Determinism contract extends to provenance: same observations in any
@@ -633,6 +686,7 @@ mod tests {
                     specificity_score: spec,
                     source_event_id: id,
                     fields,
+                    assertion: Assertion::default(),
                 }
             })
     }

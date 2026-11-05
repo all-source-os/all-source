@@ -45,6 +45,14 @@ defmodule McpServerElixir.Infrastructure.CoreBackend do
   # route to them, so a backend may leave these out.
   @optional_callbacks get_latest_state: 2, list_latest: 2, list_changes: 2
 
+  @doc """
+  MCP tool names this backend cannot serve. `McpTools` neither lists nor
+  dispatches them, so a client never sees a tool whose only answer is a refusal.
+  """
+  @callback unsupported_tools() :: [String.t()]
+
+  @optional_callbacks unsupported_tools: 0
+
   # ============================================================================
   # Search
   # ============================================================================
@@ -70,15 +78,6 @@ defmodule McpServerElixir.Infrastructure.CoreBackend do
 
   @doc "Get WAL/replication status"
   @callback wal_status() :: {:ok, map()} | {:error, term()}
-
-  @doc "Create a backup snapshot"
-  @callback backup_create(params :: map()) :: {:ok, map()} | {:error, term()}
-
-  @doc "Restore from a backup snapshot"
-  @callback backup_restore(params :: map()) :: {:ok, map()} | {:error, term()}
-
-  @doc "List available backup snapshots"
-  @callback backup_list(params :: map()) :: {:ok, map()} | {:error, term()}
 
   @doc "Deep health check"
   @callback health_deep() :: {:ok, map()} | {:error, term()}

@@ -18,6 +18,7 @@ defmodule McpServerElixir.Protocol.McpTools do
   Accepts a config map with:
   - `:read_only` — when true, excludes mutation tools
   - `:control_plane_enabled` — when false, excludes tenant management tools
+  - `:backend` — excludes the tools that backend reports as `unsupported_tools/0`
   """
   def list_tools(config \\ %{}) do
     # Phase 1: Discover (what data exists?) — START HERE
@@ -85,7 +86,6 @@ defmodule McpServerElixir.Protocol.McpTools do
       tool_storage_stats(),
       tool_partition_info(),
       tool_wal_status(),
-      tool_backup_list(),
       tool_health_deep(),
       tool_performance_report(),
       tool_audit_log()
@@ -95,11 +95,7 @@ defmodule McpServerElixir.Protocol.McpTools do
       if config[:read_only] do
         []
       else
-        [
-          tool_compact_storage(),
-          tool_backup_create(),
-          tool_backup_restore()
-        ]
+        [tool_compact_storage()]
       end
 
     # Phase 8: Tenants — gated by control_plane_enabled
@@ -193,20 +189,33 @@ defmodule McpServerElixir.Protocol.McpTools do
       tool_benchmark_query()
     ]
 
-    discover_tools ++
-      search_tools ++
-      drill_down_tools ++
-      context_tools ++
-      mutate_tools ++
-      event_read_tools ++
-      ops_mutate_tools ++
-      ops_read_tools ++
-      tenant_tools ++
-      fleet_tools ++
-      schema_tools ++
-      analytics_tools ++
-      developer_tools
+    unsupported = unsupported_tools(config[:backend])
+
+    (discover_tools ++
+       search_tools ++
+       drill_down_tools ++
+       context_tools ++
+       mutate_tools ++
+       event_read_tools ++
+       ops_mutate_tools ++
+       ops_read_tools ++
+       tenant_tools ++
+       fleet_tools ++
+       schema_tools ++
+       analytics_tools ++
+       developer_tools)
+    |> Enum.reject(&(&1.name in unsupported))
   end
+
+  defp unsupported_tools(nil), do: []
+
+  defp unsupported_tools(backend) when is_atom(backend) do
+    if Code.ensure_loaded?(backend) and function_exported?(backend, :unsupported_tools, 0),
+      do: backend.unsupported_tools(),
+      else: []
+  end
+
+  defp unsupported_tools(_backend), do: []
 
   @tool_handlers %{
     "query_events" => :handle_query_events,
@@ -266,9 +275,6 @@ defmodule McpServerElixir.Protocol.McpTools do
     "storage_stats" => :handle_storage_stats,
     "partition_info" => :handle_partition_info,
     "wal_status" => :handle_wal_status,
-    "backup_create" => :handle_backup_create,
-    "backup_restore" => :handle_backup_restore,
-    "backup_list" => :handle_backup_list,
     "health_deep" => :handle_health_deep,
     "performance_report" => :handle_performance_report,
     "audit_log" => :handle_audit_log
@@ -349,9 +355,7 @@ defmodule McpServerElixir.Protocol.McpTools do
                            "clone_entity",
                            "merge_entities",
                            "split_entity",
-                           "compact_storage",
-                           "backup_create",
-                           "backup_restore"
+                           "compact_storage"
                          ])
 
   # Tools gated by control_plane_enabled. Includes the tenant management tools
@@ -401,6 +405,9 @@ defmodule McpServerElixir.Protocol.McpTools do
 
     # Check gating before dispatch
     cond do
+      tool_name in unsupported_tools(Map.get(state, :backend)) ->
+        {:error, "Unknown tool: #{tool_name}"}
+
       MapSet.member?(@read_only_gated_tools, tool_name) and Map.get(state, :read_only, false) ->
         {:ok,
          %{
@@ -1312,13 +1319,19 @@ defmodule McpServerElixir.Protocol.McpTools do
               "Natural language search query describing what you're looking for (e.g., \"user login attempts\" or \"failed payment transactions\")"
           },
           "limit" => %{
-            type: "number",
-            description: "Maximum number of results to return (default: 100, max: 1000)"
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            description: "Maximum number of results to return (default: 100, max: 100)"
           },
           "threshold" => %{
             type: "number",
             description:
               "Minimum similarity threshold from 0.0 to 1.0 (default: 0.7). Lower values return more results but with less relevance. Use 0.5 for broad exploration, 0.8+ for precise matches."
+          },
+          "event_type" => %{
+            type: "string",
+            description: "Only return events of this exact type (e.g., \"user.created\")"
           },
           "format" => %{
             type: "string",
@@ -1335,75 +1348,72 @@ defmodule McpServerElixir.Protocol.McpTools do
     %{
       name: "hybrid_search",
       description: """
-      Perform advanced search combining semantic understanding with keyword matching \
-      and metadata filters. This is the most powerful search tool, using Reciprocal \
-      Rank Fusion (RRF) to blend results from multiple search strategies.
+      Search events with one query scored two ways — semantic (vector) similarity \
+      and keyword (BM25) relevance — blended with Reciprocal Rank Fusion (RRF), \
+      optionally narrowed to one event type or entity.
 
       **When to use this tool:**
-      - Complex queries requiring both concept matching AND specific keywords
-      - Filtering by event type, entity, or time range while searching content
+      - Queries that need both concept matching AND specific terms
+      - Searching content within one event type or one entity
       - Finding events when you know some specifics but want semantic expansion
-      - Questions like "Show me user-related events from last week about authentication"
 
       **Search strategies:**
-      - Provide `semantic_query` for concept/meaning-based search
-      - Provide `keywords` for exact term matching (BM25)
-      - Provide both for hybrid search (recommended for complex queries)
-      - Use `filters` to narrow results by event_type, entity_id, or time range
+      - `query` is scored both semantically and by keywords
+      - `semantic_weight` / `keyword_weight` shift the blend toward one strategy
+      - `event_type` / `entity_id` narrow the candidates
+      - `semantic_query` and `keywords` are accepted and joined into `query`
 
       **Tips:**
-      - Combine semantic_query with filters for best results
-      - Use keywords when you know exact terms that must appear
-      - Time ranges use ISO 8601 format (e.g., "2024-01-15T00:00:00Z")
-      - Results are ranked by combined RRF score from all active search strategies
-
-      Returns events with combined relevance scores and individual strategy scores.
+      - Put the exact terms that must match in the query alongside the concept
+      - There is no time filter here; for a time range use query_events with since/until
+      - Results carry `score` plus `semantic_score` and `keyword_score` (null when \
+      that strategy did not match the event)
+      - A Core without an embedding model answers keyword-only: every \
+      `semantic_score` is null
 
       **Example combinations:**
-      - Semantic + filter: `semantic_query: "payment issues", filters: {event_type: "payment.failed"}`
-      - Keywords + time: `keywords: "timeout OR error", filters: {time_from: "2024-01-01T00:00:00Z"}`
-      - Full hybrid: `semantic_query: "user churn signals", keywords: "cancel unsubscribe", filters: {entity_id: "user-123"}`
+      - Concept + type: `query: "payment issues", event_type: "payment.failed"`
+      - Keyword-leaning: `query: "timeout error", keyword_weight: 0.8, semantic_weight: 0.2`
+      - One entity: `query: "cancel unsubscribe churn", entity_id: "user-123"`
       """,
       inputSchema: %{
         type: "object",
         properties: %{
+          "query" => %{
+            type: "string",
+            description: "Search text, scored both semantically and by keywords"
+          },
           "semantic_query" => %{
             type: "string",
             description:
-              "Natural language query for semantic (meaning-based) search. Finds conceptually similar events even without exact keyword matches."
+              "Natural language text for semantic (meaning-based) matching; joined into `query` when `query` is absent"
           },
           "keywords" => %{
             type: "string",
             description:
-              "Keywords for BM25 text search. Supports boolean operators (AND, OR), phrases (\"exact phrase\"), and field-specific search (field:value)."
+              "Terms for BM25 keyword matching; joined into `query` when `query` is absent"
           },
-          "filters" => %{
-            type: "object",
-            description: "Optional filters to narrow search results",
-            properties: %{
-              "event_type" => %{
-                type: "string",
-                description: "Filter by exact event type (e.g., \"user.created\", \"order.placed\")"
-              },
-              "entity_id" => %{
-                type: "string",
-                description: "Filter by exact entity ID (e.g., \"user-123\", \"order-456\")"
-              },
-              "time_from" => %{
-                type: "string",
-                description:
-                  "Include events on or after this ISO timestamp (e.g., \"2024-01-15T00:00:00Z\")"
-              },
-              "time_to" => %{
-                type: "string",
-                description:
-                  "Include events on or before this ISO timestamp (e.g., \"2024-01-31T23:59:59Z\")"
-              }
-            }
+          "event_type" => %{
+            type: "string",
+            description: "Only return events of this exact type (e.g., \"user.created\")"
+          },
+          "entity_id" => %{
+            type: "string",
+            description: "Only return events of this exact entity (e.g., \"user-123\")"
+          },
+          "semantic_weight" => %{
+            type: "number",
+            description: "Weight of the semantic score in the blend (0.0-1.0)"
+          },
+          "keyword_weight" => %{
+            type: "number",
+            description: "Weight of the keyword score in the blend (0.0-1.0)"
           },
           "limit" => %{
-            type: "number",
-            description: "Maximum number of results to return (default: 100, max: 1000)"
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            description: "Maximum number of results to return (default: 100, max: 100)"
           },
           "format" => %{
             type: "string",
@@ -2947,7 +2957,8 @@ defmodule McpServerElixir.Protocol.McpTools do
     params = %{
       "query" => query,
       "limit" => limit,
-      "threshold" => threshold
+      "min_similarity" => threshold,
+      "event_type" => Map.get(args, "event_type")
     }
 
     case state.backend.semantic_search(params) do
@@ -2979,80 +2990,71 @@ defmodule McpServerElixir.Protocol.McpTools do
 
   @doc false
   def handle_hybrid_search(args, state, format) do
-    semantic_query = Map.get(args, "semantic_query")
-    keywords = Map.get(args, "keywords")
-    filters = Map.get(args, "filters", %{})
-    limit = Map.get(args, "limit", 100)
+    filters = Map.get(args, "filters") || %{}
+    time_filters = Enum.filter(["time_from", "time_to"], &Map.has_key?(filters, &1))
+    query = hybrid_query_text(args)
 
-    # Build the search params
-    params = %{
-      "limit" => limit
-    }
+    cond do
+      time_filters != [] ->
+        {:error,
+         "hybrid_search cannot filter by #{Enum.join(time_filters, ", ")}: Core's hybrid " <>
+           "search has no time filter. Use query_events with since/until instead."}
 
-    params =
-      if semantic_query, do: Map.put(params, "semantic_query", semantic_query), else: params
+      query == nil ->
+        {:error, "hybrid_search needs query text: pass `query` (or `semantic_query` / `keywords`)."}
 
-    params = if keywords, do: Map.put(params, "keywords", keywords), else: params
+      true ->
+        params = %{
+          "query" => query,
+          "limit" => Map.get(args, "limit", 100),
+          "event_type" => Map.get(args, "event_type") || Map.get(filters, "event_type"),
+          "entity_id" => Map.get(args, "entity_id") || Map.get(filters, "entity_id"),
+          "semantic_weight" => Map.get(args, "semantic_weight"),
+          "keyword_weight" => Map.get(args, "keyword_weight")
+        }
 
-    # Add filters if present
-    params =
-      if map_size(filters) > 0 do
-        Map.put(params, "filters", filters)
-      else
-        params
-      end
+        run_hybrid_search(params, state, format)
+    end
+  end
 
+  defp hybrid_query_text(args) do
+    case Map.get(args, "query") do
+      query when is_binary(query) and query != "" ->
+        query
+
+      _ ->
+        [Map.get(args, "semantic_query"), Map.get(args, "keywords")]
+        |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+        |> case do
+          [] -> nil
+          parts -> Enum.join(parts, " ")
+        end
+    end
+  end
+
+  defp run_hybrid_search(params, state, format) do
     case state.backend.hybrid_search(params) do
       {:ok, data} ->
-        results = Map.get(data, "results", [])
-        count = length(results)
+        count = data |> Map.get("results", []) |> length()
 
-        # Build a descriptive summary of what was searched
-        search_desc =
-          [
-            if(semantic_query, do: "Semantic: \"#{semantic_query}\"", else: nil),
-            if(keywords, do: "Keywords: \"#{keywords}\"", else: nil)
-          ]
-          |> Enum.reject(&is_nil/1)
-          |> Enum.join(" + ")
-
-        search_desc = if search_desc == "", do: "No query provided", else: search_desc
-
-        # Build filter description
         filter_desc =
-          [
-            if(Map.get(filters, "event_type"),
-              do: "event_type=#{Map.get(filters, "event_type")}",
-              else: nil
-            ),
-            if(Map.get(filters, "entity_id"),
-              do: "entity_id=#{Map.get(filters, "entity_id")}",
-              else: nil
-            ),
-            if(Map.get(filters, "time_from"),
-              do: "from=#{Map.get(filters, "time_from")}",
-              else: nil
-            ),
-            if(Map.get(filters, "time_to"), do: "to=#{Map.get(filters, "time_to")}", else: nil)
-          ]
-          |> Enum.reject(&is_nil/1)
-          |> Enum.join(", ")
+          ["event_type", "entity_id"]
+          |> Enum.filter(&params[&1])
+          |> Enum.map_join(", ", &"#{&1}=#{params[&1]}")
 
         filter_line = if filter_desc != "", do: "🔧 Filters: #{filter_desc}\n", else: ""
 
         summary = """
         🔀 Hybrid Search Results
-        📝 #{search_desc}
+        📝 Query: "#{params["query"]}"
         #{filter_line}📊 Found: #{count} matching events\
         """
-
-        formatted_data = ToonEncoder.format_response(data, format)
 
         {:ok,
          %{
            content: [
              %{type: "text", text: summary},
-             %{type: "text", text: formatted_data}
+             %{type: "text", text: ToonEncoder.format_response(data, format)}
            ]
          }}
 
@@ -5611,150 +5613,6 @@ defmodule McpServerElixir.Protocol.McpTools do
     }
   end
 
-  defp tool_backup_create do
-    %{
-      name: "backup_create",
-      description: """
-      Create a backup snapshot of the event store. Backups capture a consistent \
-      point-in-time copy of all data for disaster recovery.
-
-      **When to use this tool:**
-      - Before major operations (migrations, bulk deletes, schema changes)
-      - Scheduled disaster recovery snapshots
-      - Before deploying new Core versions
-      - Creating restore points for testing
-
-      **SAFETY WARNING:**
-      - Backup creation is I/O intensive — plan for increased disk usage
-      - Ensure sufficient disk space for the snapshot (check storage_stats first)
-      - Backup is a point-in-time snapshot — events written during backup may not be included
-      - Large datasets may take significant time to backup
-
-      **Common patterns:**
-      - Full backup: `label: "pre-migration-2024-01"`
-      - Tenant backup: `tenant_id: "tenant-123", label: "tenant-backup"`
-      - Incremental: `incremental: true` (only changes since last backup)
-
-      **Performance tips:**
-      - Use incremental backups for frequent snapshots
-      - Schedule during off-peak hours
-      - Monitor disk space during backup creation
-      - Use label parameter for easy identification in backup_list
-      """,
-      inputSchema: %{
-        type: "object",
-        properties: %{
-          "label" => %{
-            type: "string",
-            description: "Human-readable label for the backup"
-          },
-          "tenant_id" => %{
-            type: "string",
-            description: "Backup only this tenant's data"
-          },
-          "incremental" => %{
-            type: "boolean",
-            description: "Create incremental backup from last full backup (default: false)"
-          }
-        }
-      }
-    }
-  end
-
-  defp tool_backup_restore do
-    %{
-      name: "backup_restore",
-      description: """
-      Restore data from a backup snapshot. This is a DESTRUCTIVE operation that \
-      replaces current data with the backup contents.
-
-      **SAFETY WARNING — DESTRUCTIVE OPERATION:**
-      - This REPLACES current data with backup data
-      - All events written after the backup was created will be LOST
-      - Always create a fresh backup before restoring (backup_create)
-      - Consider using dry_run: true first to validate the backup
-      - This operation requires confirmation and cannot be undone
-
-      **When to use this tool:**
-      - Disaster recovery after data corruption
-      - Rolling back a failed migration
-      - Restoring a tenant's data from a known good state
-      - Testing restore procedures
-
-      **Common patterns:**
-      - Restore from specific backup: `backup_id: "bkp-20240115-001"`
-      - Dry run validation: `backup_id: "bkp-20240115-001", dry_run: true`
-      - Tenant restore: `backup_id: "bkp-20240115-001", tenant_id: "tenant-123"`
-
-      **Performance tips:**
-      - Restore time depends on backup size
-      - System may be unavailable during restore
-      - Always verify data integrity after restore
-      """,
-      inputSchema: %{
-        type: "object",
-        properties: %{
-          "backup_id" => %{
-            type: "string",
-            description: "ID of the backup to restore from (use backup_list to find)"
-          },
-          "tenant_id" => %{
-            type: "string",
-            description: "Restore only this tenant's data"
-          },
-          "dry_run" => %{
-            type: "boolean",
-            description: "Validate backup integrity without restoring (default: false)"
-          },
-          "confirm" => %{
-            type: "boolean",
-            description: "REQUIRED: Must be true to execute restore. Safety confirmation."
-          }
-        },
-        required: ["backup_id", "confirm"]
-      }
-    }
-  end
-
-  defp tool_backup_list do
-    %{
-      name: "backup_list",
-      description: """
-      List available backup snapshots with metadata. Use this to find backup IDs \
-      for restore operations or to audit backup history.
-
-      **When to use this tool:**
-      - Finding a specific backup for restore
-      - Auditing backup history and retention
-      - Verifying backup schedule is running
-      - Checking backup sizes for capacity planning
-
-      **Common patterns:**
-      - List all backups: no parameters needed
-      - Filter by tenant: `tenant_id: "tenant-123"`
-      - Recent backups: `limit: 5`
-      - Find by label: check the label field in results
-
-      **Performance tips:**
-      - Lightweight read-only metadata operation
-      - Results include backup_id, label, created_at, size, and status
-      """,
-      inputSchema: %{
-        type: "object",
-        properties: %{
-          "tenant_id" => %{
-            type: "string",
-            description: "List backups for a specific tenant"
-          },
-          "limit" => %{
-            type: "number",
-            description: "Maximum number of backups to return (default: 20)"
-          }
-        }
-      }
-    }
-  end
-
   defp tool_health_deep do
     %{
       name: "health_deep",
@@ -5859,7 +5717,7 @@ defmodule McpServerElixir.Protocol.McpTools do
 
       **Common patterns:**
       - Recent activity: no parameters — returns latest audit entries
-      - By action: `action: "delete"` or `action: "backup_create"`
+      - By action: `action: "delete"` or `action: "compact_storage"`
       - By actor: `actor: "admin@example.com"` — who performed the action
       - By entity: `entity_id: "user-123"` — operations on a specific entity
       - Time range: `since: "2024-01-01T00:00:00Z", until: "2024-01-31T23:59:59Z"`
@@ -5874,7 +5732,7 @@ defmodule McpServerElixir.Protocol.McpTools do
         properties: %{
           "action" => %{
             type: "string",
-            description: "Filter by action type (e.g., delete, archive, restore, backup_create)"
+            description: "Filter by action type (e.g., delete, archive, restore, compact_storage)"
           },
           "actor" => %{
             type: "string",
@@ -6038,63 +5896,6 @@ defmodule McpServerElixir.Protocol.McpTools do
       {:error, reason} ->
         {:error, "Failed to get WAL status: #{inspect(reason)}"}
     end
-  end
-
-  @doc false
-  def handle_backup_create(_args, _state, _format) do
-    {:ok,
-     %{
-       content: [
-         %{
-           type: "text",
-           text: """
-           Backup Create — Not Yet Available
-
-           Backup API is not yet implemented in AllSource Core.
-
-           Workaround: Copy the Core data directory (WAL + Parquet files) while the service is stopped.
-           """
-         }
-       ]
-     }}
-  end
-
-  @doc false
-  def handle_backup_restore(_args, _state, _format) do
-    {:ok,
-     %{
-       content: [
-         %{
-           type: "text",
-           text: """
-           Backup Restore — Not Yet Available
-
-           Backup restore API is not yet implemented in AllSource Core.
-
-           Workaround: Stop Core, replace the data directory with a backup copy, then restart.
-           """
-         }
-       ]
-     }}
-  end
-
-  @doc false
-  def handle_backup_list(_args, _state, _format) do
-    {:ok,
-     %{
-       content: [
-         %{
-           type: "text",
-           text: """
-           Backup List — Not Yet Available
-
-           Backup API is not yet implemented in AllSource Core.
-
-           Workaround: Check the Core data directory for WAL segments and Parquet files.
-           """
-         }
-       ]
-     }}
   end
 
   @doc false

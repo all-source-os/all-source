@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use tracing_subscriber::EnvFilter;
 
 mod analytics;
+mod contract;
 mod core_writer;
 mod dispatch;
 mod doc_extract;
@@ -346,6 +347,9 @@ async fn main() -> Result<()> {
                 prime: None,
                 recall: None,
                 hosted: Some(hosted),
+                api_key: std::env::var("PRIME_API_KEY")
+                    .ok()
+                    .filter(|k| !k.is_empty()),
             });
             tracing::info!("Starting HTTP server on port {}", cli.port);
             http::serve(state, cli.port).await?;
@@ -690,6 +694,9 @@ async fn main() -> Result<()> {
                 prime: Some(prime),
                 recall: Some(recall),
                 hosted: None,
+                api_key: std::env::var("PRIME_API_KEY")
+                    .ok()
+                    .filter(|k| !k.is_empty()),
             });
             http::serve(state, cli.port).await?;
         }

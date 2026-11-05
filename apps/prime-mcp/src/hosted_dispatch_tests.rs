@@ -80,7 +80,7 @@ async fn add_node_then_search_round_trips_with_tenant() {
 }
 
 #[tokio::test]
-async fn unsupported_tool_errors_without_crashing() {
+async fn an_unadvertised_tool_is_refused_without_crashing() {
     let server = MockServer::start().await;
     let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
     let r = req(
@@ -94,7 +94,32 @@ async fn unsupported_tool_errors_without_crashing() {
     let v = serde_json::to_value(&resp).unwrap();
     assert_eq!(v["result"]["isError"], json!(true));
     let text = v["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(text.contains("not yet available on the hosted backend"));
+    assert!(text.contains("is not served by the hosted backend"));
+}
+
+#[test]
+fn hosted_schemas_leave_out_the_time_axes_hosted_does_not_read() {
+    let Value::Array(defs) = hosted_tool_definitions() else {
+        panic!("tools/list is not an array");
+    };
+    let names: Vec<&str> = defs.iter().filter_map(|t| t["name"].as_str()).collect();
+    for tool in [
+        "prime_add_node",
+        "prime_update_node",
+        "prime_neighbors",
+        "prime_recall",
+    ] {
+        assert!(names.contains(&tool), "{tool} not advertised");
+    }
+    for t in &defs {
+        for arg in UNSERVED_TIME_ARGS {
+            assert!(
+                t["inputSchema"]["properties"].get(arg).is_none(),
+                "{} advertises {arg}",
+                t["name"]
+            );
+        }
+    }
 }
 
 #[tokio::test]

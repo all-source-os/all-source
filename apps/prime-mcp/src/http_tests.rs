@@ -9,20 +9,21 @@ use axum::{
 };
 use tower::ServiceExt; // for `oneshot`
 
-async fn test_state() -> Arc<AppState> {
+pub(super) async fn test_state() -> Arc<AppState> {
     let prime = Prime::open_in_memory().await.unwrap();
     let recall = RecallEngine::with_deps(prime.recall_deps(), &IndexConfig::default());
     Arc::new(AppState {
         prime: Some(Arc::new(prime)),
         recall: Some(recall),
         hosted: None,
+        api_key: None,
     })
 }
 
+pub(super) const TEST_KEY: &str = "test-key";
+
 fn graph_router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/api/v1/prime/graph", get(get_full_graph))
-        .with_state(state)
+    router(state)
 }
 
 #[tokio::test]
@@ -77,9 +78,7 @@ async fn graph_endpoint_returns_written_node_and_edge() {
 }
 
 fn mcp_router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/mcp", post(mcp_handler))
-        .with_state(state)
+    router(state)
 }
 
 async fn mcp_post(app: &Router, payload: Value) -> (StatusCode, Value) {
@@ -179,7 +178,7 @@ use wiremock::{
     matchers::{method as wm_method, path as wm_path},
 };
 
-async fn hosted_state(server: &MockServer) -> Arc<AppState> {
+pub(super) async fn hosted_state(server: &MockServer) -> Arc<AppState> {
     Mock::given(wm_method("GET"))
         .and(wm_path("/api/v1/events/query"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "events": [] })))
@@ -198,20 +197,22 @@ async fn hosted_state(server: &MockServer) -> Arc<AppState> {
         prime: None,
         recall: None,
         hosted: Some(Arc::new(hosted)),
+        api_key: Some(TEST_KEY.to_string()),
     })
 }
 
-async fn hosted_state_stateful(server: &MockServer) -> Arc<AppState> {
+pub(super) async fn hosted_state_stateful(server: &MockServer) -> Arc<AppState> {
     crate::hosted_test_core::mount_stateful_core(server).await;
     let hosted = HostedPrime::connect(server.uri(), None, 8, std::time::Duration::from_mins(1));
     Arc::new(AppState {
         prime: None,
         recall: None,
         hosted: Some(Arc::new(hosted)),
+        api_key: Some(TEST_KEY.to_string()),
     })
 }
 
-async fn mcp_post_with_tenant(
+pub(super) async fn mcp_post_with_tenant(
     app: &Router,
     tenant: Option<&str>,
     payload: Value,
@@ -219,7 +220,8 @@ async fn mcp_post_with_tenant(
     let mut builder = Request::builder()
         .method("POST")
         .uri("/mcp")
-        .header("content-type", "application/json");
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {TEST_KEY}"));
     if let Some(t) = tenant {
         builder = builder.header("x-tenant-id", t);
     }
@@ -293,7 +295,7 @@ async fn mcp_hosted_path_unsupported_tool_errors() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["result"]["isError"], json!(true));
     let text = body["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(text.contains("not yet available on the hosted backend"));
+    assert!(text.contains("is not served by the hosted backend"));
 }
 
 #[tokio::test]
@@ -315,22 +317,20 @@ async fn mcp_no_tenant_stateless_returns_400() {
 }
 
 fn rest_router(state: Arc<AppState>) -> Router {
-    Router::new()
-        .route("/api/v1/prime/nodes", post(create_node))
-        .route("/api/v1/prime/nodes/{id}", get(get_node))
-        .route("/api/v1/prime/graph", get(get_full_graph))
-        .route("/api/v1/prime/recall", post(recall))
-        .with_state(state)
+    router(state)
 }
 
-async fn rest_request(
+pub(super) async fn rest_request(
     app: &Router,
     method: &str,
     uri: &str,
     tenant: Option<&str>,
     body: Option<Value>,
 ) -> (StatusCode, Value) {
-    let mut builder = Request::builder().method(method).uri(uri);
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("authorization", format!("Bearer {TEST_KEY}"));
     if let Some(t) = tenant {
         builder = builder.header("x-tenant-id", t);
     }

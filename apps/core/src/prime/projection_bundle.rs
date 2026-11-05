@@ -107,6 +107,24 @@ impl GraphProjections {
     pub fn apply(&self, view: &EventView) {
         let event = view_to_event(view);
         self.process_all(&event);
+        if view.event_type == crate::prime::schema::SCHEMA_REGISTERED {
+            self.sync_exclusive_relations(&view.tenant_id);
+        }
+    }
+
+    /// Mark every `cardinality: one` edge kind exclusive in the contradiction
+    /// projection, backfilling relations seen for the first time.
+    fn sync_exclusive_relations(&self, tenant: &str) {
+        for relation in self.schema.exclusive_relations(tenant) {
+            if !self.contradiction.is_exclusive(&relation) {
+                self.contradiction.configure_exclusive(&relation);
+                self.contradiction.backfill_exclusive(
+                    &relation,
+                    &self.adjacency,
+                    &self.node_type_index.all_entity_ids(),
+                );
+            }
+        }
     }
 
     fn process_all(&self, event: &Event) {
