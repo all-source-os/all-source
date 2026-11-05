@@ -1,7 +1,8 @@
 # Fly.io Configuration for AllSource Core
 # Deploy from monorepo root (Core Dockerfile needs workspace context):
 #   flyctl deploy --config apps/core/fly.toml --dockerfile apps/core/Dockerfile
-# Scale: flyctl scale count 2 --app allsource-core
+# One machine only: .internal resolves to every started machine
+# (docs/runbooks/CORE_DEPLOY.md).
 
 app = "allsource-core"
 primary_region = "iad"  # US East (Virginia) - change to your preferred region
