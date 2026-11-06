@@ -76,6 +76,7 @@ pub fn hosted_tool_definitions() -> Value {
 }
 
 /// Dispatch one JSON-RPC request against a tenant-scoped [`HostedPrime`].
+/// `principal` is the authenticated caller, recorded on node and edge writes.
 ///
 /// Returns `None` for notifications (no reply), `Some(Response)` otherwise —
 /// the same contract as [`crate::dispatch::handle_request`], so the HTTP
@@ -83,6 +84,7 @@ pub fn hosted_tool_definitions() -> Value {
 pub async fn handle_request_hosted(
     hosted: &HostedPrime,
     tenant: &str,
+    principal: Option<&str>,
     req: &Request,
 ) -> Option<Response> {
     match req.method.as_str() {
@@ -110,7 +112,7 @@ pub async fn handle_request_hosted(
                 .cloned()
                 .unwrap_or_else(|| json!({}));
 
-            let result = call_tool_hosted(hosted, tenant, tool_name, &args).await;
+            let result = call_tool_hosted(hosted, tenant, principal, tool_name, &args).await;
             Some(Response::success(req.id.clone(), result))
         }
 
@@ -124,14 +126,20 @@ pub async fn handle_request_hosted(
 
 /// Dispatch a single tool call to the matching [`HostedPrime`] method, threading
 /// `tenant`. A `tenant_id` argument that differs from `tenant` is refused.
-async fn call_tool_hosted(hosted: &HostedPrime, tenant: &str, name: &str, args: &Value) -> Value {
+async fn call_tool_hosted(
+    hosted: &HostedPrime,
+    tenant: &str,
+    principal: Option<&str>,
+    name: &str,
+    args: &Value,
+) -> Value {
     if let Some(msg) = contract::conflicting_tenant(args.get("tenant_id"), tenant) {
         return tool_error(&msg);
     }
     match name {
-        "prime_add_node" => call_add_node(hosted, tenant, args).await,
-        "prime_add_edge" => call_add_edge(hosted, tenant, args).await,
-        "prime_update_node" => call_update_node(hosted, tenant, args).await,
+        "prime_add_node" => call_add_node(hosted, tenant, principal, args).await,
+        "prime_add_edge" => call_add_edge(hosted, tenant, principal, args).await,
+        "prime_update_node" => call_update_node(hosted, tenant, principal, args).await,
         "prime_neighbors" => call_neighbors(hosted, tenant, args).await,
         "prime_search" => call_search(hosted, tenant, args).await,
         "prime_shortest_path" => call_shortest_path(hosted, tenant, args).await,
@@ -183,13 +191,18 @@ fn tool_error(msg: &str) -> Value {
 
 // ── Tool implementations (mirroring tools.rs arg parsing + result shaping) ──
 
-async fn call_add_node(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value {
+async fn call_add_node(
+    hosted: &HostedPrime,
+    tenant: &str,
+    principal: Option<&str>,
+    args: &Value,
+) -> Value {
     let node_type = args
         .get("type")
         .and_then(Value::as_str)
         .unwrap_or("unknown");
     let properties = args.get("properties").cloned().unwrap_or_else(|| json!({}));
-    let assertion = match contract::assertion_from_args(args, "source") {
+    let assertion = match contract::hosted_assertion(args, "source", principal) {
         Ok(a) => a,
         Err(e) => return tool_error(&e),
     };
@@ -206,14 +219,19 @@ async fn call_add_node(hosted: &HostedPrime, tenant: &str, args: &Value) -> Valu
     }
 }
 
-async fn call_update_node(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value {
+async fn call_update_node(
+    hosted: &HostedPrime,
+    tenant: &str,
+    principal: Option<&str>,
+    args: &Value,
+) -> Value {
     let Some(node_id) = args.get("node_id").and_then(Value::as_str) else {
         return tool_error("missing 'node_id'");
     };
     let Some(properties) = args.get("properties").filter(|p| p.is_object()).cloned() else {
         return tool_error("missing 'properties' (object)");
     };
-    let assertion = match contract::assertion_from_args(args, "source") {
+    let assertion = match contract::hosted_assertion(args, "source", principal) {
         Ok(a) => a,
         Err(e) => return tool_error(&e),
     };
@@ -417,7 +435,12 @@ async fn call_set_enforcement(hosted: &HostedPrime, tenant: &str, args: &Value) 
     }
 }
 
-async fn call_add_edge(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value {
+async fn call_add_edge(
+    hosted: &HostedPrime,
+    tenant: &str,
+    principal: Option<&str>,
+    args: &Value,
+) -> Value {
     let Some(source) = args.get("source").and_then(Value::as_str) else {
         return tool_error("missing 'source'");
     };
@@ -429,10 +452,11 @@ async fn call_add_edge(hosted: &HostedPrime, tenant: &str, args: &Value) -> Valu
     };
     let properties = args.get("properties").cloned();
     let weight = args.get("weight").and_then(Value::as_f64);
-    let assertion = match contract::assertion_from_args(args, contract::ASSERTION_SOURCE_KEY) {
-        Ok(a) => a,
-        Err(e) => return tool_error(&e),
-    };
+    let assertion =
+        match contract::hosted_assertion(args, contract::ASSERTION_SOURCE_KEY, principal) {
+            Ok(a) => a,
+            Err(e) => return tool_error(&e),
+        };
 
     match hosted
         .add_edge_asserted(

@@ -67,7 +67,11 @@ impl PrimeRoute {
 
 fn assertion_schema_properties() -> Value {
     json!({
-        "source": {"type": "string", "enum": ["user", "agent", "extraction", "import"]},
+        "source": {
+            "type": "string",
+            "enum": ["user", "agent", "extraction", "import"],
+            "description": "extraction requires run_id and a non-empty derived_from"
+        },
         "actor": {"type": "string"},
         "model": {"type": "string"},
         "run_id": {"type": "string"},

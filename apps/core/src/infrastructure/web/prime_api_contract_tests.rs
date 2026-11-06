@@ -294,6 +294,7 @@ async fn http_provenance_without_a_projection_is_answered_under_last_write() {
             "source": "extraction",
             "model": "m",
             "run_id": "r1",
+            "derived_from": ["doc:2"],
             "confidence": 0.7
         })),
     )

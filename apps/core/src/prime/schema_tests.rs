@@ -125,9 +125,11 @@ fn enforcement_replay_keeps_the_latest_event_per_tenant() {
     proj.process(&set("a", "strict", at(200))).unwrap();
     proj.process(&set("a", "warn", at(100))).unwrap();
     proj.process(&set("b", "warn", at(50))).unwrap();
+    proj.process(&set("d", "open", at(60))).unwrap();
     assert_eq!(proj.enforcement("a"), EnforcementMode::Strict);
     assert_eq!(proj.enforcement("b"), EnforcementMode::Warn);
-    assert_eq!(proj.enforcement("c"), EnforcementMode::Open);
+    assert_eq!(proj.enforcement("c"), EnforcementMode::Warn, "never set");
+    assert_eq!(proj.enforcement("d"), EnforcementMode::Open, "opted out");
 
     let snap = proj.snapshot().unwrap();
     proj.clear();

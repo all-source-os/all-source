@@ -86,6 +86,11 @@ pub struct Assertion {
     /// Overrides [`AssertionSource::default_priority`] when set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_priority: Option<i32>,
+    /// The authenticated principal the server accepted the write from. Prime's
+    /// write path sets it and ignores caller input; an event ingested raw into
+    /// the tenant's Core can still carry any value here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_by: Option<String>,
 }
 
 impl Assertion {
@@ -149,21 +154,43 @@ impl Assertion {
         self
     }
 
+    #[must_use]
+    pub fn with_recorded_by(mut self, principal: impl Into<String>) -> Self {
+        self.recorded_by = Some(principal.into());
+        self
+    }
+
     /// Priority used by `highest_priority` folding.
     pub fn priority(&self) -> i32 {
         self.source_priority
             .unwrap_or_else(|| self.source.default_priority())
     }
 
-    /// Refuse a write-side assertion: `unknown` source, or a confidence that is
-    /// not finite or outside `0.0..=1.0`. Runs before any event is appended,
-    /// whatever the enforcement mode.
+    /// Refuse a write-side assertion: `unknown` source, an `extraction` that
+    /// does not name its run and what it was extracted from, or a confidence
+    /// that is not finite or outside `0.0..=1.0`. Runs before any event is
+    /// appended, whatever the enforcement mode.
     pub fn validate(&self) -> PrimeResult<()> {
         if self.source == AssertionSource::Unknown {
             return Err(PrimeError::ValidationFailed(
                 "assertion.source: expected one of user, agent, extraction, import, received \"unknown\""
                     .to_string(),
             ));
+        }
+        if self.source == AssertionSource::Extraction {
+            if self.run_id.as_deref().is_none_or(|r| r.trim().is_empty()) {
+                return Err(PrimeError::ValidationFailed(
+                    "assertion.run_id: an extraction must name the run that produced it, received null"
+                        .to_string(),
+                ));
+            }
+            if !self.derived_from.iter().any(|d| !d.trim().is_empty()) {
+                return Err(PrimeError::ValidationFailed(
+                    "assertion.derived_from: an extraction must name the document, URL or event it \
+                     was extracted from, received []"
+                        .to_string(),
+                ));
+            }
         }
         if let Some(c) = self.confidence
             && !(c.is_finite() && (0.0..=1.0).contains(&c))
@@ -240,6 +267,7 @@ impl AssertionInput {
             derived_from: self.derived_from.unwrap_or_default(),
             confidence: self.confidence,
             source_priority: self.source_priority,
+            recorded_by: None,
         };
         assertion.validate()?;
         Ok(Some(assertion))

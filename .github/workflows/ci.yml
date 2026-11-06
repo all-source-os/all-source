@@ -936,6 +936,14 @@ jobs:
     env:
       MIX_ENV: test
       RUSTUP_TOOLCHAIN: stable
+    # The published Core the search tools are checked against over real HTTP.
+    services:
+      core:
+        image: ghcr.io/all-source-os/allsource-core-community:sha-7deb361
+        env:
+          ALLSOURCE_AUTH_DISABLED: "true"
+        ports:
+          - 3900:3900
 
     steps:
       - name: Checkout
@@ -1008,6 +1016,14 @@ jobs:
       # Then tests
       - name: Run tests
         run: mix test
+
+      - name: Search tools against a running Core
+        timeout-minutes: 5
+        env:
+          LIVE_CORE_URL: http://localhost:3900
+        run: |
+          timeout 60 sh -c 'until curl -sf http://localhost:3900/health > /dev/null; do sleep 1; done'
+          timeout -k 15 200 mix test --include integration test/mcp_server_elixir/integration/live_core_search_test.exs
 
   # ============================================================================
   # Summary Gate - All Quality Checks Must Pass

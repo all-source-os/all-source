@@ -375,7 +375,7 @@ fn base_tool_definitions() -> Value {
         },
         {
             "name": "prime_set_enforcement",
-            "description": "Set how registered kinds are enforced: 'open' (default; only legacy required fields are checked), 'warn' (violations are recorded on the accepted write) or 'strict' (violations and unregistered types are refused with the field, expected kind and received value). The latest setting wins.",
+            "description": "Set how registered kinds are enforced: 'open' (only legacy required fields are checked), 'warn' (default; violations are recorded on the accepted write, nothing is refused) or 'strict' (violations and unregistered types are refused with the field, expected kind and received value). The latest setting wins.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

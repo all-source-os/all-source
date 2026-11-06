@@ -408,7 +408,7 @@ func (cp *ControlPlane) ProxyIngestBatch(c *gin.Context) {
 // off it, and attach the per-request JWT so Prime can independently verify
 // the caller's identity if it chooses to.
 func (cp *ControlPlane) ProxyPrime(c *gin.Context) {
-	_, tenantID, _, ok := authIdentityFromContext(c)
+	userID, tenantID, _, ok := authIdentityFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "no auth context"})
 		return
@@ -442,7 +442,9 @@ func (cp *ControlPlane) ProxyPrime(c *gin.Context) {
 	// to the app with it and stamp the trusted tenant header. If it is NOT set
 	// (pre-migration / local), fall back to the user-scoped service JWT + the
 	// query param so nothing breaks before the app is switched to hosted mode.
-	extraHeaders := map[string]string{"X-Tenant-Id": tenantID}
+	// X-User-Id is trusted on the same credential and becomes recorded_by on
+	// Prime node and edge writes; a caller-sent copy is never forwarded.
+	extraHeaders := map[string]string{"X-Tenant-Id": tenantID, "X-User-Id": userID}
 	var bearer string
 	if key := os.Getenv("PRIME_API_KEY"); key != "" {
 		bearer = key

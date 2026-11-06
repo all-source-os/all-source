@@ -99,6 +99,25 @@ pub fn assertion_from_args(args: &Value, source_key: &str) -> Result<Option<Asse
     .map_err(|e| prime_error_text(&e))
 }
 
+/// [`assertion_from_args`] for a hosted node or edge write: the authenticated
+/// principal is recorded on it, with an agent assertion when the caller sent
+/// none.
+pub fn hosted_assertion(
+    args: &Value,
+    source_key: &str,
+    principal: Option<&str>,
+) -> Result<Option<Assertion>, String> {
+    let assertion = assertion_from_args(args, source_key)?;
+    Ok(match principal {
+        Some(p) => Some(
+            assertion
+                .unwrap_or_else(Assertion::agent)
+                .with_recorded_by(p),
+        ),
+        None => assertion,
+    })
+}
+
 /// JSON Schema properties for the optional assertion fields, merged into the
 /// node, update and edge tool schemas.
 pub fn assertion_schema(source_key: &str) -> Value {
@@ -113,7 +132,7 @@ pub fn assertion_schema(source_key: &str) -> Value {
     props[source_key] = json!({
         "type": "string",
         "enum": ["user", "agent", "extraction", "import"],
-        "description": "Who asserted the fact. Defaults to agent when any assertion field is sent."
+        "description": "Who asserted the fact. Defaults to agent when any assertion field is sent. extraction requires run_id and a non-empty derived_from."
     });
     props
 }

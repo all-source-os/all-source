@@ -66,6 +66,18 @@ fn scoped_tenant(scope: Scope) -> Option<String> {
     scope.map(|Extension(TenantScope(t))| t)
 }
 
+/// The end user the Control Plane authenticated, from `X-User-Id`. Bound by
+/// [`auth_boundary`] under the same credential check as the tenant, and
+/// recorded as `recorded_by` on hosted node and edge creates and updates.
+#[derive(Clone, Debug)]
+pub struct Principal(pub String);
+
+type Caller = Option<Extension<Principal>>;
+
+fn caller_principal(caller: &Caller) -> Option<&str> {
+    caller.as_ref().map(|Extension(Principal(p))| p.as_str())
+}
+
 /// One routed endpoint. The router and the `OpenAPI` document are both built
 /// from [`http_routes`], so a route cannot be served undocumented.
 pub struct HttpRoute {
@@ -466,13 +478,17 @@ fn credential_matches(headers: &HeaderMap, expected: &str) -> bool {
     })
 }
 
-fn tenant_from_headers(headers: &HeaderMap) -> Option<String> {
+fn trimmed_header(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
-        .get("x-tenant-id")
+        .get(name)
         .and_then(|v| v.to_str().ok())
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(String::from)
+}
+
+fn tenant_from_headers(headers: &HeaderMap) -> Option<String> {
+    trimmed_header(headers, "x-tenant-id")
 }
 
 fn refuse(status: StatusCode, msg: &str) -> Response {
@@ -533,6 +549,9 @@ async fn auth_boundary(
     if let Some(msg) = contract::conflicting_tenant(query_tenant.as_ref(), &tenant) {
         return refuse(StatusCode::FORBIDDEN, &msg);
     }
+    if let Some(principal) = trimmed_header(req.headers(), "x-user-id") {
+        req.extensions_mut().insert(Principal(principal));
+    }
     req.extensions_mut().insert(TenantScope(tenant));
     next.run(req).await
 }
@@ -552,6 +571,7 @@ async fn auth_boundary(
 async fn mcp_handler(
     State(state): State<Arc<AppState>>,
     scope: Scope,
+    caller: Caller,
     body: Bytes,
 ) -> impl IntoResponse {
     let req: crate::protocol::Request = match serde_json::from_slice(&body) {
@@ -566,7 +586,14 @@ async fn mcp_handler(
         let Some(tenant) = scoped_tenant(scope) else {
             return missing_tenant_response().into_response();
         };
-        return match crate::hosted_dispatch::handle_request_hosted(hosted, &tenant, &req).await {
+        return match crate::hosted_dispatch::handle_request_hosted(
+            hosted,
+            &tenant,
+            caller_principal(&caller),
+            &req,
+        )
+        .await
+        {
             Some(resp) => (StatusCode::OK, Json(resp)).into_response(),
             None => StatusCode::ACCEPTED.into_response(),
         };
@@ -838,13 +865,14 @@ async fn get_full_graph(
 async fn create_node(
     State(state): State<Arc<AppState>>,
     scope: Scope,
+    caller: Caller,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     let req: CreateNodeRequest = match parse_body(&body) {
         Ok(r) => r,
         Err(reply) => return reply,
     };
-    let assertion = match contract::assertion_from_args(&body, "source") {
+    let assertion = match contract::hosted_assertion(&body, "source", caller_principal(&caller)) {
         Ok(a) => a,
         Err(e) => return bad_request(&e),
     };
@@ -920,6 +948,7 @@ async fn get_node(
 async fn update_node(
     State(state): State<Arc<AppState>>,
     scope: Scope,
+    caller: Caller,
     Path(id): Path<String>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
@@ -927,7 +956,7 @@ async fn update_node(
         Ok(r) => r,
         Err(reply) => return reply,
     };
-    let assertion = match contract::assertion_from_args(&body, "source") {
+    let assertion = match contract::hosted_assertion(&body, "source", caller_principal(&caller)) {
         Ok(a) => a,
         Err(e) => return bad_request(&e),
     };
@@ -1214,13 +1243,18 @@ async fn get_enforcement(State(state): State<Arc<AppState>>, scope: Scope) -> im
 async fn create_edge(
     State(state): State<Arc<AppState>>,
     scope: Scope,
+    caller: Caller,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     let req: CreateEdgeRequest = match parse_body(&body) {
         Ok(r) => r,
         Err(reply) => return reply,
     };
-    let assertion = match contract::assertion_from_args(&body, contract::ASSERTION_SOURCE_KEY) {
+    let assertion = match contract::hosted_assertion(
+        &body,
+        contract::ASSERTION_SOURCE_KEY,
+        caller_principal(&caller),
+    ) {
         Ok(a) => a,
         Err(e) => return bad_request(&e),
     };

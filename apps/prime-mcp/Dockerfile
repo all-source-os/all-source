@@ -22,17 +22,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
-# Copy workspace root manifest and lockfile
+# Dependency layers depend only on manifests, lockfiles and the shared crates,
+# so a source change in Core or Prime does not recompile the dependency graph.
 COPY Cargo.toml Cargo.lock ./
-
-# Copy allsource-core (the main dependency)
-COPY apps/core/ apps/core/
-
-# Copy shared crates allsource-core depends on (e.g. allsource-prime-models).
+COPY apps/core/Cargo.toml apps/core/
 COPY crates/ crates/
+COPY apps/prime-mcp/Cargo.toml apps/prime-mcp/Cargo.lock apps/prime-mcp/
 
-# Copy prime-mcp itself
-COPY apps/prime-mcp/ apps/prime-mcp/
+# Cargo refuses a manifest whose declared targets are missing, so each target
+# gets an empty stand-in until the real sources are copied. Only default
+# targets a crate really has are stubbed: an extra one would become a target.
+RUN for spec in "apps/core src/lib.rs src/main.rs" "apps/prime-mcp src/main.rs"; do \
+        set -- $spec; dir=$1; shift; manifest="$dir/Cargo.toml"; \
+        for target in "$@" \
+            $(grep -oE '^path = "[^"]+\.rs"' "$manifest" | cut -d'"' -f2) \
+            $(grep -A1 -E '^\[\[bench\]\]' "$manifest" | grep -oE '^name = "[^"]+"' | cut -d'"' -f2 | sed 's|.*|benches/&.rs|'); do \
+            mkdir -p "$dir/$(dirname "$target")"; \
+            echo 'fn main() {}' > "$dir/$target"; \
+        done; \
+    done
 
 # Stub workspace members that prime-mcp doesn't need but Cargo.toml references
 RUN mkdir -p apps/mcp-server-elixir/native/core_nif/src \
@@ -50,14 +58,33 @@ RUN mkdir -p apps/mcp-server-elixir/native/core_nif/src \
 
 WORKDIR /build/apps/prime-mcp
 
-FROM builder-source AS builder-image
-RUN timeout -k 15 260 cargo build --release --locked -p image --lib
+# Each phase fits one 5-minute CI step. Exit 124 keeps the finished units for
+# the next phase to resume; any other failure stops the build.
+FROM builder-source AS builder-deps-warm
+RUN timeout -k 15 230 cargo build --release --locked; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency build paused at its deadline"; exit 0; fi; \
+    exit "$status"
 
-FROM builder-image AS builder-parquet
-RUN timeout -k 15 260 cargo build --release --locked -p parquet --lib
+FROM builder-deps-warm AS builder-deps-resume
+RUN timeout -k 15 230 cargo build --release --locked; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency build paused at its deadline"; exit 0; fi; \
+    exit "$status"
 
-FROM builder-parquet AS builder-core
-RUN timeout -k 15 260 cargo build --release --locked -p allsource-core --lib
+FROM builder-deps-resume AS builder-deps
+RUN timeout -k 15 240 cargo build --release --locked; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency build paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps AS builder-core
+COPY apps/core/ /build/apps/core/
+COPY apps/prime-mcp/ /build/apps/prime-mcp/
+# The stand-ins were written after the checkout, so the real files look older
+# than the compiled stubs; without the touch cargo would keep the stubs.
+RUN find /build/apps/core /build/apps/prime-mcp -name '*.rs' -exec touch {} + \
+    && timeout -k 15 260 cargo build --release --locked -p allsource-core --lib
 
 FROM builder-core AS builder
 RUN timeout -k 15 260 cargo build --release --locked
