@@ -6,6 +6,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-11-06
+
+Valid time beside record time. An event can say when its fact was true;
+Core still assigns the record time.
+
+### Added
+
+- `IngestEventInput::valid_from` / `valid_to` and the `with_valid_from` /
+  `with_valid_to` builders. Sent only when set; without `valid_from` Core uses
+  the record time.
+- `Event::valid_from` / `valid_to`, and `IngestResponse::valid_from` /
+  `recorded_at`. All `None` from a Core without valid time.
+- `QueryEventsParams::as_of` (record time) and `as_of_valid`, `since_valid`,
+  `until_valid` (valid time), with builders. `since` and `until` stay on the
+  record axis.
+- `EntityStateParams::as_of_valid` and its builder; `EntityState::as_of_valid`
+  echoes it.
+
+### Changed
+
+- `IngestEventInput`, `Event`, `IngestResponse`, `QueryEventsParams`,
+  `EntityStateParams` and `EntityState` have new public fields, so struct
+  literals of them need updating. The input types (`IngestEventInput`,
+  `QueryEventsParams`, `EntityStateParams`) take `..Default::default()` or
+  their builders.
+- `EntityStateParams::as_of` is documented as record time.
+
 ## [0.27.0] — 2026-11-04
 
 A Core restart no longer fails calls. On 2026-11-01 a restart refused clients
