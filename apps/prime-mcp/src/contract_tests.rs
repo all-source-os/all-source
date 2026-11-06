@@ -58,6 +58,29 @@ fn non_numeric_confidence_and_unknown_source_are_refused() {
 }
 
 #[test]
+fn a_hosted_write_records_the_principal_and_ignores_a_claimed_one() {
+    let a = hosted_assertion(&json!({}), "source", Some("user-42"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(a.source, AssertionSource::Agent);
+    assert_eq!(a.recorded_by.as_deref(), Some("user-42"));
+
+    let a = hosted_assertion(
+        &json!({ "source": "user", "actor": "ann", "recorded_by": "mallory" }),
+        "source",
+        Some("user-42"),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(a.source, AssertionSource::User);
+    assert_eq!(a.actor.as_deref(), Some("ann"));
+    assert_eq!(a.recorded_by.as_deref(), Some("user-42"));
+
+    let a = hosted_assertion(&json!({ "recorded_by": "mallory" }), "source", None).unwrap();
+    assert!(a.is_none(), "without a principal nothing is stamped");
+}
+
+#[test]
 fn explicit_source_priority_overrides_the_derived_one() {
     let a = assertion_from_args(
         &json!({ "source": "import", "source_priority": 42 }),

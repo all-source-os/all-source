@@ -103,14 +103,15 @@ impl SchemaKind {
     }
 }
 
-/// How strictly a tenant's typed kinds are enforced.
+/// How strictly a tenant's typed kinds are enforced. A tenant that never set a
+/// mode is under `warn`: nothing is refused, every violation is recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EnforcementMode {
     /// Legacy required fields only.
-    #[default]
     Open,
     /// Violations are recorded on the accepted event.
+    #[default]
     Warn,
     /// Violations and unregistered types are refused.
     Strict,
@@ -537,7 +538,7 @@ impl SchemaProjection {
         Ok(existing.version + 1)
     }
 
-    /// Enforcement mode for `tenant`; `open` until one is set.
+    /// Enforcement mode for `tenant`; `warn` until one is set.
     pub fn enforcement(&self, tenant: &str) -> EnforcementMode {
         self.enforcement
             .get(tenant)

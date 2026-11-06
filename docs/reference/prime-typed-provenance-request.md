@@ -7,7 +7,7 @@ Out of scope: a second time axis (valid time). Another thread owns it on `feat/b
 ## Coordinator decisions
 
 - **Import priority:** `Import` derives `source_priority` 500: above an agent write (100), below a user correction (1000). An explicit `source_priority` on the assertion overrides the derived value.
-- **Enforcement default:** every store, new or existing, starts `open`. `strict` and `warn` are set explicitly per store and tenant by a persisted `prime.enforcement.set` event (MCP and HTTP), and the latest such event wins on replay. No newness detection.
+- **Enforcement default:** every store, new or existing, starts `warn` (changed from `open`; see [the 2026-11-06 gap status](../reports/2026-11-06-prime-hash-gap-status.md)). `strict` and `warn` are set explicitly per store and tenant by a persisted `prime.enforcement.set` event (MCP and HTTP), and the latest such event wins on replay. No newness detection.
 - **Hosted tenant:** the tenant is the one bound to the authenticated credential that the hosted path already resolves (`HostedPrime` tenant, `prime-mcp` hosted mode with `CORE_URL` + `PRIME_API_KEY`). A caller-supplied tenant parameter never establishes scope. Embedded unscoped reads keep current behavior.
 - **Legacy provenance:** events written before this change report `source: unknown`, not a defaulted agent.
 

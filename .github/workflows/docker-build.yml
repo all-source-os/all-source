@@ -277,27 +277,45 @@ jobs:
           cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
           seed: ${{ needs.compiler-seed.outputs.image }}
 
-      - name: Cache Prime image dependencies
+      # Dependency phases build from manifests only, so their cache survives a
+      # Core or Prime source change. Each imports its own previous cache and
+      # the phase before it.
+      - name: Warm Prime dependencies
         if: matrix.name == 'prime'
         timeout-minutes: 5
         uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/prime-mcp/Dockerfile
-          target: builder-image
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-image
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-image,mode=max
+          target: builder-deps-warm
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps-warm
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps-warm,mode=max
 
-      - name: Cache Prime Parquet dependencies
+      - name: Resume Prime dependencies
         if: matrix.name == 'prime'
         timeout-minutes: 5
         uses: docker/build-push-action@v7
         with:
           context: .
           file: apps/prime-mcp/Dockerfile
-          target: builder-parquet
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-image
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-parquet,mode=max
+          target: builder-deps-resume
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps-warm
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps-resume
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps-resume,mode=max
+
+      - name: Cache Prime dependencies
+        if: matrix.name == 'prime'
+        timeout-minutes: 5
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/prime-mcp/Dockerfile
+          target: builder-deps
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps-resume
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps,mode=max
 
       - name: Cache Prime Core library
         if: matrix.name == 'prime'
@@ -307,7 +325,9 @@ jobs:
           context: .
           file: apps/prime-mcp/Dockerfile
           target: builder-core
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-parquet
+          cache-from: |
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-deps
+            type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-core
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-prime:buildcache-builder-core,mode=max
 
       # The embedded image compiles the core_nif dependency tree, which a cold

@@ -23,7 +23,7 @@ async fn initialize_returns_server_info() {
     let server = MockServer::start().await;
     let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
     let r = req(1, "initialize", json!({}));
-    let resp = handle_request_hosted(&hosted, "tenant-a", &r)
+    let resp = handle_request_hosted(&hosted, "tenant-a", None, &r)
         .await
         .unwrap();
     let v = serde_json::to_value(&resp).unwrap();
@@ -36,7 +36,7 @@ async fn notifications_initialized_has_no_reply() {
     let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
     let r = req(0, "notifications/initialized", json!({}));
     assert!(
-        handle_request_hosted(&hosted, "tenant-a", &r)
+        handle_request_hosted(&hosted, "tenant-a", None, &r)
             .await
             .is_none()
     );
@@ -53,7 +53,7 @@ async fn add_node_then_search_round_trips_with_tenant() {
         "tools/call",
         json!({ "name": "prime_add_node", "arguments": { "type": "contact", "properties": { "name": "Alice" } } }),
     );
-    let resp = handle_request_hosted(&hosted, "tenant-a", &add)
+    let resp = handle_request_hosted(&hosted, "tenant-a", None, &add)
         .await
         .unwrap();
     let v = serde_json::to_value(&resp).unwrap();
@@ -68,7 +68,7 @@ async fn add_node_then_search_round_trips_with_tenant() {
         "tools/call",
         json!({ "name": "prime_search", "arguments": { "type": "contact" } }),
     );
-    let resp = handle_request_hosted(&hosted, "tenant-a", &search)
+    let resp = handle_request_hosted(&hosted, "tenant-a", None, &search)
         .await
         .unwrap();
     let v = serde_json::to_value(&resp).unwrap();
@@ -88,7 +88,7 @@ async fn an_unadvertised_tool_is_refused_without_crashing() {
         "tools/call",
         json!({ "name": "prime_index", "arguments": {} }),
     );
-    let resp = handle_request_hosted(&hosted, "tenant-a", &r)
+    let resp = handle_request_hosted(&hosted, "tenant-a", None, &r)
         .await
         .unwrap();
     let v = serde_json::to_value(&resp).unwrap();

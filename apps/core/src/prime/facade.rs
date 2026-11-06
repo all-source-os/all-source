@@ -464,7 +464,7 @@ impl Prime {
         Ok(())
     }
 
-    /// The store's enforcement mode; `open` until one is set.
+    /// The store's enforcement mode; `warn` until one is set.
     pub fn enforcement(&self) -> EnforcementMode {
         self.schema.enforcement(DEFAULT_TENANT)
     }

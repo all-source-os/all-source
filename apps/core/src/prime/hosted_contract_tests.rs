@@ -177,6 +177,99 @@ async fn hosted_invalid_confidence_appends_no_event() {
 }
 
 #[tokio::test]
+async fn hosted_refuses_an_extraction_that_does_not_name_its_run_and_source() {
+    let server = empty_core().await;
+    let h = hosted(&server);
+    for (assertion, field) in [
+        (
+            Assertion::extraction().with_derived_from(vec!["https://example.com/a".into()]),
+            "assertion.run_id",
+        ),
+        (
+            Assertion::extraction().with_run_id("run-1"),
+            "assertion.derived_from",
+        ),
+        (
+            Assertion::extraction()
+                .with_run_id("run-1")
+                .with_derived_from(vec![" ".into()]),
+            "assertion.derived_from",
+        ),
+    ] {
+        let err = h
+            .add_node_asserted("t", "person", json!({}), Some(assertion))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains(field), "{err}");
+    }
+    assert!(posted_events(&server).await.is_empty());
+
+    h.add_node_asserted(
+        "t",
+        "person",
+        json!({}),
+        Some(
+            Assertion::extraction()
+                .with_run_id("run-1")
+                .with_derived_from(vec!["https://example.com/a".into()]),
+        ),
+    )
+    .await
+    .unwrap();
+    let posted = posted_events(&server).await;
+    assert_eq!(posted[0]["metadata"]["assertion"]["run_id"], "run-1");
+    assert_eq!(
+        posted[0]["metadata"]["assertion"]["derived_from"],
+        json!(["https://example.com/a"])
+    );
+}
+
+#[tokio::test]
+async fn a_tenant_that_never_set_a_mode_is_warned_and_never_refused() {
+    let server = empty_core().await;
+    let h = hosted(&server);
+    h.add_node("t", "gadget", json!({})).await.unwrap();
+    h.add_edge("t", "node:gadget:missing", "node:gadget:gone", "uses", None)
+        .await
+        .expect("warn refuses nothing, missing endpoints included");
+
+    let posted = posted_events(&server).await;
+    assert_eq!(posted.len(), 2);
+    assert_eq!(
+        posted[0]["metadata"]["validation_warnings"][0]["field"],
+        "node_type"
+    );
+    assert_eq!(
+        posted[1]["metadata"]["validation_warnings"][0]["field"],
+        "relation"
+    );
+}
+
+#[tokio::test]
+async fn hosted_records_the_server_stamped_principal_beside_the_claimed_actor() {
+    let server = empty_core().await;
+    let h = hosted(&server);
+    h.add_node_asserted(
+        "t",
+        "person",
+        json!({"name": "A"}),
+        Some(
+            Assertion::agent()
+                .with_actor("claimed")
+                .with_recorded_by("user-42"),
+        ),
+    )
+    .await
+    .unwrap();
+    let posted = posted_events(&server).await;
+    let assertion = &posted[0]["metadata"]["assertion"];
+    assert_eq!(assertion["actor"], "claimed");
+    assert_eq!(assertion["recorded_by"], "user-42");
+    let decoded = Assertion::from_metadata(Some(&posted[0]["metadata"]));
+    assert_eq!(decoded.recorded_by.as_deref(), Some("user-42"));
+}
+
+#[tokio::test]
 async fn hosted_write_metadata_matches_the_warm_read() {
     let server = empty_core().await;
     let h = hosted(&server);
@@ -215,11 +308,11 @@ async fn hosted_kind_registration_and_enforcement_are_tenant_scoped() {
     assert!(h.kinds("tenant-b").await.unwrap().is_empty());
     assert_eq!(
         h.enforcement("tenant-b").await.unwrap(),
-        EnforcementMode::Open
+        EnforcementMode::Warn
     );
     h.add_node("tenant-b", "person", json!({"age": "old"}))
         .await
-        .expect("tenant-b is open and has no kinds");
+        .expect("tenant-b never set a mode, so it is warned, not refused");
     assert!(
         h.add_node("tenant-a", "person", json!({"age": "old"}))
             .await

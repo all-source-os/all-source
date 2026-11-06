@@ -281,8 +281,9 @@ impl HostedPrime {
     }
 
     /// Create an edge with an explicit assertion, validated against the
-    /// tenant's kinds. When the relation has a kind or enforcement is not
-    /// `open`, both endpoints must be live nodes of this tenant.
+    /// tenant's kinds. When the relation has a kind or enforcement is
+    /// `strict`, both endpoints must be live nodes of this tenant; `warn`
+    /// refuses nothing.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_edge_asserted(
         &self,
@@ -298,7 +299,7 @@ impl HostedPrime {
         validate_assertion(assertion.as_ref())?;
         let g = self.cache.get_or_hydrate(tenant).await?;
         let typed = g.schema.kind(tenant, SchemaKind::Edge, relation).is_some()
-            || g.schema.enforcement(tenant) != EnforcementMode::Open;
+            || g.schema.enforcement(tenant) == EnforcementMode::Strict;
         if typed {
             for end in [source, target] {
                 if !g.node_state.is_live(end) {
@@ -613,7 +614,7 @@ impl HostedPrime {
         Ok(())
     }
 
-    /// The tenant's enforcement mode; `open` until one is set.
+    /// The tenant's enforcement mode; `warn` until one is set.
     pub async fn enforcement(&self, tenant: &str) -> Result<EnforcementMode> {
         let tenant = scoped(tenant)?;
         let g = self.cache.get_or_hydrate(tenant).await?;

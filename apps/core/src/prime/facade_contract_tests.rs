@@ -78,6 +78,7 @@ async fn user_correction_written_before_a_newer_extraction_wins_under_highest_pr
                 Assertion::extraction()
                     .with_model("claude-x")
                     .with_run_id("run-1")
+                    .with_derived_from(vec!["doc:notes.md".to_string()])
                     .with_confidence(0.4),
             ),
         )
@@ -216,7 +217,12 @@ async fn explicit_priority_overrides_the_derived_one_and_import_derives_500() {
         .update_node_asserted(
             &eid,
             json!({"n": 2}),
-            Some(Assertion::extraction().with_source_priority(2000)),
+            Some(
+                Assertion::extraction()
+                    .with_run_id("run-2")
+                    .with_derived_from(vec!["doc:deck.pdf".to_string()])
+                    .with_source_priority(2000),
+            ),
         )
         .await
         .unwrap();

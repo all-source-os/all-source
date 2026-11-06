@@ -33,7 +33,7 @@ async fn hosted_call(hosted: &HostedPrime, tenant: &str, name: &str, args: Value
         "params": { "name": name, "arguments": args }
     }))
     .unwrap();
-    let resp = hosted_dispatch::handle_request_hosted(hosted, tenant, &req)
+    let resp = hosted_dispatch::handle_request_hosted(hosted, tenant, None, &req)
         .await
         .unwrap();
     serde_json::to_value(&resp).unwrap()["result"].clone()
@@ -393,7 +393,7 @@ async fn every_advertised_hosted_tool_is_served() {
     let req: protocol::Request =
         serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }))
             .unwrap();
-    let resp = hosted_dispatch::handle_request_hosted(&hosted, "tenant-list", &req)
+    let resp = hosted_dispatch::handle_request_hosted(&hosted, "tenant-list", None, &req)
         .await
         .unwrap();
     let listed = serde_json::to_value(&resp).unwrap()["result"]["tools"].clone();

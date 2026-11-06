@@ -368,7 +368,7 @@ async fn hosted_rest_writes_carry_their_assertions_into_provenance() {
         "PATCH",
         &format!("/api/v1/prime/nodes/{ada}"),
         &headers,
-        Some(json!({ "properties": { "title": "CTO" }, "source": "extraction", "run_id": "r-1", "confidence": 0.6 })),
+        Some(json!({ "properties": { "title": "CTO" }, "source": "extraction", "run_id": "r-1", "derived_from": ["doc://cv.pdf"], "confidence": 0.6 })),
     )
     .await;
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
@@ -395,6 +395,10 @@ async fn hosted_rest_writes_carry_their_assertions_into_provenance() {
     .await;
     assert_eq!(reply.body["assertion"]["source"], "extraction");
     assert_eq!(reply.body["assertion"]["run_id"], "r-1");
+    assert_eq!(
+        reply.body["assertion"]["derived_from"],
+        json!(["doc://cv.pdf"])
+    );
     assert_eq!(reply.body["assertion"]["confidence"], 0.6);
 
     let reply = send(
@@ -421,4 +425,89 @@ async fn hosted_rest_writes_carry_their_assertions_into_provenance() {
             .unwrap()
             .contains("assertion.confidence")
     );
+}
+
+#[tokio::test]
+async fn a_hosted_write_records_the_authenticated_user_and_never_a_claimed_one() {
+    let server = MockServer::start().await;
+    let app = router(hosted_state_stateful(&server).await);
+    let auth = bearer();
+    let as_user = [
+        ("authorization", auth.as_str()),
+        ("x-tenant-id", "tenant-who"),
+        ("x-user-id", "user-42"),
+    ];
+
+    let reply = send(
+        &app,
+        "POST",
+        "/api/v1/prime/nodes",
+        &as_user,
+        Some(json!({
+            "type": "contact",
+            "properties": { "name": "Ada" },
+            "actor": "claimed-agent",
+            "recorded_by": "mallory"
+        })),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.body);
+    let ada = reply.body["entity_id"].as_str().unwrap().to_string();
+
+    let reply = send(
+        &app,
+        "POST",
+        "/api/v1/prime/nodes",
+        &as_user,
+        Some(json!({ "type": "contact", "properties": { "name": "Bob" } })),
+    )
+    .await;
+    let bob = reply.body["entity_id"].as_str().unwrap().to_string();
+
+    for (node, actor) in [(&ada, json!("claimed-agent")), (&bob, Value::Null)] {
+        let reply = send(
+            &app,
+            "GET",
+            &format!("/api/v1/prime/nodes/{node}/fields/name/provenance"),
+            &as_user,
+            None,
+        )
+        .await;
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.body);
+        assert_eq!(reply.body["assertion"]["recorded_by"], "user-42");
+        assert_eq!(reply.body["assertion"]["source"], "agent");
+        assert_eq!(reply.body["assertion"]["actor"], actor);
+    }
+}
+
+#[tokio::test]
+async fn an_extraction_without_its_run_and_source_is_refused() {
+    let server = MockServer::start().await;
+    let app = router(hosted_state_stateful(&server).await);
+    let auth = bearer();
+    let headers = [
+        ("authorization", auth.as_str()),
+        ("x-tenant-id", "tenant-extract"),
+    ];
+
+    for (mut body, field) in [
+        (
+            json!({ "source": "extraction", "derived_from": ["https://example.com/a"] }),
+            "assertion.run_id",
+        ),
+        (
+            json!({ "source": "extraction", "run_id": "r-9" }),
+            "assertion.derived_from",
+        ),
+    ] {
+        body["type"] = json!("contact");
+        body["properties"] = json!({ "name": "Ada" });
+        let reply = send(&app, "POST", "/api/v1/prime/nodes", &headers, Some(body)).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{}", reply.body);
+        assert!(
+            reply.body["error"].as_str().unwrap().contains(field),
+            "{}",
+            reply.body
+        );
+    }
 }

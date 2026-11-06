@@ -31,6 +31,7 @@ type fakeBackend struct {
 	query  url.Values
 	auth   string
 	tenant string
+	user   string
 	body   []byte
 	respBy func(w http.ResponseWriter, r *http.Request)
 }
@@ -49,6 +50,7 @@ func newFakeBackend(respBy func(w http.ResponseWriter, r *http.Request)) (*fakeB
 		fb.query = r.URL.Query()
 		fb.auth = r.Header.Get("Authorization")
 		fb.tenant = r.Header.Get("X-Tenant-Id")
+		fb.user = r.Header.Get("X-User-Id")
 		fb.body = body
 		fb.respBy(w, r)
 	}))
@@ -277,6 +279,7 @@ func TestProxyPrime_MCPForwardsToPrimeRootWithGatewayTenant(t *testing.T) {
 	body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/prime/mcp", body)
 	req.Header.Set("X-Tenant-Id", "tenant-victim")
+	req.Header.Set("X-User-Id", "user-victim")
 	req.Header.Set("Authorization", "Bearer ask_tenant_real_key")
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -296,6 +299,9 @@ func TestProxyPrime_MCPForwardsToPrimeRootWithGatewayTenant(t *testing.T) {
 	}
 	if primeHit.tenant != "tenant-real" {
 		t.Errorf("upstream X-Tenant-Id: got %q, want tenant-real (caller-supplied header must not pass through)", primeHit.tenant)
+	}
+	if primeHit.user != "user-x" {
+		t.Errorf("upstream X-User-Id: got %q, want user-x, the authenticated user (caller-supplied header must not pass through)", primeHit.user)
 	}
 	if primeHit.auth != "Bearer prime-shared-secret" {
 		t.Errorf("upstream auth: got %q, want the gateway's PRIME_API_KEY, never the tenant key", primeHit.auth)

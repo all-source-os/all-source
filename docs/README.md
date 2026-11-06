@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Prime against HASH: gap status (2026-11-06)](./reports/2026-11-06-prime-hash-gap-status.md): the seven gaps with HASH re-verified on its source, what is deployed, the Prime image build fix, `warn` by default, server-stamped `recorded_by`, the extraction contract, and what is still open.
+
 - [Two time axes: valid time and record time](plans/2026-11-04-bitemporal-time-axes.md): every `as_of` path, the bitemporal model, and the slices that add it.
 
 - [Core restarts without refused clients](plans/2026-11-01-core-zero-downtime-restart.md): why a Core deploy refuses clients for minutes, and the phased fix.
