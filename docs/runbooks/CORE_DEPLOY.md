@@ -5,8 +5,8 @@ Core (`allsource-core`) is one Fly machine with one volume
 starts the new image on the same volume. Until its boot finishes, an image
 with the boot gate (`c76c4316` and later, so `019b7e57`) answers every
 request, `/health` included, with `503 {"error":"not_ready"}` and
-`Retry-After: 1`; an older image (`16dd13eb`, deployed since 2026-11-01)
-refuses the connection. Every Core deploy is therefore a client-visible
+`Retry-After: 1`; an older image (`16dd13eb`, in prod 2026-11-01 to
+2026-11-06) refuses the connection. Every Core deploy is therefore a client-visible
 window. This runbook keeps that window known, short and reversible; it does
 not remove it.
 
@@ -22,8 +22,23 @@ traffic would reach it.
 | Boot | Work | Measured |
 |---|---|---|
 | Image without system checkpoints (`16dd13eb`) | Full system WAL replay | 2026-11-01 in prod: 45 s stage 1 + 4m47s stage 2; clients refused 17:32:20 → 17:38:05 (5m45s). 2026-11-05 rehearsal, 2,931,768 events: 49.2 s stage 1 + 5m41s stage 2, ready after 6m30s |
-| First boot of an image with checkpoints (`019b7e57`) | Full replay, then a checkpoint written at boot | 2026-11-05 rehearsal, same events: 49.6 s stage 1 + 29.6 s stage 2, ready after 79.3 s; checkpoint written 106 ms later |
-| Later boots (`019b7e57`) | Newest checkpoint + WAL tail ([SYSTEM_CHECKPOINTS.md](./SYSTEM_CHECKPOINTS.md)) | 2026-11-05 rehearsal: 270 ms stage 1 + 26 ms stage 2. Verify replayed 2,919,522 tenant events and logged a match 100 s after ready |
+| First boot of an image with checkpoints (`019b7e57`) | Full replay, then a checkpoint written at boot | 2026-11-05 rehearsal, same events: 49.6 s stage 1 + 29.6 s stage 2, ready after 79.3 s; checkpoint written 106 ms later. 2026-11-06 in prod, 2,960,884 events: old process exited 16:20:13, connections refused until the gate opened at 16:20:18.8, `not_ready` until ready at 16:21:34.4 (50.2 s stage 1), so 81.4 s in all |
+| Later boots (`019b7e57`) | Newest checkpoint + WAL tail ([SYSTEM_CHECKPOINTS.md](./SYSTEM_CHECKPOINTS.md)) | 2026-11-05 rehearsal: 270 ms stage 1 + 26 ms stage 2. Verify replayed 2,919,522 tenant events and logged a match 100 s after ready. 2026-11-06 in prod (the verify restart): process exited 16:22:01, ready 16:22:07.5 (250 ms stage 1), so 6.5 s, most of it the machine restart; verify matched over 2,948,521 tenant events 98 s after ready |
+
+The 2026-11-06 window as clients saw it, with `7e08966d` in front:
+
+- Longhand's status page (`/api/v1/ops/status`, probed every 60 s) recorded
+  one `queue_read` incident, `core_read_failed`, 16:21:17 → 16:21:56.
+- The gateway answered reads with 503 `egress_budget_unavailable` (reason
+  `ledger_unavailable`) and its own heartbeat and usage writes got 503
+  `not_ready` until 16:21:32.
+- After the verify restart the gateway refused reads with 429 `pool_full`
+  from 16:22:16 to 16:22:22, and one usage increment hit its deadline at
+  16:22:19.
+- The gateway's log buffer started at 16:20:55, so the first 42 s of the
+  window are not in this count. No 401 appears in the buffer, but whether
+  the gateway logs a refused `ask_` key was not checked, so the number
+  refused is unknown.
 
 The rehearsal ran each image on a volume restored from the prod snapshot of
 2026-11-05 09:28, on the same guest (shared, 8 CPUs, 16 GiB), in the separate
@@ -174,14 +189,21 @@ fly deploy -a allsource-core --config apps/core/fly.toml \
   interval; a restart schedules the next sweep for the rest of the interval,
   and never sooner than 120 s.
 
-## Known: compaction fails in two archive directories
+## Files on the volume must belong to uid 1000
 
-The 2026-10-13 archive recovery ran as root and left root-owned files in
-`storage/decebal-dobrica-at-gmail-com/2026-05/` and
-`storage/default/2026-02/`: `.archive-mutation.lock`, a repair receipt and the
-repacked parts. Core runs as uid 1000, cannot open the lock, and every sweep
-fails compaction for those two tenants with
-`Archive repack: I/O failed: Permission denied`. Reads are not affected: the
-repacked parts are published and readable. Both `16dd13eb` and `019b7e57`
-take the same lock, so a deploy neither causes nor fixes it. Fix it with a
-`chown 1000:1000` of those files on the volume.
+Core runs as uid 1000. Anything run on the volume as root (`fly ssh console`
+runs as root) leaves files Core cannot open. The 2026-10-13 archive recovery
+left 16 of them in `storage/decebal-dobrica-at-gmail-com/2026-05/` and
+`storage/default/2026-02/` (`.archive-mutation.lock`, a repair receipt and
+the repacked parts), and every compaction sweep failed for those two tenants
+with `Archive repack: I/O failed: Permission denied` until they were chowned
+on 2026-11-06; the next sweep compacted both tenants without an error. Reads
+were not affected. After any root work on the volume,
+check and fix ownership:
+
+```bash
+fly ssh console -a allsource-core -C "find /app/data ! -user 1000 -print"
+fly ssh console -a allsource-core -C "find <dir> ! -user 1000 -exec chown 1000:1000 {} +"
+```
+
+`/app/data/lost+found` belongs to the filesystem and stays root-owned.
