@@ -140,6 +140,32 @@ The SDK defaults are tuned for typical use. A few things worth knowing:
 - **Validation** — Core does in-process hash lookup. Query Service adds a 120s ETS cache (SHA-256 keyed) before falling back to Core, so repeat calls through QS don't hammer Core.
 - **Rotate** by provisioning a new key, updating clients, then revoking the old one. See the [AllSource API key patterns blog post](https://all-source.xyz/blog/api-keys-and-connections) for rotation without downtime.
 
+### Short-lived credentials
+
+`CoreClient::with_config_and_credential_provider` and
+`QueryClient::with_config_and_credential_provider` replace the static key with a
+`CredentialProvider` (any `Fn() -> Result<String, Error> + Send + Sync`). The
+client asks it for a bearer on every request attempt, retries included, and on
+every WebSocket connect. `api_key` may then be empty.
+
+With the `es256-assertion` feature, `Es256AssertionProvider` signs a 60-second
+ES256 assertion with a P-256 key whose public half an operator registered on the
+tenant, and reuses it until 15 seconds before it expires:
+
+```rust,ignore
+let provider = allsource::Es256AssertionProvider::from_pkcs8_pem(
+    &std::fs::read("client-key.pem")?,
+    "my-service",                    // client_id, the assertion's iss
+    "my-tenant",                     // tenant, the assertion's sub
+    "registered-kid",                // RFC 7638 thumbprint returned at registration
+    "https://api.all-source.xyz",    // the gateway's ALLSOURCE_ASSERTION_AUDIENCE
+)?;
+let client = allsource::QueryClient::with_config_and_credential_provider(
+    allsource::ClientConfig::new("https://api.all-source.xyz", ""),
+    provider,
+)?;
+```
+
 ## Analyze and rebuild a projection
 
 Replay operations belong to `QueryClient`: Query Service applies the tenant

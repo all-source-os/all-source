@@ -36,6 +36,32 @@ struct Cli {
     #[arg(long, env = "ALLSOURCE_API_KEY", hide_env_values = true)]
     api_key: Option<String>,
 
+    /// P-256 PKCS#8 private key (PEM, or a path to one) registered as a client
+    /// key on the tenant. When set, --remote requests carry a fresh 60-second
+    /// ES256 assertion instead of --api-key.
+    #[arg(long, env = "ALLSOURCE_CLIENT_SIGNING_KEY", hide_env_values = true)]
+    client_signing_key: Option<String>,
+
+    /// Registered client id; the assertion's `iss`.
+    #[arg(long, env = "ALLSOURCE_CLIENT_ID")]
+    client_id: Option<String>,
+
+    /// Tenant the client key is registered on; the assertion's `sub`.
+    #[arg(long, env = "ALLSOURCE_TENANT_ID")]
+    client_tenant_id: Option<String>,
+
+    /// The registered key's kid (its RFC 7638 thumbprint).
+    #[arg(long, env = "ALLSOURCE_CLIENT_KID")]
+    client_kid: Option<String>,
+
+    /// Audience the gateway expects in every assertion.
+    #[arg(
+        long,
+        env = "ALLSOURCE_ASSERTION_AUDIENCE",
+        default_value = "https://api.all-source.xyz"
+    )]
+    assertion_audience: String,
+
     /// Additional named store, `name=/path/to/allsource`, repeatable.
     ///
     /// A tool call selects one with `store`; the directory from `--data-dir` is
@@ -95,10 +121,28 @@ async fn main() -> Result<()> {
 
     tracing::info!("Opening AllSource data at {:?}", cli.data_dir);
 
+    let assertion = cli
+        .client_signing_key
+        .as_deref()
+        .map(|signing_key| {
+            remote::assertion_provider(&remote::AssertionSettings {
+                signing_key,
+                client_id: cli.client_id.as_deref(),
+                tenant_id: cli.client_tenant_id.as_deref(),
+                kid: cli.client_kid.as_deref(),
+                audience: &cli.assertion_audience,
+            })
+        })
+        .transpose()?;
     let remote = cli
         .remote
         .as_deref()
-        .map(|url| RemoteStore::new(url, cli.api_key.clone()))
+        .map(|url| {
+            RemoteStore::new(url, cli.api_key.clone()).map(|store| match assertion {
+                Some(provider) => store.with_assertion(provider),
+                None => store,
+            })
+        })
         .transpose()?;
     let registry = StoreRegistry::open(
         cli.data_dir.as_deref(),

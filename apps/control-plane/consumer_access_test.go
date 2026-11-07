@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -113,5 +116,57 @@ func TestParseConsumerCanariesDropsIncompleteEntries(t *testing.T) {
 	}
 	if parseConsumerCanaries("not json") != nil {
 		t.Fatal("malformed JSON produced canaries")
+	}
+}
+
+func TestConsumerAccessSignsAnAssertedCanaryEveryRound(t *testing.T) {
+	f := newClientKeyFixture(t)
+	private, err := json.Marshal(f.privateJWK())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := `[{"kind":"managed_api_key","token":"managed"},{"kind":"asserted_client_key","client_id":"` + assertedClient + `","tenant":"` + assertedTenant + `","kid":"` + f.kid + `","private_jwk":` + string(private) + `}]`
+	canaries := parseConsumerCanaries(raw)
+	if len(canaries) != 2 || !canaries[1].asserted() {
+		t.Fatalf("canaries = %+v, want the token and the asserted entry", canaries)
+	}
+	var seen []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if bearer == "managed" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		var claims assertionClaims
+		parsed, err := assertionParser.ParseWithClaims(bearer, &claims, func(*jwt.Token) (any, error) { return f.jwk.publicKey() })
+		if err != nil || !parsed.Valid || parsed.Header["kid"] != f.kid || claims.Subject != assertedTenant || claims.Issuer != assertedClient ||
+			!audienceMatches(claims.Audience, defaultAssertionAudience) || *claims.NotAfter-*claims.IssuedAt != 60 || claims.JTI == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		seen = append(seen, claims.JTI)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	probe := &consumerAccessProbe{canaries: canaries, base: server.URL, audience: defaultAssertionAudience, client: server.Client()}
+
+	if result := probe.run(context.Background()); !result.OK {
+		t.Fatalf("asserted canary rejected: %+v", result)
+	}
+	probe.run(context.Background())
+	if len(seen) != 2 || seen[0] == seen[1] {
+		t.Fatalf("assertions were not fresh per round: %v", seen)
+	}
+}
+
+func TestParseConsumerCanariesDropsAnAssertedEntryWithAWrongKid(t *testing.T) {
+	f := newClientKeyFixture(t)
+	private, err := json.Marshal(f.privateJWK())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := `[{"kind":"asserted_client_key","client_id":"c","tenant":"t","kid":"not-the-thumbprint","private_jwk":` + string(private) + `}]`
+	if canaries := parseConsumerCanaries(raw); len(canaries) != 0 {
+		t.Fatalf("an asserted canary with a wrong kid was kept: %+v", canaries)
 	}
 }

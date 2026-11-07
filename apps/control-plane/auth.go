@@ -99,6 +99,16 @@ type AuthClient struct {
 	apiKeyCacheMu sync.RWMutex
 
 	keys *keyAuthority
+
+	asserted          *assertedKeys
+	assertionAudience string
+	legacy            *legacySunset
+}
+
+// SetLegacyKeySunset sets the instant after which unregistered API keys stop
+// working; the zero time keeps today's behavior.
+func (a *AuthClient) SetLegacyKeySunset(at time.Time) {
+	a.legacy = newLegacySunset(at)
 }
 
 // SetKeyAuthorityMode chooses whether the managed-key authority refuses
@@ -138,6 +148,9 @@ func NewAuthClient(jwtSecret, coreURL string) *AuthClient {
 		apiKeyCache: make(map[string]apiKeyCacheEntry),
 	}
 	client.SetKeyAuthorityMode(keyAuthorityEnforce)
+	client.asserted = newAssertedKeys(client.clientKeyStates)
+	client.assertionAudience = defaultAssertionAudience
+	client.legacy = newLegacySunset(time.Time{})
 	return client
 }
 
@@ -431,7 +444,12 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		// ask_-prefixed tokens are API keys issued by Core; validate by delegating
 		// to Core's /api/v1/auth/me. Everything else is parsed as a local JWT.
 		var claims *Claims
-		if strings.HasPrefix(token, "ask_") {
+		if kid, asserted := assertedHeader(token); asserted {
+			var ok bool
+			if claims, ok = authClient.authenticateAssertion(c, token, kid); !ok {
+				return
+			}
+		} else if strings.HasPrefix(token, "ask_") {
 			claims, err = authClient.ValidateAPIKey(c.Request.Context(), token)
 			if errors.Is(err, corehold.ErrUnreachable) {
 				c.Header("Retry-After", corehold.RetryAfter)
@@ -455,6 +473,14 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 					switch {
 					case lookupErr != nil:
 						reason := denialReason(lookupErr)
+						if reason == denialUnregistered && authClient.legacy.configured() && !errors.Is(lookupErr, errStrayRevokedAPIKey) {
+							if authClient.legacy.serve(claims.TenantID) {
+								break
+							}
+							keys.record(claims.TenantID, reason, lookupErr)
+							c.AbortWithStatusJSON(http.StatusUnauthorized, authClient.legacy.refusal())
+							return
+						}
 						keys.record(claims.TenantID, reason, lookupErr)
 						if reason == denialRevoked {
 							err = lookupErr

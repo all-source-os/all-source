@@ -879,8 +879,8 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
 
           {:ok, {tenant, api_key_info}}
         else
-          {:error, :core_unavailable} ->
-            {:error, :core_unavailable}
+          {:error, reason} when reason in [:core_unavailable, :legacy_key_sunset] ->
+            {:error, reason}
 
           {:error, _reason} ->
             {:error, :invalid_key}
@@ -913,15 +913,21 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
         ok
 
       {:error, reason} ->
-        if reason == :authority_off or ApiKeyAuthority.serve_refused?(claims, reason),
-          do:
+        cond do
+          reason == :authority_off or ApiKeyAuthority.serve_refused?(claims, reason) ->
             {:ok,
              %{
                "role" => claims["role"] || "serviceaccount",
                "scopes" => claims["scopes"] || [],
                "authority" => "unverified"
-             }},
-          else: {:error, reason}
+             }}
+
+          ApiKeyAuthority.legacy_sunset_refusal?(reason) ->
+            {:error, :legacy_key_sunset}
+
+          true ->
+            {:error, reason}
+        end
     end
   end
 

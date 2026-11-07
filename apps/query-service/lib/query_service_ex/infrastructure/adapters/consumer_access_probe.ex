@@ -19,8 +19,11 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ConsumerAccessProbe do
   @cache_ttl_ms 30_000
   @timeout_ms 10_000
   @rejected_reason "an existing credential kind cannot read through this machine"
+  # The Query Service does not verify ES256 client assertions yet; the asserted
+  # canary belongs in the gateway's secret only.
+  @asserted_skip "asserted client keys are verified by the gateway, not the Query Service"
 
-  @type canary :: %{kind: String.t(), token: String.t()}
+  @type canary :: %{kind: String.t(), token: String.t()} | %{kind: String.t(), skip: String.t()}
 
   @spec result() :: map()
   def result do
@@ -47,22 +50,35 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ConsumerAccessProbe do
   def parse(raw) do
     case Jason.decode(raw) do
       {:ok, entries} when is_list(entries) ->
-        for %{"kind" => kind, "token" => token} <- entries,
-            is_binary(kind) and kind != "" and is_binary(token) and token != "",
-            do: %{kind: kind, token: token}
+        Enum.flat_map(entries, &entry/1)
 
       _ ->
-        Logger.error("consumer access: #{@env} is not a JSON array of {kind,token}")
+        Logger.error("consumer access: #{@env} is not a JSON array of credentials")
         []
     end
   end
 
+  defp entry(%{"kind" => kind, "token" => token})
+       when is_binary(kind) and kind != "" and is_binary(token) and token != "",
+       do: [%{kind: kind, token: token}]
+
+  defp entry(%{"kind" => kind, "private_jwk" => %{}}) when is_binary(kind) and kind != "",
+    do: [%{kind: kind, skip: @asserted_skip}]
+
+  defp entry(_), do: []
+
   @spec run([canary()], keyword()) :: map()
-  def run([], _req_options) do
-    %{ok: false, reason: "no canary credentials configured", checked_at: now(), kinds: []}
+  def run(canaries, req_options) do
+    {probed, skipped} = Enum.split_with(canaries, &Map.has_key?(&1, :token))
+    skipped = Enum.map(skipped, &%{kind: &1.kind, status: nil, ok: true, skipped: &1.skip})
+    run_probes(probed, skipped, req_options)
   end
 
-  def run(canaries, req_options) do
+  defp run_probes([], skipped, _req_options) do
+    %{ok: false, reason: "no canary credentials configured", checked_at: now(), kinds: skipped}
+  end
+
+  defp run_probes(canaries, skipped, req_options) do
     kinds =
       Enum.map(canaries, fn %{kind: kind, token: token} ->
         status = probe(token, req_options)
@@ -75,6 +91,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ConsumerAccessProbe do
       end)
 
     ok = Enum.all?(kinds, & &1.ok)
+    kinds = kinds ++ skipped
 
     %{
       ok: ok,

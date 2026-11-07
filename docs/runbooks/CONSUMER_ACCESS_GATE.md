@@ -37,6 +37,29 @@ because it only proves the process answers HTTP.
 `CONSUMER_CANARY_CREDENTIALS` is a Fly secret on both apps: a JSON array of
 `{"kind": "<label>", "token": "<credential>"}`.
 
+The gateway also accepts an asserted client key entry:
+
+```json
+{"kind": "asserted_client_key", "client_id": "<registered client id>", "tenant": "<tenant>",
+ "kid": "<registered kid>", "private_jwk": {"kty": "EC", "crv": "P-256", "x": "...", "y": "...", "d": "..."}}
+```
+
+The gateway signs a fresh ES256 assertion from it on every probe round
+(`aud` = `ALLSOURCE_ASSERTION_AUDIENCE`, 60 s lifetime). An entry whose `kid` is
+not the thumbprint of `private_jwk` is dropped at boot with a log line. Register
+the public half with the operator route in
+[`CLIENT_KEY_ROTATION.md`](CLIENT_KEY_ROTATION.md). **Put the asserted entry in
+the gateway's secret only.** The Query Service does not verify assertions yet; it
+reports such an entry as `skipped` and does not fail its gate on it, but there is
+no reason to give it the private key.
+
+### The canary tenant
+
+Tenant `consumer-access-canary` was created 2026-11-06 22:36:51Z with two
+read-only keys, both staged as `CONSUMER_CANARY_CREDENTIALS`: one with no expiry
+and one expiring **2027-11-06**. Replace the expiring one before that date from
+the same issuance path (rule 4), or the gate fails every deploy from then on.
+
 Rules:
 
 1. **One canary per credential kind that customers hold today.** At minimum:
@@ -51,7 +74,10 @@ Rules:
    a canary for the new kind and keep the old ones.
 3. **Retiring a kind is a decision, not a side effect.** Removing a kind from the
    set means every customer holding that kind has been migrated. Record who
-   migrated them, and when, in the PR that removes the canary.
+   migrated them, and when, in the PR that removes the canary. The onboarding
+   (`SignAPIKey`) canary is retired on the day `ALLSOURCE_LEGACY_KEY_SUNSET`
+   passes: from then on the gateways refuse that kind by design
+   ([`CLIENT_KEY_ROTATION.md`](CLIENT_KEY_ROTATION.md#legacy-key-sunset)).
 4. Canaries belong to an internal tenant with read scope only. Revoke and replace
    one only if it leaks. The replacement must come from the same issuance path,
    which may mean keeping an old build around to mint it.
@@ -79,6 +105,39 @@ fly checks list -a allsource-query
 A failing `consumer_access` check during deploy means the build rejects a
 credential customers hold. Do not override it with `--strategy immediate` or
 `rolling`. Fix the build or, if the kind really is being retired, follow rule 3.
+
+### Read the config back after every deploy
+
+On 2026-11-06 a 0-byte `fly.toml` stripped the gateway's only machine of its
+services, env, checks and metrics for 32.5 minutes
+([report](../reports/2026-11-06-gateway-config-strip-outage.md)). `flyctl`
+accepted the empty file as valid. So:
+
+1. Write a config from git with a redirect, never `git show <rev>:<path> --output=<file>`
+   (for a blob that prints to stdout and leaves the file empty):
+
+   ```bash
+   git show "$REV:apps/control-plane/fly.toml" > /tmp/fly.toml
+   test -s /tmp/fly.toml
+   grep -q '^app = "allsource-control-plane"' /tmp/fly.toml
+   grep -q 'strategy = "bluegreen"' /tmp/fly.toml
+   ```
+
+   Stop if any check fails. A deploy that prints `rolling` is not using this file.
+2. Right after the deploy, read the result back:
+
+   ```bash
+   fly services list -a allsource-control-plane
+   fly machine status -d <machine-id> -a allsource-control-plane
+   fly checks list -a allsource-control-plane
+   ```
+
+   The services list must show the HTTP service, the machine config must show
+   services, env, checks and metrics, and the checks list must include
+   `consumer_access`. A client probe that passes before the machine swap proves
+   nothing about the new machine; run it after these read-backs.
+3. If any read-back is empty, revert at once from a file that passed step 1.
+   Never retry with the method that produced the bad deploy.
 
 ## Limits
 

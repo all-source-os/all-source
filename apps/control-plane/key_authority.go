@@ -37,6 +37,14 @@ const (
 	denialScope        = "scope"
 	denialKind         = "credential_kind"
 	denialOther        = "other"
+
+	denialAssertedSignature    = "asserted_signature"
+	denialAssertedAudience     = "asserted_audience"
+	denialAssertedSkew         = "asserted_skew"
+	denialAssertedExpired      = "asserted_expired"
+	denialAssertedUnregistered = "asserted_unregistered"
+	denialAssertedRevoked      = "asserted_revoked"
+	denialAssertedUnavailable  = "asserted_unavailable"
 )
 
 var errKeyAuthorityUnavailable = errors.New("API key authority unavailable")
@@ -45,6 +53,10 @@ var errKeyAuthorityUnavailable = errors.New("API key authority unavailable")
 // an unregistered id leaves the key unregistered. Shadow refuses a revoked key
 // as enforce does, so it can never refuse a legacy onboarding key.
 var errRevokedAPIKey = errors.New("revoked API key")
+
+// errStrayRevokedAPIKey still counts as unregistered, but the legacy sunset
+// never serves it, so enforce refuses a key a tenant revoked.
+var errStrayRevokedAPIKey = errors.New("unregistered API key named by a revocation")
 
 // Counts every request the managed-key authority refuses, or would refuse in
 // shadow mode, so a credential policy change is visible per tenant before it
@@ -136,8 +148,12 @@ func (k *keyAuthority) resolve(ctx context.Context, claims *Claims) (*managedKey
 }
 
 func (k *keyAuthority) record(tenant, reason string, err error) {
-	keyAuthorityDenials.WithLabelValues(string(k.mode), reason, tenantLabel(tenant)).Inc()
-	logKey := tenant + "\x00" + reason
+	k.recordAs(k.mode, tenant, reason, err)
+}
+
+func (k *keyAuthority) recordAs(mode keyAuthorityMode, tenant, reason string, err error) {
+	keyAuthorityDenials.WithLabelValues(string(mode), reason, tenantLabel(tenant)).Inc()
+	logKey := string(mode) + "\x00" + tenant + "\x00" + reason
 	now := k.now()
 	k.mu.Lock()
 	last, seen := k.lastLogged[logKey]
@@ -148,12 +164,12 @@ func (k *keyAuthority) record(tenant, reason string, err error) {
 	k.lastLogged[logKey] = now
 	k.mu.Unlock()
 	verb := "would refuse"
-	if k.mode == keyAuthorityEnforce || reason == denialRevoked {
+	if mode == keyAuthorityEnforce || reason == denialRevoked {
 		verb = "refused"
 	}
 	detail := ""
 	if err != nil {
 		detail = err.Error()
 	}
-	log.Printf("API key authority %s: mode=%s tenant=%s reason=%s detail=%q", verb, k.mode, tenant, reason, detail) //nolint:gosec // G706: tenant comes from a verified signature, reason from a fixed set.
+	log.Printf("API key authority %s: mode=%s tenant=%s reason=%s detail=%q", verb, mode, tenant, reason, detail) //nolint:gosec // G706: tenant comes from a verified signature or is "unverified", reason from a fixed set.
 }

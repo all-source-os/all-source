@@ -357,6 +357,10 @@ func AuditMiddleware(logger *AuditLogger) gin.HandlerFunc {
 			UserAgent:  c.Request.UserAgent(),
 		}
 
+		if jti := c.GetString("auth_assertion_jti"); jti != "" {
+			event.Metadata = map[string]interface{}{"assertion_jti": jti}
+		}
+
 		// Add error if request failed
 		if c.Writer.Status() >= 400 {
 			if errors := c.Errors.ByType(gin.ErrorTypeAny); len(errors) > 0 {

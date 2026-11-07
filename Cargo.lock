@@ -129,8 +129,11 @@ name = "allsource"
 version = "0.28.0"
 dependencies = [
  "async-trait",
+ "aws-lc-rs",
+ "base64 0.23.1",
  "flate2",
  "futures-util",
+ "jsonwebtoken",
  "reqwest 0.13.5",
  "serde",
  "serde_json",
@@ -140,6 +143,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "uuid",
  "wiremock",
 ]
 

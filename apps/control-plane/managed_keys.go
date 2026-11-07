@@ -22,6 +22,7 @@ import (
 )
 
 const managedKeyKind = "managed_api_key"
+const retainedEntityIntegrity = "retained-entity-v1"
 const delegationKind = "service_delegation"
 const delegationClockSkew = 5
 const managedScopeRead = "events:read"
@@ -156,7 +157,7 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 	q.Set("tenant_id", claims.TenantID)
 	q.Set("entity_id", entity)
 	q.Set("limit", "1001")
-	q.Set("integrity", "retained-entity-v1")
+	q.Set("integrity", retainedEntityIntegrity)
 	u.RawQuery = q.Encode()
 	ctx, cancel := context.WithTimeout(ctx, corehold.Deadline+5*time.Second)
 	defer cancel()
@@ -201,7 +202,7 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 		} `json:"archive_integrity"`
 	}
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, 2*1024*1024))
-	if decoder.Decode(&page) != nil || decoder.Decode(new(any)) != io.EOF || page.Count == nil || page.Total == nil || page.HasMore == nil || page.Version == nil || *page.HasMore || *page.Count != len(page.Events) || *page.Total != len(page.Events) || len(page.Events) > 1000 || page.Integrity.Protocol != "retained-entity-v1" || page.Integrity.TenantID != claims.TenantID || page.Integrity.EntityID != entity {
+	if decoder.Decode(&page) != nil || decoder.Decode(new(any)) != io.EOF || page.Count == nil || page.Total == nil || page.HasMore == nil || page.Version == nil || *page.HasMore || *page.Count != len(page.Events) || *page.Total != len(page.Events) || len(page.Events) > 1000 || page.Integrity.Protocol != retainedEntityIntegrity || page.Integrity.TenantID != claims.TenantID || page.Integrity.EntityID != entity {
 		return nil, errors.New("incomplete API key authority")
 	}
 	seen := map[string]bool{}
@@ -245,6 +246,9 @@ func (a *AuthClient) managedKey(ctx context.Context, claims *Claims) (*managedKe
 	}
 	if len(page.Events) == 0 || page.Events[len(page.Events)-1].Version != *page.Version {
 		return nil, errors.New("unregistered API key")
+	}
+	if record == nil && revoked {
+		return nil, errStrayRevokedAPIKey
 	}
 	if record == nil {
 		return nil, errors.New("unregistered API key")
@@ -406,7 +410,8 @@ func containsKeyLifecycle(value any) bool {
 	case map[string]any:
 		entity, entityOK := v["entity_id"].(string)
 		event, eventOK := v["event_type"].(string)
-		if (entityOK && strings.HasPrefix(entity, "apikey:")) || (eventOK && strings.HasPrefix(event, "apikey.")) {
+		if (entityOK && (strings.HasPrefix(entity, "apikey:") || strings.HasPrefix(entity, clientKeyEntityPrefix))) ||
+			(eventOK && (strings.HasPrefix(event, "apikey.") || strings.HasPrefix(event, clientKeyEventPrefix))) {
 			return true
 		}
 		if events, exists := v["events"]; exists {

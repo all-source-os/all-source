@@ -6,6 +6,7 @@
 
 use std::{future::Future, time::Duration};
 
+use allsource::{CredentialProvider, Es256AssertionProvider};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
@@ -55,6 +56,7 @@ pub trait ViewReader {
 pub struct RemoteStore {
     base: reqwest::Url,
     api_key: Option<String>,
+    assertion: Option<Es256AssertionProvider>,
     client: reqwest::Client,
 }
 
@@ -80,8 +82,16 @@ impl RemoteStore {
             api_key: api_key
                 .map(|key| key.trim().to_string())
                 .filter(|key| !key.is_empty()),
+            assertion: None,
             client,
         })
+    }
+
+    /// Sign every request with a fresh ES256 client assertion instead of the key.
+    #[must_use]
+    pub fn with_assertion(mut self, provider: Es256AssertionProvider) -> Self {
+        self.assertion = Some(provider);
+        self
     }
 
     /// The gateway URL, safe to report.
@@ -109,7 +119,12 @@ impl RemoteStore {
         }
 
         let mut request = self.client.get(url).timeout(timeout);
-        if let Some(key) = &self.api_key {
+        if let Some(provider) = &self.assertion {
+            let token = provider
+                .bearer()
+                .map_err(|error| anyhow::anyhow!("client assertion unavailable: {error}"))?;
+            request = request.bearer_auth(token);
+        } else if let Some(key) = &self.api_key {
             request = request.bearer_auth(key);
         }
         if let Some(tag) = if_none_match {
@@ -198,6 +213,38 @@ impl ViewReader for RemoteStore {
         )
         .await
     }
+}
+
+/// Where the client signing key comes from: inline PEM, or a path to one.
+pub fn read_signing_key(source: &str) -> Result<Vec<u8>> {
+    if source.contains("-----BEGIN") {
+        return Ok(source.as_bytes().to_vec());
+    }
+    std::fs::read(source)
+        .context("ALLSOURCE_CLIENT_SIGNING_KEY is neither a PEM nor a readable file")
+}
+
+/// Settings for signing gateway requests with a registered client key.
+pub struct AssertionSettings<'a> {
+    pub signing_key: &'a str,
+    pub client_id: Option<&'a str>,
+    pub tenant_id: Option<&'a str>,
+    pub kid: Option<&'a str>,
+    pub audience: &'a str,
+}
+
+/// Build the assertion provider; every field but the audience is required.
+pub fn assertion_provider(settings: &AssertionSettings<'_>) -> Result<Es256AssertionProvider> {
+    let (Some(client_id), Some(tenant_id), Some(kid)) =
+        (settings.client_id, settings.tenant_id, settings.kid)
+    else {
+        anyhow::bail!(
+            "ALLSOURCE_CLIENT_SIGNING_KEY needs ALLSOURCE_CLIENT_ID, ALLSOURCE_TENANT_ID and ALLSOURCE_CLIENT_KID"
+        );
+    };
+    let pem = read_signing_key(settings.signing_key)?;
+    Es256AssertionProvider::from_pkcs8_pem(&pem, client_id, tenant_id, kid, settings.audience)
+        .map_err(|error| anyhow::anyhow!("{error}"))
 }
 
 /// The refusal an embedded store gives every view read.
@@ -307,7 +354,10 @@ pub mod mock {
 
 #[cfg(test)]
 mod tests {
-    use super::{HttpReply, RemoteStore, ViewReader, gateway_reply, mock::serve_once};
+    use super::{
+        AssertionSettings, HttpReply, RemoteStore, ViewReader, assertion_provider, gateway_reply,
+        mock::serve_once,
+    };
     use serde_json::{Value, json};
 
     #[tokio::test]
@@ -374,6 +424,28 @@ mod tests {
         assert_eq!(reply.status, 304);
         assert_eq!(reply.body, Value::Null);
         assert!(gateway_reply(reply, &[]).is_ok());
+    }
+
+    #[test]
+    fn a_signing_key_needs_the_whole_client_identity() {
+        let settings = AssertionSettings {
+            signing_key: "-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n",
+            client_id: Some("client"),
+            tenant_id: None,
+            kid: Some("kid"),
+            audience: "https://api.all-source.xyz",
+        };
+        let message = assertion_provider(&settings)
+            .expect_err("tenant missing")
+            .to_string();
+        assert!(message.contains("ALLSOURCE_TENANT_ID"), "{message}");
+
+        let unreadable = AssertionSettings {
+            signing_key: "/nonexistent/signing-key.pem",
+            tenant_id: Some("tenant"),
+            ..settings
+        };
+        assert!(assertion_provider(&unreadable).is_err());
     }
 
     #[test]

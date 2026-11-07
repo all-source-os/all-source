@@ -85,6 +85,9 @@ defmodule QueryServiceExWeb.Plugs.AuthPipeline do
       {:error, :key_expired} ->
         reject(conn, "API key has expired")
 
+      {:error, :legacy_key_sunset} ->
+        ManagedKeyAccess.legacy_sunset(conn)
+
       {:error, :core_unavailable} ->
         core_unavailable(conn)
 

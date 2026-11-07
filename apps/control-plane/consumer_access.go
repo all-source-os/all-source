@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,13 +12,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
 const (
 	pathConsumerAccess = "/readyz/consumers"
-	// consumerCanaryEnv holds a JSON array of {"kind","token"}: one credential
-	// of every kind customers already hold. See docs/runbooks/CONSUMER_ACCESS_GATE.md.
+	// consumerCanaryEnv holds a JSON array with one credential of every kind
+	// customers already hold: {"kind","token"}, or an asserted client key
+	// {"kind","client_id","tenant","kid","private_jwk"} signed fresh per round.
+	// See docs/runbooks/CONSUMER_ACCESS_GATE.md.
 	consumerCanaryEnv = "CONSUMER_CANARY_CREDENTIALS"
 	// The endpoint is public, so results are reused for this long; one request
 	// cannot fan out into more than one probe round per window.
@@ -25,8 +31,35 @@ const (
 )
 
 type consumerCanary struct {
-	Kind  string `json:"kind"`
-	Token string `json:"token"`
+	Kind       string `json:"kind"`
+	Token      string `json:"token"`
+	ClientID   string `json:"client_id"`
+	Tenant     string `json:"tenant"`
+	Kid        string `json:"kid"`
+	PrivateJWK *ecJWK `json:"private_jwk"`
+
+	signer *ecdsa.PrivateKey
+}
+
+func (c *consumerCanary) asserted() bool {
+	return c.PrivateJWK != nil
+}
+
+// bearer returns the static token, or a fresh 60-second ES256 assertion.
+func (c *consumerCanary) bearer(audience string, now time.Time) (string, error) {
+	if !c.asserted() {
+		return c.Token, nil
+	}
+	jti := make([]byte, 16)
+	if _, err := rand.Read(jti); err != nil {
+		return "", err
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+		"iss": c.ClientID, "sub": c.Tenant, "aud": audience, "iat": now.Unix(), "exp": now.Add(assertionMaxLifetime).Unix(),
+		"jti": base64.RawURLEncoding.EncodeToString(jti),
+	})
+	token.Header["kid"] = c.Kid
+	return token.SignedString(c.signer)
 }
 
 type consumerKindResult struct {
@@ -50,6 +83,7 @@ type consumerAccessResult struct {
 type consumerAccessProbe struct {
 	canaries []consumerCanary
 	base     string
+	audience string
 	client   *http.Client
 
 	mu       sync.Mutex
@@ -65,6 +99,7 @@ func newConsumerAccessProbe() *consumerAccessProbe {
 	return &consumerAccessProbe{
 		canaries: parseConsumerCanaries(os.Getenv(consumerCanaryEnv)),
 		base:     "http://127.0.0.1:" + port,
+		audience: assertionAudienceFromEnv(),
 		client:   &http.Client{Timeout: consumerProbeTimeout},
 	}
 }
@@ -75,12 +110,22 @@ func parseConsumerCanaries(raw string) []consumerCanary {
 	}
 	var parsed []consumerCanary
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		log.Printf("consumer access: %s is not a JSON array of {kind,token}: %v", consumerCanaryEnv, err)
+		log.Printf("consumer access: %s is not a JSON array of credentials: %v", consumerCanaryEnv, err)
 		return nil
 	}
 	canaries := parsed[:0]
 	for _, canary := range parsed {
-		if canary.Kind != "" && canary.Token != "" {
+		switch {
+		case canary.Kind == "":
+		case canary.asserted():
+			signer, err := canary.PrivateJWK.privateKey()
+			if err != nil || canary.ClientID == "" || canary.Tenant == "" || canary.Kid != canary.PrivateJWK.thumbprint() {
+				log.Printf("consumer access: asserted canary %q needs client_id, tenant, a kid matching private_jwk and a valid P-256 private_jwk", canary.Kind) //nolint:gosec // G706: operator-controlled env.
+				continue
+			}
+			canary.signer = signer
+			canaries = append(canaries, canary)
+		case canary.Token != "":
 			canaries = append(canaries, canary)
 		}
 	}
@@ -114,8 +159,12 @@ func (p *consumerAccessProbe) run(ctx context.Context) consumerAccessResult {
 		return result
 	}
 	result.OK = true
-	for _, canary := range p.canaries {
-		status := p.probe(ctx, canary.Token)
+	for i := range p.canaries {
+		canary := &p.canaries[i]
+		status := 0
+		if token, err := canary.bearer(p.audience, time.Now()); err == nil {
+			status = p.probe(ctx, token)
+		}
 		ok := status == http.StatusOK
 		if !ok {
 			result.OK = false

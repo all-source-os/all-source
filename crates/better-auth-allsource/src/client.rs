@@ -1,4 +1,7 @@
-use crate::error::AllsourceAuthError;
+use crate::{
+    credentials::{Credential, CredentialProvider},
+    error::AllsourceAuthError,
+};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -82,7 +85,7 @@ pub struct AllsourceClient {
     http: Client,
     core_url: String,
     query_url: String,
-    api_key: String,
+    credential: Credential,
     tenant_id: Option<String>,
     /// Shared by every clone: the instant before which calls fail fast with
     /// [`AllsourceAuthError::RateLimited`], and the refusal's scope.
@@ -178,6 +181,24 @@ fn latest_payload<T: DeserializeOwned>(
 
 impl AllsourceClient {
     pub fn new(core_url: &str, query_url: &str, api_key: &str) -> Self {
+        Self::with_credential(core_url, query_url, Credential::Static(api_key.to_string()))
+    }
+
+    /// Ask `provider` for the bearer before every request instead of sending
+    /// a fixed key.
+    pub fn with_credential_provider(
+        core_url: &str,
+        query_url: &str,
+        provider: impl CredentialProvider + 'static,
+    ) -> Self {
+        Self::with_credential(
+            core_url,
+            query_url,
+            Credential::Provider(Arc::new(provider)),
+        )
+    }
+
+    fn with_credential(core_url: &str, query_url: &str, credential: Credential) -> Self {
         let http = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -187,7 +208,7 @@ impl AllsourceClient {
             http,
             core_url: core_url.trim_end_matches('/').to_string(),
             query_url: query_url.trim_end_matches('/').to_string(),
-            api_key: api_key.to_string(),
+            credential,
             tenant_id: None,
             not_before: Arc::new(Mutex::new(None)),
         }
@@ -282,7 +303,7 @@ impl AllsourceClient {
         let resp = self
             .http
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", self.credential.header()?)
             .json(&event)
             .send()
             .await?;
@@ -341,7 +362,7 @@ impl AllsourceClient {
             .http
             .get(&url)
             .query(&self.tenant_query())
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", self.credential.header()?)
             .query(&[
                 ("entity_id", entity_id),
                 ("limit", &limit.to_string()),
@@ -373,7 +394,7 @@ impl AllsourceClient {
             .http
             .get(&url)
             .query(&self.tenant_query())
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", self.credential.header()?)
             .query(&[
                 ("event_type_prefix", event_type_prefix),
                 ("limit", &limit.to_string()),
@@ -436,7 +457,7 @@ impl AllsourceClient {
             .http
             .get(&url)
             .query(&self.tenant_query())
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", self.credential.header()?)
             .query(&[
                 ("event_type_prefix", event_type_prefix),
                 ("payload_filter", &filter),
@@ -505,7 +526,7 @@ impl AllsourceClient {
             .http
             .get(&url)
             .query(&self.tenant_query())
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", self.credential.header()?)
             .query(&[
                 ("event_type_prefix", event_type_prefix),
                 ("payload_filter", &filter),
@@ -559,7 +580,7 @@ impl AllsourceClient {
             .http
             .get(&url)
             .query(&self.tenant_query())
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", self.credential.header()?)
             .query(&[
                 ("event_type_prefix", event_type_prefix),
                 ("limit", "10000"),
@@ -675,7 +696,7 @@ impl AllsourceClient {
                 .http
                 .get(&url)
                 .query(&self.tenant_query())
-                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Authorization", self.credential.header()?)
                 .query(&[
                     ("event_type_prefix", event_type_prefix),
                     ("payload_filter", &filter),
