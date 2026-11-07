@@ -51,6 +51,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 - [AllSource LinkedIn company page](./brand/LINKEDIN_COMPANY_PAGE.md)
 - [AllSource and WolvenTech keyword demand (2026-10-01)](./seo/2026-10-01-allsource-wolventech-keyword-demand.md): treg/DataForSEO volumes, related keywords, intent exclusions and targeting priorities.
 - [Search-content implementation (2026-10-01)](./seo/2026-10-01-search-content-implementation.md): page intent, content changes, technical verification and measurement limits for both sites.
+- [AllSource editorial review (2026-11-07)](./seo/2026-11-07-editorial-review/README.md): factual corrections and contextual links for product-owner review.
+- [Agent memory after compaction search evidence (2026-11-07)](./seo/2026-11-07-compaction-search-evidence.md): search intent, sources, and trend-data limits.
 - [Directory and registry listings (2026-10-21)](./outreach/2026-10-21-directory-listings.md): product facts for listings, MCP registry and ClawHub routes, curated directories and the submission log.
 
 | | Link | Description |

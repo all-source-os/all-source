@@ -54,11 +54,11 @@ Yes, but you're fighting the data model. Your audit log is a second-class citize
 
 > "I can use a message queue like Kafka"
 
-Kafka is a transport, not a database. You can't query Kafka for "all events for entity X between timestamps A and B" with sub-millisecond latency. You need to materialize that data somewhere—which means you're back to building event sourcing yourself.
+Kafka is an event-streaming platform that stores and distributes records. An event-sourcing design also needs an explicit system of record, a retention and recovery policy, and a way to handle concurrent changes to an entity. Kafka Streams can maintain queryable application state, but the query model and operational responsibilities depend on how that application is built. Evaluate per-entity history, optimistic concurrency, and replay requirements against the capabilities of the chosen architecture.
 
 > "My new edge database has versioning"
 
-Version control ≠ event sourcing. Versioning gives you snapshots. Event sourcing gives you the **granular sequence of changes**. The difference matters when you need to understand *how* you got from version A to version B.
+Database versioning and event sourcing can both preserve history. Database versioning may retain prior record states; event sourcing records domain events as the authoritative history from which state is derived. The detail available depends on what each system records and retains. Event-sourced systems can also use snapshots to reduce replay work.
 
 ## When Event Sourcing Shines
 
@@ -134,7 +134,7 @@ If you're considering event sourcing, start with these questions:
 3. **Are you building AI features?** Your agents need memory, not just snapshots.
 4. **Is data integrity critical?** Immutable logs prevent accidental (or malicious) history rewriting.
 
-If you answered yes to any of these, it's time to look beyond traditional databases.
+If you answered yes to any of these, it's time to look beyond traditional databases. To test a rebuild against an expected result, use the [event replay validation checklist](/event-replay-validation-checklist).
 
 ## The Bottom Line
 

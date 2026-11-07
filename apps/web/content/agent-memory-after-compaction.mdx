@@ -1,0 +1,56 @@
+---
+title: "How to Test Agent Memory After Context Compaction"
+publishedAt: "2026-11-07"
+summary: "Use a synthetic fixture to check whether an agent can recover decisions, corrections, and source references after compaction or a fresh session."
+author: "Decebal Dobrica"
+image: "/assets/blog/ai-agents-need-memory.webp"
+---
+
+An agent resumes a long task after context compaction. It remembers the objective but repeats a rejected approach. Was the decision omitted from the compacted context, absent from durable memory, or stored but not retrieved? Those are different failures. Test each boundary before changing the prompt or the database.
+
+## Compaction and memory have different jobs
+
+Compaction reduces the active context carried into later turns. Persistent memory can make selected information available to later sessions. Neither guarantees that a particular decision will be recalled correctly. OpenAI's [memory and compaction example](https://developers.openai.com/cookbook/examples/agents_sdk/building_reliable_agents_memory_compaction) separates the current run's working state, reusable lessons, and the reviewed output. Its [session-memory guide](https://developers.openai.com/cookbook/examples/agents_sdk/session_memory), published September 9, 2025, discusses the tradeoff between carrying too much context and preserving too little.
+
+The test below is a design exercise. It does not depend on a particular model or claim that AllSource automatically performs compaction.
+
+## Build a fixture with a correction
+
+Use synthetic data in an isolated workspace. Record these four facts in the same order:
+
+| ID | Record | Expected current interpretation |
+| --- | --- | --- |
+| E1 | Task: investigate an interrupted import. | The task remains open. |
+| E2 | Attempt: retrying the import duplicated rows. | Do not repeat this attempt unchanged. |
+| E3 | Decision: inspect the checkpoint before retrying. | This is the next investigation step. |
+| E4 | Correction: the checkpoint is in `fixture-b`, not `fixture-a`. | `fixture-b` supersedes the earlier location. |
+
+Keep the expected answers outside the context provided to the agent. Store enough information to identify the task, order the records, trace each fact to its source, and distinguish the correction from the earlier statement. Do not put production credentials, customer data, or private transcripts in the fixture.
+
+## Exercise three boundaries
+
+1. **Baseline:** Ask the agent for the next step, the rejected approach, and the checkpoint location before compaction. Record its answers and cited source IDs.
+2. **Compaction:** Trigger the mechanism supported by your runtime, then ask the same questions. Record what was actually carried forward and what was retrieved. Do not edit opaque compaction output; follow your runtime's contract.
+3. **Fresh session:** Start a new session with the same permitted memory access but without the prior conversation. Ask again, then inspect the retrieved records and their source IDs.
+
+For this fixture, a passing answer names checkpoint inspection as the next step, avoids the unchanged retry, selects `fixture-b`, and points to E2–E4 where the system exposes provenance. Mark each item **pass**, **fail**, or **not run**. An answer that happens to be right without a source is a separate result from one whose evidence can be inspected.
+
+| Observation | First place to inspect |
+| --- | --- |
+| E3 or E4 was never written | Write path and its acknowledgement. |
+| Records exist but the fresh session cannot find them | Tenant, permissions, query and retrieval limits. |
+| Both locations return but `fixture-a` wins | Ordering, correction handling and selection rules. |
+| Facts survive compaction but disappear after restart | Persistence and session boundaries. |
+| Answer is correct but points to the wrong record | Provenance attribution. |
+
+An empty result alone does not show which condition failed. Inspect the stored records and the exact query before concluding that data was lost. A restart test is also distinct from an abrupt-termination test; record which boundary you exercised.
+
+## Compare approaches with the same fixture
+
+A versioned file, a framework's persistent checkpoint, or an event store may be enough for different workloads. Compare each using the same fixture, access scope, prompts, and expected answers. Measure the time and resources your own runs use; do not infer reliability from a single successful answer. Add duplicate delivery, a second tenant, and an unavailable memory service as separate tests when those conditions matter to your system.
+
+If you need to reconstruct a projection from retained events, use the [event replay validation checklist](/event-replay-validation-checklist). For a worked example of separating read and write models, see [CQRS vs event sourcing](/blog/cqrs-vs-event-sourcing). For memory-specific access boundaries, see [agent memory security](/blog/agent-memory-security-poisoning).
+
+## Sources
+
+Sources checked November 7, 2026. OpenAI's [session-memory guide](https://developers.openai.com/cookbook/examples/agents_sdk/session_memory) describes trimming and compression; its [memory and compaction example](https://developers.openai.com/cookbook/examples/agents_sdk/building_reliable_agents_memory_compaction) distinguishes working context, reusable lessons, and reviewed artifacts. Microsoft's [AgentRx research](https://www.microsoft.com/en-us/research/blog/systematic-debugging-for-ai-agents-introducing-the-agentrx-framework/), published March 12, 2026, investigates localization of failures in agent trajectories. These sources motivate the test; the fixture and pass criteria above are illustrative, not measured customer results.
