@@ -10,14 +10,60 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
   # ALLSOURCE_KEY_AUTHORITY_MODE, read in config/runtime.exs. Unset outside prod, so tests run the authority as enforce unless they opt out.
   def mode, do: Application.get_env(:query_service_ex, :key_authority_mode, :enforce)
 
+  # ALLSOURCE_LEGACY_KEY_SUNSET, read in config/runtime.exs as a UTC DateTime or nil.
+  def legacy_sunset, do: Application.get_env(:query_service_ex, :legacy_key_sunset)
+
   @doc """
   Whether a credential the authority refuses is still served. Shadow serves all
-  of them except a revocation, which no legacy key can carry.
+  of them except a revocation, which no legacy key can carry. Once a legacy
+  sunset is set, an unregistered key is served in shadow and enforce alike until
+  that instant and refused after it.
   """
   def serve_refused?(claims, reason) do
     mode = mode()
-    serve = mode == :off or (mode == :shadow and reason != :key_revoked)
+    sunset = legacy_sunset()
 
+    if reason == :unregistered and mode != :off and sunset != nil do
+      serve_legacy?(claims, sunset)
+    else
+      serve = mode == :off or (mode == :shadow and reason != :key_revoked)
+      denial(claims, mode, reason, serve)
+    end
+  end
+
+  def legacy_sunset_refusal?(reason) do
+    sunset = legacy_sunset()
+
+    reason == :unregistered and mode() != :off and sunset != nil and
+      DateTime.compare(DateTime.utc_now(), sunset) != :lt
+  end
+
+  def legacy_sunset_message do
+    date = legacy_sunset() |> DateTime.to_date() |> Date.to_iso8601()
+
+    "This API key predates registered keys and stopped working on #{date}. " <>
+      "Register a client key or create a dashboard key."
+  end
+
+  defp serve_legacy?(claims, sunset) do
+    if DateTime.compare(DateTime.utc_now(), sunset) == :lt do
+      tenant = claims["tenant_id"]
+
+      :telemetry.execute([:query_service_ex, :auth, :legacy_key_served], %{count: 1}, %{
+        tenant: tenant
+      })
+
+      log_once({:legacy_served, tenant}, fn ->
+        "Legacy API key served: tenant=#{inspect(tenant)} sunset=#{DateTime.to_iso8601(sunset)}"
+      end)
+
+      true
+    else
+      denial(claims, mode(), :unregistered, false)
+    end
+  end
+
+  defp denial(claims, mode, reason, serve) do
     :telemetry.execute([:query_service_ex, :auth, :key_authority_denial], %{count: 1}, %{
       mode: mode,
       reason: reason
@@ -25,6 +71,16 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
 
     log_denial(claims["tenant_id"], mode, reason, serve)
     serve
+  end
+
+  defp log_once(id, message) do
+    key = {__MODULE__, :logged, id}
+    now = System.monotonic_time(:second)
+
+    if now - :persistent_term.get(key, now - @denial_log_interval_s) >= @denial_log_interval_s do
+      :persistent_term.put(key, now)
+      Logger.warning(message.())
+    end
   end
 
   # :persistent_term is rewritten at most once per tenant and reason a minute.
@@ -72,7 +128,7 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
     with true <- valid_token_expiry?(claims),
          {:ok, :managed} <- kind(claims),
          {:ok, records} <- records(claims["tenant_id"]),
-         %{} = key <- Map.get(records, claims["sub"]),
+         {:ok, key} <- registered(records, claims["sub"]),
          :ok <- if(key["revoked"] == true, do: {:error, :key_revoked}, else: :ok),
          true <- key["active"] == true,
          true <- valid_scopes?(key["scopes"]),
@@ -82,6 +138,15 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
     else
       {:error, _} = error -> error
       _ -> {:error, :invalid_key}
+    end
+  end
+
+  # An id only a stray revocation names folds to an inactive record, so it is
+  # refused as :invalid_key and the legacy sunset never serves it.
+  defp registered(records, id) do
+    case Map.get(records, id) do
+      %{} = key -> {:ok, key}
+      _ -> {:error, :unregistered}
     end
   end
 
@@ -167,9 +232,14 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
       current = records[id]
 
       cond do
-        is_nil(current) -> {:ok, Map.put(records, id, key)}
-        security_fields(current) == security_fields(key) -> {:ok, records}
-        true -> {:ok, Map.put(records, id, Map.put(current, "active", false))}
+        is_nil(current) ->
+          {:ok, Map.put(records, id, key)}
+
+        security_fields(current) == security_fields(key) ->
+          {:ok, records}
+
+        true ->
+          {:ok, Map.put(records, id, Map.put(current, "active", false))}
       end
     else
       {:error, :invalid_key}

@@ -1,4 +1,4 @@
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 use std::{
     sync::{Arc, Mutex, PoisonError},
@@ -7,6 +7,7 @@ use std::{
 
 use crate::{
     circuit_breaker::{CircuitBreaker, State as CircuitState},
+    credentials::{Credential, CredentialProvider},
     error::Error,
     fold::EventFolder,
     latest::view_refusal,
@@ -62,7 +63,8 @@ fn rides_through_restart(err: &Error, idempotent: bool) -> bool {
 pub struct ClientConfig {
     /// Base URL of the service.
     pub base_url: String,
-    /// API key for authentication.
+    /// API key for authentication. Ignored, and may be empty, when the client
+    /// is built with `with_config_and_credential_provider`.
     pub api_key: String,
     /// HTTP request timeout. Default: 30s.
     pub timeout: Duration,
@@ -87,13 +89,20 @@ impl ClientConfig {
     }
 }
 
+fn bearer_header(token: &str) -> Result<HeaderValue, Error> {
+    let mut value = HeaderValue::from_str(&format!("Bearer {token}"))
+        .map_err(|e| Error::Config(format!("invalid API key: {e}")))?;
+    value.set_sensitive(true);
+    Ok(value)
+}
+
 /// Shared HTTP transport with retry and circuit breaker.
 #[derive(Debug)]
 pub(crate) struct HttpTransport {
     pub(crate) base_url: String,
-    /// Kept alongside the reqwest default headers so non-HTTP transports
-    /// (the WebSocket stream) can authenticate with the same credential.
-    pub(crate) api_key: String,
+    /// Kept so non-HTTP transports (the WebSocket stream) authenticate with
+    /// the same credential as the HTTP calls.
+    pub(crate) credential: Credential,
     http: reqwest::Client,
     retry: RetryConfig,
     circuit_breaker: CircuitBreaker,
@@ -103,20 +112,22 @@ pub(crate) struct HttpTransport {
 }
 
 impl HttpTransport {
-    fn new(config: &ClientConfig) -> Result<Self, Error> {
+    fn new(config: &ClientConfig, provider: Option<Credential>) -> Result<Self, Error> {
         if config.base_url.is_empty() {
             return Err(Error::Config("base_url is required".into()));
         }
-        if config.api_key.is_empty() {
-            return Err(Error::Config("api_key is required".into()));
-        }
+        let credential = match provider {
+            Some(provider) => provider,
+            None if config.api_key.is_empty() => {
+                return Err(Error::Config("api_key is required".into()));
+            }
+            None => Credential::Static(config.api_key.clone()),
+        };
 
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            HeaderValue::from_str(&format!("Bearer {}", config.api_key))
-                .map_err(|e| Error::Config(format!("invalid API key: {e}")))?,
-        );
+        if let Credential::Static(key) = &credential {
+            headers.insert(AUTHORIZATION, bearer_header(key)?);
+        }
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
         let http = reqwest::Client::builder()
@@ -126,7 +137,7 @@ impl HttpTransport {
 
         Ok(Self {
             base_url: config.base_url.trim_end_matches('/').to_string(),
-            api_key: config.api_key.clone(),
+            credential,
             http,
             retry: config.retry.clone(),
             circuit_breaker: CircuitBreaker::new(
@@ -139,6 +150,17 @@ impl HttpTransport {
 
     pub(crate) fn circuit_state(&self) -> CircuitState {
         self.circuit_breaker.state()
+    }
+
+    /// Runs inside every retry attempt, so a provider mints a fresh bearer per
+    /// attempt; a static key already rides in the default headers.
+    fn authorize(&self, req: reqwest::RequestBuilder) -> Result<reqwest::RequestBuilder, Error> {
+        match &self.credential {
+            Credential::Static(_) => Ok(req),
+            Credential::Provider(_) => {
+                Ok(req.header(AUTHORIZATION, bearer_header(&self.credential.bearer()?)?))
+            }
+        }
     }
 
     fn pending_rate_limit(&self) -> Option<Error> {
@@ -182,7 +204,7 @@ impl HttpTransport {
     ) -> Result<(Option<T>, ResponseMeta), Error> {
         self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
-            let mut req = self.http.get(&url).query(query);
+            let mut req = self.authorize(self.http.get(&url).query(query))?;
             if let Some(etag) = if_none_match {
                 req = req.header(reqwest::header::IF_NONE_MATCH, etag);
             }
@@ -200,7 +222,7 @@ impl HttpTransport {
     pub(crate) async fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, Error> {
         self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
-            let resp = self.http.get(&url).send().await?;
+            let resp = self.authorize(self.http.get(&url))?.send().await?;
             self.handle_response(resp).await
         })
         .await
@@ -213,7 +235,10 @@ impl HttpTransport {
     ) -> Result<T, Error> {
         self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
-            let resp = self.http.get(&url).query(query).send().await?;
+            let resp = self
+                .authorize(self.http.get(&url).query(query))?
+                .send()
+                .await?;
             self.handle_response(resp).await
         })
         .await
@@ -226,7 +251,10 @@ impl HttpTransport {
     ) -> Result<T, Error> {
         self.with_retry(false, || async {
             let url = format!("{}{}", self.base_url, path);
-            let resp = self.http.post(&url).json(body).send().await?;
+            let resp = self
+                .authorize(self.http.post(&url).json(body))?
+                .send()
+                .await?;
             self.handle_response(resp).await
         })
         .await
@@ -239,7 +267,10 @@ impl HttpTransport {
     ) -> Result<T, Error> {
         self.with_retry(false, || async {
             let url = format!("{}{}", self.base_url, path);
-            let resp = self.http.put(&url).json(body).send().await?;
+            let resp = self
+                .authorize(self.http.put(&url).json(body))?
+                .send()
+                .await?;
             self.handle_response(resp).await
         })
         .await
@@ -249,7 +280,7 @@ impl HttpTransport {
     pub(crate) async fn delete(&self, path: &str) -> Result<(), Error> {
         self.with_retry(false, || async {
             let url = format!("{}{}", self.base_url, path);
-            let resp = self.http.delete(&url).send().await?;
+            let resp = self.authorize(self.http.delete(&url))?.send().await?;
             if resp.status().is_success() {
                 return Ok(());
             }
@@ -268,7 +299,7 @@ impl HttpTransport {
     ) -> Result<Option<T>, Error> {
         self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
-            let resp = self.http.get(&url).send().await?;
+            let resp = self.authorize(self.http.get(&url))?.send().await?;
             if resp.status().as_u16() == 404 {
                 return Ok(None);
             }
@@ -442,7 +473,22 @@ impl QueryClient {
     #[allow(clippy::needless_pass_by_value)] // public API — taking ownership is idiomatic
     pub fn with_config(config: ClientConfig) -> Result<Self, Error> {
         Ok(Self {
-            transport: Arc::new(HttpTransport::new(&config)?),
+            transport: Arc::new(HttpTransport::new(&config, None)?),
+        })
+    }
+
+    /// Create with full configuration, asking `provider` for the bearer on
+    /// every request attempt instead of sending `config.api_key`.
+    #[allow(clippy::needless_pass_by_value)] // public API — taking ownership is idiomatic
+    pub fn with_config_and_credential_provider(
+        config: ClientConfig,
+        provider: impl CredentialProvider + 'static,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            transport: Arc::new(HttpTransport::new(
+                &config,
+                Some(Credential::Provider(Arc::new(provider))),
+            )?),
         })
     }
 
@@ -770,7 +816,23 @@ impl CoreClient {
     #[allow(clippy::needless_pass_by_value)] // public API — taking ownership is idiomatic
     pub fn with_config(config: ClientConfig) -> Result<Self, Error> {
         Ok(Self {
-            transport: Arc::new(HttpTransport::new(&config)?),
+            transport: Arc::new(HttpTransport::new(&config, None)?),
+        })
+    }
+
+    /// Create with full configuration, asking `provider` for the bearer on
+    /// every request attempt and WebSocket connect instead of sending
+    /// `config.api_key`.
+    #[allow(clippy::needless_pass_by_value)] // public API — taking ownership is idiomatic
+    pub fn with_config_and_credential_provider(
+        config: ClientConfig,
+        provider: impl CredentialProvider + 'static,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            transport: Arc::new(HttpTransport::new(
+                &config,
+                Some(Credential::Provider(Arc::new(provider))),
+            )?),
         })
     }
 

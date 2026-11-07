@@ -54,4 +54,28 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ConsumerAccessProbeTest do
     assert ConsumerAccessProbe.parse("not json") == []
     assert ConsumerAccessProbe.parse(nil) == []
   end
+
+  test "an asserted client key canary is reported as skipped and never fails the gate" do
+    raw =
+      ~s([{"kind":"managed_api_key","token":"managed"},) <>
+        ~s({"kind":"asserted_client_key","client_id":"c","tenant":"t","kid":"k","private_jwk":{"kty":"EC"}}])
+
+    canaries = ConsumerAccessProbe.parse(raw)
+    assert [%{kind: "managed_api_key"}, %{kind: "asserted_client_key", skip: _}] = canaries
+
+    result = run(canaries, ["Bearer managed"])
+    assert result.ok
+
+    assert [%{status: 200}, %{kind: "asserted_client_key", ok: true, skipped: reason}] =
+             result.kinds
+
+    assert reason =~ "gateway"
+  end
+
+  test "only asserted canaries still means nothing was probed" do
+    result = run([%{kind: "asserted_client_key", skip: "gateway only"}], [])
+
+    refute result.ok
+    assert [%{kind: "asserted_client_key", skipped: "gateway only"}] = result.kinds
+  end
 end

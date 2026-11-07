@@ -174,6 +174,18 @@ func NewControlPlane(ctx context.Context) (*ControlPlane, error) {
 	}
 	authClient.SetKeyAuthorityMode(keyMode)
 	log.Printf("API key authority mode: %s", keyMode) //nolint:gosec // G706: parseKeyAuthorityMode returns one of three constants.
+	legacySunsetAt, sunsetErr := parseLegacyKeySunset(os.Getenv(legacyKeySunsetEnv))
+	if sunsetErr != nil {
+		return nil, sunsetErr
+	}
+	authClient.SetLegacyKeySunset(legacySunsetAt)
+	if legacySunsetAt.IsZero() {
+		log.Printf("Legacy API key sunset: unset")
+	} else {
+		log.Printf("Legacy API key sunset: %s", legacySunsetAt.Format(time.RFC3339)) //nolint:gosec // G706: formatted from a parsed time.Time.
+	}
+	authClient.assertionAudience = assertionAudienceFromEnv()
+	log.Printf("Client assertion audience: %s", authClient.assertionAudience) //nolint:gosec // G706: operator-controlled env.
 
 	// Sign a service-to-service JWT so the resty client can authenticate with Core.
 	// Uses a long-lived token with admin role — Core validates with the same shared secret.
@@ -809,6 +821,7 @@ func (cp *ControlPlane) setupRoutes() {
 	// Reuses the recovery guard + audit machinery (admin.recovery.reap_demo). The
 	// prevention half is the DEMO_ENABLED gate on DemoStartHandler.
 	admin.POST("/tenants/reap-demo", cp.container.RecoveryHandler.ReapDemo)
+	registerClientKeyRoutes(admin, cp.authClient)
 
 	// Fleet health (read) — the cross-tenant rollup + per-tenant assessment.
 	// The health model lives once here; the admin UI (P2) and Elixir MCP (P3)

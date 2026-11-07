@@ -22,10 +22,13 @@ ws = [
     "tokio/rt-multi-thread",
 ]
 projection-worker = ["ws", "dep:async-trait"]
+# Es256AssertionProvider: short-lived ES256 client assertions from a registered P-256 key.
+es256-assertion = ["dep:jsonwebtoken", "dep:uuid"]
 
 [dependencies]
 async-trait = { version = "0.1", optional = true }
 futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
+jsonwebtoken = { workspace = true, optional = true }
 reqwest = { version = "0.13", features = ["json", "query"], default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -35,9 +38,13 @@ tokio = { version = "1", features = ["rt", "time", "sync"] }
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake"], optional = true }
 tracing = "0.1"
 url = { version = "2", optional = true }
+uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
+aws-lc-rs = "1"
+base64 = { workspace = true }
 flate2 = "1"
+jsonwebtoken = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wiremock = "0.6"

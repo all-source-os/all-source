@@ -17,6 +17,7 @@ name = "allsource-mcp"
 path = "src/main.rs"
 
 [dependencies]
+allsource = { version = "0.28.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
 allsource-core = { version = "0.28.0", path = "../../apps/core", default-features = false, features = ["embedded"] }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }

@@ -41,6 +41,23 @@ if config_env() == :prod do
 
   config :query_service_ex, :key_authority_mode, key_authority_mode
 
+  legacy_key_sunset =
+    case System.get_env("ALLSOURCE_LEGACY_KEY_SUNSET", "") |> String.trim() do
+      "" ->
+        nil
+
+      raw ->
+        case DateTime.from_iso8601(raw) do
+          {:ok, at, _offset} ->
+            at
+
+          _ ->
+            raise "ALLSOURCE_LEGACY_KEY_SUNSET must be an RFC3339 instant, got #{inspect(raw)}"
+        end
+    end
+
+  config :query_service_ex, :legacy_key_sunset, legacy_key_sunset
+
   # Secret key base - use provided value or generate a temporary one for health checks
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||

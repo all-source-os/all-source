@@ -423,9 +423,9 @@ async fn run_forever<S: WorkerState>(
 
         // The stream authenticates with the same key as the client's HTTP calls —
         // gateways in front of Core reject an empty bearer at the handshake.
-        let stream_client = EventStreamClient::new(
+        let stream_client = EventStreamClient::with_credential(
             worker.core.transport().base_url.clone(),
-            worker.core.transport().api_key.clone(),
+            worker.core.transport().credential.clone(),
         );
 
         caught_up.store(false, Ordering::SeqCst);

@@ -37,9 +37,25 @@ defmodule QueryServiceExWeb.Plugs.ManagedKeyAccess do
   end
 
   defp refused(conn, claims, reason, message) do
-    if ApiKeyAuthority.serve_refused?(claims, reason),
-      do: {:ok, conn},
-      else: {:error, message}
+    cond do
+      ApiKeyAuthority.serve_refused?(claims, reason) -> {:ok, conn}
+      ApiKeyAuthority.legacy_sunset_refusal?(reason) -> {:ok, legacy_sunset(conn)}
+      true -> {:error, message}
+    end
+  end
+
+  @doc "The 401 an unregistered key gets once ALLSOURCE_LEGACY_KEY_SUNSET has passed."
+  def legacy_sunset(conn) do
+    conn
+    |> put_status(:unauthorized)
+    |> Phoenix.Controller.json(%{
+      error: %{
+        code: "unauthorized",
+        reason: "legacy_key_sunset",
+        message: ApiKeyAuthority.legacy_sunset_message()
+      }
+    })
+    |> halt()
   end
 
   def key(conn, %{"authority" => "unverified"} = key),
@@ -123,8 +139,8 @@ defmodule QueryServiceExWeb.Plugs.ManagedKeyAccess do
     entity = Map.get(value, "entity_id", "")
     event = Map.get(value, "event_type", "")
 
-    (is_binary(entity) and String.starts_with?(entity, "apikey:")) or
-      (is_binary(event) and String.starts_with?(event, "apikey.")) or
+    (is_binary(entity) and String.starts_with?(entity, ["apikey:", "clientkey:"])) or
+      (is_binary(event) and String.starts_with?(event, ["apikey.", "clientkey."])) or
       reserved?(Map.get(value, "events", []))
   end
 

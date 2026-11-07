@@ -593,6 +593,103 @@ defmodule QueryServiceExWeb.ManagedKeyLifecycleTest do
     end
   end
 
+  test "the legacy sunset never serves a key a stray revocation names", %{state: state} do
+    with_mode(:enforce)
+    with_sunset(DateTime.add(DateTime.utc_now(), 3600))
+
+    stray = %{
+      "id" => "stray",
+      "tenant_id" => @tenant,
+      "entity_id" => "apikey:#{@tenant}",
+      "event_type" => "apikey.revoked",
+      "version" => 1,
+      "timestamp" => "2026-01-01T00:00:00Z",
+      "payload" => %{"key_id" => @tenant}
+    }
+
+    Agent.update(state, &%{&1 | events: [stray]})
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      assert request(plug, legacy_onboarding_key()).status == 401,
+             "#{inspect(plug)} served a revoked legacy key before the sunset"
+    end
+  end
+
+  defp with_sunset(at) do
+    Application.put_env(:query_service_ex, :legacy_key_sunset, at)
+    on_exit(fn -> Application.delete_env(:query_service_ex, :legacy_key_sunset) end)
+  end
+
+  defp count_legacy(test_pid) do
+    handler = "legacy-key-served-#{inspect(test_pid)}"
+
+    :telemetry.attach(
+      handler,
+      [:query_service_ex, :auth, :legacy_key_served],
+      fn _, _, meta, _ -> send(test_pid, {:legacy_served, meta.tenant}) end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+  end
+
+  test "enforce serves an unregistered key until the legacy sunset and counts it" do
+    with_mode(:enforce)
+    with_sunset(DateTime.add(DateTime.utc_now(), 3600))
+    count_legacy(self())
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      refute request(plug, legacy_onboarding_key()).halted,
+             "#{inspect(plug)} refused before the sunset"
+
+      assert_received {:legacy_served, @tenant}
+    end
+  end
+
+  test "after the legacy sunset an unregistered key gets the sunset refusal" do
+    with_mode(:shadow)
+    sunset = DateTime.add(DateTime.utc_now(), -60)
+    with_sunset(sunset)
+    date = sunset |> DateTime.to_date() |> Date.to_iso8601()
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      conn = request(plug, legacy_onboarding_key())
+      assert conn.status == 401, "#{inspect(plug)} served after the sunset"
+      error = Jason.decode!(conn.resp_body)["error"]
+      assert error["reason"] == "legacy_key_sunset"
+      assert error["message"] =~ "stopped working on #{date}"
+    end
+  end
+
+  test "a revoked key is refused before the legacy sunset" do
+    with_mode(:enforce)
+    with_sunset(DateTime.add(DateTime.utc_now(), 3600))
+    created = create(%{"scopes" => ["events:read"]}) |> Map.fetch!(:resp_body) |> Jason.decode!()
+    assert :ok = ApiKeyStore.revoke_key(@tenant, created["id"])
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      assert request(plug, created["key"]).status == 401
+    end
+  end
+
+  test "public ingest refuses the client key stream" do
+    key = legacy_onboarding_key()
+    with_mode(:off)
+
+    for body <- [
+          %{"entity_id" => "clientkey:#{@tenant}", "event_type" => "x"},
+          %{"entity_id" => "e", "event_type" => "clientkey.registered"},
+          %{"events" => [%{"entity_id" => "e", "event_type" => "clientkey.revoked"}]}
+        ] do
+      conn =
+        conn(:post, "/api/events", body)
+        |> put_req_header("authorization", "Bearer " <> key)
+        |> AuthPipeline.call([])
+
+      assert conn.status == 403
+    end
+  end
+
   test "off skips the authority read", %{state: state} do
     with_mode(:off)
     Agent.update(state, &%{&1 | truncated: true})

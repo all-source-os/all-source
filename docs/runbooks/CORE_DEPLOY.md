@@ -17,6 +17,13 @@ Longhand's control plane reaches it through the gateway
 `allsource-core` app: `.internal` resolves to every started machine, so real
 traffic would reach it.
 
+Gateway deploys follow
+[`CONSUMER_ACCESS_GATE.md`](CONSUMER_ACCESS_GATE.md#read-the-config-back-after-every-deploy),
+including the config read-back after every deploy. The same rule applies to a
+Core `fly.toml` taken from git: write it with a redirect, check its size and its
+`app = "allsource-core"` line before deploying, and read
+`fly machine status -d` back afterwards.
+
 ## What a boot costs
 
 | Boot | Work | Measured |

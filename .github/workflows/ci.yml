@@ -704,11 +704,15 @@ jobs:
 
       - name: Rust SDK clippy
         working-directory: sdks/rust
-        run: cargo clippy --locked -p allsource --all-targets -- -D warnings
+        run: cargo clippy --locked -p allsource --all-targets --features es256-assertion -- -D warnings
 
       - name: Rust SDK tests
         working-directory: sdks/rust
         run: cargo test --locked -p allsource
+
+      - name: Rust SDK tests (es256-assertion)
+        working-directory: sdks/rust
+        run: cargo test --locked -p allsource --features es256-assertion
 
       - uses: actions/setup-go@v7
         with:

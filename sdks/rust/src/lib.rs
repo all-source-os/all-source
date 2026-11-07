@@ -84,8 +84,11 @@
 //! }
 //! ```
 
+#[cfg(feature = "es256-assertion")]
+mod assertion;
 mod circuit_breaker;
 mod client;
+mod credentials;
 mod error;
 mod fold;
 mod latest;
@@ -99,8 +102,11 @@ mod types;
 #[cfg(feature = "ws")]
 mod ws;
 
+#[cfg(feature = "es256-assertion")]
+pub use assertion::{Es256AssertionProvider, ASSERTION_LIFETIME_SECS, ASSERTION_REFRESH_SECS};
 pub use circuit_breaker::{CircuitBreaker, CircuitPermit, State as CircuitState};
 pub use client::{ClientConfig, CoreClient, QueryClient, RetryConfig};
+pub use credentials::CredentialProvider;
 pub use error::Error;
 pub use fold::{fold_events, EventFolder};
 pub use latest::{

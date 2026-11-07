@@ -16,7 +16,7 @@ use better_auth_core::{
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::{client::AllsourceClient, user_record::UserRecord};
+use crate::{client::AllsourceClient, credentials::CredentialProvider, user_record::UserRecord};
 
 /// Keys that better-auth-allsource refuses to accept inside `User.metadata`.
 /// These look like password hash storage, which belongs on
@@ -108,6 +108,18 @@ impl AllsourceAuthAdapter {
     pub fn new(core_url: &str, query_url: &str, api_key: &str) -> Self {
         Self {
             client: AllsourceClient::new(core_url, query_url, api_key),
+        }
+    }
+
+    /// Create an adapter that asks `provider` for the bearer before every
+    /// request, e.g. a short-lived ES256 client assertion.
+    pub fn with_credential_provider(
+        core_url: &str,
+        query_url: &str,
+        provider: impl CredentialProvider + 'static,
+    ) -> Self {
+        Self {
+            client: AllsourceClient::with_credential_provider(core_url, query_url, provider),
         }
     }
 

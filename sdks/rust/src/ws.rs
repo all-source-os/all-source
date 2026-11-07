@@ -17,10 +17,14 @@
 //! - Live event: bare `Event` JSON (no `type` field)
 //! - Lagged: `{"type":"lagged","missed":N}` — broadcast channel overflowed
 
-use crate::{Error, Event};
+use crate::{
+    credentials::{Credential, CredentialProvider},
+    Error, Event,
+};
 use futures_util::{SinkExt, Stream};
 use std::{
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 use tokio::net::TcpStream;
@@ -78,15 +82,27 @@ pub enum StreamItem {
 #[derive(Debug, Clone)]
 pub struct EventStreamClient {
     base_url: String,
-    api_key: String,
+    credential: Credential,
 }
 
 impl EventStreamClient {
     /// Create a client pointed at a Core base URL (e.g. `http://localhost:3900`).
     pub fn new(base_url: impl Into<String>, api_key: impl Into<String>) -> Self {
+        Self::with_credential(base_url.into(), Credential::Static(api_key.into()))
+    }
+
+    /// Create a client that asks `provider` for the bearer on every connect.
+    pub fn with_credential_provider(
+        base_url: impl Into<String>,
+        provider: impl CredentialProvider + 'static,
+    ) -> Self {
+        Self::with_credential(base_url.into(), Credential::Provider(Arc::new(provider)))
+    }
+
+    pub(crate) fn with_credential(base_url: String, credential: Credential) -> Self {
         Self {
-            base_url: base_url.into(),
-            api_key: api_key.into(),
+            base_url,
+            credential,
         }
     }
 
@@ -106,7 +122,7 @@ impl EventStreamClient {
             .map_err(|e| Error::WebSocket(format!("failed to build WS request: {e}")))?;
         request.headers_mut().insert(
             "Authorization",
-            format!("Bearer {}", self.api_key)
+            format!("Bearer {}", self.credential.bearer()?)
                 .parse()
                 .map_err(|e| Error::WebSocket(format!("invalid api key: {e}")))?,
         );
