@@ -18,12 +18,12 @@ use tokio_tungstenite::tungstenite::{
     http::header::{AUTHORIZATION, HeaderValue},
 };
 
-use super::backend::ChangeEvent;
+use super::{backend::ChangeEvent, remote_auth::RemoteAuth};
 
 /// Main entry point — runs until the process exits.
 pub async fn run_ws_client(
     ws_url: String,
-    api_key: Option<String>,
+    auth: RemoteAuth,
     local: Arc<EmbeddedCore>,
     change_tx: broadcast::Sender<ChangeEvent>,
 ) {
@@ -31,7 +31,7 @@ pub async fn run_ws_client(
     let backoff_cap_ms: u64 = 30_000;
 
     loop {
-        match connect_and_pump(&ws_url, api_key.as_deref(), &local, &change_tx).await {
+        match connect_and_pump(&ws_url, &auth, &local, &change_tx).await {
             Ok(()) => {
                 tracing::info!("remote_stream: connection closed cleanly, reconnecting");
                 backoff_ms = 500;
@@ -51,7 +51,7 @@ pub async fn run_ws_client(
 /// Open one WebSocket connection and pump events until it drops.
 async fn connect_and_pump(
     ws_url: &str,
-    api_key: Option<&str>,
+    auth: &RemoteAuth,
     local: &Arc<EmbeddedCore>,
     change_tx: &broadcast::Sender<ChangeEvent>,
 ) -> Result<(), String> {
@@ -59,8 +59,9 @@ async fn connect_and_pump(
         .into_client_request()
         .map_err(|e| format!("invalid ws url {ws_url}: {e}"))?;
 
-    if let Some(key) = api_key {
-        let bearer = format!("Bearer {key}");
+    // Asked per attempt so a reconnect never sends an expired assertion.
+    if let Some(token) = auth.bearer().map_err(|e| e.to_string())? {
+        let bearer = format!("Bearer {token}");
         let value =
             HeaderValue::from_str(&bearer).map_err(|e| format!("invalid bearer header: {e}"))?;
         request.headers_mut().insert(AUTHORIZATION, value);

@@ -72,7 +72,9 @@ Benchmark reference: 11.9us p99 indexed reads. Benchmark numbers describe named 
 
 Hosted base URL: https://api.all-source.xyz
 Health: `GET https://api.all-source.xyz/health`
-Authentication: `Authorization: Bearer <api_key>`
+Authentication: `Authorization: Bearer <api_key>` (the gateway reads no other header)
+Registered client keys: a service may instead send a 60-second ES256 assertion signed with a P-256 key a platform operator registered on the tenant (header `kid` = RFC 7638 thumbprint; claims `iss` = client_id, `sub` = tenant, `aud` = `https://api.all-source.xyz`, `jti`). Rust, TypeScript, Python and Go SDKs sign it. Guide: https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md
+Legacy sunset: old onboarding keys that were never registered are refused after the gateway's sunset date with `401` reason `legacy_key_sunset`; dashboard keys keep working.
 
 Latest state without history, all served by the hosted gateway:
 

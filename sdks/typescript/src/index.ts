@@ -1,10 +1,18 @@
+export {
+  ASSERTION_LIFETIME_SECS,
+  ASSERTION_REFRESH_SECS,
+  type Es256AssertionOptions,
+  Es256AssertionProvider,
+} from "./assertion";
 export type { CircuitState } from "./circuit-breaker";
 export { CircuitBreaker } from "./circuit-breaker";
 export { AllSourceClient } from "./client";
+export { CredentialError, type CredentialProvider } from "./credentials";
 export type { EventFolder } from "./fold";
 export { foldEvents } from "./fold";
 export {
   type AllSourceConfig,
+  type AllSourceConfigBase,
   AllSourceError,
   type CircuitBreakerConfig,
   CircuitOpenError,

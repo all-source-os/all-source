@@ -19,6 +19,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::remote_auth::RemoteAuth;
+
 const CURSOR_FILE: &str = ".prime_email_ingest_cursor.json";
 const EMAIL_EVENT_PREFIX: &str = "email.";
 const BATCH_SIZE: usize = 200;
@@ -272,7 +274,7 @@ pub async fn ingest_email_event(
 #[derive(Clone, Debug)]
 pub struct EmailIngestConfig {
     pub remote_url: String,
-    pub api_key: String,
+    pub auth: RemoteAuth,
     pub interval: Duration,
 }
 
@@ -343,7 +345,7 @@ pub async fn run_email_ingest_loop(
 
     loop {
         ticker.tick().await;
-        match pull_once(&prime, &http, &base_url, &config.api_key, &mut cursor).await {
+        match pull_once(&prime, &http, &base_url, &config.auth, &mut cursor).await {
             Ok(folded) if folded > 0 => {
                 if let Err(e) = cursor.save(&cursor_path) {
                     tracing::warn!(error = %e, "failed to persist email ingest cursor");
@@ -360,7 +362,7 @@ async fn pull_once(
     prime: &Prime,
     http: &reqwest::Client,
     base_url: &str,
-    api_key: &str,
+    auth: &RemoteAuth,
     cursor: &mut Cursor,
 ) -> Result<usize> {
     // Build the query string manually (this reqwest build has no `.query()`).
@@ -376,7 +378,7 @@ async fn pull_once(
 
     let resp = http
         .get(&url)
-        .bearer_auth(api_key)
+        .bearer_auth(auth.bearer()?)
         .send()
         .await
         .with_context(|| format!("GET {url}"))?;

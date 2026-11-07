@@ -161,6 +161,25 @@ GET /api/health → {"status":"healthy","version":"0.10.3","checks":{"websocket"
 }
 ```
 
+A managed onboarding key with no registration record, used after
+`ALLSOURCE_LEGACY_KEY_SUNSET`, is refused with `401` and the reason nested under
+`error`:
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "reason": "legacy_key_sunset",
+    "message": "This API key predates registered keys and stopped working on <date>. Register a client key or create a dashboard key."
+  }
+}
+```
+
+The gateway sends the same `reason` and `message` at the top level. See
+[CLIENT_KEY_ROTATION.md](runbooks/CLIENT_KEY_ROTATION.md#legacy-key-sunset), and
+[REGISTERED_CLIENT_KEYS.md](guides/REGISTERED_CLIENT_KEYS.md) for moving a
+client to a registered key.
+
 ## Known Issues
 
 1. **`/api/events/streams` and `/api/events/types` return 400**: These old paths don't exist. Use `/api/streams` and `/api/event-types` instead.

@@ -874,7 +874,8 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
             "tenant_id" => tenant_id,
             "role" => key["role"],
             "scopes" => key["scopes"],
-            "authority" => key["authority"]
+            "authority" => key["authority"],
+            "legacy_sunset" => key["legacy_sunset"] == true
           }
 
           {:ok, {tenant, api_key_info}}
@@ -919,7 +920,8 @@ defmodule QueryServiceEx.Infrastructure.Adapters.RustCoreClient do
              %{
                "role" => claims["role"] || "serviceaccount",
                "scopes" => claims["scopes"] || [],
-               "authority" => "unverified"
+               "authority" => "unverified",
+               "legacy_sunset" => ApiKeyAuthority.legacy_served?(reason)
              }}
 
           ApiKeyAuthority.legacy_sunset_refusal?(reason) ->

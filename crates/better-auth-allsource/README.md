@@ -38,6 +38,39 @@ let auth = BetterAuth::builder()
 
 That's it. All 10 `DatabaseAdapter` sub-traits are implemented — users, sessions, accounts, organizations, members, invitations, verification tokens, two-factor auth, API keys, and passkeys all work out of the box.
 
+### With a registered client key
+
+Against the hosted gateway, the adapter can sign every request with a P-256 key that an AllSource operator registered on your tenant, instead of holding a long-lived API key. `AllsourceAuthAdapter::with_credential_provider` asks its provider for the bearer before every request. The adapter does not depend on the `allsource` SDK, so add it with the `es256-assertion` feature and wrap its `Es256AssertionProvider` in a closure:
+
+```toml
+[dependencies]
+allsource = { version = "0.29", features = ["es256-assertion"] }
+better-auth-allsource = "0.14.15"
+```
+
+```rust,ignore
+use allsource::{CredentialProvider as _, Es256AssertionProvider};
+use better_auth_allsource::AllsourceAuthAdapter;
+
+let provider = Es256AssertionProvider::from_pkcs8_pem(
+    &std::fs::read("client-key.pem")?,
+    "my-auth-service",            // client id: the assertion's iss
+    "my-tenant",                  // tenant: the assertion's sub
+    "registered-kid",             // RFC 7638 thumbprint returned at registration
+    "https://api.all-source.xyz", // the gateway's ALLSOURCE_ASSERTION_AUDIENCE
+)?;
+
+let adapter = AllsourceAuthAdapter::with_credential_provider(
+    "https://api.all-source.xyz",
+    "https://api.all-source.xyz",
+    move || provider.bearer().map_err(|e| e.to_string()),
+);
+```
+
+The provider mints a 60-second ES256 assertion and reuses it until 15 seconds before it expires, so a cached token is never sent stale. Only the gateway verifies assertions: point both URLs at it, not at Core or the Query Service directly. Registration is operator-only; see [`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md). A failing provider surfaces as `AllsourceAuthError::Api` with status `0`, before any request is sent.
+
+API keys minted by the old onboarding flow (HS256 keys with no registration record) are refused with `401` and reason `legacy_key_sunset` once the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` passes. Dashboard-created keys and registered client keys keep working.
+
 ## How It Works
 
 Each auth entity maps to an Allsource event stream:

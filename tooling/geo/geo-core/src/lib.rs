@@ -27,7 +27,8 @@
 //!   reply parsing.
 //! - [`emitter`] — turns a [`GeoEvent`] into a Core ingest envelope and either
 //!   POSTs it through the Control Plane gateway or prints it (`--dry-run`).
-//! - [`config`] — `ALLSOURCE_API_URL` / `ALLSOURCE_API_KEY`.
+//! - [`config`] — `ALLSOURCE_API_URL`, and `ALLSOURCE_API_KEY` or a registered
+//!   client key (`ALLSOURCE_CLIENT_*`).
 //! - [`idempotency`] — natural-key hashing, so a re-ingest of the same log
 //!   window does not double-count.
 //! - [`samples`] — the canonical example of every event, shared by the
@@ -74,7 +75,10 @@ pub use bots::{
     BOTS, BotCategory, BotSpec, Cidr, PublishedPrefixes, RangeCatalog, TAXONOMY_VERSION,
     Verdict, Verification,
 };
-pub use config::{DEFAULT_API_URL, ENV_API_KEY, ENV_API_URL, GeoConfig};
+pub use config::{
+    DEFAULT_API_URL, ENV_API_KEY, ENV_API_URL, ENV_ASSERTION_AUDIENCE, ENV_CLIENT_ID,
+    ENV_CLIENT_KID, ENV_CLIENT_SIGNING_KEY, ENV_TENANT_ID, GeoConfig,
+};
 pub use discovery::{
     DISCOVERY_SOURCES, DiscoverySource, capture_path, discovery_label, discovery_source,
     is_ai_source,

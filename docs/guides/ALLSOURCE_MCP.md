@@ -117,6 +117,49 @@ Instead of `--data-dir`, you can set `ALLSOURCE_DATA_DIR`:
 }
 ```
 
+### Remote gateway
+
+`--remote <url>` binds a store read over HTTP from the hosted gateway. A remote
+store answers the view tools (`get_latest_state`, `list_latest`, `list_changes`);
+the event tools need a `--data-dir` store. Two ways to authenticate:
+
+**Registered client key (preferred for long-running use).** Every request carries
+a fresh 60-second ES256 assertion, and `ALLSOURCE_API_KEY` is ignored.
+
+| Variable | Value |
+|---|---|
+| `ALLSOURCE_CLIENT_SIGNING_KEY` | P-256 PKCS#8 PEM, or a path to one |
+| `ALLSOURCE_CLIENT_ID` | the `client_id` the key was registered with |
+| `ALLSOURCE_TENANT_ID` | the tenant the key is registered on |
+| `ALLSOURCE_CLIENT_KID` | the kid returned at registration |
+| `ALLSOURCE_ASSERTION_AUDIENCE` | optional, default `https://api.all-source.xyz` |
+
+```json
+{
+  "mcpServers": {
+    "allsource-remote": {
+      "command": "allsource-mcp",
+      "args": ["--remote", "https://api.all-source.xyz"],
+      "env": {
+        "ALLSOURCE_CLIENT_SIGNING_KEY": "/path/to/client-key.pem",
+        "ALLSOURCE_CLIENT_ID": "my-mcp-reader",
+        "ALLSOURCE_TENANT_ID": "my-tenant",
+        "ALLSOURCE_CLIENT_KID": "<kid from registration>"
+      }
+    }
+  }
+}
+```
+
+Register a separate key for the MCP server with read scopes only
+(`events:read`, `projections:read`). Key generation and registration:
+[Registered client keys](REGISTERED_CLIENT_KEYS.md).
+
+**API key.** Set `ALLSOURCE_API_KEY` (or pass `--api-key`); it is sent as
+`Authorization: Bearer`. A dashboard `ask_` key works. A managed onboarding key with
+no registration record stops working at the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET`
+(`401`, reason `legacy_key_sunset`).
+
 ### Common data directory locations
 
 | Application | Data directory |

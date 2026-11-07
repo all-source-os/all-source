@@ -27,19 +27,52 @@ The [companion post on connection paths](/blog/connection-path) goes into the de
 
 ## Authentication
 
-Every request carries an API key. The SDK defaults to `Authorization: Bearer`; the legacy `X-API-Key` header also works. Pick one and stick with it:
+Every request carries a bearer in `Authorization: Bearer`. The hosted gateway reads only that header. Core and the Query Service also accept the legacy `X-API-Key` header from callers inside your network:
 
 ```bash
-# Preferred
+# Gateway and internal callers
 curl -H "Authorization: Bearer ask_your_key_here" \
   https://your-allsource/health
 
-# Legacy but accepted
+# Internal callers only (Core, Query Service); the gateway ignores it
 curl -H "X-API-Key: ask_your_key_here" \
   https://your-allsource/health
 ```
 
 Keys look like `ask_` followed by a 32-character token. You provision them by setting `ALLSOURCE_BOOTSTRAP_API_KEY` on Core's first boot — the key persists in Core's system WAL and is replayed automatically on restart.
+
+### Registered client keys (signed assertions)
+
+A long-running service can skip the stored bearer. It keeps a P-256 private key, a platform operator registers the public half on the tenant (`POST /api/v1/admin/tenants/:id/client-keys`, which returns the `kid`), and the service signs a short-lived ES256 JWT for its requests to the gateway:
+
+- header: `{"alg": "ES256", "typ": "JWT", "kid": "<kid>"}`, where the kid is the RFC 7638 thumbprint of the public key
+- claims: `iss` = your registered `client_id`, `sub` = your tenant id, `aud` = `"https://api.all-source.xyz"` (one string, not an array), `iat` = now, `exp` at most 60 seconds after `iat`, `jti` = a unique id
+- signature: ES256 in JOSE form (r || s), which JWT libraries produce
+
+Minting one in Python with PyJWT:
+
+```python
+import time, uuid
+import jwt  # pip install "pyjwt[crypto]"
+
+now = int(time.time())
+token = jwt.encode(
+    {
+        "iss": "my-service",
+        "sub": "my-tenant",
+        "aud": "https://api.all-source.xyz",
+        "iat": now,
+        "exp": now + 60,
+        "jti": str(uuid.uuid4()),
+    },
+    open("client-key.pem").read(),
+    algorithm="ES256",
+    headers={"kid": "<kid>", "typ": "JWT"},
+)
+# Authorization: Bearer <token>
+```
+
+Role and scopes come from the registration, not from the token. `jti` is logged for audit and not checked for reuse, so you can cache a token and reuse it until shortly before `exp`. The gateway allows 30 seconds of clock skew. The Rust, TypeScript, Python and Go SDKs do all of this for you. Key generation, kid computation and rotation are in the [registered client keys guide](https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md).
 
 ## Ingesting events
 
@@ -280,16 +313,22 @@ All endpoints return standard HTTP status codes:
 
 - `200`/`201` — success
 - `400` — malformed request (bad JSON, missing field)
-- `401` — missing or invalid API key
+- `401` — missing or invalid credential; on the gateway the `reason` field names the failed check (`asserted_signature`, `asserted_audience`, `asserted_skew`, `asserted_expired`, `asserted_unregistered`, `asserted_revoked`, or `legacy_key_sunset` for an old onboarding key that was never registered, used after the sunset date)
 - `403` — key is valid but lacks permission for this operation
 - `404` — entity or view row not found (a view row answers `{"error": "not_found", "ready": <bool>}`)
 - `429` — rate limit (only via Query Service — Core has no rate limiter)
 - `5xx` — treat as retryable with backoff
 
-Error bodies follow a consistent shape:
+Core and the Query Service nest the error:
 
 ```json
 {"error": {"message": "description", "code": "optional-machine-code"}}
+```
+
+Gateway authentication refusals are flat:
+
+```json
+{"error": "unauthorized", "reason": "legacy_key_sunset", "message": "This API key predates registered keys and stopped working on <date>. Register a client key or create a dashboard key."}
 ```
 
 ## Performance patterns

@@ -10,11 +10,71 @@ go get github.com/all-source-os/allsource-go
 
 ## Authentication
 
-AllSource uses API keys. Get one from your dashboard at [all-source.xyz](https://all-source.xyz) (Settings → API Keys) or mint one via `POST /api/v1/auth/api-keys`. The SDK sends it in the `X-API-Key` header.
+### API key
+
+Get a key from your dashboard at [all-source.xyz](https://all-source.xyz) (Settings → API Keys) or mint one via `POST /api/v1/auth/api-keys`. The SDK sends it on every request in both `Authorization: Bearer <key>` (read by the gateway) and `X-API-Key` (read first by the Query Service).
 
 ```go
 client := allsource.New(os.Getenv("ALLSOURCE_API_KEY"), "https://api.all-source.xyz")
 ```
+
+### Registered client key (ES256)
+
+Registering a key, computing its kid and rotating it: [the registered client keys guide](https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md).
+
+A service can instead sign a short-lived ES256 assertion with a P-256 private
+key whose public half is registered on the tenant. Registration is done by an
+AllSource operator, not by the tenant: see
+[`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md)
+and the design in
+[`docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md`](../../docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+Role and scopes come from the registration, not the token.
+
+```go
+pemKey, err := os.ReadFile("client-key.pem") // PKCS#8 PEM, P-256
+if err != nil {
+	log.Fatal(err)
+}
+signer, err := allsource.NewES256AssertionProvider(
+	pemKey,
+	"my-service",                       // client id, sent as iss
+	"my-tenant",                        // tenant id, sent as sub
+	os.Getenv("ALLSOURCE_CLIENT_KID"),  // RFC 7638 thumbprint of the registered public key
+	allsource.DefaultAssertionAudience, // must equal the gateway's ALLSOURCE_ASSERTION_AUDIENCE
+)
+if err != nil {
+	log.Fatal(err) // bad key or missing argument
+}
+client := allsource.New("", "https://api.all-source.xyz", allsource.WithCredentialProvider(signer))
+```
+
+Each assertion lives 60 seconds and is reused until 15 seconds before it
+expires. The provider is asked on every request attempt, retries included, so
+a retry never carries an expired token. On this path the SDK sends only
+`Authorization: Bearer <assertion>` and no `X-API-Key`: only the gateway
+verifies assertions. `allsource.JWKThumbprint(&key.PublicKey)` computes the
+`kid` from a public key.
+
+Any `CredentialProvider` works, for example a token fetched from your own
+secret store:
+
+```go
+client := allsource.New("", baseURL, allsource.WithCredentialProvider(
+	allsource.CredentialProviderFunc(func(ctx context.Context) (string, error) {
+		return tokens.Current(ctx)
+	}),
+))
+```
+
+A provider error fails the request with a `*allsource.CredentialError` before
+anything is sent, and is not retried.
+
+### Legacy key sunset
+
+When the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` date has passed, a managed
+onboarding key with no registration record is refused with
+`401 legacy_key_sunset` (`apiErr.IsLegacyKeySunset()`). Dashboard keys keep
+working. Register a client key, or create a dashboard key.
 
 ## Quickstart
 
@@ -135,7 +195,9 @@ err := client.Sync(ctx, "ops_status", allsource.SyncOptions{Checkpoint: stored, 
 
 ## Error Handling
 
-API errors are returned as `*allsource.APIError` with helper methods:
+API errors are returned as `*allsource.APIError` with helper methods.
+`Reason` carries the gateway's cause for an auth denial (for example
+`legacy_key_sunset`, `asserted_expired`, `asserted_unregistered`):
 
 ```go
 _, err := client.Ingest(ctx, "user.signup", "user-123", data)
@@ -143,6 +205,10 @@ if err != nil {
 	var apiErr *allsource.APIError
 	if errors.As(err, &apiErr) {
 		switch {
+		case apiErr.IsLegacyKeySunset():
+			log.Fatal("Key retired: register a client key or create a dashboard key")
+		case apiErr.IsAssertionDenied():
+			log.Fatalf("Client assertion refused: %s", apiErr.Reason)
 		case apiErr.IsUnauthorized():
 			log.Fatal("Invalid API key")
 		case apiErr.IsRateLimited():
@@ -175,5 +241,5 @@ result, err := client.Query(ctx, allsource.QueryOptions{
 
 ```go
 httpClient := &http.Client{Timeout: 60 * time.Second}
-client := allsource.NewWithHTTPClient("as_key", "https://api.all-source.xyz", httpClient)
+client := allsource.New("as_key", "https://api.all-source.xyz", allsource.WithHTTPClient(httpClient))
 ```

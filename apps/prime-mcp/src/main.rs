@@ -35,6 +35,7 @@ mod pr;
 mod profiling;
 mod projection_registry;
 mod protocol;
+mod remote_auth;
 mod report;
 mod sync;
 mod templates;
@@ -116,14 +117,41 @@ struct Cli {
     auto_inject_max_tokens: usize,
 
     /// Remote `AllSource` Core base URL to push `prime.*` events to.
-    /// When set with `--api-key`, spawns a background sync loop that ships
-    /// events to your tenant so the web panel's Memory tab can show them.
+    /// When set with `--api-key` or `--client-signing-key`, spawns a background
+    /// sync loop that ships events to your tenant so the web panel's Memory tab
+    /// can show them.
     #[arg(long, env = "PRIME_SYNC_TO")]
     sync_to: Option<String>,
 
-    /// Tenant API key for sync. Required if `--sync-to` is set.
-    #[arg(long, env = "PRIME_API_KEY")]
+    /// Tenant API key for sync. `--sync-to` needs this or `--client-signing-key`.
+    #[arg(long, env = "PRIME_API_KEY", hide_env_values = true)]
     api_key: Option<String>,
+
+    /// P-256 PKCS#8 private key (PEM, or a path to one) registered as a client
+    /// key on the tenant. When set, sync requests carry a fresh 60-second ES256
+    /// assertion instead of `--api-key`.
+    #[arg(long, env = "ALLSOURCE_CLIENT_SIGNING_KEY", hide_env_values = true)]
+    client_signing_key: Option<String>,
+
+    /// Registered client id; the assertion's `iss`.
+    #[arg(long, env = "ALLSOURCE_CLIENT_ID")]
+    client_id: Option<String>,
+
+    /// Tenant the client key is registered on; the assertion's `sub`.
+    #[arg(long, env = "ALLSOURCE_TENANT_ID")]
+    client_tenant_id: Option<String>,
+
+    /// The registered key's kid (its RFC 7638 thumbprint).
+    #[arg(long, env = "ALLSOURCE_CLIENT_KID")]
+    client_kid: Option<String>,
+
+    /// Audience the gateway expects in every assertion.
+    #[arg(
+        long,
+        env = "ALLSOURCE_ASSERTION_AUDIENCE",
+        default_value = DEFAULT_AUDIENCE
+    )]
+    assertion_audience: String,
 
     /// Sync flush interval in milliseconds; at least 1 (default: 1000ms).
     #[arg(
@@ -205,6 +233,46 @@ fn expand_home_path(raw: &Path) -> PathBuf {
         out = format!("{home}/{rest}");
     }
     PathBuf::from(out)
+}
+
+const DEFAULT_AUDIENCE: &str = "https://api.all-source.xyz";
+
+const SYNC_FLAGS_TOGETHER: &str = "--sync-to needs a credential, and a credential needs \
+     --sync-to: pass --api-key, or --client-signing-key with --client-id, \
+     --client-tenant-id and --client-kid (or neither). Get a tenant API key at \
+     https://www.all-source.xyz/connect; client keys are registered by an operator \
+     (docs/runbooks/CLIENT_KEY_ROTATION.md).";
+
+/// A DXT launcher passes every `${user_config.*}` field, cleared ones as `""`.
+fn nonblank(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|s| !s.is_empty())
+}
+
+/// The sync credential: a registered client key when its signing key is set,
+/// otherwise the tenant API key. The `ALLSOURCE_CLIENT_*` variables are shared
+/// with allsource-mcp, so they are read only when `--sync-to` is set.
+fn sync_credential(cli: &Cli) -> Result<Option<remote_auth::RemoteAuth>> {
+    let signing_key =
+        nonblank(cli.sync_to.as_deref()).and_then(|_| nonblank(cli.client_signing_key.as_deref()));
+    if let Some(signing_key) = signing_key {
+        let signing_key = if signing_key.contains("-----BEGIN") {
+            signing_key.to_string()
+        } else {
+            expand_home_path(Path::new(signing_key))
+                .to_string_lossy()
+                .into_owned()
+        };
+        return remote_auth::assertion(&remote_auth::AssertionSettings {
+            signing_key: &signing_key,
+            client_id: nonblank(cli.client_id.as_deref()),
+            tenant_id: nonblank(cli.client_tenant_id.as_deref()),
+            kid: nonblank(cli.client_kid.as_deref()),
+            audience: nonblank(Some(cli.assertion_audience.as_str())).unwrap_or(DEFAULT_AUDIENCE),
+        })
+        .map(Some);
+    }
+    let api_key = nonblank(cli.api_key.as_deref());
+    Ok(api_key.map(|key| remote_auth::RemoteAuth::ApiKey(key.to_string())))
 }
 
 #[tokio::main]
@@ -504,25 +572,16 @@ async fn main() -> Result<()> {
             }
         }
 
-        // Opt-in: with --sync-to + --api-key, push the freshly-extracted code
-        // graph to the hosted tenant Core, then exit. One-shot drain (not the
-        // forever loop the server modes spawn). Same trim-as-unset handling as
-        // the server path so a DXT-cleared `--sync-to ""` is treated as local.
-        let sync_to = cli
-            .sync_to
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        let api_key = cli
-            .api_key
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        match (sync_to, api_key) {
-            (Some(url), Some(key)) => {
+        // Opt-in: with --sync-to and a credential, push the freshly-extracted
+        // code graph to the hosted tenant Core, then exit. One-shot drain (not
+        // the forever loop the server modes spawn). Same trim-as-unset handling
+        // as the server path so a DXT-cleared `--sync-to ""` is treated as local.
+        let sync_to = nonblank(cli.sync_to.as_deref());
+        match (sync_to, sync_credential(&cli)?) {
+            (Some(url), Some(auth)) => {
                 let sync_config = sync::SyncConfig {
                     remote_url: url.to_string(),
-                    api_key: key.to_string(),
+                    auth,
                     interval: std::time::Duration::from_millis(cli.sync_interval_ms),
                 };
                 tracing::info!(remote_url = %url, "Hound: pushing code graph to hosted Core…");
@@ -530,16 +589,12 @@ async fn main() -> Result<()> {
                 tracing::info!(pushed, "Hound: sync complete");
                 println!("hound: synced {pushed} events to {url}");
             }
-            (Some(_), None) | (None, Some(_)) => {
-                anyhow::bail!(
-                    "--sync-to and --api-key must be supplied together (or neither). \
-                     Get a tenant API key at https://www.all-source.xyz/connect."
-                );
-            }
+            (Some(_), None) | (None, Some(_)) => anyhow::bail!(SYNC_FLAGS_TOGETHER),
             (None, None) => {
                 tracing::info!(
                     "Hound: local-only graph. Pass --sync-to https://api.all-source.xyz \
-                     and --api-key <tenant key> to push it to your hosted tenant graph."
+                     and --api-key <tenant key> (or a registered client key) to push it to \
+                     your hosted tenant graph."
                 );
             }
         }
@@ -583,27 +638,18 @@ async fn main() -> Result<()> {
         std::time::Duration::from_secs(30),
     ));
 
-    // Spawn the push-only sync loop when both --sync-to and --api-key are set.
-    // Mismatched flags are a user error worth surfacing rather than silently
-    // dropping sync.
+    // Spawn the push-only sync loop when --sync-to and a credential are both
+    // set. Mismatched flags are a user error worth surfacing rather than
+    // silently dropping sync.
     //
     // Treat blank strings as "not set". The Claude Desktop DXT manifest always
     // passes `--sync-to ${user_config.sync_to}` / `--api-key ${...}`, so a user
     // who clears the sync URL in the extension settings hands us `--sync-to ""`
     // rather than omitting the flag. Without this guard that empty string would
     // be taken as a real remote and every push would fail against `/api/v1/events`.
-    let sync_to = cli
-        .sync_to
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    let api_key = cli
-        .api_key
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    match (sync_to, api_key) {
-        (Some(url), Some(key)) => {
+    let sync_to = nonblank(cli.sync_to.as_deref());
+    match (sync_to, sync_credential(&cli)?) {
+        (Some(url), Some(auth)) => {
             tracing::info!(
                 remote_url = %url,
                 "Prime sync ENABLED — prime.* events will be shipped to your AllSource tenant \
@@ -614,10 +660,10 @@ async fn main() -> Result<()> {
                 remote_url: Some(url.to_string()),
             });
             // Give tool handlers (inbox_draft) a writer to the remote Core.
-            core_writer::set_core_writer(url, key);
+            core_writer::set_core_writer(url, auth.clone());
             let sync_config = sync::SyncConfig {
                 remote_url: url.to_string(),
-                api_key: key.to_string(),
+                auth: auth.clone(),
                 interval: std::time::Duration::from_millis(cli.sync_interval_ms),
             };
             let sync_prime = Arc::clone(&prime);
@@ -628,7 +674,7 @@ async fn main() -> Result<()> {
             // into the local graph as interaction nodes (P0 AI inbox).
             let email_config = email_ingester::EmailIngestConfig {
                 remote_url: url.to_string(),
-                api_key: key.to_string(),
+                auth,
                 interval: std::time::Duration::from_millis(cli.sync_interval_ms),
             };
             let email_prime = Arc::clone(&prime);
@@ -639,12 +685,7 @@ async fn main() -> Result<()> {
                 email_data_dir,
             ));
         }
-        (Some(_), None) | (None, Some(_)) => {
-            anyhow::bail!(
-                "--sync-to and --api-key must be supplied together (or neither). \
-                 Get a tenant API key at https://www.all-source.xyz/connect."
-            );
-        }
+        (Some(_), None) | (None, Some(_)) => anyhow::bail!(SYNC_FLAGS_TOGETHER),
         (None, None) => {
             tools::set_sync_status(tools::SyncStatus {
                 enabled: false,
@@ -656,7 +697,8 @@ async fn main() -> Result<()> {
             tracing::warn!(
                 "Prime running LOCAL-ONLY — writes will NOT appear in your AllSource dashboard \
                  (all-source.xyz/dashboard/memory). Pass --sync-to https://api.all-source.xyz \
-                 and --api-key <your tenant key> to sync. Get a key at \
+                 and --api-key <your tenant key>, or a registered client key \
+                 (--client-signing-key), to sync. Get a key at \
                  https://www.all-source.xyz/connect. Call prime_stats to confirm sync state."
             );
         }

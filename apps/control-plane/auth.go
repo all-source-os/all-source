@@ -475,6 +475,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 						reason := denialReason(lookupErr)
 						if reason == denialUnregistered && authClient.legacy.configured() && !errors.Is(lookupErr, errStrayRevokedAPIKey) {
 							if authClient.legacy.serve(claims.TenantID) {
+								authClient.legacy.announce(c)
 								break
 							}
 							keys.record(claims.TenantID, reason, lookupErr)

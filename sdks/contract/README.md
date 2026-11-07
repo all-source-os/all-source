@@ -28,6 +28,22 @@ the fixture describes, and asserts that:
 5. given `response`, the SDK returned the typed result, `NotModified`, or the
    typed error the description names.
 
+## Authorization
+
+The fixtures do not pin a credential. The SDK's `Authorization: Bearer` value
+may be a static API key or an ES256 client assertion minted by a registered
+client key (see
+[CLIENT_KEY_ROTATION.md](../../docs/runbooks/CLIENT_KEY_ROTATION.md)); the
+gateway reads only `Authorization`. An SDK that mints assertions is checked
+against the interop pair in `sdks/rust/tests/fixtures/`
+(`es256_interop_test_key.pem`, `es256_interop_token.jwt`; client
+`longhand-control-plane`, tenant `asserted-tenant`, audience
+`https://api.all-source.xyz`, `iat` 1794009600), which the gateway's
+`asserted_keys_interop_test.go` also verifies. Its suite must verify the
+committed token with the key's public half and must mint the same header and
+claims, apart from `jti`, at that `iat`. The pair stays out of `fixtures/`,
+which holds only request/response files.
+
 ## File format
 
 One file per call. Every file has exactly this shape:

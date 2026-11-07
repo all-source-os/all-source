@@ -22,6 +22,7 @@ defmodule McpServerElixir.Application do
         # PubSub for local event broadcasting
         {Phoenix.PubSub, name: McpServerElixir.PubSub}
       ] ++
+        assertion_children() ++
         backend_children(core_mode) ++
         [
           # Conversation context manager for multi-turn queries
@@ -50,6 +51,17 @@ defmodule McpServerElixir.Application do
       ]
     else
       stdio_children()
+    end
+  end
+
+  # Before the backend: the WebSocket client authenticates as it starts. A
+  # signer that refuses its settings fails the boot. The child starts with no
+  # args and reads its settings itself, so a start-error report never prints
+  # the signing key.
+  defp assertion_children do
+    case Application.get_env(:mcp_server_elixir, :client_assertion) do
+      nil -> []
+      _settings -> [{McpServerElixir.Infrastructure.ClientAssertion, []}]
     end
   end
 

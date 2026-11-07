@@ -129,6 +129,28 @@ pub struct InitArgs {
     /// API key for authenticating with AllSource
     #[arg(long)]
     pub api_key: Option<String>,
+
+    /// Path to the P-256 PKCS#8 private key registered as a client key on the
+    /// tenant. Requests then carry a fresh 60-second ES256 assertion instead of
+    /// --api-key.
+    #[arg(long, requires_all = ["remote", "client_id", "tenant_id", "client_kid"])]
+    pub signing_key: Option<String>,
+
+    /// Registered client id; the assertion's `iss`
+    #[arg(long)]
+    pub client_id: Option<String>,
+
+    /// Tenant the client key is registered on; the assertion's `sub`
+    #[arg(long)]
+    pub tenant_id: Option<String>,
+
+    /// The registered key's kid (its RFC 7638 thumbprint)
+    #[arg(long)]
+    pub client_kid: Option<String>,
+
+    /// Audience the gateway expects (default https://api.all-source.xyz)
+    #[arg(long)]
+    pub audience: Option<String>,
 }
 
 #[derive(clap::Args)]

@@ -382,7 +382,33 @@ MIX_ENV=prod mix release
 |---------------------|---------|-------------|
 | `ALLSOURCE_CORE_URL` | `http://localhost:3900` | Core event store URL |
 | `ALLSOURCE_CONTROL_URL` | `http://localhost:3901` | Control Plane URL (enables tenant tools) |
-| `MCP_READ_ONLY` | `false` | Disable all write operations |
+| `ALLSOURCE_READ_ONLY` | `false` | Disable all write operations |
+| `CORE_API_KEY` (or `ALLSOURCE_CORE_API_KEY`) | unset | Static key sent as `Authorization: Bearer <key>`. Ignored when `ALLSOURCE_CLIENT_SIGNING_KEY` is set |
+| `ALLSOURCE_CLIENT_SIGNING_KEY` | unset | P-256 PKCS#8 private key, inline PEM or a path to one, registered as a client key on the tenant. When set, every request carries a 60-second ES256 assertion instead of the static key |
+| `ALLSOURCE_CLIENT_ID` | required with a signing key | Registered client id; the assertion's `iss` |
+| `ALLSOURCE_TENANT_ID` | required with a signing key | Tenant the key is registered on; the assertion's `sub` |
+| `ALLSOURCE_CLIENT_KID` | required with a signing key | The registered key's kid, its RFC 7638 JWK thumbprint |
+| `ALLSOURCE_ASSERTION_AUDIENCE` | `https://api.all-source.xyz` | Must equal the gateway's `ALLSOURCE_ASSERTION_AUDIENCE` |
+
+### Client key authentication
+
+With `ALLSOURCE_CLIENT_SIGNING_KEY` set, the server signs an ES256 JWT for each
+request (header `alg: ES256`, `typ: JWT`, `kid`; claims `iss`, `sub`, `aud`,
+`iat`, `exp = iat + 60`, `jti`) and reuses it until 15 seconds before it
+expires. HTTP retries and WebSocket reconnects each ask for a current one. Only
+`Authorization` is sent; the static key is not.
+
+The server refuses to boot when `ALLSOURCE_CLIENT_ID`, `ALLSOURCE_TENANT_ID` or
+`ALLSOURCE_CLIENT_KID` is missing, when the key is not a P-256 PKCS#8 PEM, or
+when `ALLSOURCE_CLIENT_KID` is not the key's RFC 7638 thumbprint.
+
+An operator registers the public key on the tenant; tenants cannot register
+their own. The procedure is in
+[`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md).
+
+Once the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` passes, a managed onboarding
+key with no registration record is refused with `401` and reason
+`legacy_key_sunset`. Dashboard `ask_` keys keep working.
 
 ## Troubleshooting
 

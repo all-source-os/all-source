@@ -97,7 +97,8 @@ impl Workspace {
                         "mode = \"remote\" requires [sync] remote_url in config.toml".into(),
                     )
                 })?;
-                let client = HttpCoreClient::new(url).with_api_key(config.api_key());
+                let auth = config.remote_auth()?;
+                let client = HttpCoreClient::new(url).with_auth(auth.clone());
                 client.health().await?;
 
                 // Create an in-memory Core for local projection cache
@@ -138,13 +139,12 @@ impl Workspace {
                 // Spawn the WebSocket live-stream client so subscribers see
                 // events arrive in real time without HTTP polling.
                 let ws_url = derive_ws_url(url);
-                let api_key = config.api_key().map(|s| s.to_string());
                 let change_tx = backend
                     .remote_change_sender()
                     .expect("remote backend has a change_tx");
                 let local_for_task = Arc::clone(&local);
                 tokio::spawn(async move {
-                    super::remote_stream::run_ws_client(ws_url, api_key, local_for_task, change_tx)
+                    super::remote_stream::run_ws_client(ws_url, auth, local_for_task, change_tx)
                         .await;
                 });
 
@@ -205,7 +205,7 @@ fn derive_ws_url(http_url: &str) -> String {
 
 /// Create a new .chronis/ workspace in the given directory.
 pub fn init_workspace(path: &Path) -> Result<(), ChronError> {
-    init_workspace_inner(path, None, None)
+    init_workspace_inner(path, None)
 }
 
 /// Create a new .chronis/ workspace pre-configured for remote sync.
@@ -214,24 +214,33 @@ pub fn init_workspace_with_remote(
     remote_url: &str,
     api_key: Option<&str>,
 ) -> Result<(), ChronError> {
-    init_workspace_inner(path, Some(remote_url), api_key)
+    init_workspace_with_sync(
+        path,
+        super::config::SyncConfig {
+            remote_url: Some(remote_url.to_string()),
+            api_key: api_key.map(String::from),
+            ..Default::default()
+        },
+    )
+}
+
+/// Create a new .chronis/ workspace with the given `[sync]` section.
+pub fn init_workspace_with_sync(
+    path: &Path,
+    sync: super::config::SyncConfig,
+) -> Result<(), ChronError> {
+    init_workspace_inner(path, Some(sync))
 }
 
 fn init_workspace_inner(
     path: &Path,
-    remote_url: Option<&str>,
-    api_key: Option<&str>,
+    sync: Option<super::config::SyncConfig>,
 ) -> Result<(), ChronError> {
     let chronis_dir = path.join(CHRONIS_DIR);
     if chronis_dir.exists() {
         return Err(ChronError::WorkspaceExists(path.display().to_string()));
     }
     std::fs::create_dir_all(&chronis_dir)?;
-
-    let sync = remote_url.map(|url| super::config::SyncConfig {
-        remote_url: Some(url.to_string()),
-        api_key: api_key.map(String::from),
-    });
 
     let config = ChronisConfig {
         sync,
@@ -249,7 +258,7 @@ fn init_workspace_inner(
     std::fs::write(&gitignore_path, "wal/\nstorage/\nsync/\n")?;
 
     println!("Initialized chronis workspace in {}", chronis_dir.display());
-    if remote_url.is_some() {
+    if config.sync.as_ref().is_some_and(|s| s.remote_url.is_some()) {
         println!("Remote sync configured. Run `cn sync` to push/pull events.");
     }
     Ok(())

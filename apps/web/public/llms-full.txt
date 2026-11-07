@@ -161,6 +161,34 @@ Results are ordered by (timestamp, version), ascending by default. Pass
 ## Authentication
 All API calls (except onboard, health, billing/catalog and x402/routes) require:
   Authorization: Bearer <api_key>
+The gateway reads only the Authorization header; X-API-Key is ignored.
+
+Registered client keys (ES256 assertions):
+  A service keeps a P-256 private key. A platform operator registers the public
+  JWK on the tenant (POST /api/v1/admin/tenants/{id}/client-keys, operator
+  session only; tenants cannot self-register) and returns the kid. The service
+  then sends, per request:
+    Authorization: Bearer <ES256 JWT>
+  header: alg=ES256, typ=JWT, kid=<RFC 7638 thumbprint of the public key>
+  claims: iss=<client_id>, sub=<tenant id>, aud="https://api.all-source.xyz",
+          iat=now, exp<=iat+60s, jti=<unique id>
+  Role (serviceaccount) and scopes come from the registration, not the token.
+  The gateway allows 30 s clock skew. jti is logged, not checked for reuse.
+  SDKs: Es256AssertionProvider in Rust (feature es256-assertion), TypeScript
+  and Python (extra "assertion"); ES256AssertionProvider in Go. allsource-mcp --remote reads
+  ALLSOURCE_CLIENT_SIGNING_KEY, ALLSOURCE_CLIENT_ID, ALLSOURCE_TENANT_ID,
+  ALLSOURCE_CLIENT_KID.
+  Guide: https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md
+
+Refusals answer {"error", "reason", "message"}. Reasons: asserted_signature,
+asserted_audience, asserted_skew, asserted_expired, asserted_unregistered,
+asserted_revoked (401), asserted_unavailable (503, retry after 5 s), scope (403).
+
+Legacy key sunset: keys minted by the old onboarding flow that have no
+registration record are refused after the gateway's ALLSOURCE_LEGACY_KEY_SUNSET
+with 401 {"error":"unauthorized","reason":"legacy_key_sunset",...}. Before that
+date such responses carry Deprecation and Sunset headers. Dashboard keys keep
+working.
 
 ## Storage and durability
 AllSource Core IS the database — a purpose-built Rust event store, not a cache

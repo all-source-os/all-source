@@ -12,6 +12,9 @@
 # Defaults:
 #   CP_URL: https://api.all-source.xyz
 #   QS_URL: https://allsource-query.fly.dev
+#
+# Optional ES256 client-assertion leg (Test 4b): ALLSOURCE_CLIENT_ID,
+# ALLSOURCE_CLIENT_KID, ALLSOURCE_TENANT_ID and ALLSOURCE_CLIENT_ASSERTION_CMD.
 
 set -euo pipefail
 
@@ -105,6 +108,53 @@ if [ "$QUERY_STATUS" = "200" ]; then
 else
   fail "Event query → HTTP $QUERY_STATUS (expected 200)"
   echo "  Body: $QUERY_BODY"
+fi
+
+# Informational: before ALLSOURCE_LEGACY_KEY_SUNSET, a response served with a
+# managed key that has no registration record carries Deprecation and Sunset.
+LEGACY_HEADERS=$(curl -sS -o /dev/null -D - "$CP_URL/api/v1/events/query?event_type=billing.smoke_test&limit=1" \
+  -H "Authorization: Bearer $API_KEY" | tr -d '\r' | grep -iE '^(deprecation|sunset):' || true)
+if [ -n "$LEGACY_HEADERS" ]; then
+  echo "  i Onboarding key is served on the legacy path:"
+  while IFS= read -r header; do echo "      $header"; done <<< "$LEGACY_HEADERS"
+else
+  echo "  i No Deprecation/Sunset headers (key is registered, or no sunset is configured)"
+fi
+
+# --- Test 4b: ES256 client assertion (optional) ---
+# Runs when ALLSOURCE_CLIENT_ID, ALLSOURCE_CLIENT_KID and ALLSOURCE_TENANT_ID name
+# an operator-registered client key (docs/runbooks/CLIENT_KEY_ROTATION.md).
+# The repo ships no standalone minting CLI, so ALLSOURCE_CLIENT_ASSERTION_CMD must
+# be a command that prints one fresh assertion for that key, for example a small
+# program built on the Rust SDK's Es256AssertionProvider. Assertions live 60s,
+# so it is run here rather than read from a pre-minted variable.
+echo ""
+echo "--- Test 4b: Query events with an ES256 client assertion ---"
+if [ -z "${ALLSOURCE_CLIENT_ID:-}" ] || [ -z "${ALLSOURCE_CLIENT_KID:-}" ] || [ -z "${ALLSOURCE_TENANT_ID:-}" ]; then
+  echo "  - skipped: set ALLSOURCE_CLIENT_ID, ALLSOURCE_CLIENT_KID and ALLSOURCE_TENANT_ID to run it"
+elif [ -z "${ALLSOURCE_CLIENT_ASSERTION_CMD:-}" ]; then
+  echo "  - skipped: ALLSOURCE_CLIENT_* is set but no minting tool is available."
+  echo "    Set ALLSOURCE_CLIENT_ASSERTION_CMD to a command that prints a fresh ES256 assertion."
+else
+  ASSERTION=$(bash -c "$ALLSOURCE_CLIENT_ASSERTION_CMD" 2>/dev/null | tr -d '[:space:]' || true)
+  if [ -z "$ASSERTION" ]; then
+    fail "ALLSOURCE_CLIENT_ASSERTION_CMD printed no assertion"
+  else
+    ASSERTED_RESP=$(curl -sS -D - -w "\n%{http_code}" "$CP_URL/api/v1/events/query?limit=1" \
+      -H "Authorization: Bearer $ASSERTION")
+    ASSERTED_STATUS=$(echo "$ASSERTED_RESP" | tail -1)
+    if [ "$ASSERTED_STATUS" = "200" ]; then
+      pass "Assertion for client=$ALLSOURCE_CLIENT_ID tenant=$ALLSOURCE_TENANT_ID → 200"
+    else
+      fail "Assertion query → HTTP $ASSERTED_STATUS (expected 200)"
+      echo "  Body: $(echo "$ASSERTED_RESP" | sed '$d' | tail -1)"
+    fi
+    if echo "$ASSERTED_RESP" | tr -d '\r' | grep -qiE '^(deprecation|sunset):'; then
+      fail "Assertion response carries Deprecation/Sunset (registered keys must not)"
+    else
+      pass "Assertion response carries no Deprecation/Sunset headers"
+    fi
+  fi
 fi
 
 # --- Test 5: Billing status from Query Service ---

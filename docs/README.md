@@ -196,6 +196,7 @@ For DevOps and platform engineers.
 | [Quality Gates](./current/QUALITY_GATES.md) | CI/CD enforcement standards | ✅ |
 | [Performance Guide](./current/PERFORMANCE.md) | Optimization and tuning | ✅ |
 | [Docker Images](./docker-images.md) | Container configuration | ✅ |
+| [Registered client keys](./guides/REGISTERED_CLIENT_KEYS.md) | Generate a P-256 key, compute the kid, get it registered, configure each SDK and allsource-mcp, rotate, read refusals | ✅ |
 | [Troubleshooting](./guides/TROUBLESHOOTING.md) | Common issues and solutions | ✅ |
 | [Test Coverage Plan](./testing/control-plane-coverage-plan.md) | Control plane testing | ✅ |
 

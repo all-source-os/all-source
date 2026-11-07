@@ -3,14 +3,14 @@
 //! Prime runs on the user's laptop; the remote Core can't reach it. So sync is
 //! one-directional: a background task queries the local store for events with
 //! the `prime.` prefix that the remote hasn't seen yet, then `POST`s each
-//! event to `<remote_url>/api/v1/events` with the tenant API key as Bearer
-//! auth. The cursor (last-pushed event timestamp) is persisted to the data
+//! event to `<remote_url>/api/v1/events` with a Bearer credential: the tenant
+//! API key, or a fresh ES256 assertion from a registered client key. The cursor (last-pushed event timestamp) is persisted to the data
 //! directory so restarts resume from where they left off instead of replaying
 //! the whole history.
 //!
 //! The remote endpoint is the same one chronis uses (see
-//! `apps/chronis/src/infrastructure/http_core_client.rs`); the tenant is
-//! derived from the API key by the gateway.
+//! `apps/chronis/src/infrastructure/http_core_client.rs`); the gateway derives
+//! the tenant from the credential.
 
 use std::{
     path::{Path, PathBuf},
@@ -27,6 +27,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::remote_auth::RemoteAuth;
+
 const CURSOR_FILE: &str = ".prime_sync_cursor.json";
 const PRIME_EVENT_PREFIX: &str = "prime.";
 const BATCH_SIZE: usize = 200;
@@ -36,8 +38,8 @@ const BATCH_SIZE: usize = 200;
 pub struct SyncConfig {
     /// Base URL of the remote `AllSource` Core (e.g. `https://api.all-source.xyz`).
     pub remote_url: String,
-    /// Tenant API key. Sent as `Authorization: Bearer <key>`.
-    pub api_key: String,
+    /// Sent as `Authorization: Bearer <token>`, asked for on every push.
+    pub auth: RemoteAuth,
     /// How often to drain the queue. Default 1s.
     pub interval: Duration,
 }
@@ -104,7 +106,7 @@ pub async fn run_sync_loop(prime: Arc<Prime>, config: SyncConfig, data_dir: Path
     loop {
         ticker.tick().await;
 
-        match drain_once(&prime, &http, &base_url, &config.api_key, &mut cursor).await {
+        match drain_once(&prime, &http, &base_url, &config.auth, &mut cursor).await {
             Ok(pushed) if pushed > 0 => {
                 if let Err(e) = cursor.save(&cursor_path) {
                     tracing::warn!(error = %e, "failed to persist sync cursor");
@@ -134,7 +136,7 @@ pub async fn flush_all(prime: &Prime, config: &SyncConfig, data_dir: &Path) -> R
 
     let mut total = 0;
     loop {
-        let pushed = drain_once(prime, &http, &base_url, &config.api_key, &mut cursor).await?;
+        let pushed = drain_once(prime, &http, &base_url, &config.auth, &mut cursor).await?;
         if pushed == 0 {
             break;
         }
@@ -151,7 +153,7 @@ async fn drain_once(
     prime: &Prime,
     http: &reqwest::Client,
     base_url: &str,
-    api_key: &str,
+    auth: &RemoteAuth,
     cursor: &mut Cursor,
 ) -> Result<usize> {
     let mut query = Query::new()
@@ -184,7 +186,7 @@ async fn drain_once(
 
     let mut pushed = 0;
     for ev in &pending {
-        push_event(http, base_url, api_key, ev).await?;
+        push_event(http, base_url, auth, ev).await?;
         pushed += 1;
         cursor.last_pushed_at = Some(ev.timestamp);
     }
@@ -195,7 +197,7 @@ async fn drain_once(
 async fn push_event(
     http: &reqwest::Client,
     base_url: &str,
-    api_key: &str,
+    auth: &RemoteAuth,
     ev: &EventView,
 ) -> Result<()> {
     let url = format!("{base_url}/api/v1/events");
@@ -208,7 +210,7 @@ async fn push_event(
 
     let resp = http
         .post(&url)
-        .bearer_auth(api_key)
+        .bearer_auth(auth.bearer()?)
         .json(&body)
         .send()
         .await
@@ -294,7 +296,7 @@ mod tests {
 
         let config = SyncConfig {
             remote_url: server.uri(),
-            api_key: "test-key".to_string(),
+            auth: RemoteAuth::ApiKey("test-key".to_string()),
             interval: Duration::from_millis(10),
         };
 
@@ -317,5 +319,61 @@ mod tests {
             .filter(|r| std::str::from_utf8(&r.body).is_ok_and(|s| s.contains("EXTRACTED")))
             .count();
         assert_eq!(confidence_hits, 1);
+    }
+
+    #[tokio::test]
+    async fn a_registered_client_key_sends_only_an_es256_bearer() {
+        use wiremock::{
+            Mock, MockServer, ResponseTemplate,
+            matchers::{method, path},
+        };
+
+        use crate::remote_auth::{AssertionSettings, assertion};
+
+        // Shared with the Rust SDK and the gateway's asserted_keys_interop_test.go.
+        const INTEROP_TEST_KEY: &str =
+            include_str!("../../../sdks/rust/tests/fixtures/es256_interop_test_key.pem");
+
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/events"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let dir = tempdir().expect("tempdir");
+        let prime = Prime::open(dir.path()).await.expect("open prime");
+        prime
+            .add_node("file", serde_json::json!({ "path": "a.rs" }))
+            .await
+            .expect("add file");
+
+        let auth = assertion(&AssertionSettings {
+            signing_key: INTEROP_TEST_KEY,
+            client_id: Some("longhand-control-plane"),
+            tenant_id: Some("asserted-tenant"),
+            kid: Some("q_OqpJGBOYfCf5q-_NvXB8sEV7Zo9CN_EUHRewTCSSQ"),
+            audience: "https://api.all-source.xyz",
+        })
+        .expect("assertion credential");
+        let config = SyncConfig {
+            remote_url: server.uri(),
+            auth,
+            interval: Duration::from_millis(10),
+        };
+        assert!(flush_all(&prime, &config, dir.path()).await.expect("flush") > 0);
+
+        let requests = server.received_requests().await.expect("requests");
+        assert!(!requests.is_empty());
+        for request in &requests {
+            assert!(request.headers.get("x-api-key").is_none());
+            let value = request
+                .headers
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .expect("authorization header");
+            let token = value.strip_prefix("Bearer ").expect("bearer scheme");
+            assert_eq!(token.split('.').count(), 3, "a compact JWS: {token}");
+        }
     }
 }

@@ -530,7 +530,8 @@ async fn emit(events: &[GeoEvent], mode: EmitMode) -> Result<()> {
             }
             println!();
             println!(
-                "DRY RUN — nothing written. Re-run without --dry-run (needs ALLSOURCE_API_KEY)."
+                "DRY RUN — nothing written. Re-run without --dry-run (needs ALLSOURCE_API_KEY \
+                 or ALLSOURCE_CLIENT_SIGNING_KEY)."
             );
         }
         EmitMode::Live => {

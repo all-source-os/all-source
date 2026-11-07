@@ -218,6 +218,8 @@ Authorization: Bearer <api_key>
 
 Each agent receives a push notification when a peer emits an event. No polling, no message broker needed.
 
+A long-running agent can send a 60-second ES256 assertion signed with a registered client key in place of `<api_key>` (SDK `Es256AssertionProvider`, or `ALLSOURCE_CLIENT_*` for `allsource-mcp`). The SDKs sign a fresh one for each WebSocket connect. See [Registered client keys](../guides/REGISTERED_CLIENT_KEYS.md).
+
 ### State reconstruction at any point
 
 ```

@@ -33,8 +33,15 @@ func TestLegacySunsetServesUnregisteredKeysUntilTheInstant(t *testing.T) {
 
 			before := legacyServed(tenant)
 			for range 2 {
-				if got := lifecycleRequest(t, client, legacyOnboardingClaims(tenant), http.MethodGet, queryEventsPath, "").Code; got != http.StatusOK {
-					t.Fatalf("legacy key refused before the sunset: %d", got)
+				served := lifecycleRequest(t, client, legacyOnboardingClaims(tenant), http.MethodGet, queryEventsPath, "")
+				if served.Code != http.StatusOK {
+					t.Fatalf("legacy key refused before the sunset: %d", served.Code)
+				}
+				if got := served.Header().Get("Deprecation"); got != "@1794009600" {
+					t.Fatalf("Deprecation header %q, want @1794009600", got)
+				}
+				if got := served.Header().Get("Sunset"); got != "Mon, 07 Dec 2026 00:00:00 GMT" {
+					t.Fatalf("Sunset header %q", got)
 				}
 			}
 			if got := legacyServed(tenant) - before; got != 2 {
@@ -50,6 +57,9 @@ func TestLegacySunsetServesUnregisteredKeysUntilTheInstant(t *testing.T) {
 			if recorder.Code != http.StatusUnauthorized || body["error"] != "unauthorized" || body["reason"] != "legacy_key_sunset" ||
 				body["message"] != "This API key predates registered keys and stopped working on 2026-12-07. Register a client key or create a dashboard key." {
 				t.Fatalf("after the sunset: %d %v", recorder.Code, body)
+			}
+			if recorder.Header().Get("Deprecation") != "" || recorder.Header().Get("Sunset") != "" {
+				t.Fatalf("refusal carried deprecation headers: %v", recorder.Header())
 			}
 		})
 	}
@@ -83,6 +93,21 @@ func TestLegacySunsetNeverServesALegacyKeyATenantRevoked(t *testing.T) {
 		if served := legacyServed("proof-tenant") - before; served != 0 {
 			t.Fatalf("%s: a revoked legacy key was counted as served by the sunset", mode)
 		}
+	}
+}
+
+func TestLegacySunsetLeavesOtherResponsesUnmarked(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tenant := "unmarked-tenant"
+	core, _ := keyAuthorityCore(t, http.StatusOK, emptyKeyPage(tenant))
+	client := NewAuthClient("synthetic-secret", core.URL)
+	client.SetKeyAuthorityMode(keyAuthorityShadow)
+	recorder := lifecycleRequest(t, client, legacyOnboardingClaims(tenant), http.MethodGet, queryEventsPath, "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("legacy key without a sunset got %d", recorder.Code)
+	}
+	if recorder.Header().Get("Deprecation") != "" || recorder.Header().Get("Sunset") != "" {
+		t.Fatalf("no sunset configured, yet headers were set: %v", recorder.Header())
 	}
 }
 

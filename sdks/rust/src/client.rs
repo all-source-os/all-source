@@ -443,6 +443,11 @@ impl HttpTransport {
 /// For co-located services where you control both sides and don't need those
 /// gateway features, prefer [`CoreClient`] — one hop, no cache layer.
 ///
+/// The hosted gateway (`https://api.all-source.xyz`) also accepts a registered
+/// client key: build with [`QueryClient::with_config_and_credential_provider`]
+/// and an `Es256AssertionProvider` (feature `es256-assertion`) to send a fresh
+/// ES256 assertion instead of an API key.
+///
 /// Cloning is cheap; the underlying `reqwest::Client` and its connection pool
 /// are shared via `Arc`.
 #[derive(Debug, Clone)]
@@ -774,6 +779,10 @@ impl QueryClient {
 /// For multi-tenant / external / billing-gated traffic, use [`QueryClient`]
 /// instead — that goes through the Query Service which owns rate limiting
 /// and quota enforcement.
+///
+/// Pointed at the hosted gateway instead (as an ingest client), it can sign
+/// each request with a registered client key: see
+/// [`CoreClient::with_config_and_credential_provider`].
 ///
 /// Cloning is cheap; the underlying `reqwest::Client` and its connection pool
 /// are shared via `Arc`. Constructing a fresh `CoreClient` per request is an

@@ -7,12 +7,16 @@ against AllSource Core and sync `chronis` task events into a shared team workspa
 
 ## Overview
 
-AllSource issues two kinds of API credentials:
+AllSource accepts three kinds of credentials:
 
 | Credential | Format | Issued by | Used by |
 |---|---|---|---|
 | **CP JWT** | `eyJ...` (signed JWT) | Control Plane at login | Dashboard browser sessions |
 | **Scoped API key** | signed bearer token | Dashboard API Keys | `chronis` CLI, AI agents, automation scripts |
+| **Registered client key** | P-256 keypair; the client signs a 60 s ES256 assertion per request | the client generates it; a platform operator registers the public key via `POST /api/v1/admin/tenants/:id/client-keys` | long-running services and agents, `allsource-mcp --remote` |
+
+A registered client key's role is always `serviceaccount` and its scopes come from
+the registration. Setup: [Registered client keys](../guides/REGISTERED_CLIENT_KEYS.md).
 
 Human team members receive a CP JWT on OAuth login. It contains identity and tenant claims only;
 it never embeds a long-lived API key. The dashboard proxies authenticated requests with the
@@ -136,6 +140,18 @@ agent's `.chronis/config.toml` with a new key provisioned from the dashboard.
 2. Update `.chronis/config.toml` on the agent with the new key
 3. Verify the agent syncs successfully
 4. Revoke the old key from the dashboard
+
+A registered client key rotates differently: the operator registers the new public
+key, the agent switches, and the operator revokes the old kid. See
+[CLIENT_KEY_ROTATION.md](../runbooks/CLIENT_KEY_ROTATION.md).
+
+### Legacy onboarding keys
+
+Keys minted by the old onboarding flow that have no registration record stop working
+at the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` and get `401` with reason
+`legacy_key_sunset`. Dashboard keys created as above are not affected. An agent
+holding an old onboarding key should move to a dashboard key or a registered client
+key before that date.
 
 ---
 

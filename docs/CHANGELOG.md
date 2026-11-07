@@ -4,6 +4,30 @@ All notable changes to AllSource Chronos are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Registered ES256 client keys** — a tenant client keeps a P-256 private key,
+  an operator registers the public half
+  (`POST/GET /api/v1/admin/tenants/:id/client-keys`,
+  `DELETE /api/v1/admin/tenants/:id/client-keys/:kid`), and each request carries a
+  60-second ES256 assertion (`kid` = RFC 7638 thumbprint, `iss` = `client_id`,
+  `sub` = tenant, `aud` = `ALLSOURCE_ASSERTION_AUDIENCE`). Role and scopes come from
+  the registration. The gateway verifies assertions without a Core round-trip per
+  request.
+- **Client signers in every SDK** — Rust (`Es256AssertionProvider`, feature
+  `es256-assertion`), TypeScript, Python and Go providers mint the assertion and
+  are asked for a bearer on every request attempt. On that path only
+  `Authorization` is sent. `allsource-mcp --remote` reads `ALLSOURCE_CLIENT_*`.
+- **Legacy key sunset** — `ALLSOURCE_LEGACY_KEY_SUNSET` (RFC 3339) on the gateway
+  and the Query Service. Managed onboarding keys with no registration record are
+  served with `Deprecation` and `Sunset` headers until the instant and refused
+  afterwards with `401` reason `legacy_key_sunset`. Dashboard keys are not
+  affected.
+
+Guide: [Registered client keys](guides/REGISTERED_CLIENT_KEYS.md). Operator
+procedure: [CLIENT_KEY_ROTATION.md](runbooks/CLIENT_KEY_ROTATION.md). Decision:
+[2026-11-07](decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+
 ## [0.20.1] - 2026-04-30
 
 ### Fixed

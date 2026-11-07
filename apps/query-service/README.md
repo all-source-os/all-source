@@ -119,6 +119,22 @@ The service runs on **http://localhost:3902**
 - `GET /api/health` - Health check
 - `GET /api/metrics` - Runtime metrics
 
+## Authentication and the legacy key sunset
+
+Hosted tenant clients reach this service through the gateway at
+`https://api.all-source.xyz`, which verifies ES256 client assertions
+(`Authorization: Bearer <ES256 JWT>` signed with an operator-registered P-256
+key). Keys are registered by platform operators only:
+[`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md).
+
+`ALLSOURCE_LEGACY_KEY_SUNSET` (RFC 3339, read in `config/runtime.exs`) sets the
+instant after which a managed onboarding key with no registration record is
+refused with 401 and `"reason": "legacy_key_sunset"`. Before that instant such a
+key is still served, and the response carries `Deprecation` (RFC 9745) and
+`Sunset` (RFC 8594) headers. Keys with a registration record are unaffected.
+Unset changes nothing, and the variable has no effect while
+`ALLSOURCE_KEY_AUTHORITY_MODE=off`. Set the same value on the Control Plane.
+
 ## Development
 
 ```bash

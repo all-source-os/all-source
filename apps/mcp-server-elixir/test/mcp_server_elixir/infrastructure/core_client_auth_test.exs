@@ -16,18 +16,25 @@ defmodule McpServerElixir.Infrastructure.CoreClientAuthTest do
   """
   use ExUnit.Case, async: false
 
+  alias McpServerElixir.Infrastructure.ClientAssertion
   alias McpServerElixir.Infrastructure.CoreClient
+  alias McpServerElixir.Infrastructure.CoreCredentials
   alias McpServerElixir.Infrastructure.CoreWebSocketClient
+
+  @fixtures Path.expand("../../../../../sdks/rust/tests/fixtures", __DIR__)
 
   setup do
     original_url = Application.get_env(:mcp_server_elixir, :core_url)
     original_key = Application.get_env(:mcp_server_elixir, :core_api_key)
+    original_assertion = Application.get_env(:mcp_server_elixir, :client_assertion)
 
     on_exit(fn ->
       restore(:core_url, original_url)
       restore(:core_api_key, original_key)
+      restore(:client_assertion, original_assertion)
     end)
 
+    Application.delete_env(:mcp_server_elixir, :client_assertion)
     :ok
   end
 
@@ -42,17 +49,10 @@ defmodule McpServerElixir.Infrastructure.CoreClientAuthTest do
     end)
   end
 
+  # What CoreCredentials puts on a request as it passes through the middleware.
   defp auth_header do
-    Enum.find_value(CoreClient.__middleware__(), fn
-      {Tesla.Middleware.Headers, :call, [headers]} ->
-        Enum.find_value(headers, fn
-          {"authorization", value} -> value
-          _ -> nil
-        end)
-
-      _ ->
-        nil
-    end)
+    {:ok, env} = CoreCredentials.call(%Tesla.Env{}, [], [])
+    Tesla.get_header(env, "authorization")
   end
 
   describe "core_url resolution (reported as build-time-frozen; pinned here)" do
@@ -103,6 +103,60 @@ defmodule McpServerElixir.Infrastructure.CoreClientAuthTest do
 
       Application.put_env(:mcp_server_elixir, :core_api_key, "key-two")
       assert auth_header() == "Bearer key-two"
+    end
+
+    test "the credential is applied inside Retry, so every attempt asks for it again" do
+      stack = Enum.map(CoreClient.__middleware__(), fn {module, _fun, _args} -> module end)
+      refute Tesla.Middleware.Headers in stack
+
+      retry = Enum.find_index(stack, &(&1 == Tesla.Middleware.Retry))
+      credentials = Enum.find_index(stack, &(&1 == CoreCredentials))
+      assert retry && credentials && credentials > retry
+    end
+  end
+
+  describe "ES256 client assertion (ALLSOURCE_CLIENT_SIGNING_KEY set)" do
+    setup do
+      settings = [
+        signing_key: Path.join(@fixtures, "es256_interop_test_key.pem"),
+        client_id: "longhand-control-plane",
+        tenant_id: "asserted-tenant",
+        kid: "q_OqpJGBOYfCf5q-_NvXB8sEV7Zo9CN_EUHRewTCSSQ",
+        audience: "https://api.all-source.xyz"
+      ]
+
+      start_supervised!({ClientAssertion, settings})
+      Application.put_env(:mcp_server_elixir, :client_assertion, settings)
+      Application.put_env(:mcp_server_elixir, :core_api_key, "as_live_static")
+      :ok
+    end
+
+    test "HTTP sends the assertion and ignores the static key" do
+      "Bearer " <> token = auth_header()
+      assert [_, _, _] = String.split(token, ".")
+      refute token =~ "as_live_static"
+
+      [header | _] = String.split(token, ".")
+      decoded = header |> Base.url_decode64!(padding: false) |> Jason.decode!()
+      assert decoded["kid"] == "q_OqpJGBOYfCf5q-_NvXB8sEV7Zo9CN_EUHRewTCSSQ"
+      assert decoded["alg"] == "ES256"
+      assert CoreClient.auth_headers() == [{"authorization", "Bearer " <> token}]
+    end
+
+    test "the WebSocket sends the same cached assertion" do
+      "Bearer " <> token = auth_header()
+      assert CoreWebSocketClient.build_auth_headers() == [{"Authorization", "Bearer " <> token}]
+    end
+
+    test "a reconnect replaces the Authorization header and keeps the others" do
+      conn = %WebSockex.Conn{
+        extra_headers: [{"Authorization", "Bearer stale"}, {"x-trace", "1"}]
+      }
+
+      refreshed = CoreWebSocketClient.refresh_auth(conn)
+      assert {"x-trace", "1"} in refreshed.extra_headers
+      assert [{"Authorization", "Bearer " <> token}] = refreshed.extra_headers -- [{"x-trace", "1"}]
+      refute token == "stale"
     end
   end
 

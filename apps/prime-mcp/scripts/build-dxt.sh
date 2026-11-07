@@ -123,7 +123,11 @@ cat > "$stage/manifest.json" <<MANIFEST
       ],
       "env": {
         "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model",
-        "PRIME_API_KEY": "\${user_config.api_key}"
+        "PRIME_API_KEY": "\${user_config.api_key}",
+        "ALLSOURCE_CLIENT_SIGNING_KEY": "\${user_config.client_signing_key}",
+        "ALLSOURCE_CLIENT_ID": "\${user_config.client_id}",
+        "ALLSOURCE_TENANT_ID": "\${user_config.client_tenant_id}",
+        "ALLSOURCE_CLIENT_KID": "\${user_config.client_kid}"
       },
       "platform_overrides": {
         "linux": {
@@ -135,7 +139,11 @@ cat > "$stage/manifest.json" <<MANIFEST
           ],
           "env": {
             "PRIME_EMBED_MODEL_DIR": "\${__dirname}/server/model",
-            "PRIME_API_KEY": "\${user_config.api_key}"
+            "PRIME_API_KEY": "\${user_config.api_key}",
+            "ALLSOURCE_CLIENT_SIGNING_KEY": "\${user_config.client_signing_key}",
+            "ALLSOURCE_CLIENT_ID": "\${user_config.client_id}",
+            "ALLSOURCE_TENANT_ID": "\${user_config.client_tenant_id}",
+            "ALLSOURCE_CLIENT_KID": "\${user_config.client_kid}"
           }
         }
       }
@@ -148,9 +156,33 @@ cat > "$stage/manifest.json" <<MANIFEST
     "api_key": {
       "type": "string",
       "title": "AllSource API Key",
-      "description": "Generate one at https://www.all-source.xyz/connect. The free tier is enough to get started.",
+      "description": "Generate one at https://www.all-source.xyz/connect. The free tier is enough to get started. Ignored when a client signing key is set below.",
       "sensitive": true,
       "required": true
+    },
+    "client_signing_key": {
+      "type": "file",
+      "title": "Client signing key (optional)",
+      "description": "P-256 PKCS#8 private key whose public half an AllSource operator registered on your tenant. When set, sync signs a fresh 60-second ES256 assertion per request and the API key is ignored. Needs the three client fields below.",
+      "required": false
+    },
+    "client_id": {
+      "type": "string",
+      "title": "Client id (with a client signing key)",
+      "description": "The client id the key was registered under.",
+      "required": false
+    },
+    "client_tenant_id": {
+      "type": "string",
+      "title": "Tenant id (with a client signing key)",
+      "description": "The tenant the client key is registered on.",
+      "required": false
+    },
+    "client_kid": {
+      "type": "string",
+      "title": "Key id (with a client signing key)",
+      "description": "The kid the operator returned at registration (the key's RFC 7638 thumbprint).",
+      "required": false
     },
     "data_dir": {
       "type": "directory",

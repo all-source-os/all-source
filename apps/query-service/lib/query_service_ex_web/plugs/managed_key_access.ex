@@ -38,10 +38,30 @@ defmodule QueryServiceExWeb.Plugs.ManagedKeyAccess do
 
   defp refused(conn, claims, reason, message) do
     cond do
-      ApiKeyAuthority.serve_refused?(claims, reason) -> {:ok, conn}
+      ApiKeyAuthority.serve_refused?(claims, reason) -> {:ok, announce_if_legacy(conn, reason)}
       ApiKeyAuthority.legacy_sunset_refusal?(reason) -> {:ok, legacy_sunset(conn)}
       true -> {:error, message}
     end
+  end
+
+  defp announce_if_legacy(conn, reason) do
+    if ApiKeyAuthority.legacy_served?(reason), do: announce_legacy_sunset(conn), else: conn
+  end
+
+  # The day registered ES256 client keys replaced unregistered managed keys
+  # (docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+  @legacy_deprecated_at ~U[2026-11-07 00:00:00Z]
+
+  @doc """
+  Marks a response served with an unregistered key before the sunset:
+  Deprecation per RFC 9745 and Sunset per RFC 8594, matching the gateway.
+  """
+  def announce_legacy_sunset(conn) do
+    sunset = ApiKeyAuthority.legacy_sunset() |> DateTime.shift_zone!("Etc/UTC")
+
+    conn
+    |> put_resp_header("deprecation", "@#{DateTime.to_unix(@legacy_deprecated_at)}")
+    |> put_resp_header("sunset", Calendar.strftime(sunset, "%a, %d %b %Y %H:%M:%S GMT"))
   end
 
   @doc "The 401 an unregistered key gets once ALLSOURCE_LEGACY_KEY_SUNSET has passed."
@@ -58,8 +78,11 @@ defmodule QueryServiceExWeb.Plugs.ManagedKeyAccess do
     |> halt()
   end
 
-  def key(conn, %{"authority" => "unverified"} = key),
-    do: conn |> assign(:api_key, key) |> guard_ingest()
+  def key(conn, %{"authority" => "unverified"} = key) do
+    conn = assign(conn, :api_key, key)
+    conn = if key["legacy_sunset"] == true, do: announce_legacy_sunset(conn), else: conn
+    guard_ingest(conn)
+  end
 
   def key(conn, key) do
     required = required_scope(conn.method, canonical_path(conn))

@@ -23,6 +23,9 @@ tokio.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
+aws-lc-rs = "1"
+base64 = "0.22"
+jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]

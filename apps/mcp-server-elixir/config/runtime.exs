@@ -22,6 +22,25 @@ if api_key = System.get_env("CORE_API_KEY") || System.get_env("ALLSOURCE_CORE_AP
   config :mcp_server_elixir, core_api_key: api_key
 end
 
+# A registered client signing key replaces the static key above: every request
+# then carries a 60-second ES256 assertion. ClientAssertion refuses missing
+# identity values, a key that is not P-256 PKCS#8, or a kid that is not the
+# key's RFC 7638 thumbprint, and the release does not boot.
+case System.get_env("ALLSOURCE_CLIENT_SIGNING_KEY") do
+  blank when blank in [nil, ""] ->
+    :ok
+
+  signing_key ->
+    config :mcp_server_elixir,
+      client_assertion: [
+        signing_key: signing_key,
+        client_id: System.get_env("ALLSOURCE_CLIENT_ID"),
+        tenant_id: System.get_env("ALLSOURCE_TENANT_ID"),
+        kid: System.get_env("ALLSOURCE_CLIENT_KID"),
+        audience: System.get_env("ALLSOURCE_ASSERTION_AUDIENCE", "https://api.all-source.xyz")
+      ]
+end
+
 # Core URL overrides (runtime)
 if core_url = System.get_env("CORE_URL") || System.get_env("ALLSOURCE_CORE_URL") do
   config :mcp_server_elixir, core_url: core_url

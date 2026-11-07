@@ -2,6 +2,7 @@ package allsource
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,9 @@ type APIError struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 	StatusCode int    `json:"status_code"`
+	// Reason is the gateway's machine-readable cause for an auth denial, such
+	// as "legacy_key_sunset" or "asserted_expired". Empty when the body has none.
+	Reason string `json:"reason,omitempty"`
 	// Detail, ExpectedVersion, CurrentVersion, Generation and Ready carry
 	// Core's structured error fields when the body has them.
 	Detail          string `json:"detail,omitempty"`
@@ -53,6 +57,21 @@ func (e *APIError) Error() string {
 
 // IsUnauthorized returns true if the error is a 401 Unauthorized.
 func (e *APIError) IsUnauthorized() bool { return e.StatusCode == 401 }
+
+// IsLegacyKeySunset returns true if the gateway refused an unregistered
+// managed key because its ALLSOURCE_LEGACY_KEY_SUNSET has passed. Register a
+// client key, or create a dashboard key.
+func (e *APIError) IsLegacyKeySunset() bool {
+	return e.StatusCode == 401 && e.Reason == "legacy_key_sunset"
+}
+
+// IsAssertionDenied returns true if the gateway refused an ES256 client
+// assertion; Reason names the check that failed (asserted_signature,
+// asserted_audience, asserted_skew, asserted_expired, asserted_unregistered,
+// asserted_revoked or asserted_unavailable). A corrupt registration history
+// is refused as history_invalid, a reason other credential kinds share, so
+// this returns false for it.
+func (e *APIError) IsAssertionDenied() bool { return strings.HasPrefix(e.Reason, "asserted_") }
 
 // IsForbidden returns true if the error is a 403 Forbidden.
 func (e *APIError) IsForbidden() bool { return e.StatusCode == 403 }

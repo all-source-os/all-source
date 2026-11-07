@@ -168,6 +168,15 @@ GET    /api/v1/users           List all users
 DELETE /api/v1/users/:id       Delete user
 ```
 
+### Client Keys (Platform Operators Only)
+```
+POST   /api/v1/admin/tenants/:id/client-keys        Register a public P-256 JWK
+GET    /api/v1/admin/tenants/:id/client-keys        List a tenant's client keys
+DELETE /api/v1/admin/tenants/:id/client-keys/:kid   Revoke a client key
+```
+
+These routes sit behind the admin middleware, which refuses every API credential, and require an operator session with the Admin role. Tenants cannot register their own keys. The POST body is `{client_id, jwk, scopes}`: `jwk` is the public half only (a JWK with `d` is refused), and the response returns the `kid`, the RFC 7638 thumbprint the client puts in its token header. A registered client then authenticates with `Authorization: Bearer <ES256 JWT>` (`iss` = client id, `sub` = tenant, `aud`, `iat`, `exp` at most 60s after `iat`, `jti`); role and scopes come from the registration, not the token. Procedure: [`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md).
+
 ---
 
 ## 🚀 Quick Start
@@ -244,6 +253,8 @@ CMD ["./control-plane"]
 | `ALLSOURCE_ADMISSION_MODE` | `shadow` | Per-tenant admission: `off`, `shadow` (count only, no response changes) or `enforce` |
 | `ALLSOURCE_ADMISSION_OVERRIDES` | `` | JSON object of per-tenant limit overrides; required (`{}` for none) when enforcing |
 | `ALLSOURCE_KEY_AUTHORITY_MODE` | `shadow` | Managed API-key authority: `off`, `shadow` (count and log would-be refusals in `control_plane_auth_denials_total{mode,reason,tenant}`, serve the request) or `enforce` (refuse; 503 when Core cannot answer). Enforce only once the shadow count is zero or every denied tenant has been reissued a registered key |
+| `ALLSOURCE_LEGACY_KEY_SUNSET` | `` | RFC 3339 instant. Before it, a managed onboarding key with no registration record is still served and its responses carry `Deprecation` (RFC 9745) and `Sunset` (RFC 8594) headers; from it on, that key is refused with 401 `reason: legacy_key_sunset`. Dashboard `ask_` keys and registered client keys are unaffected. Unset changes nothing. Has no effect while `ALLSOURCE_KEY_AUTHORITY_MODE=off` |
+| `ALLSOURCE_ASSERTION_AUDIENCE` | `https://api.all-source.xyz` | The `aud` an ES256 client assertion must carry |
 | `ALLSOURCE_METRICS_PROM_URL` | `https://api.fly.io/prometheus/allsource` | Prometheus API the admin client-health view reads |
 | `ALLSOURCE_METRICS_PROM_TOKEN` | `` | Read-only Fly token for that API; unset shows the client-health view as not configured |
 

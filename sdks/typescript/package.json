@@ -1,6 +1,6 @@
 {
   "name": "@allsourcedev/client",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "JavaScript/TypeScript client for the AllSource event store API",
   "license": "MIT",
   "main": "./dist/index.cjs",
@@ -16,8 +16,12 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "bun build src/index.ts --outfile dist/index.mjs --target node --format esm && bun build src/index.ts --outfile dist/index.cjs --target node --format cjs && bun run build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",

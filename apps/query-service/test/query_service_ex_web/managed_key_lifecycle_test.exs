@@ -646,6 +646,48 @@ defmodule QueryServiceExWeb.ManagedKeyLifecycleTest do
     end
   end
 
+  test "a legacy key served before the sunset carries Deprecation and Sunset headers" do
+    with_mode(:enforce)
+    with_sunset(~U[2099-12-07 00:00:00Z])
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      conn = request(plug, legacy_onboarding_key())
+      refute conn.halted, "#{inspect(plug)} refused before the sunset"
+      assert get_resp_header(conn, "deprecation") == ["@1794009600"], inspect(plug)
+      assert get_resp_header(conn, "sunset") == ["Mon, 07 Dec 2099 00:00:00 GMT"], inspect(plug)
+    end
+  end
+
+  test "responses outside the legacy path carry no sunset headers" do
+    with_mode(:shadow)
+    key = legacy_onboarding_key()
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      conn = request(plug, key)
+      refute conn.halted
+      assert get_resp_header(conn, "deprecation") == [], "#{inspect(plug)} without a sunset"
+      assert get_resp_header(conn, "sunset") == []
+    end
+
+    with_sunset(~U[2099-12-07 00:00:00Z])
+    created = create(%{"scopes" => ["events:read"]}) |> Map.fetch!(:resp_body) |> Jason.decode!()
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      conn = request(plug, created["key"])
+      refute conn.halted
+      assert get_resp_header(conn, "deprecation") == [], "#{inspect(plug)} registered key"
+      assert get_resp_header(conn, "sunset") == []
+    end
+
+    with_sunset(DateTime.add(DateTime.utc_now(), -60))
+
+    for plug <- [AuthPipeline, JwksAuth, JwtAuth, ApiKeyAuth] do
+      conn = request(plug, key)
+      assert conn.status == 401
+      assert get_resp_header(conn, "deprecation") == [], "#{inspect(plug)} refusal"
+    end
+  end
+
   test "after the legacy sunset an unregistered key gets the sunset refusal" do
     with_mode(:shadow)
     sunset = DateTime.add(DateTime.utc_now(), -60)

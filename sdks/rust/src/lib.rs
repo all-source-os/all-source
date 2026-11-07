@@ -50,6 +50,31 @@
 //! }
 //! ```
 //!
+//! ## Registered client keys
+//!
+//! Against the hosted gateway, a service can sign each request with a P-256 key
+//! that an operator registered on the tenant instead of sending a long-lived API
+//! key. Enable the `es256-assertion` feature and pass an `Es256AssertionProvider`
+//! to `with_config_and_credential_provider`; the client asks it for a fresh
+//! 60-second assertion on every request attempt and WebSocket connect. A runnable
+//! version is `examples/asserted_client.rs`.
+//!
+//! ```rust,ignore
+//! use allsource::{ClientConfig, Es256AssertionProvider, QueryClient};
+//!
+//! let provider = Es256AssertionProvider::from_pkcs8_pem(
+//!     &std::fs::read("client-key.pem")?,
+//!     "my-service",                 // client id: the assertion's iss
+//!     "my-tenant",                  // tenant: the assertion's sub
+//!     "registered-kid",             // RFC 7638 thumbprint returned at registration
+//!     "https://api.all-source.xyz", // the gateway's ALLSOURCE_ASSERTION_AUDIENCE
+//! )?;
+//! let qs = QueryClient::with_config_and_credential_provider(
+//!     ClientConfig::new("https://api.all-source.xyz", ""),
+//!     provider,
+//! )?;
+//! ```
+//!
 //! ## Event Folding
 //!
 //! ```rust,no_run

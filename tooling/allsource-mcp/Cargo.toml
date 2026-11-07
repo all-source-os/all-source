@@ -1,6 +1,6 @@
 [package]
 name = "allsource-mcp"
-version = "0.18.2"
+version = "0.19.0"
 edition = "2024"
 rust-version = "1.92"
 description = "Lightweight MCP server for local AllSource debugging (stdio transport)"
@@ -17,7 +17,7 @@ name = "allsource-mcp"
 path = "src/main.rs"
 
 [dependencies]
-allsource = { version = "0.28.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
+allsource = { version = "0.29.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
 allsource-core = { version = "0.28.0", path = "../../apps/core", default-features = false, features = ["embedded"] }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }

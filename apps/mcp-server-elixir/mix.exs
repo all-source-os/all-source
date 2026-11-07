@@ -60,7 +60,7 @@ defmodule McpServerElixir.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :crypto, :public_key],
       mod: {McpServerElixir.Application, []}
     ]
   end

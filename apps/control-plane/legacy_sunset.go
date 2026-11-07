@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +14,10 @@ import (
 )
 
 const legacyKeySunsetEnv = "ALLSOURCE_LEGACY_KEY_SUNSET"
+
+// legacyKeyDeprecatedAt is the day registered ES256 client keys replaced
+// unregistered managed keys (docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+var legacyKeyDeprecatedAt = time.Date(2026, 11, 7, 0, 0, 0, 0, time.UTC)
 
 var legacyKeyRequests = tenantMetrics.NewCounterVec(prometheus.CounterOpts{
 	Name: "control_plane_legacy_key_requests_total",
@@ -68,6 +74,13 @@ func (l *legacySunset) serve(tenant string) bool {
 	l.mu.Unlock()
 	log.Printf("legacy API key served: tenant=%s sunset=%s", tenant, l.at.Format(time.RFC3339)) //nolint:gosec // G706: tenant comes from a verified signature.
 	return true
+}
+
+// announce marks a response served with a legacy key: Deprecation per RFC 9745
+// and Sunset per RFC 8594, so a client can see the cut-off before it lands.
+func (l *legacySunset) announce(c *gin.Context) {
+	c.Header("Deprecation", "@"+strconv.FormatInt(legacyKeyDeprecatedAt.Unix(), 10))
+	c.Header("Sunset", l.at.UTC().Format(http.TimeFormat))
 }
 
 func (l *legacySunset) refusal() gin.H {

@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use allsource::{QueryClient, QueryEventsParams};
+use allsource::QueryEventsParams;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Duration, SecondsFormat, Utc};
 use geo_core::{
@@ -666,7 +666,8 @@ pub async fn run_live(
     markdown_out: Option<&std::path::Path>,
 ) -> Result<()> {
     let config = GeoConfig::from_env()?;
-    let client = QueryClient::new(config.api_url(), config.api_key())
+    let client = config
+        .query_client()
         .with_context(|| format!("could not build a gateway client for {}", config.api_url()))?;
 
     let params = QueryEventsParams::new()

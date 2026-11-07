@@ -113,11 +113,9 @@ impl GeoEmitter {
 
     /// A live emitter for an explicit config.
     pub fn live(config: &GeoConfig) -> Result<Self, GeoError> {
-        let client = CoreClient::new(config.api_url(), config.api_key()).map_err(|source| {
-            GeoError::Client {
-                api_url: config.api_url().to_string(),
-                source,
-            }
+        let client = config.core_client().map_err(|source| GeoError::Client {
+            api_url: config.api_url().to_string(),
+            source,
         })?;
         Ok(Self {
             mode: EmitMode::Live,
@@ -128,7 +126,7 @@ impl GeoEmitter {
 
     /// Dry-run when asked, otherwise live from the environment.
     ///
-    /// A live emitter with no `ALLSOURCE_API_KEY` fails loudly here rather
+    /// A live emitter with no credential fails loudly here rather
     /// than degrading to a no-op — a silently dropped window is worse than a
     /// crashed job.
     pub fn from_env(mode: EmitMode) -> Result<Self, GeoError> {

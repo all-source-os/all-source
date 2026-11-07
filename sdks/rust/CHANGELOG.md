@@ -6,6 +6,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-11-07
+
+Registered client keys. A tenant client can authenticate with a short-lived
+ES256 assertion signed by a P-256 key whose public half is registered on the
+tenant, instead of a long-lived API key. The gateway serves managed onboarding
+keys with no registration record until its `ALLSOURCE_LEGACY_KEY_SUNSET`, then
+refuses them with `401 legacy_key_sunset`; dashboard `ask_` keys are
+unaffected. Design:
+`docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md`;
+registration and rotation: `docs/runbooks/CLIENT_KEY_ROTATION.md`.
+
+### Added
+
+- `CredentialProvider`: produces the bearer for one request. Any
+  `Fn() -> Result<String, Error> + Send + Sync` closure is one. The client asks
+  it on every request attempt, retries included, and on every WebSocket
+  connect. Return `Error::Config` when no token can be produced; the client
+  does not retry it.
+- `QueryClient::with_config_and_credential_provider` and
+  `CoreClient::with_config_and_credential_provider`. `ClientConfig::api_key`
+  is ignored and may be empty on a client built this way.
+- `EventStreamClient::with_credential_provider` (`ws` feature).
+- `es256-assertion` cargo feature with `Es256AssertionProvider`.
+  `from_pkcs8_pem(pem, client_id, tenant, kid, audience)` signs a
+  `ASSERTION_LIFETIME_SECS` (60 s) assertion with `iss` = client id,
+  `sub` = tenant, `aud` = audience, the registered `kid` in the header and a
+  fresh `jti`, and reuses it until `ASSERTION_REFRESH_SECS` (15 s) before it
+  expires. It pulls in `jsonwebtoken` and `uuid`.
+
+### Changed
+
+- A static API key is marked sensitive in the default headers, so it no
+  longer appears in reqwest's `Debug` output.
+
 ## [0.28.0] — 2026-11-06
 
 Valid time beside record time. An event can say when its fact was true;

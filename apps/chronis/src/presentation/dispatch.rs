@@ -15,7 +15,7 @@ use crate::{
         repository::{TaskEdit, TaskRepository},
     },
     infrastructure::{
-        config::{ChronisConfig, CoreMode},
+        config::{ChronisConfig, CoreMode, SyncConfig},
         core_task_repo::CoreTaskRepository,
         prime_setup, workspace,
     },
@@ -103,7 +103,27 @@ fn resolve_archive_ids(
 pub fn dispatch_init(args: &super::cli::InitArgs) -> Result<(), ChronError> {
     let cwd = std::env::current_dir()?;
     if let Some(ref remote_url) = args.remote {
-        workspace::init_workspace_with_remote(&cwd, remote_url, args.api_key.as_deref())
+        if args
+            .signing_key
+            .as_deref()
+            .is_some_and(|key| key.contains("-----BEGIN"))
+        {
+            return Err(ChronError::Sync(
+                "--signing-key takes a path; config.toml is tracked in git, \
+                 so put the PEM in ALLSOURCE_CLIENT_SIGNING_KEY instead"
+                    .into(),
+            ));
+        }
+        let sync = SyncConfig {
+            remote_url: Some(remote_url.clone()),
+            api_key: args.api_key.clone(),
+            client_id: args.client_id.clone(),
+            tenant_id: args.tenant_id.clone(),
+            client_kid: args.client_kid.clone(),
+            signing_key_path: args.signing_key.clone(),
+            audience: args.audience.clone(),
+        };
+        workspace::init_workspace_with_sync(&cwd, sync)
     } else {
         workspace::init_workspace(&cwd)
     }

@@ -8,15 +8,17 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
   ## Authentication (#228)
 
   A hosted Core / gateway (e.g. `https://api.all-source.xyz`) requires
-  `Authorization: Bearer <key>`. Without it every request 401s, which the MCP
-  layer surfaces as JSON-RPC `-32603 Internal error`. The raw key *without* the
-  `Bearer` scheme 401s just the same, so the scheme is mandatory.
+  `Authorization: Bearer <credential>`. Without it every request 401s, which the
+  MCP layer surfaces as JSON-RPC `-32603 Internal error`. `CoreCredentials`
+  supplies the credential on every attempt: an ES256 client assertion when
+  `ALLSOURCE_CLIENT_SIGNING_KEY` is set, otherwise the static key.
 
-  Note that Tesla evaluates module-level `plug` arguments on every request (they
-  are compiled into `__middleware__/0`, not frozen into a module attribute), so
-  both the base URL and `auth_headers/0` below pick up whatever
-  `config/runtime.exs` resolved at release boot.
+  Tesla evaluates module-level `plug` arguments on every request (they are
+  compiled into `__middleware__/0`, not frozen into a module attribute), so the
+  base URL picks up whatever `config/runtime.exs` resolved at release boot.
   """
+
+  alias McpServerElixir.Infrastructure.CoreCredentials
 
   @behaviour McpServerElixir.Infrastructure.CoreBackend
 
@@ -35,10 +37,6 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
     Application.get_env(:mcp_server_elixir, :core_url, @default_base_url)
   )
 
-  # Authenticate against a hosted Core. Resolves per request; an empty list is
-  # a no-op, so an unconfigured key sends no header rather than a bare "Bearer ".
-  plug(Tesla.Middleware.Headers, auth_headers())
-
   plug(Tesla.Middleware.JSON)
   plug(Tesla.Middleware.Timeout, timeout: @default_timeout)
 
@@ -52,6 +50,10 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
       {:error, _} -> true
     end
   )
+
+  # After Retry so a retried attempt carries a credential minted for it. With no
+  # credential configured no header is sent, rather than a bare "Bearer ".
+  plug(CoreCredentials)
 
   # 404/405 on a read route means the row is absent or this deployment does not
   # expose the route. The server never rebuilds the answer from raw events: a
@@ -72,16 +74,9 @@ defmodule McpServerElixir.Infrastructure.CoreClient do
   end
 
   @doc false
-  # The Authorization header sent with every request, or [] when no key is
+  # The Authorization header a request would carry now, or [] when none is
   # configured. Public (undocumented) so tests can assert it without a socket.
-  def auth_headers do
-    case Application.get_env(:mcp_server_elixir, :core_api_key) do
-      nil -> []
-      "" -> []
-      "Bearer " <> _ = key -> [{"authorization", key}]
-      key -> [{"authorization", "Bearer " <> key}]
-    end
-  end
+  def auth_headers, do: CoreCredentials.headers("authorization")
 
   @doc "Query events with flexible filters"
   @impl true

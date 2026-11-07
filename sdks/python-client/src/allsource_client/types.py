@@ -21,6 +21,34 @@ class AllSourceError(Exception):
         self.status_code = status_code
         self.body = body
 
+    @property
+    def reason(self) -> Optional[str]:
+        """The gateway's refusal reason (e.g. `legacy_key_sunset`), when the body carries one."""
+        return body_reason(self.body)
+
+
+def body_reason(body: Any) -> Optional[str]:
+    """`reason` at the top level (gateway) or under `error` (Query Service)."""
+    if not isinstance(body, dict):
+        return None
+    for source in (body, body.get("error")):
+        if isinstance(source, dict):
+            reason = source.get("reason")
+            if isinstance(reason, str) and reason:
+                return reason
+    return None
+
+
+LEGACY_KEY_SUNSET = "legacy_key_sunset"
+
+
+class LegacyKeySunsetError(AllSourceError):
+    """`401 legacy_key_sunset`: a managed key minted before registered client keys.
+
+    The gateway stopped accepting it at `ALLSOURCE_LEGACY_KEY_SUNSET`. Switch to
+    a registered ES256 client key (`Es256AssertionProvider`) or a dashboard key.
+    """
+
 
 class VersionConflictError(AllSourceError):
     """`409 version_conflict`: a read-model commit raced another writer."""

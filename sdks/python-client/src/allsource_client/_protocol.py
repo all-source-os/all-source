@@ -24,7 +24,9 @@ from allsource_client.types import (
     EventList,
     FeedCursor,
     FeedPage,
+    LEGACY_KEY_SUNSET,
     InvalidViewError,
+    LegacyKeySunsetError,
     NotModified,
     RateLimitedError,
     ReadModelCommit,
@@ -34,6 +36,7 @@ from allsource_client.types import (
     SyncItem,
     SyncReset,
     SyncUpsert,
+    body_reason,
     VersionConflictError,
     ViewChanges,
     ViewEntitiesPage,
@@ -124,6 +127,8 @@ def raise_for_status(
         raise ViewResetError(message, status, generation=_int(body.get("generation")), body=body)
     if code == "invalid_view" and isinstance(body, dict):
         raise InvalidViewError(message, status, detail=str(body.get("detail", "")), body=body)
+    if status == 401 and body_reason(body) == LEGACY_KEY_SUNSET:
+        raise LegacyKeySunsetError(code=code, message=message, status_code=status, body=body)
     if status in RETRY_AFTER_STATUSES:
         if code == "api_error":
             code = "rate_limited" if status == 429 else "unavailable"

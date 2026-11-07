@@ -77,6 +77,14 @@ keep working for 30 days after the deploy, then stop.
    `better-auth-allsource` and `allsource-mcp` use it rather than each minting
    tokens.
 
+   Parity note: the TypeScript, Python and Go SDKs and the Elixir MCP server
+   (`apps/mcp-server-elixir`) now carry their own ES256 signers, so non-Rust
+   clients do not need the Rust SDK. Each is checked
+   against the shared fixtures in `sdks/rust/tests/fixtures/`
+   (`es256_interop_test_key.pem`, `es256_interop_token.jwt`), which the gateway
+   also verifies in `asserted_keys_interop_test.go`. Same claims, same 60 s
+   lifetime, same rule of sending only `Authorization`.
+
 ## Rejected alternatives
 
 - **An AllSource-published JWKS alone.** Rotating platform-signed tokens through

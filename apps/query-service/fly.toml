@@ -36,6 +36,13 @@ primary_region = "iad"  # US East (Virginia)
 # - JWT_SECRET: shared with Control Plane for token verification
 # - CORE_API_KEY: bearer token for Core API calls
 #
+# Optional, set with the same value on the Control Plane:
+# - ALLSOURCE_LEGACY_KEY_SUNSET: RFC 3339 instant. Before it, a managed onboarding
+#   key with no registration record is served with Deprecation and Sunset response
+#   headers; from it on, that key gets 401 reason legacy_key_sunset. Keys with a
+#   registration record are unaffected. No effect while
+#   ALLSOURCE_KEY_AUTHORITY_MODE=off.
+#
 # Billing (LemonSqueezy) and OAuth secrets belong in the Control Plane, not here.
 
 [http_service]

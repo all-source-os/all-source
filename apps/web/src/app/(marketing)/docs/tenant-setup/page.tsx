@@ -71,6 +71,23 @@ curl -X POST https://api.all-source.xyz/api/v1/teams/agent-keys \\
 # Response includes the scoped API key
 # Use this key in your agent — never the bootstrap key`;
 
+const codeClientKey = `# On the service's machine: generate a P-256 key (keep the PEM secret)
+openssl ecparam -name prime256v1 -genkey -noout \\
+  | openssl pkcs8 -topk8 -nocrypt -out client-key.pem
+
+# PLATFORM OPERATOR ONLY: register the public JWK on the tenant
+curl -X POST https://api.all-source.xyz/api/v1/admin/tenants/$TENANT/client-keys \\
+  -H "Authorization: Bearer $OPERATOR_SESSION" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "client_id": "my-service",
+    "jwk": {"kty": "EC", "crv": "P-256", "x": "...", "y": "..."},
+    "scopes": ["events:read", "events:write"]
+  }'
+
+# 201 response includes the kid (RFC 7638 thumbprint).
+# The service signs a 60 s ES256 assertion per request with that kid.`;
+
 const codeChronisConfig = `# Configure chronis CLI to sync with your tenant
 
 # In your project's .chronis/config.toml:
@@ -242,6 +259,31 @@ export default function TenantSetupPage() {
               <h3 className="text-lg font-semibold mb-3">Step 3: Configure your agent or CLI</h3>
               <CodeBlock title=".chronis/config.toml" code={codeChronisConfig} />
             </div>
+
+            <div>
+              <h3 className="text-lg font-semibold mb-3">
+                Optional: Register a client key (ES256) for a long-running service
+              </h3>
+              <CodeBlock title="register-client-key.sh" code={codeClientKey} />
+              <p className="mt-3 text-sm text-muted-foreground">
+                A registered client key replaces a stored bearer: the service keeps the private key
+                and signs a fresh assertion for every request, so nothing long-lived travels on the
+                wire. Registration is done by a platform operator, never by a tenant credential. The
+                role is always <code>serviceaccount</code> and the scopes come from the
+                registration. The Rust, TypeScript, Python and Go SDKs and{" "}
+                <code>allsource-mcp --remote</code> sign the assertion for you. Full steps,
+                including computing the kid and rotating:{" "}
+                <a
+                  href="https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline underline-offset-4 hover:opacity-80"
+                >
+                  registered client keys guide
+                </a>
+                .
+              </p>
+            </div>
           </div>
         </div>
       </Section>
@@ -267,6 +309,10 @@ export default function TenantSetupPage() {
               {
                 title: "Rotate keys, don't share them",
                 desc: "Each agent or service should have its own API key. If one is compromised, revoke it via the Control Plane dashboard or API without affecting other agents. Keys are cheap — create as many as you need.",
+              },
+              {
+                title: "Move old onboarding keys before the sunset",
+                desc: "Keys minted by the old onboarding flow that were never registered stop working at the gateway's legacy-key sunset date and get 401 with reason legacy_key_sunset. Dashboard keys are not affected. Replace an old onboarding key with a dashboard key or a registered client key before that date.",
               },
               {
                 title: "Use api.all-source.xyz, not Core directly",
@@ -312,10 +358,29 @@ export default function TenantSetupPage() {
                     auth: "Admin JWT",
                     desc: "Admin: mint scoped API key",
                   },
-                  { endpoint: "POST /api/v1/events", auth: "Any API key", desc: "Ingest event" },
+                  {
+                    endpoint: "POST /api/v1/admin/tenants/:id/client-keys",
+                    auth: "Operator session",
+                    desc: "Operator: register a client public key (ES256)",
+                  },
+                  {
+                    endpoint: "GET /api/v1/admin/tenants/:id/client-keys",
+                    auth: "Operator session",
+                    desc: "Operator: list a tenant's client keys",
+                  },
+                  {
+                    endpoint: "DELETE /api/v1/admin/tenants/:id/client-keys/:kid",
+                    auth: "Operator session",
+                    desc: "Operator: revoke a client key (permanent)",
+                  },
+                  {
+                    endpoint: "POST /api/v1/events",
+                    auth: "API key or client assertion",
+                    desc: "Ingest event",
+                  },
                   {
                     endpoint: "GET /api/v1/events/query",
-                    auth: "Any API key",
+                    auth: "API key or client assertion",
                     desc: "Query events",
                   },
                   { endpoint: "GET /health", auth: "None", desc: "Health check" },

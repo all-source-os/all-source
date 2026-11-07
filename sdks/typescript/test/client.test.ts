@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { EventFolder } from "../src";
+import type { AllSourceConfig, EventFolder } from "../src";
 import {
   AllSourceClient,
   AllSourceError,
   CircuitOpenError,
+  CredentialError,
   NotModified,
   ViewRowNotFound,
 } from "../src";
@@ -44,8 +45,8 @@ describe("AllSourceClient constructor", () => {
     expect(() => createClient({ baseUrl: "" })).toThrow("baseUrl is required");
   });
 
-  test("throws if apiKey is empty", () => {
-    expect(() => createClient({ apiKey: "" })).toThrow("apiKey is required");
+  test("throws if apiKey is empty and no credentials are given", () => {
+    expect(() => createClient({ apiKey: "" })).toThrow("apiKey or credentials is required");
   });
 
   test("strips trailing slashes from baseUrl", async () => {
@@ -708,5 +709,148 @@ describe("custom fetch injection", () => {
     expect(called).toBe(true);
     // Global mock should NOT have been called
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("credentials provider", () => {
+  function headersOf(call: unknown): Record<string, string> {
+    return (call as [string, RequestInit])[1].headers as Record<string, string>;
+  }
+
+  test("rejects a config with both apiKey and credentials", () => {
+    const config = {
+      baseUrl: MOCK_BASE_URL,
+      apiKey: MOCK_API_KEY,
+      credentials: () => "token",
+    } as unknown as AllSourceConfig;
+    expect(() => new AllSourceClient(config)).toThrow(
+      "pass either apiKey or credentials, not both"
+    );
+  });
+
+  test("rejects a config with neither apiKey nor credentials", () => {
+    const config = { baseUrl: MOCK_BASE_URL } as unknown as AllSourceConfig;
+    expect(() => new AllSourceClient(config)).toThrow("apiKey or credentials is required");
+  });
+
+  test("asks the provider on every attempt, retries included", async () => {
+    let minted = 0;
+    let calls = 0;
+    const customFetch = mock(() => {
+      calls++;
+      if (calls <= 2) {
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 503 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ status: "ok" }), { status: 200 }));
+    });
+    const client = new AllSourceClient({
+      baseUrl: MOCK_BASE_URL,
+      credentials: () => `assertion-${++minted}`,
+      fetch: customFetch as unknown as typeof globalThis.fetch,
+      retry: { maxRetries: 3, baseDelay: 1, backoffFactor: 1, maxDelay: 1 },
+    });
+
+    expect(await client.getHealth()).toEqual({ status: "ok" });
+
+    expect(minted).toBe(3);
+    expect(customFetch.mock.calls.map((call) => headersOf(call).Authorization)).toEqual([
+      "Bearer assertion-1",
+      "Bearer assertion-2",
+      "Bearer assertion-3",
+    ]);
+  });
+
+  test("accepts an object with an async bearer() and sends no X-API-Key", async () => {
+    const client = new AllSourceClient({
+      baseUrl: MOCK_BASE_URL,
+      credentials: { bearer: async () => "signed.jwt.value" },
+    });
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ status: "ok" }), { status: 200 }))
+    );
+
+    await client.getHealth();
+
+    const headers = headersOf(mockFetch.mock.calls[0]);
+    expect(headers.Authorization).toBe("Bearer signed.jwt.value");
+    expect(headers["X-API-Key"]).toBeUndefined();
+  });
+
+  test("a provider that throws is not retried and does not trip the breaker", async () => {
+    let asked = 0;
+    const client = new AllSourceClient({
+      baseUrl: MOCK_BASE_URL,
+      credentials: () => {
+        asked++;
+        if (asked === 1) throw new Error("key store locked");
+        return "token";
+      },
+      retry: { maxRetries: 3, baseDelay: 1 },
+      circuitBreaker: { threshold: 1, recoveryTimeout: 60_000 },
+    });
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ status: "ok" }), { status: 200 }))
+    );
+
+    const error = await client.getHealth().catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(CredentialError);
+    expect((error as CredentialError).message).toContain("key store locked");
+    expect(asked).toBe(1);
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    expect(await client.getHealth()).toEqual({ status: "ok" });
+  });
+
+  test("an empty bearer is a CredentialError", async () => {
+    const client = new AllSourceClient({ baseUrl: MOCK_BASE_URL, credentials: () => "" });
+
+    const error = await client.getHealth().catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(CredentialError);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("refusal reasons", () => {
+  test("a gateway legacy_key_sunset 401 exposes its reason", async () => {
+    const client = createClient({ retry: { maxRetries: 0 } });
+    mockFetch.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            error: "unauthorized",
+            reason: "legacy_key_sunset",
+            message:
+              "This API key predates registered keys and stopped working on 2026-12-07. Register a client key or create a dashboard key.",
+          }),
+          { status: 401 }
+        )
+      )
+    );
+
+    const error = (await client.getHealth().catch((e: unknown) => e)) as AllSourceError;
+
+    expect(error.reason).toBe("legacy_key_sunset");
+    expect(error.isLegacyKeySunset()).toBe(true);
+  });
+
+  test("a Query Service refusal nests the reason under error", () => {
+    const error = new AllSourceError("x", 401, {
+      error: { reason: "legacy_key_sunset", message: "m" },
+    });
+    expect(error.reason).toBe("legacy_key_sunset");
+    expect(error.isLegacyKeySunset()).toBe(true);
+  });
+
+  test("an asserted refusal is not a sunset", () => {
+    const error = new AllSourceError("x", 401, {
+      error: "unauthorized",
+      reason: "asserted_expired",
+      message: "assertion has expired",
+    });
+    expect(error.reason).toBe("asserted_expired");
+    expect(error.isLegacyKeySunset()).toBe(false);
+    expect(new AllSourceError("x", 401, "plain text").reason).toBeUndefined();
   });
 });

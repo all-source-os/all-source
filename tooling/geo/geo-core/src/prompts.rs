@@ -501,9 +501,9 @@ mod tests {
     }
 
     #[test]
-    fn interrogation_v2_covers_identity_boundary_and_source_quality() {
+    fn interrogation_set_covers_identity_boundary_and_source_quality() {
         let set = interrogation();
-        assert_eq!(set.version, 2);
+        assert_eq!(set.version, 3);
         assert_eq!(set.len(), 17);
         assert_eq!(set.claim_count(), 25);
 
