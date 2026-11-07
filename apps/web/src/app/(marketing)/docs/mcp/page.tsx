@@ -286,6 +286,49 @@ printf '%s\\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \\
           </p>
         </section>
 
+        {/* ── Registered client keys ───────────────────────────────────── */}
+        <section>
+          <h2 className="text-xl font-semibold text-foreground mb-3">
+            Hosted reads without a stored bearer
+          </h2>
+          <p className="text-muted-foreground leading-relaxed mb-3">
+            The Rust <Code>allsource-mcp</Code> binary has a <Code>--remote</Code> mode that reads
+            views (<Code>get_latest_state</Code>, <Code>list_latest</Code>,{" "}
+            <Code>list_changes</Code>) from the hosted gateway. It can authenticate with a
+            registered client key instead of an API key: a platform operator registers your P-256
+            public key on the tenant, and the binary signs a fresh 60-second ES256 assertion for
+            every request. When these variables are set, <Code>ALLSOURCE_API_KEY</Code> is ignored.
+          </p>
+          <CodeBlock>{`{
+  "mcpServers": {
+    "allsource-remote": {
+      "command": "allsource-mcp",
+      "args": ["--remote", "${GATEWAY}"],
+      "env": {
+        "ALLSOURCE_CLIENT_SIGNING_KEY": "/path/to/client-key.pem",
+        "ALLSOURCE_CLIENT_ID": "my-mcp-reader",
+        "ALLSOURCE_TENANT_ID": "my-tenant",
+        "ALLSOURCE_CLIENT_KID": "<kid from registration>"
+      }
+    }
+  }
+}`}</CodeBlock>
+          <p className="text-muted-foreground leading-relaxed mt-3 text-sm">
+            <Code>ALLSOURCE_ASSERTION_AUDIENCE</Code> is optional and defaults to{" "}
+            <Code>{GATEWAY}</Code>. Register a separate read-only key for the connector. Keys minted
+            by the old onboarding flow that were never registered stop working at the gateway&apos;s
+            legacy-key sunset with <Code>401 legacy_key_sunset</Code>; dashboard keys are not
+            affected. Key generation, registration and rotation:{" "}
+            <a
+              href="https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md"
+              className="text-foreground underline underline-offset-4 hover:opacity-80"
+            >
+              registered client keys guide
+            </a>
+            .
+          </p>
+        </section>
+
         {/* ── Efficiency ───────────────────────────────────────────────── */}
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">Running it efficiently</h2>

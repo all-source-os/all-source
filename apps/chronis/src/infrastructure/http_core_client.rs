@@ -2,13 +2,14 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::remote_auth::RemoteAuth;
 use crate::domain::error::ChronError;
 
 /// HTTP client for a remote AllSource Core instance.
 pub struct HttpCoreClient {
     client: reqwest::Client,
     base_url: String,
-    api_key: Option<String>,
+    auth: RemoteAuth,
 }
 
 /// Matches `EventView` from allsource-core but is independently deserializable
@@ -70,26 +71,31 @@ impl HttpCoreClient {
         Self {
             client: reqwest::Client::new(),
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: None,
+            auth: RemoteAuth::None,
         }
     }
 
     pub fn with_api_key(mut self, api_key: Option<&str>) -> Self {
-        self.api_key = api_key.map(|k| k.to_string());
+        self.auth = api_key.map_or(RemoteAuth::None, |k| RemoteAuth::ApiKey(k.to_string()));
         self
     }
 
-    fn auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        match &self.api_key {
-            Some(key) => req.bearer_auth(key),
+    pub fn with_auth(mut self, auth: RemoteAuth) -> Self {
+        self.auth = auth;
+        self
+    }
+
+    fn auth(&self, req: reqwest::RequestBuilder) -> Result<reqwest::RequestBuilder, ChronError> {
+        Ok(match self.auth.bearer()? {
+            Some(token) => req.bearer_auth(token),
             None => req,
-        }
+        })
     }
 
     pub async fn health(&self) -> Result<(), ChronError> {
         let req = self.client.get(format!("{}/health", self.base_url));
         let resp = self
-            .auth(req)
+            .auth(req)?
             .send()
             .await
             .map_err(|e| ChronError::Sync(format!("remote health check failed: {e}")))?;
@@ -169,7 +175,7 @@ impl HttpCoreClient {
         }
         let req = self.client.get(&url).query(&query);
         let resp = self
-            .auth(req)
+            .auth(req)?
             .send()
             .await
             .map_err(|e| ChronError::Sync(format!("query remote Core: {e}")))?;
@@ -207,7 +213,7 @@ impl HttpCoreClient {
             .post(format!("{}/api/v1/events", self.base_url))
             .json(&req);
         let resp = self
-            .auth(http_req)
+            .auth(http_req)?
             .send()
             .await
             .map_err(|e| ChronError::Sync(format!("ingest to remote Core: {e}")))?;

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "allsource-client"
-version = "0.24.0"
+version = "0.25.0"
 description = "Python SDK for AllSource Event Store"
 readme = "README.md"
 license = "MIT"
@@ -25,7 +25,14 @@ classifiers = [
 dependencies = ["httpx>=0.25.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-asyncio>=0.21", "pytest-httpx>=0.30", "mypy>=1.0"]
+assertion = ["cryptography>=41"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-httpx>=0.30",
+    "mypy>=1.0",
+    "cryptography>=41",
+]
 
 [project.urls]
 # These render as links on the PyPI project page, so they must resolve.

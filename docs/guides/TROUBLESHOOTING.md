@@ -278,6 +278,74 @@ sudo ntpdate pool.ntp.org
 
 ---
 
+### Client Assertion and Legacy Key Refusals
+
+**Symptoms:**
+- A client using a registered client key (ES256 assertion) gets 401, 403 or 503
+- A client using an old onboarding key gets 401 after a fixed date
+
+Every refusal has the body `{"error", "reason", "message"}`. Read `reason`; it
+names the failed check. The gateway also counts each one in
+`control_plane_auth_denials_total{mode, reason, tenant}`.
+
+**Diagnostic Commands:**
+```bash
+# Show the refusal body
+curl -sS -i https://api.all-source.xyz/api/v1/events?limit=1 \
+  -H "Authorization: Bearer $TOKEN"
+
+# Decode the assertion header and claims (no validation)
+echo "$TOKEN" | cut -d'.' -f1 | tr '_-' '/+' | base64 -d 2>/dev/null | jq
+echo "$TOKEN" | cut -d'.' -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq
+```
+
+**`asserted_signature` (401):** the token or `kid` is malformed, `jti` is
+missing, or the signature does not verify with the registered public key. The
+client is usually signing with a different key than the one registered. Recompute
+the kid from the client's PEM ([Registered client keys](REGISTERED_CLIENT_KEYS.md#2-build-the-public-jwk-and-compute-the-kid))
+and compare it with the registration.
+
+**`asserted_audience` (401):** `aud` is not the one string the gateway expects
+(`ALLSOURCE_ASSERTION_AUDIENCE`, default `https://api.all-source.xyz`). An array
+`aud` is refused. Set the client's audience to match.
+
+**`asserted_skew` (401):** `iat` or `nbf` is more than 30 s in the future, or
+`exp - iat` is over 60 s. Sync the client clock (see above) or shorten the token
+lifetime.
+
+**`asserted_expired` (401):** `exp` is missing or more than 30 s in the past. The
+client reused an old assertion; mint a new one per request or reuse one only
+until shortly before `exp`.
+
+**`asserted_unregistered` (401):** no registration matches (tenant, kid), or
+`iss` is not the registered `client_id`, or `sub` is not the tenant. Ask an
+operator to register the key, or fix `client_id` and tenant. After a new
+registration, wait 30 s for the gateway cache.
+
+**`asserted_revoked` (401):** the kid was revoked. A revoked key cannot be
+registered again; generate a new keypair and have it registered.
+
+**`asserted_unavailable` (503, `Retry-After: 5`):** the gateway could not read the
+tenant's registrations from Core and has no good read from the last 5 minutes.
+Retry after 5 s; this is a Core outage, not a client problem.
+
+**`history_invalid` / `incomplete_authority`:** the tenant's `clientkey:<tenant>`
+stream failed the gateway's strict fold. Escalate to an operator.
+
+**`scope` (403):** the key authenticated, but its registered scopes do not cover
+the route. Register a key with the needed scopes.
+
+**`legacy_key_sunset` (401):** the bearer is a managed onboarding key (an HS256
+JWT minted by the old onboarding flow) with no registration record, and the
+request came after `ALLSOURCE_LEGACY_KEY_SUNSET`. Before that date such responses
+carry `Deprecation` and `Sunset` headers. Dashboard `ask_` keys are not affected.
+Move the client to a registered client key or a dashboard key. The Query Service
+nests `reason` and `message` under `error` for this refusal.
+
+Operator-side detail: [CLIENT_KEY_ROTATION.md](../runbooks/CLIENT_KEY_ROTATION.md#reading-refusals).
+
+---
+
 ### RBAC Permission Denied
 
 **Symptoms:**

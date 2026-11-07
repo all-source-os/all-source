@@ -140,6 +140,34 @@ export default function ApiKeysPage() {
         </Card>
       </FadeIn>
 
+      {/* Registered client keys */}
+      <FadeIn delay={0.28} inView>
+        <Card>
+          <CardContent className="flex items-start gap-4 p-4">
+            <Key className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <div>
+              <h3 className="font-medium">Running a service? Use a registered client key</h3>
+              <p className="text-sm text-muted-foreground">
+                A service can hold a P-256 private key instead of a stored API key and sign a
+                60-second assertion for each request. A platform operator registers the public key
+                on your tenant; it is not created on this page. The Rust, TypeScript, Python and Go
+                SDKs sign the assertions for you. Keys from the old onboarding flow that were never
+                registered stop working at the legacy-key sunset date; keys created here are not
+                affected.{" "}
+                <a
+                  className="underline hover:text-foreground"
+                  href="https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Registered client keys guide
+                </a>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </FadeIn>
+
       {/* Keys table */}
       <FadeIn delay={0.3} inView>
         {error ? (

@@ -19,7 +19,9 @@ version = "0.1.0"
 # Default features (rustls + projection-worker). The SDK's default set is the
 # one it is tested and shipped under; trimming it here only trades a small
 # binary saving for a dead-code warning in the SDK's own build.
-allsource = { path = "../../sdks/rust" }
+# es256-assertion: gateway requests carry an assertion signed with a registered
+# client key (ALLSOURCE_CLIENT_SIGNING_KEY).
+allsource = { path = "../../sdks/rust", features = ["es256-assertion"] }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 # `.env` support for the provider keys and the gateway credential. Chosen for

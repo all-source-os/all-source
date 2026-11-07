@@ -6,7 +6,9 @@ Typed Rust client for the [AllSource](https://github.com/all-source-os/all-sourc
 
 ```toml
 [dependencies]
-allsource = "0.27"
+allsource = "0.29"
+# With registered client keys (ES256 assertions):
+# allsource = { version = "0.29", features = ["es256-assertion"] }
 ```
 
 ## Which client do I want?
@@ -136,9 +138,34 @@ The SDK defaults are tuned for typical use. A few things worth knowing:
 ## API keys
 
 - **Provision** via `ALLSOURCE_BOOTSTRAP_API_KEY` on Core's first boot (idempotent — safe to leave set). Keys persist in Core's system WAL.
-- **Authenticate** with `Authorization: Bearer ask_...` (preferred) or the legacy `X-API-Key` header. The SDK uses `Authorization: Bearer` automatically.
+- **Authenticate** with `Authorization: Bearer ask_...`. The SDK sends only `Authorization: Bearer`. Core also accepts the legacy `X-API-Key` header, but the hosted gateway at `https://api.all-source.xyz` reads only `Authorization`.
 - **Validation** — Core does in-process hash lookup. Query Service adds a 120s ETS cache (SHA-256 keyed) before falling back to Core, so repeat calls through QS don't hammer Core.
 - **Rotate** by provisioning a new key, updating clients, then revoking the old one. See the [AllSource API key patterns blog post](https://all-source.xyz/blog/api-keys-and-connections) for rotation without downtime.
+
+### Registered client keys and the legacy key sunset
+
+Registering a key, computing its kid and rotating it: [the registered client keys guide](https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md).
+
+A service that talks to the hosted gateway can authenticate without a long-lived
+bearer. It holds a P-256 private key; an AllSource operator registers the public
+half on the tenant and returns its `kid` (the RFC 7638 thumbprint). Registration
+is operator-only; the procedure is in
+[`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md),
+and the design in
+[`docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md`](../../docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+
+Each request then carries `Authorization: Bearer <JWT>` with header
+`{"alg":"ES256","typ":"JWT","kid":...}` and claims `iss` (client id), `sub`
+(tenant id), `aud` (default `https://api.all-source.xyz`), `iat`, `exp` at most
+60 seconds after `iat`, and a unique `jti`. The role and scopes come from the
+registration, not the token. A refused assertion answers `401` with
+`{"error", "reason", "message"}`; the runbook lists each `reason`.
+
+The gateway and the Query Service can be given a legacy key sunset
+(`ALLSOURCE_LEGACY_KEY_SUNSET`, an RFC 3339 instant).
+After it, an API key minted by the old onboarding flow (an HS256 key with no
+registration record) is refused with `401` and reason `legacy_key_sunset`.
+Dashboard-created keys and registered client keys keep working.
 
 ### Short-lived credentials
 
@@ -151,6 +178,9 @@ every WebSocket connect. `api_key` may then be empty.
 With the `es256-assertion` feature, `Es256AssertionProvider` signs a 60-second
 ES256 assertion with a P-256 key whose public half an operator registered on the
 tenant, and reuses it until 15 seconds before it expires:
+
+A runnable version is in [`examples/asserted_client.rs`](examples/asserted_client.rs)
+(`cargo run --example asserted_client --features es256-assertion`).
 
 ```rust,ignore
 let provider = allsource::Es256AssertionProvider::from_pkcs8_pem(
@@ -263,11 +293,13 @@ See the runnable [`examples/asset_projection.rs`](examples/asset_projection.rs) 
 - `ws` — WebSocket client only (without the worker)
 - `rustls` (default) — rustls TLS backend
 - `native-tls` — platform-native TLS
+- `es256-assertion` — `Es256AssertionProvider`, short-lived ES256 client assertions from a registered P-256 key
+- `gzip` — sends `Accept-Encoding: gzip` and decompresses gzip responses
 
 To build without WebSocket support (smaller dep tree):
 
 ```toml
-allsource = { version = "0.27", default-features = false, features = ["rustls"] }
+allsource = { version = "0.29", default-features = false, features = ["rustls"] }
 ```
 
 For a deeper guide on projection design, operational concerns, and migration from polling, see [`docs/use-cases/custom-projections.md`](../../docs/use-cases/custom-projections.md).

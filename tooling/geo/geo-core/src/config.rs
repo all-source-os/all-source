@@ -1,4 +1,8 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
+
+use allsource::{
+    ClientConfig, CoreClient, CredentialProvider, Es256AssertionProvider, QueryClient,
+};
 
 use crate::error::GeoError;
 
@@ -11,6 +15,22 @@ pub const ENV_API_URL: &str = "ALLSOURCE_API_URL";
 
 /// Environment variable holding the gateway API key.
 pub const ENV_API_KEY: &str = "ALLSOURCE_API_KEY";
+
+/// Environment variable holding a registered client key's P-256 PKCS#8 private
+/// key, as a PEM or a path to one. When set it replaces `ALLSOURCE_API_KEY`.
+pub const ENV_CLIENT_SIGNING_KEY: &str = "ALLSOURCE_CLIENT_SIGNING_KEY";
+
+/// The registered client id; the assertion's `iss`.
+pub const ENV_CLIENT_ID: &str = "ALLSOURCE_CLIENT_ID";
+
+/// The tenant the client key is registered on; the assertion's `sub`.
+pub const ENV_TENANT_ID: &str = "ALLSOURCE_TENANT_ID";
+
+/// The registered key's kid (its RFC 7638 thumbprint).
+pub const ENV_CLIENT_KID: &str = "ALLSOURCE_CLIENT_KID";
+
+/// The audience the gateway expects; defaults to [`DEFAULT_API_URL`].
+pub const ENV_ASSERTION_AUDIENCE: &str = "ALLSOURCE_ASSERTION_AUDIENCE";
 
 /// What happened when the process looked for a `.env` file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,11 +83,21 @@ pub fn init_env() -> &'static DotenvOutcome {
     })
 }
 
+/// The credential sent to the gateway.
+#[derive(Clone)]
+enum GeoCredential {
+    /// A long-lived API key sent unchanged.
+    ApiKey(String),
+    /// A registered client key; the SDK asks it for a fresh assertion on every
+    /// request attempt.
+    Assertion(Arc<Es256AssertionProvider>),
+}
+
 /// Where GEO telemetry is written and with what credential.
 #[derive(Clone)]
 pub struct GeoConfig {
     api_url: String,
-    api_key: String,
+    credential: GeoCredential,
 }
 
 impl GeoConfig {
@@ -75,13 +105,23 @@ impl GeoConfig {
     pub fn new(api_url: impl Into<String>, api_key: impl Into<String>) -> Self {
         Self {
             api_url: api_url.into(),
-            api_key: api_key.into(),
+            credential: GeoCredential::ApiKey(api_key.into()),
         }
     }
 
-    /// Read `ALLSOURCE_API_URL` (optional) and `ALLSOURCE_API_KEY` (required).
+    /// Build a config that signs every request with a registered client key.
+    pub fn with_assertion(api_url: impl Into<String>, provider: Es256AssertionProvider) -> Self {
+        Self {
+            api_url: api_url.into(),
+            credential: GeoCredential::Assertion(Arc::new(provider)),
+        }
+    }
+
+    /// Read `ALLSOURCE_API_URL` (optional) and a credential: the
+    /// `ALLSOURCE_CLIENT_*` registered client key when
+    /// `ALLSOURCE_CLIENT_SIGNING_KEY` is set, otherwise `ALLSOURCE_API_KEY`.
     ///
-    /// A missing key is a hard error with an actionable message — see
+    /// A missing credential is a hard error with an actionable message — see
     /// [`GeoError::MissingApiKey`]. There is no silent no-op mode; use
     /// [`crate::EmitMode::DryRun`] when you deliberately do not want to write.
     pub fn from_env() -> Result<Self, GeoError> {
@@ -95,12 +135,14 @@ impl GeoConfig {
             Err(_) => DEFAULT_API_URL.to_string(),
         };
 
-        let api_key = std::env::var(ENV_API_KEY)
-            .ok()
-            .filter(|k| !k.trim().is_empty())
-            .ok_or(GeoError::MissingApiKey)?;
+        if let Some(signing_key) = env_nonblank(ENV_CLIENT_SIGNING_KEY) {
+            let provider = assertion_from_env(&signing_key)?;
+            return Ok(Self::with_assertion(api_url, provider));
+        }
 
-        Ok(Self { api_url, api_key })
+        let api_key = env_nonblank(ENV_API_KEY).ok_or(GeoError::MissingApiKey)?;
+
+        Ok(Self::new(api_url, api_key))
     }
 
     /// Gateway base URL (no trailing slash).
@@ -108,18 +150,90 @@ impl GeoConfig {
         &self.api_url
     }
 
-    /// Gateway API key.
-    pub fn api_key(&self) -> &str {
-        &self.api_key
+    /// Gateway API key, when the credential is one.
+    pub fn api_key(&self) -> Option<&str> {
+        match &self.credential {
+            GeoCredential::ApiKey(key) => Some(key),
+            GeoCredential::Assertion(_) => None,
+        }
+    }
+
+    /// An ingest-capable client pointed at the gateway.
+    pub fn core_client(&self) -> Result<CoreClient, allsource::Error> {
+        match &self.credential {
+            GeoCredential::ApiKey(key) => CoreClient::new(&self.api_url, key),
+            GeoCredential::Assertion(provider) => CoreClient::with_config_and_credential_provider(
+                ClientConfig::new(&self.api_url, ""),
+                shared(provider),
+            ),
+        }
+    }
+
+    /// A query client pointed at the gateway.
+    pub fn query_client(&self) -> Result<QueryClient, allsource::Error> {
+        match &self.credential {
+            GeoCredential::ApiKey(key) => QueryClient::new(&self.api_url, key),
+            GeoCredential::Assertion(provider) => QueryClient::with_config_and_credential_provider(
+                ClientConfig::new(&self.api_url, ""),
+                shared(provider),
+            ),
+        }
     }
 }
 
-/// Redacts the key so a `{config:?}` in a log line can never leak a credential.
+/// One provider, and so one cached assertion, behind every client built from a config.
+fn shared(provider: &Arc<Es256AssertionProvider>) -> impl CredentialProvider + 'static {
+    let provider = Arc::clone(provider);
+    move || provider.bearer()
+}
+
+fn env_nonblank(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// Build the assertion provider from the `ALLSOURCE_CLIENT_*` variables.
+fn assertion_from_env(signing_key: &str) -> Result<Es256AssertionProvider, GeoError> {
+    let (Some(client_id), Some(tenant_id), Some(kid)) = (
+        env_nonblank(ENV_CLIENT_ID),
+        env_nonblank(ENV_TENANT_ID),
+        env_nonblank(ENV_CLIENT_KID),
+    ) else {
+        return Err(GeoError::ClientKey {
+            reason: "ALLSOURCE_CLIENT_SIGNING_KEY needs ALLSOURCE_CLIENT_ID, \
+                     ALLSOURCE_TENANT_ID and ALLSOURCE_CLIENT_KID"
+                .to_string(),
+        });
+    };
+    let audience =
+        env_nonblank(ENV_ASSERTION_AUDIENCE).unwrap_or_else(|| DEFAULT_API_URL.to_string());
+    let pem = if signing_key.contains("-----BEGIN") {
+        signing_key.as_bytes().to_vec()
+    } else {
+        std::fs::read(signing_key).map_err(|e| GeoError::ClientKey {
+            reason: format!(
+                "ALLSOURCE_CLIENT_SIGNING_KEY is neither a PEM nor a readable file: {e}"
+            ),
+        })?
+    };
+    let built = Es256AssertionProvider::from_pkcs8_pem(&pem, client_id, tenant_id, kid, audience);
+    built.map_err(|e| GeoError::ClientKey {
+        reason: e.to_string(),
+    })
+}
+
+/// Redacts the credential so a `{config:?}` in a log line can never leak it.
 impl std::fmt::Debug for GeoConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let credential = match self.credential {
+            GeoCredential::ApiKey(_) => "api key <redacted>",
+            GeoCredential::Assertion(_) => "registered client key",
+        };
         f.debug_struct("GeoConfig")
             .field("api_url", &self.api_url)
-            .field("api_key", &"<redacted>")
+            .field("credential", &credential)
             .finish()
     }
 }
@@ -220,5 +334,4 @@ mod tests {
             "{outcome:?}"
         );
     }
-
 }

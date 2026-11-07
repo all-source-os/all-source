@@ -11,6 +11,12 @@
 # Needs two real tenant API keys (mint at https://www.all-source.xyz/connect):
 #   TENANT_A_KEY=...  TENANT_B_KEY=...  ./tooling/verify-prime-prod.sh
 #
+# Once the gateway's ALLSOURCE_LEGACY_KEY_SUNSET has passed, only these keys
+# still authenticate: dashboard ask_ keys, managed keys with a registration
+# record, and fresh ES256 client assertions for an operator-registered key.
+# A managed key minted by the old onboarding flow with no record gets 401
+# reason legacy_key_sunset, which this script reports as a failed create.
+#
 # Optional overrides:
 #   API_BASE      (default https://api.all-source.xyz)   — the Control Plane edge
 #   PRIME_DIRECT  (default https://allsource-prime.fly.dev) — the app's public URL

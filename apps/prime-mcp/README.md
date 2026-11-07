@@ -87,8 +87,33 @@ account or network required.
 
 ## Sync configuration
 
-Set `--sync-to` and `--api-key` together to sync local events to AllSource Core,
-or use `PRIME_SYNC_TO` and `PRIME_API_KEY`. Omit both to run locally without sync.
+Set `--sync-to` and a credential together to sync local events to AllSource Core,
+or use `PRIME_SYNC_TO` and the matching environment variables. Omit both to run
+locally without sync. The credential is one of:
+
+- **A registered client key (preferred).** An AllSource operator registers the
+  public half of a P-256 key on your tenant
+  ([`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md))
+  and gives you the client id and kid. Pass `--client-signing-key` (a PKCS#8 PEM,
+  or a path to one), `--client-id`, `--client-tenant-id` and `--client-kid`, or set
+  `ALLSOURCE_CLIENT_SIGNING_KEY`, `ALLSOURCE_CLIENT_ID`, `ALLSOURCE_TENANT_ID` and
+  `ALLSOURCE_CLIENT_KID`. `--assertion-audience` / `ALLSOURCE_ASSERTION_AUDIENCE`
+  defaults to `https://api.all-source.xyz`. Every push and every `email.*` pull
+  then carries a fresh 60-second ES256 assertion from the `allsource` SDK's
+  `Es256AssertionProvider`, sent as `Authorization: Bearer` only, and
+  `--api-key` is ignored. Prime refuses to start if the key is unreadable or one
+  of the three ids is missing. The `ALLSOURCE_CLIENT_*` variables are the ones
+  `allsource-mcp` reads; Prime reads them only when `--sync-to` is set.
+- **A tenant API key**: `--api-key` or `PRIME_API_KEY`, from
+  https://www.all-source.xyz/connect.
+
+API keys minted by the old onboarding flow (HS256 keys with no registration
+record) stop working once the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` passes:
+sync then fails with `401` and reason `legacy_key_sunset`. Dashboard-created keys
+and registered client keys keep working.
+
+The Claude Desktop extension (`.dxt`) exposes the client key as optional
+settings next to the API key.
 
 `--sync-interval-ms` sets the flush interval in milliseconds. It defaults to
 `1000` and must be at least `1`. `PRIME_SYNC_INTERVAL_MS` supplies the same

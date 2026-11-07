@@ -34,6 +34,8 @@ Both paths expose the same `/api/v1/*` HTTP + WebSocket surface. The difference 
 
 **Through the gateway (the public path)**: your request hits `api.all-source.xyz` over the public internet. TLS terminates. The gateway pulls the API key, hits its 120s cache, and on cache miss validates with Core. Then it applies the tenant's rate-limit window, checks the plan's quota, attaches tenant context, and forwards to Core over internal networking. Core does its own key validation (same hash lookup), runs the handler, returns. The gateway may transform the response before handing it back.
 
+The gateway also accepts a **registered client assertion**: a 60-second ES256 JWT that your service signs with a P-256 key whose public half a platform operator registered on your tenant. The gateway verifies the signature against the tenant's registered keys, which it reads from Core at most once every 30 seconds per machine, so an assertion costs no per-request validation round-trip to Core. Role and scopes come from the registration. Background: [the decision record](https://github.com/all-source-os/all-source/blob/main/docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+
 For a cached API key (the common case) the gateway hop adds one network round-trip — typically a few ms on the same continent, more cross-region. The extra logic (rate limit check, quota check) is in-memory and negligible. So the overhead is dominated by the network hop, which is dominated by topology.
 
 In-cluster internal Core vs. external-via-gateway is the difference between **~0.5ms and ~5–15ms per request** depending on where your caller sits. For a projection worker processing 10k events a second, every millisecond of extra hop is 10 seconds of extra latency per second of work — which is why internal workers should always go direct.
@@ -95,7 +97,7 @@ Concretely, a SaaS running AllSource might:
 
 ## How to switch later
 
-The gateway and Core speak the same `/api/v1/*` protocol. Switching from one to the other is a base URL change — no payload shape differences, no auth changes, no API rewrites.
+The gateway and Core speak the same `/api/v1/*` protocol. Switching from one to the other is a base URL change — no payload shape differences, no API rewrites. One auth caveat: only the gateway verifies registered client assertions. A service that signs ES256 assertions needs an `ask_` API key if it moves to Core direct.
 
 So you're not locked in on day one. Start with the sensible default: if you're inside the network and internal-only, use Core direct over internal DNS. If you have external callers, put them on the gateway. If you guess wrong, flipping the base URL in your config gets you to the other side in an afternoon — the caveat being that you **never** move Core onto a public DNS record; if you decide internal services need to reach Core from outside the network, that's a VPN / Tailscale / bastion problem, not a DNS problem.
 
@@ -113,5 +115,6 @@ Three examples, three different right answers:
 
 - [Connecting to AllSource without an SDK](/blog/connecting-without-an-sdk) — wire protocol reference
 - [Custom projections end-to-end guide](https://github.com/all-source-os/all-source/blob/main/docs/use-cases/custom-projections.md) — read model design
-- [Auth chain reference](https://github.com/all-source-os/all-source/blob/main/docs/current/AUTH_CHAIN.md) — how API keys flow through both services
+- [Auth chain reference](https://github.com/all-source-os/all-source/blob/main/docs/current/AUTH_CHAIN.md) — how API keys and client assertions flow through both services
+- [Registered client keys guide](https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md) — generate, register and rotate an ES256 client key
 - [Rust SDK README](https://github.com/all-source-os/all-source/blob/main/sdks/rust/README.md) — typed client for both paths

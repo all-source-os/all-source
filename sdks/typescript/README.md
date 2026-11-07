@@ -4,7 +4,8 @@ TypeScript/JavaScript client for the [AllSource](https://all-source.xyz) event s
 
 Talks to the AllSource gateway (`https://api.all-source.xyz`), not Core directly.
 Ships compiled ESM + CJS with `.d.ts` types. Runs on Node 18+ and Bun. Zero
-runtime dependencies (uses the global `fetch`).
+runtime dependencies (uses the global `fetch`, and WebCrypto for client
+assertions).
 
 ## Installation
 
@@ -40,6 +41,69 @@ const client = new AllSourceClient({
 ```
 
 The tenant is taken from the key — there is no separate tenant argument.
+
+### Registered client keys (ES256)
+
+Registering a key, computing its kid and rotating it: [the registered client keys guide](https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md).
+
+A service that talks to the hosted gateway can authenticate with a P-256
+keypair instead of a long-lived API key. An operator registers the public key
+on your tenant; the SDK then signs a 60-second ES256 assertion for each
+request. Background:
+[the decision record](../../docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+
+1. Generate a PKCS#8 P-256 private key on the client's machine and keep it in
+   your secret store:
+
+   ```bash
+   openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out client-key.pem
+   ```
+
+2. Ask an AllSource operator to register the public JWK (`kty`, `crv`, `x`,
+   `y`) for your tenant and client id. Registration is operator-only
+   (`POST /api/v1/admin/tenants/:id/client-keys`); the answer carries the
+   `kid`, the key's RFC 7638 thumbprint. Procedure and rotation:
+   [CLIENT_KEY_ROTATION.md](../../docs/runbooks/CLIENT_KEY_ROTATION.md).
+
+3. Pass an `Es256AssertionProvider` as `credentials`:
+
+   ```typescript
+   import { AllSourceClient, Es256AssertionProvider } from "@allsourcedev/client";
+
+   const credentials = await Es256AssertionProvider.fromPkcs8Pem(
+     process.env.ALLSOURCE_CLIENT_SIGNING_KEY!, // PEM text
+     {
+       clientId: process.env.ALLSOURCE_CLIENT_ID!,
+       tenant: process.env.ALLSOURCE_TENANT_ID!,
+       kid: process.env.ALLSOURCE_CLIENT_KID!,
+       audience: "https://api.all-source.xyz", // the gateway's ALLSOURCE_ASSERTION_AUDIENCE
+     }
+   );
+
+   const client = new AllSourceClient({ baseUrl: "https://api.all-source.xyz", credentials });
+   ```
+
+`fromPkcs8Pem` refuses a key that is not a P-256 PKCS#8 PEM, or an empty
+field, when it is called, so a misconfigured service fails at boot rather than
+on its first request. Each assertion lives 60 seconds and is reused until 15
+seconds before it expires; the gateway allows 30 seconds of clock skew, so keep
+the client's clock synced. Role and scopes come from the registration, not the
+token. The provider uses WebCrypto: Node 19+, Bun and browsers have it
+globally; on Node 18 pass `crypto: require("node:crypto").webcrypto`.
+
+`credentials` also accepts your own provider: a function, or an object with a
+`bearer()` method, returning the token (without `Bearer `) or a promise of it.
+The client asks it on every attempt, retries included, and sends only
+`Authorization: Bearer <token>`. If it throws, the request fails with
+`CredentialError` and is not retried.
+
+### Legacy key sunset
+
+A deployment can set `ALLSOURCE_LEGACY_KEY_SUNSET`. After that instant, keys
+minted before managed registration (the old onboarding flow) are refused with
+`401` and reason `legacy_key_sunset`. Dashboard keys and registered client keys
+keep working. `err.isLegacyKeySunset()` detects it; the fix is a registered
+client key or a dashboard key.
 
 ## Quick Start
 
@@ -79,7 +143,8 @@ console.log("Status:", health.status);
 | Option           | Type       | Required | Default | Description                          |
 |------------------|------------|----------|---------|--------------------------------------|
 | `baseUrl`        | `string`   | Yes      | —       | AllSource gateway URL                |
-| `apiKey`         | `string`   | Yes      | —       | API key (sent as Bearer and `X-API-Key`) |
+| `apiKey`         | `string`   | One of   | —       | Static API key (sent as Bearer and `X-API-Key`) |
+| `credentials`    | `CredentialProvider` | One of | — | Asked for a bearer on every attempt; sent as Bearer only |
 | `timeout`        | `number`   | No       | `30000` | Request timeout in milliseconds      |
 | `retry`          | `object`   | No       | —       | Retry/backoff overrides              |
 | `circuitBreaker` | `object`   | No       | —       | Circuit-breaker overrides            |
@@ -228,20 +293,36 @@ network errors) and a circuit breaker. Both are configurable via the constructor
 
 ### Error handling
 
-API errors throw `AllSourceError` with `status` and `body`:
+API errors throw `AllSourceError` with `status`, `body` and, for an auth
+refusal, `reason`:
 
 ```typescript
-import { AllSourceClient, AllSourceError } from "@allsourcedev/client";
+import { AllSourceClient, AllSourceError, CredentialError } from "@allsourcedev/client";
 
 try {
   await client.ingestEvent({ /* … */ });
 } catch (err) {
-  if (err instanceof AllSourceError) {
-    console.error(`API error ${err.status}:`, err.body);
-    if (err.isUnauthorized()) console.error("Check your API key.");
+  if (err instanceof CredentialError) {
+    console.error("Could not produce a credential:", err.message); // not retried
+  } else if (err instanceof AllSourceError) {
+    console.error(`API error ${err.status} (${err.reason ?? "no reason"}):`, err.body);
+    if (err.isLegacyKeySunset()) console.error("Register a client key or create a dashboard key.");
   }
 }
 ```
+
+| `reason` | Meaning |
+|---|---|
+| `legacy_key_sunset` | a key minted before managed registration, refused after the deployment's sunset |
+| `asserted_signature` | malformed assertion or `kid`, or the signature does not match the registered key |
+| `asserted_audience` | `aud` differs from the gateway's configured audience |
+| `asserted_skew` | `iat` more than 30 s ahead of the gateway, or `exp - iat` over 60 s |
+| `asserted_expired` | the assertion expired more than 30 s ago |
+| `asserted_unregistered` | no registration for this tenant and `kid`, or `clientId`/tenant mismatch |
+| `asserted_revoked` | the `kid` was revoked; rotate to a new key |
+| `asserted_unavailable` | `503`: the gateway cannot read registrations; retried automatically |
+
+Full table: [CLIENT_KEY_ROTATION.md](../../docs/runbooks/CLIENT_KEY_ROTATION.md#reading-refusals).
 
 ## License
 

@@ -27,6 +27,7 @@ WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY apps/core/Cargo.toml apps/core/
 COPY crates/ crates/
+COPY sdks/rust/ sdks/rust/
 COPY apps/prime-mcp/Cargo.toml apps/prime-mcp/Cargo.lock apps/prime-mcp/
 
 # Cargo refuses a manifest whose declared targets are missing, so each target
@@ -47,10 +48,6 @@ RUN mkdir -p apps/mcp-server-elixir/native/core_nif/src \
     && echo '' > apps/mcp-server-elixir/native/core_nif/src/lib.rs \
     && printf '[package]\nname = "core_nif"\nversion = "0.1.0"\nedition = "2024"\n' \
        > apps/mcp-server-elixir/native/core_nif/Cargo.toml \
-    && mkdir -p sdks/rust/src \
-    && echo '' > sdks/rust/src/lib.rs \
-    && printf '[package]\nname = "allsource"\nversion = "0.16.0"\nedition = "2024"\n' \
-       > sdks/rust/Cargo.toml \
     && mkdir -p tooling/performance/src \
     && echo 'fn main() {}' > tooling/performance/src/main.rs \
     && printf '[package]\nname = "allsource-performance"\nversion = "0.1.0"\nedition = "2024"\n[[bin]]\nname = "allsource-performance"\npath = "src/main.rs"\n' \

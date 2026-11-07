@@ -5,6 +5,14 @@ All notable changes to the Go Control Plane will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Legacy key sunset signal**: while `ALLSOURCE_LEGACY_KEY_SUNSET` is in the future, a response served with an unregistered managed onboarding key carries `Deprecation: @1794009600` (RFC 9745, 2026-11-07) and `Sunset: <HTTP-date of the sunset>` (RFC 8594). Refusals, registered client keys and dashboard `ask_` keys carry neither.
+
+### Documentation
+- README lists `ALLSOURCE_LEGACY_KEY_SUNSET`, `ALLSOURCE_ASSERTION_AUDIENCE` and the operator-only client-key routes under `/api/v1/admin/tenants/:id/client-keys`.
+
 ## [0.10.7] - 2026-02-26
 
 ### Fixed

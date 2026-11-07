@@ -58,7 +58,45 @@ After `/me` returns `{tenant_id, role}`, Query Service:
 - Caches the validated result in ETS
 - Sets `conn.assigns` with `tenant_id`, `current_tenant`, `auth_method: :api_key`
 
+## Hosted gateway (Control Plane)
+
+Clients of the hosted service call the Go gateway at `https://api.all-source.xyz`,
+which reads only the `Authorization: Bearer` header (`X-API-Key` is ignored).
+`auth.go` routes the bearer by its shape:
+
+1. **ES256 client assertion** (JWT header `alg: ES256` with a `kid`): verified in
+   `asserted_keys.go` against the tenant's registered public keys, read from the
+   `clientkey:<tenant>` entity in Core and cached for 30 s per gateway machine. No
+   Core round-trip per request. Claims: `iss` = registered `client_id`, `sub` =
+   tenant, `aud` = `ALLSOURCE_ASSERTION_AUDIENCE`, `exp - iat` at most 60 s, 30 s
+   skew, `jti` required. Role (`serviceaccount`) and scopes come from the
+   registration. Keys are registered by operators only
+   (`/api/v1/admin/tenants/:id/client-keys`).
+2. **`ask_` API key**: validated by Core `/api/v1/auth/me`, as above. The legacy
+   sunset does not apply.
+3. **Any other JWT**: validated locally. A managed-kind key is checked against the
+   key authority (`apikey:<tenant>`); one with no `apikey.created` record (keys from
+   the old onboarding `SignAPIKey`) is served until `ALLSOURCE_LEGACY_KEY_SUNSET`
+   with `Deprecation` and `Sunset` response headers, and refused afterwards with
+   `401` reason `legacy_key_sunset`.
+
+Refusals answer `{"error", "reason", "message"}`. Reason table and procedure:
+[CLIENT_KEY_ROTATION.md](../runbooks/CLIENT_KEY_ROTATION.md). Decision:
+[2026-11-07 registered ES256 keys](../decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+Client setup: [Registered client keys](../guides/REGISTERED_CLIENT_KEYS.md).
+
+The Query Service does not verify assertions; asserted clients go through the
+gateway.
+
 ## Environment variables
+
+### Control Plane gateway
+
+| Variable | Purpose |
+|----------|---------|
+| `ALLSOURCE_ASSERTION_AUDIENCE` | Required `aud` of client assertions (default `https://api.all-source.xyz`) |
+| `ALLSOURCE_KEY_AUTHORITY_MODE` | `off`, `shadow` or `enforce` for managed-key checks |
+| `ALLSOURCE_LEGACY_KEY_SUNSET` | RFC 3339 instant; unregistered managed keys are served before it and refused with `legacy_key_sunset` from it. Unset keeps prior behaviour |
 
 ### Core
 
@@ -79,6 +117,7 @@ After `/me` returns `{tenant_id, role}`, Query Service:
 | `CORE_API_KEY` | API key for QS -> Core internal calls |
 | `JWT_SECRET` | Same shared secret as Core |
 | `AUTH_DISABLED` | `true` to bypass auth in dev (QS-side) |
+| `ALLSOURCE_LEGACY_KEY_SUNSET` | Same RFC 3339 instant as the gateway; must parse or boot fails. Before it, served legacy keys emit `[:query_service_ex, :auth, :legacy_key_served]`; after it they get `legacy_key_sunset` (nested under `error`) |
 
 ## Production setup (recommended)
 

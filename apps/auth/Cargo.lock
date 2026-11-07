@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "better-auth-allsource"
-version = "0.14.14"
+version = "0.14.15"
 dependencies = [
  "async-trait",
  "better-auth-core",

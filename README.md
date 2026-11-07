@@ -243,6 +243,8 @@ The database. Source of truth for all event data.
 Authentication, authorization, billing, and operational management.
 
 - JWT auth & RBAC (4 roles, 7 permissions), policy enforcement with audit logging
+- Registered ES256 client keys: clients sign 60 s assertions with an operator-registered P-256 key; SDK signers for Rust, TypeScript, Python and Go ([guide](docs/guides/REGISTERED_CLIENT_KEYS.md), [decision](docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md))
+- Dated sunset for unregistered onboarding keys (`ALLSOURCE_LEGACY_KEY_SUNSET`, `401 legacy_key_sunset`); dashboard keys unaffected
 - OAuth login (GitHub, Google) with CSRF-protected state cookies
 - LemonSqueezy billing integration, HAL hypermedia API, OpenAPI spec
 - OpenTelemetry distributed tracing

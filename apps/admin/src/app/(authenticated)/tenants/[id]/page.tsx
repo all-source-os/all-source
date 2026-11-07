@@ -36,6 +36,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { HealthChip } from "@/components/fleet/health-chip";
+import { ClientKeysPanel } from "@/components/tenants/client-keys-panel";
 import { CommsPanel } from "@/components/tenants/comms-panel";
 import { OperationsPanel } from "@/components/tenants/operations-panel";
 import { TenantHealthPanel } from "@/components/tenants/tenant-health-panel";
@@ -323,7 +324,9 @@ export default function TenantDetailPage() {
               <>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Plan</span>
-                  <span className="text-sm font-medium capitalize">{planLabel(tenant.subscription.plan)}</span>
+                  <span className="text-sm font-medium capitalize">
+                    {planLabel(tenant.subscription.plan)}
+                  </span>
                 </div>
                 {tenant.subscription.status && (
                   <div className="flex justify-between">
@@ -627,6 +630,8 @@ export default function TenantDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <ClientKeysPanel tenantId={tenant.id} tenantName={tenant.name} />
 
       {/* Recent errors / empty-read symptoms */}
       <Card data-testid="tenant-symptoms-card">

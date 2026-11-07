@@ -16,8 +16,12 @@ Set your API key for the examples below:
 
 ```bash
 export ALLSOURCE_API_KEY="your-api-key-here"
-export ALLSOURCE_URL="https://all-source.xyz"
+export ALLSOURCE_URL="https://api.all-source.xyz"
 ```
+
+Every request sends the key as `Authorization: Bearer <key>`. The hosted gateway reads only that header; it ignores `X-API-Key`.
+
+> **Running a service in production?** Register an ES256 client key instead of storing a long-lived bearer: the service signs a 60-second assertion per request. See [Registered client keys](guides/REGISTERED_CLIENT_KEYS.md). Keys minted by the old onboarding flow that were never registered stop working at the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` (`401`, reason `legacy_key_sunset`); dashboard keys are not affected.
 
 > **Local development?** If running locally with Docker, use `http://localhost:3902` for the Query Service or `http://localhost:3900` for Core directly.
 
@@ -30,7 +34,7 @@ Store your first event. Every event has an `event_type`, an `entity_id` (the thi
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/events" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" \
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" \
   -d '{
     "event_type": "user.signup",
     "entity_id": "user-123",
@@ -61,7 +65,7 @@ Add a few more events to have data to query:
 # Order placed
 curl -s "$ALLSOURCE_URL/api/v1/events" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" \
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" \
   -d '{
     "event_type": "order.placed",
     "entity_id": "order-456",
@@ -75,7 +79,7 @@ curl -s "$ALLSOURCE_URL/api/v1/events" \
 # Payment processed
 curl -s "$ALLSOURCE_URL/api/v1/events" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" \
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" \
   -d '{
     "event_type": "payment.processed",
     "entity_id": "order-456",
@@ -96,7 +100,7 @@ curl -s "$ALLSOURCE_URL/api/v1/events" \
 
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/events" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" | jq
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 
 ### Filter by entity
@@ -105,7 +109,7 @@ Get the full history of a specific entity:
 
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/events?entity_id=order-456" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" | jq
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 
 ### Filter by event type
@@ -114,14 +118,14 @@ Find all events of a specific type:
 
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/events?event_type=user.signup" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" | jq
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 
 ### Paginate results
 
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/events?limit=10&offset=0" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" | jq
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 
 Response:
@@ -152,7 +156,7 @@ Projections are materialized views that automatically update as new events arriv
 # Save projection state for an entity
 curl -s "$ALLSOURCE_URL/api/v1/projections" \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" \
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" \
   -d '{
     "name": "order_summary",
     "entity_id": "order-456",
@@ -169,14 +173,14 @@ curl -s "$ALLSOURCE_URL/api/v1/projections" \
 
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/projections" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" | jq
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 
 ### Get a specific projection
 
 ```bash
 curl -s "$ALLSOURCE_URL/api/v1/projections/order_summary" \
-  -H "X-API-Key: $ALLSOURCE_API_KEY" | jq
+  -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 
 ---

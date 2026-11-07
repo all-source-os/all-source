@@ -1,4 +1,5 @@
 import { CircuitBreaker } from "./circuit-breaker";
+import { type CredentialProvider, resolveBearer } from "./credentials";
 import { type EventFolder, foldEvents } from "./fold";
 import {
   type AllSourceConfig,
@@ -68,6 +69,10 @@ interface SendOptions {
   accept?: readonly number[];
   timeoutMs?: number;
 }
+
+type Credential =
+  | { kind: "static"; key: string }
+  | { kind: "provider"; provider: CredentialProvider };
 
 interface RawResponse {
   status: number;
@@ -188,7 +193,7 @@ function stripTrailingSlashes(url: string): string {
 
 export class AllSourceClient {
   private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private readonly credential: Credential;
   private readonly timeout: number;
   private readonly retryConfig: RetryConfig;
   private readonly circuitBreaker: CircuitBreaker;
@@ -196,10 +201,19 @@ export class AllSourceClient {
 
   constructor(config: AllSourceConfig) {
     if (!config.baseUrl) throw new Error("baseUrl is required");
-    if (!config.apiKey) throw new Error("apiKey is required");
+    const { apiKey, credentials } = config;
+    if (apiKey && credentials) {
+      throw new Error("pass either apiKey or credentials, not both");
+    }
+    if (credentials) {
+      this.credential = { kind: "provider", provider: credentials };
+    } else if (apiKey) {
+      this.credential = { kind: "static", key: apiKey };
+    } else {
+      throw new Error("apiKey or credentials is required");
+    }
 
     this.baseUrl = stripTrailingSlashes(config.baseUrl);
-    this.apiKey = config.apiKey;
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
 
     this.retryConfig = {
@@ -619,16 +633,6 @@ export class AllSourceClient {
 
     const { body } = options;
     const url = `${this.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      // The gateway reads only Authorization; the Query Service reads X-API-Key first.
-      Authorization: `Bearer ${this.apiKey}`,
-      "X-API-Key": this.apiKey,
-      Accept: "application/json",
-      ...options.headers,
-    };
-    if (body !== undefined) {
-      headers["Content-Type"] = "application/json";
-    }
     const accept = options.accept ?? [];
     const timeout = options.timeoutMs ?? this.timeout;
 
@@ -641,6 +645,17 @@ export class AllSourceClient {
         const delay = retryAfterMs ?? this.computeDelay(attempt);
         retryAfterMs = undefined;
         await new Promise((r) => setTimeout(r, delay));
+      }
+
+      // Resolved per attempt so a short-lived assertion is fresh after a backoff
+      // wait. A CredentialError escapes the retry loop and the circuit breaker.
+      const headers: Record<string, string> = {
+        ...(await this.authHeaders()),
+        Accept: "application/json",
+        ...options.headers,
+      };
+      if (body !== undefined) {
+        headers["Content-Type"] = "application/json";
       }
 
       const controller = new AbortController();
@@ -721,6 +736,15 @@ export class AllSourceClient {
     // Should not reach here, but just in case
     this.circuitBreaker.recordFailure();
     throw lastError;
+  }
+
+  private async authHeaders(): Promise<Record<string, string>> {
+    if (this.credential.kind === "static") {
+      const { key } = this.credential;
+      // The gateway reads only Authorization; the Query Service reads X-API-Key first.
+      return { Authorization: `Bearer ${key}`, "X-API-Key": key };
+    }
+    return { Authorization: `Bearer ${await resolveBearer(this.credential.provider)}` };
   }
 
   private computeDelay(attempt: number): number {

@@ -46,6 +46,8 @@ defmodule McpServerElixir.Infrastructure.CoreWebSocketClient do
   use WebSockex
   require Logger
 
+  alias McpServerElixir.Infrastructure.CoreCredentials
+
   @default_url "ws://localhost:3900/api/v1/events/stream"
   @default_initial_backoff_ms 1_000
   @default_max_backoff_ms 30_000
@@ -144,18 +146,15 @@ defmodule McpServerElixir.Infrastructure.CoreWebSocketClient do
   end
 
   @doc false
-  # A hosted Core rejects the raw key — the header must carry the `Bearer`
-  # scheme (#228). Tolerate a key that already includes it.
+  # Asked again on every connect: a client assertion lives 60s, so headers
+  # captured at start would be refused on a later reconnect.
   # Public (undocumented) so tests can assert the header without a live socket.
-  def build_auth_headers do
-    api_key = Application.get_env(:mcp_server_elixir, :core_api_key)
+  def build_auth_headers, do: CoreCredentials.headers("Authorization")
 
-    case api_key do
-      nil -> []
-      "" -> []
-      "Bearer " <> _ = key -> [{"Authorization", key}]
-      key -> [{"Authorization", "Bearer " <> key}]
-    end
+  @doc false
+  def refresh_auth(%WebSockex.Conn{extra_headers: headers} = conn) do
+    kept = Enum.reject(headers, fn {name, _} -> String.downcase(name) == "authorization" end)
+    %{conn | extra_headers: kept ++ build_auth_headers()}
   end
 
   defp start_retry_loop(url, name, initial_state) do
@@ -181,11 +180,9 @@ defmodule McpServerElixir.Infrastructure.CoreWebSocketClient do
 
     Process.sleep(backoff)
 
-    extra_headers = Map.get(state, :extra_headers, [])
-
     case WebSockex.start_link(url, __MODULE__, %{state | reconnect_attempts: attempt},
            name: name,
-           extra_headers: extra_headers
+           extra_headers: build_auth_headers()
          ) do
       {:ok, _pid} ->
         Logger.info("[CoreWebSocketClient] Connected after #{attempt} retries")
@@ -385,7 +382,7 @@ defmodule McpServerElixir.Infrastructure.CoreWebSocketClient do
   end
 
   @impl WebSockex
-  def handle_disconnect(%{reason: reason}, state) do
+  def handle_disconnect(%{reason: reason} = status, state) do
     new_attempts = state.reconnect_attempts + 1
     new_total = state.total_reconnects + 1
 
@@ -435,7 +432,7 @@ defmodule McpServerElixir.Infrastructure.CoreWebSocketClient do
 
       Process.sleep(backoff)
 
-      {:reconnect, %{new_state | backoff_ms: min(backoff * 2, state.max_backoff_ms)}}
+      reconnect(status, %{new_state | backoff_ms: min(backoff * 2, state.max_backoff_ms)})
     end
   end
 
@@ -446,6 +443,11 @@ defmodule McpServerElixir.Infrastructure.CoreWebSocketClient do
   end
 
   # Private Functions
+
+  defp reconnect(%{conn: %WebSockex.Conn{} = conn}, state),
+    do: {:reconnect, refresh_auth(conn), state}
+
+  defp reconnect(_status, state), do: {:reconnect, state}
 
   defp send_filters(filters) do
     filter_json = Jason.encode!(filters)

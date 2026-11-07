@@ -20,6 +20,7 @@ from typing import (
 import httpx
 
 from allsource_client import _protocol as proto
+from allsource_client.credentials import AsyncCredentialProvider, ProviderAuth, require_one_credential
 from allsource_client.fold import EventFolder, fold_events
 from allsource_client.types import (
     AllSourceError,
@@ -85,21 +86,33 @@ class AllSourceAsyncClient:
         async with AllSourceAsyncClient(api_key="as_xxx") as client:
             event = await client.ingest("user.signup", "user-123", {"plan": "pro"})
             events = await client.query(event_type="user.signup")
+
+    Pass exactly one of `api_key` and `credential_provider`. The provider may
+    return a string or an awaitable of one; it is called on every request
+    attempt, retries included, and its value is sent as
+    `Authorization: Bearer <token>`.
     """
 
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str] = None,
         base_url: str = "https://api.all-source.xyz",
         timeout: float = 30.0,
+        *,
+        credential_provider: Optional[AsyncCredentialProvider] = None,
     ) -> None:
+        require_one_credential(api_key, credential_provider)
+        headers = {"Content-Type": "application/json"}
+        auth: Optional[httpx.Auth] = None
+        if credential_provider is not None:
+            auth = ProviderAuth(credential_provider)
+        else:
+            headers["Authorization"] = f"Bearer {api_key}"
         self._base_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
+            auth=auth,
             timeout=timeout,
         )
         self._sleep: Callable[[float], Awaitable[None]] = asyncio.sleep

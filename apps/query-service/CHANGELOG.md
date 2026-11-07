@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - View folding (latest-state contract, ADR-021): `Views.Reducer` applies declarative view definitions; `Views.ViewFolder` folds each tenant's view from Core's event feed into the `view_<name>` read model; `Views.ViewCatalog` polls `GET /api/v1/admin/views`. Off unless `VIEWS_FOLD_ENABLED=true`.
+- Legacy key sunset signal: while `ALLSOURCE_LEGACY_KEY_SUNSET` is in the future, a response served with an unregistered managed onboarding key, by Bearer JWT or `X-API-Key`, carries `Deprecation: @1794009600` (RFC 9745, 2026-11-07) and `Sunset: <HTTP-date of the sunset>` (RFC 8594), the same headers the Control Plane sends. Keys with a registration record and refusals carry neither.
+- OpenAPI security scheme descriptions name ES256 client assertions, which the hosted gateway at `https://api.all-source.xyz` verifies before a request reaches this service.
 
 ### Removed
 - `GET /api/v1/snapshots` and `POST /api/query/projected`, with `ProjectionSync`, `EventPipeline`, `Projections.ProjectionServer`, `ProjectionSupervisor`, `FoldPipeline` and the Core snapshot and projection-state client calls. Their Core stores carry no tenant key.

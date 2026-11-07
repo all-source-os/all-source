@@ -5,6 +5,26 @@ All notable changes to the MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- ES256 client key authentication against the hosted gateway. Set
+  `ALLSOURCE_CLIENT_SIGNING_KEY` (inline PEM or path), `ALLSOURCE_CLIENT_ID`,
+  `ALLSOURCE_TENANT_ID` and `ALLSOURCE_CLIENT_KID`, and optionally
+  `ALLSOURCE_ASSERTION_AUDIENCE` (default `https://api.all-source.xyz`). Each
+  request then carries a 60-second assertion, reused until 15 seconds before it
+  expires, and the static `CORE_API_KEY` is not sent. The variable names match
+  `allsource-mcp`.
+- Boot fails on a missing identity variable, a key that is not P-256 PKCS#8, or
+  a kid that is not the key's RFC 7638 thumbprint.
+
+### Changed
+- HTTP retries and WebSocket reconnects ask for the credential again instead of
+  reusing the header captured at start.
+
+### Fixed
+- README listed `MCP_READ_ONLY`; the variable read is `ALLSOURCE_READ_ONLY`.
+
 ## [0.9.0] - 2026-02-10
 
 ### Added

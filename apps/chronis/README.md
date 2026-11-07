@@ -239,7 +239,32 @@ instance_id = "a1b2c3d4-..."              # Auto-generated, identifies this mach
 
 [sync]
 remote_url = "https://api.all-source.xyz"  # Remote Core for sync target or primary backend
+api_key = "..."                            # Optional; see "Authenticating to the hosted gateway"
 ```
+
+#### Authenticating to the hosted gateway
+
+`https://api.all-source.xyz` needs a credential on every request. Chronis sends one of two:
+
+- **A registered client key (preferred).** The tenant's operator registers the public half of a P-256 key ([`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md)) and gives you the client id and kid. Chronis signs a fresh 60-second ES256 assertion with the private key for every HTTP request and every WebSocket connect, using the `allsource` SDK's `Es256AssertionProvider`. Only the `Authorization` header is sent.
+- **An API key** (`api_key`), sent unchanged as `Authorization: Bearer <key>`.
+
+When a signing key is configured, `api_key` is ignored.
+
+```toml
+# .chronis/config.toml
+[sync]
+remote_url = "https://api.all-source.xyz"
+client_id = "my-team-chronis"              # assertion iss
+tenant_id = "my-tenant"                    # assertion sub
+client_kid = "q_OqpJGB..."                 # the kid the operator gave you (RFC 7638 thumbprint)
+signing_key_path = "~/.config/chronis/client-key.pem"
+# audience = "https://api.all-source.xyz"  # default
+```
+
+`config.toml` is tracked in git, so `signing_key_path` must be a path; chronis refuses a PEM pasted into it. Each setting can be overridden per machine with `ALLSOURCE_CLIENT_SIGNING_KEY` (a PEM, or a path to one), `ALLSOURCE_CLIENT_ID`, `ALLSOURCE_TENANT_ID`, `ALLSOURCE_CLIENT_KID` and `ALLSOURCE_ASSERTION_AUDIENCE`, the same variables `allsource-mcp` reads. `cn init --remote <url> --signing-key <path> --client-id <id> --tenant-id <tenant> --client-kid <kid>` writes the section for you.
+
+API keys minted by the old onboarding flow (HS256 keys with no registration record) stop working once the gateway's `ALLSOURCE_LEGACY_KEY_SUNSET` passes, with `401` and reason `legacy_key_sunset`. Dashboard-created keys and registered client keys keep working.
 
 ### Visualization
 

@@ -36,6 +36,7 @@ describe("GEO canonical product facts", () => {
     expect(organization.sameAs).toEqual([
       "https://github.com/all-source-os/all-source",
       "https://x.com/ddonprogramming",
+      "https://www.linkedin.com/company/allsource-event-store/",
     ]);
 
     const productMap = productVerticalListSchema(productVerticals);

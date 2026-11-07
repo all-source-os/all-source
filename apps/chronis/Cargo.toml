@@ -36,6 +36,8 @@ allsource-core = { version = "0.28.0", path = "../core", default-features = fals
     "embedded-replicant",
     "embedded-projections",
 ] }
+# Es256AssertionProvider for registered client keys; same client as allsource-mcp.
+allsource = { version = "0.29.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
 anyhow = "1.0"
 arboard = "3.4"
 axum = { version = "0.8", features = ["json", "ws"] }
@@ -66,8 +68,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["serde"] }
 
 [dev-dependencies]
+aws-lc-rs = "1"
+base64 = "0.22"
 divan = "0.1"
 iai-callgrind = "0.16"
+jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"] }
 tempfile = "3.23"
 
 [[bench]]

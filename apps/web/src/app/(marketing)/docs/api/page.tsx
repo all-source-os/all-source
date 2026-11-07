@@ -104,14 +104,50 @@ export default function ApiReferencePage() {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">Authentication</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Requests to the Query Service (port 3902) require a Bearer token in the{" "}
+            Requests to the hosted gateway require a Bearer token in the{" "}
             <code className="text-sm bg-muted px-1.5 py-0.5 rounded">Authorization</code> header.
-            Direct Core access (port 3900) does not require authentication — it is intended for
-            internal service-to-service communication.
+            The gateway reads no other header. Direct Core access (port 3900) does not require
+            authentication; it is intended for internal service-to-service communication.
           </p>
           <pre className="mt-3 rounded-lg border border-border bg-muted/50 p-4 text-sm overflow-x-auto">
             <code>{`Authorization: Bearer <your-api-key>`}</code>
           </pre>
+          <p className="mt-4 text-muted-foreground leading-relaxed">
+            The bearer is either a dashboard API key or a registered client assertion. For a
+            registered client key, your service keeps a P-256 private key and a platform operator
+            registers the public half on your tenant. Each request then carries a short-lived ES256
+            JWT the service signs itself:
+          </p>
+          <pre className="mt-3 rounded-lg border border-border bg-muted/50 p-4 text-sm overflow-x-auto">
+            <code>{`header  {"alg":"ES256","typ":"JWT","kid":"<RFC 7638 thumbprint>"}
+claims  iss  = your registered client_id
+        sub  = your tenant id
+        aud  = "https://api.all-source.xyz"
+        iat  = now, exp = at most iat + 60 s
+        jti  = unique per token`}</code>
+          </pre>
+          <p className="mt-4 text-muted-foreground leading-relaxed">
+            Role and scopes come from the registration, not the token. The Rust, TypeScript, Python
+            and Go SDKs sign these for you. Refusals answer{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
+              {`{"error", "reason", "message"}`}
+            </code>
+            . Keys minted by the old onboarding flow that were never registered stop working at the
+            gateway&apos;s legacy-key sunset date with{" "}
+            <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
+              401 reason: legacy_key_sunset
+            </code>
+            ; dashboard keys are not affected. Setup steps:{" "}
+            <a
+              href="https://github.com/all-source-os/all-source/blob/main/docs/guides/REGISTERED_CLIENT_KEYS.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4 hover:opacity-80"
+            >
+              registered client keys guide
+            </a>
+            .
+          </p>
         </section>
 
         <section>

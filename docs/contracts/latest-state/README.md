@@ -10,6 +10,17 @@ Every SDK sends the key as `Authorization: Bearer <key>`. The gateway reads no
 other header and answers `401 "no authorization header"` without it. SDKs that
 also send `X-API-Key` do so for callers that reach the Query Service directly.
 
+The bearer is either an API key or a registered client assertion: an ES256 JWT
+with header `kid` = the RFC 7638 thumbprint of a public key an operator
+registered on the tenant, and claims `iss` = `client_id`, `sub` = tenant,
+`aud` = `ALLSOURCE_ASSERTION_AUDIENCE` (default `https://api.all-source.xyz`),
+`exp - iat` at most 60 s, and a `jti`. An SDK configured with a credential
+provider asks it for a bearer on every request attempt and every feed connect,
+and sends only `Authorization`. Refusals answer `{"error", "reason", "message"}`;
+the reasons (`asserted_*`, `scope`, `legacy_key_sunset`) are listed in
+[CLIENT_KEY_ROTATION.md](../../runbooks/CLIENT_KEY_ROTATION.md#reading-refusals).
+Decision: [registered ES256 keys](../../decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+
 Every SDK test reads the JSON fixtures in [`sdks/contract/fixtures/`](../../../sdks/contract/fixtures/),
 so the four SDKs and Core agree on one set of bodies.
 

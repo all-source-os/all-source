@@ -7,6 +7,7 @@ pub mod id;
 pub mod prime_memory;
 pub mod prime_setup;
 pub mod projection;
+pub mod remote_auth;
 pub mod remote_stream;
 pub mod wal_tail;
 pub mod workspace;

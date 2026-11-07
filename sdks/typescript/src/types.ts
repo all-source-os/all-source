@@ -1,3 +1,5 @@
+import type { CredentialProvider } from "./credentials";
+
 /** Retry configuration with exponential backoff. */
 export interface RetryConfig {
   /** Maximum number of retries. Defaults to 3. */
@@ -18,12 +20,10 @@ export interface CircuitBreakerConfig {
   recoveryTimeout: number;
 }
 
-/** Configuration options for the AllSource client. */
-export interface AllSourceConfig {
-  /** Base URL of the AllSource Query Service (e.g., "https://allsource-query.fly.dev"). */
+/** Options shared by both ways of authenticating. */
+export interface AllSourceConfigBase {
+  /** Base URL of the AllSource gateway (e.g., "https://api.all-source.xyz"). */
   baseUrl: string;
-  /** API key, sent as `Authorization: Bearer` and as `X-API-Key`. */
-  apiKey: string;
   /** Request timeout in milliseconds. Defaults to 30000. */
   timeout?: number;
   /** Retry configuration. Uses sensible defaults if omitted. */
@@ -33,6 +33,24 @@ export interface AllSourceConfig {
   /** Custom fetch function. Defaults to globalThis.fetch. */
   fetch?: typeof globalThis.fetch;
 }
+
+/** Configuration options for the AllSource client: exactly one of `apiKey` or `credentials`. */
+export type AllSourceConfig = AllSourceConfigBase &
+  (
+    | {
+        /** Static API key, sent as `Authorization: Bearer` and as `X-API-Key`. */
+        apiKey: string;
+        credentials?: undefined;
+      }
+    | {
+        /**
+         * Asked for a bearer on every request attempt, retries included, and
+         * sent as `Authorization: Bearer` only.
+         */
+        credentials: CredentialProvider;
+        apiKey?: undefined;
+      }
+  );
 
 /** An event to ingest into AllSource. */
 export interface IngestEventInput {
@@ -441,9 +459,36 @@ export class AllSourceError extends Error {
     this.name = "AllSourceError";
   }
 
+  /**
+   * The refusal's `reason` code, such as `legacy_key_sunset` or
+   * `asserted_expired`. The gateway sends it at the top level; the Query
+   * Service nests it under `error`.
+   */
+  get reason(): string | undefined {
+    const body = this.body;
+    if (typeof body !== "object" || body === null) return undefined;
+    const record = body as Record<string, unknown>;
+    if (typeof record.reason === "string") return record.reason;
+    const nested = record.error;
+    if (typeof nested === "object" && nested !== null) {
+      const reason = (nested as Record<string, unknown>).reason;
+      if (typeof reason === "string") return reason;
+    }
+    return undefined;
+  }
+
   /** Whether the error is a 401 Unauthorized. */
   isUnauthorized(): boolean {
     return this.status === 401;
+  }
+
+  /**
+   * Whether a key minted before managed registration was refused because the
+   * deployment's `ALLSOURCE_LEGACY_KEY_SUNSET` has passed. Register a client
+   * key or create a dashboard key.
+   */
+  isLegacyKeySunset(): boolean {
+    return this.status === 401 && this.reason === "legacy_key_sunset";
   }
 
   /** Whether the error is a 429 Rate Limited. */

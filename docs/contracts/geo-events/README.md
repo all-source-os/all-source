@@ -40,8 +40,9 @@ own output, not a hand-typed approximation of it.
 
 Every `geo.*` event is POSTed to `POST /api/v1/events` **through the Control
 Plane gateway** (`https://api.all-source.xyz`). Core does not authenticate
-public traffic; the gateway validates the key, injects `tenant_id` and
-forwards.
+public traffic; the gateway validates the API key or registered client
+assertion ([decision](../../decisions/2026-11-07-tenant-clients-registered-es256-keys.md)),
+injects `tenant_id` and forwards.
 
 | field | who sets it | rule |
 |---|---|---|

@@ -38,6 +38,14 @@ defmodule QueryServiceEx.Infrastructure.Adapters.ApiKeyAuthority do
       DateTime.compare(DateTime.utc_now(), sunset) != :lt
   end
 
+  @doc "Whether a credential refused for `reason` is served only because the legacy sunset has not passed."
+  def legacy_served?(reason) do
+    sunset = legacy_sunset()
+
+    reason == :unregistered and mode() != :off and sunset != nil and
+      DateTime.compare(DateTime.utc_now(), sunset) == :lt
+  end
+
   def legacy_sunset_message do
     date = legacy_sunset() |> DateTime.to_date() |> Date.to_iso8601()
 

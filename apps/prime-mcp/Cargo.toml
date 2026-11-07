@@ -39,6 +39,8 @@ prime-remote-embed = ["allsource-core/prime-remote-embed"]
 prime-bundled-model = ["allsource-core/prime-bundled-model"]
 
 [dependencies]
+# Es256AssertionProvider for sync with a registered client key.
+allsource = { version = "0.29.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
 allsource-core = { version = "0.28.0", path = "../../apps/core", default-features = false, features = ["prime-recall", "prime-vectors"] }
 anyhow = "1.0"
 axum = { version = "0.8", features = ["json"] }
@@ -60,8 +62,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
+aws-lc-rs = "1"
+base64 = "0.22"
 divan = "0.1"
 iai-callgrind = "0.16"
+jsonwebtoken = { version = "11.1", features = ["aws_lc_rs"] }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 wiremock = "0.6"

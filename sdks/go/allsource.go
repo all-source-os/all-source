@@ -72,6 +72,7 @@ func WithTimeout(d time.Duration) Option {
 // Client is the AllSource Event Store API client.
 type Client struct {
 	apiKey  string
+	cred    CredentialProvider
 	baseURL string
 	http    *http.Client
 	retry   *RetryConfig
@@ -198,6 +199,11 @@ func (c *Client) shouldRetry(err error, status int) bool {
 		return false
 	}
 
+	var credErr *CredentialError
+	if errors.As(err, &credErr) {
+		return false
+	}
+
 	// Transport errors (no status code) are retryable.
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
@@ -213,6 +219,18 @@ func (c *Client) shouldRetry(err error, status int) bool {
 }
 
 func (c *Client) doOnce(ctx context.Context, method, path string, body any, header http.Header) (*response, error) {
+	var bearer string
+	if c.cred != nil {
+		token, err := c.cred.Bearer(ctx)
+		if err != nil {
+			return &response{}, &CredentialError{Err: err}
+		}
+		if token == "" {
+			return &response{}, &CredentialError{Err: ErrNoCredential}
+		}
+		bearer = token
+	}
+
 	var reqBody io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -226,9 +244,14 @@ func (c *Client) doOnce(ctx context.Context, method, path string, body any, head
 	if err != nil {
 		return &response{}, fmt.Errorf("create request: %w", err)
 	}
-	// The gateway reads only Authorization; the Query Service reads X-API-Key first.
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("X-API-Key", c.apiKey)
+	if c.cred != nil {
+		// The Query Service cannot verify an assertion, so it gets no X-API-Key.
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	} else {
+		// The gateway reads only Authorization; the Query Service reads X-API-Key first.
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	for name, values := range header {
 		for _, v := range values {
@@ -258,12 +281,15 @@ func (c *Client) doOnce(ctx context.Context, method, path string, body any, head
 	return out, nil
 }
 
-// parseAPIError reads both error shapes: the gateway's
-// {"error":{"code","message"}} and Core's {"error":"<code>", ...fields}.
+// parseAPIError reads both error shapes: {"error":{"code","message","reason"}}
+// (the Query Service) and
+// {"error":"<code>", ...fields}, which is also the gateway's auth denial
+// {"error","reason","message"}.
 func parseAPIError(data []byte, statusCode int) *APIError {
 	var errResp struct {
 		Error           json.RawMessage `json:"error"`
 		Message         string          `json:"message"`
+		Reason          string          `json:"reason"`
 		Detail          string          `json:"detail"`
 		ExpectedVersion *int64          `json:"expected_version"`
 		CurrentVersion  *int64          `json:"current_version"`
@@ -273,6 +299,7 @@ func parseAPIError(data []byte, statusCode int) *APIError {
 	if err := json.Unmarshal(data, &errResp); err == nil && len(errResp.Error) > 0 {
 		apiErr := &APIError{
 			StatusCode:      statusCode,
+			Reason:          errResp.Reason,
 			Detail:          errResp.Detail,
 			ExpectedVersion: errResp.ExpectedVersion,
 			CurrentVersion:  errResp.CurrentVersion,
@@ -282,10 +309,14 @@ func parseAPIError(data []byte, statusCode int) *APIError {
 		var nested struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
+			Reason  string `json:"reason"`
 		}
 		if json.Unmarshal(errResp.Error, &nested) == nil && nested.Code != "" {
 			apiErr.Code = nested.Code
 			apiErr.Message = nested.Message
+			if apiErr.Reason == "" {
+				apiErr.Reason = nested.Reason
+			}
 			return apiErr
 		}
 		var code string

@@ -1,17 +1,19 @@
 //! Process-global writer to the remote Core, for tool handlers that must
 //! persist events the local Prime store can't ship (e.g. `inbox_draft` →
 //! `email.drafted`). Mirrors `tools::SyncStatus`: set once at startup from
-//! `--sync-to` / `--api-key`. Tool handlers otherwise have no access to the
-//! tenant api key. The remote gateway injects `tenant_id` from the key.
+//! `--sync-to` and its credential. Tool handlers otherwise have no access to
+//! the credential. The remote gateway injects `tenant_id` from it.
 
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
+use crate::remote_auth::RemoteAuth;
+
 struct CoreWriter {
     base_url: String,
-    api_key: String,
+    auth: RemoteAuth,
     client: reqwest::Client,
 }
 
@@ -19,10 +21,10 @@ static CORE_WRITER: OnceLock<CoreWriter> = OnceLock::new();
 
 /// Record the remote Core target. Called once at startup; later calls are
 /// ignored (same as `tools::set_sync_status`).
-pub fn set_core_writer(remote_url: &str, api_key: &str) {
+pub fn set_core_writer(remote_url: &str, auth: RemoteAuth) {
     let _ = CORE_WRITER.set(CoreWriter {
         base_url: remote_url.trim_end_matches('/').to_string(),
-        api_key: api_key.to_string(),
+        auth,
         client: reqwest::Client::new(),
     });
 }
@@ -33,7 +35,7 @@ pub fn is_configured() -> bool {
 }
 
 /// POST an event to the remote Core. `tenant_id` is injected by the gateway
-/// from the api key, so it is not sent. Returns the created event id.
+/// from the credential, so it is not sent. Returns the created event id.
 pub async fn ingest_event(
     event_type: &str,
     entity_id: &str,
@@ -42,7 +44,7 @@ pub async fn ingest_event(
 ) -> Result<String> {
     let w = CORE_WRITER
         .get()
-        .context("remote Core not configured (pass --sync-to and --api-key)")?;
+        .context("remote Core not configured (pass --sync-to and a credential)")?;
     let url = format!("{}/api/v1/events", w.base_url);
     let body = json!({
         "event_type": event_type,
@@ -53,7 +55,7 @@ pub async fn ingest_event(
     let resp = w
         .client
         .post(&url)
-        .bearer_auth(&w.api_key)
+        .bearer_auth(w.auth.bearer()?)
         .json(&body)
         .send()
         .await

@@ -270,6 +270,178 @@ export async function unsuspendTenant(id: string): Promise<void> {
   }
 }
 
+// ── Registered client keys (operator-only ES256 registration) ─────────
+// Routes: apps/control-plane/client_keys_admin.go. Registration is an operator
+// action by design; tenants cannot register their own keys.
+
+/** The managed key scopes the Control Plane accepts (managed_keys.go validKeyScopes). */
+export const CLIENT_KEY_SCOPES = [
+  "events:read",
+  "events:write",
+  "queries:execute",
+  "projections:read",
+  "projections:write",
+  "schemas:read",
+  "schemas:write",
+] as const;
+
+export type ClientKeyScope = (typeof CLIENT_KEY_SCOPES)[number];
+
+export interface PublicJwk {
+  kty: "EC";
+  crv: "P-256";
+  x: string;
+  y: string;
+}
+
+export interface ClientKey {
+  kid: string;
+  revoked: boolean;
+  invalid: boolean;
+  active: boolean;
+  client_id?: string;
+  alg?: string;
+  role?: string;
+  scopes?: string[];
+  created_at?: string;
+  created_by?: string;
+  revoked_at?: string;
+  revoked_by?: string;
+  jwk?: PublicJwk;
+}
+
+export type ClientKeyState = "active" | "revoked" | "invalid" | "inactive";
+
+export function clientKeyState(key: ClientKey): ClientKeyState {
+  if (key.revoked) return "revoked";
+  if (key.invalid) return "invalid";
+  return key.active ? "active" : "inactive";
+}
+
+export interface RegisterClientKeyRequest {
+  client_id: string;
+  jwk: PublicJwk;
+  scopes: string[];
+}
+
+export interface RegisterClientKeyResult {
+  kid: string;
+  tenant_id: string;
+  client_id: string;
+  already_registered?: boolean;
+  alg?: string;
+  role?: string;
+  scopes?: string[];
+}
+
+export interface RevokeClientKeyResult {
+  kid: string;
+  tenant_id: string;
+  revoked_at?: string;
+  already_revoked?: boolean;
+}
+
+const BASE64URL_32_BYTES = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * Parse an operator-pasted JWK into the public members the register route
+ * takes. Refuses a private JWK (one with `d`) before it leaves the browser.
+ * The Control Plane still checks the point is on the curve.
+ */
+export function parsePublicJwk(text: string): PublicJwk {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("The JWK is not valid JSON.");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("The JWK must be a JSON object.");
+  }
+  const jwk = value as Record<string, unknown>;
+  if ("d" in jwk) {
+    throw new Error("This is a private JWK. Paste the public key only (no d member).");
+  }
+  if (jwk.kty !== "EC" || jwk.crv !== "P-256") {
+    throw new Error("The JWK must be a P-256 key: kty EC, crv P-256.");
+  }
+  if (
+    typeof jwk.x !== "string" ||
+    typeof jwk.y !== "string" ||
+    !BASE64URL_32_BYTES.test(jwk.x) ||
+    !BASE64URL_32_BYTES.test(jwk.y)
+  ) {
+    throw new Error("The JWK x and y must each be 32 bytes, base64url without padding.");
+  }
+  return { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y };
+}
+
+/** Prefer the Control Plane's `{error, message}` body over the bare status. */
+async function clientKeyError(res: Response, action: string): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data && typeof data === "object") {
+      if (typeof data.message === "string" && data.message) {
+        return `Failed to ${action}: ${data.message}`;
+      }
+      if (typeof data.error === "string" && data.error) {
+        return `Failed to ${action}: ${data.error}`;
+      }
+    }
+  } catch {
+    // non-JSON body: fall through to the status-only message
+  }
+  return `Failed to ${action}: ${res.status}`;
+}
+
+function clientKeysUrl(tenantId: string, kid?: string): string {
+  const base = `${getApiUrl()}/api/v1/admin/tenants/${encodeURIComponent(tenantId)}/client-keys`;
+  return kid ? `${base}/${encodeURIComponent(kid)}` : base;
+}
+
+export async function fetchClientKeys(tenantId: string): Promise<ClientKey[]> {
+  const res = await fetch(clientKeysUrl(tenantId), { credentials: "include" });
+  if (!res.ok) {
+    throw new Error(await clientKeyError(res, "load client keys"));
+  }
+  const data = (await res.json()) ?? {};
+  return asList<ClientKey>(data, "client_keys");
+}
+
+export async function registerClientKey(
+  tenantId: string,
+  request: RegisterClientKeyRequest
+): Promise<RegisterClientKeyResult> {
+  const res = await fetch(clientKeysUrl(tenantId), {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id: request.client_id,
+      jwk: request.jwk,
+      scopes: request.scopes,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await clientKeyError(res, "register client key"));
+  }
+  return res.json();
+}
+
+export async function revokeClientKey(
+  tenantId: string,
+  kid: string
+): Promise<RevokeClientKeyResult> {
+  const res = await fetch(clientKeysUrl(tenantId, kid), {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new Error(await clientKeyError(res, "revoke client key"));
+  }
+  return res.json();
+}
+
 // ── List fetcher ──────────────────────────────────────────────────────
 
 export async function fetchTenants(params: FetchTenantsParams = {}): Promise<TenantsResponse> {

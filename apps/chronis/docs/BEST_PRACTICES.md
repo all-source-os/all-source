@@ -72,6 +72,10 @@ remote_url = "https://api.all-source.xyz"
 
 **When to use:** Shared team instance, CI/CD pipelines, environments where you want a single source of truth without sync. Reads use a local in-memory projection cache bootstrapped from remote events on startup.
 
+### Credentials for the hosted gateway
+
+Both modes need a credential when `remote_url` is `https://api.all-source.xyz`. Prefer a registered client key: put `client_id`, `tenant_id`, `client_kid` and `signing_key_path` in `[sync]`, or set `ALLSOURCE_CLIENT_SIGNING_KEY`, `ALLSOURCE_CLIENT_ID`, `ALLSOURCE_TENANT_ID` and `ALLSOURCE_CLIENT_KID` per machine. Keep the private key out of the repository: `config.toml` is tracked, so it carries only the path. An `api_key` in `[sync]` still works; keys from the old onboarding flow stop at the gateway's legacy key sunset. Details: the README's "Authenticating to the hosted gateway" and [`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../../docs/runbooks/CLIENT_KEY_ROTATION.md).
+
 ---
 
 ## When to Use TOON (and When Not To)

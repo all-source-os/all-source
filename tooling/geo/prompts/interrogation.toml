@@ -10,6 +10,12 @@
 # correct, and the source path is also what tells prompt 027 which file to
 # change when a model gets it wrong.
 #
+# ── VERSION 3 ───────────────────────────────────────────────────────
+#
+# Version 3 changes one expectation: api.shape now accepts a registered ES256
+# client key as well as an API key at the gateway
+# (docs/decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+#
 # ── VERSION 2 ───────────────────────────────────────────────────────
 #
 # Version 2 starts a new interrogation baseline after the canonical product
@@ -22,7 +28,7 @@
 # covers enterprise features. That exception is called out in the licence
 # expectation rather than silently graded as wholly fabricated.
 
-version = 2
+version = 3
 family = "interrogation"
 
 [[prompt]]
@@ -400,8 +406,9 @@ A REST API under the /api/v1/ prefix: POST /api/v1/events to ingest, \
 GET /api/v1/events/query to read back (returning {"events": [...], "count": \
 N}), plus /api/v1/projections, /api/v1/snapshots and /api/v1/schemas, with \
 GET /health at the root and Prometheus metrics at /metrics. Public traffic is \
-authenticated with a bearer API key at the gateway (api.all-source.xyz), not \
-against Core directly. There are Rust, TypeScript, Python and Go SDKs. An \
+authenticated at the gateway (api.all-source.xyz), not against Core directly, \
+with an Authorization bearer that is either an API key or a short-lived ES256 \
+assertion signed by a client key registered on the tenant. There are Rust, TypeScript, Python and Go SDKs. An \
 answer describing a SQL-only interface, a GraphQL API, or gRPC as the primary \
 surface is inaccurate.
 """

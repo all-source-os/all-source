@@ -93,13 +93,23 @@ defmodule QueryServiceExWeb.ApiSpec do
             type: "http",
             scheme: "bearer",
             bearerFormat: "JWT",
-            description: "JWT token issued by the Control Plane or dev-token endpoint"
+            description:
+              "JWT issued by the Control Plane or dev-token endpoint. Through the hosted " <>
+                "gateway (https://api.all-source.xyz), a tenant client may instead send an " <>
+                "ES256 client assertion signed with an operator-registered P-256 key " <>
+                "(header kid = RFC 7638 thumbprint; iss = client id, sub = tenant, aud, " <>
+                "iat, exp at most 60s after iat, jti); the gateway verifies it and takes " <>
+                "role and scopes from the registration. A managed onboarding key with no " <>
+                "registration record is refused once ALLSOURCE_LEGACY_KEY_SUNSET passes " <>
+                "and carries Deprecation and Sunset response headers until then."
           },
           "api_key" => %SecurityScheme{
             type: "apiKey",
             name: "X-API-Key",
             in: "header",
-            description: "API key for programmatic access"
+            description:
+              "API key for programmatic access. The hosted gateway reads only the " <>
+                "Authorization header; prefer an ES256 client assertion there."
           }
         }
       },
