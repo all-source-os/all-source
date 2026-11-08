@@ -35,6 +35,13 @@ struct Resident {
     sequences: Vec<u64>,
     /// Events written per domain over the whole history, folded ones included.
     counts: BTreeMap<String, u64>,
+    /// Serialized size of `events`, kept current on push and release so the
+    /// memory sampler never walks the resident set under the lock.
+    bytes: u64,
+}
+
+fn serialized_len(event: &Event) -> u64 {
+    serde_json::to_vec(event).map_or(0, |bytes| bytes.len() as u64)
 }
 
 impl Resident {
@@ -43,6 +50,7 @@ impl Resident {
             .counts
             .entry(domain_of(&event).to_string())
             .or_default() += 1;
+        self.bytes += serialized_len(&event);
         self.sequences.push(sequence);
         self.events.push(event);
     }
@@ -214,6 +222,7 @@ impl SystemMetadataStore {
             let checkpoint = loaded.as_ref().expect("tail implies a checkpoint");
             for (sequence, event) in &checkpoint.verbatim {
                 resident.sequences.push(*sequence);
+                resident.bytes += serialized_len(event);
                 resident.events.push(event.clone());
             }
             resident.counts.clone_from(&checkpoint.domain_counts);
@@ -288,6 +297,41 @@ impl SystemMetadataStore {
 
     pub fn wal(&self) -> &WriteAheadLog {
         &self.wal
+    }
+
+    /// Drop the folded events a checkpoint at `covered_seq` holds. Call only
+    /// once that checkpoint is durable, and under the checkpointer's base
+    /// lock: `capture` reads resident events by index and must not see them
+    /// move.
+    pub fn release_folded(&self, covered_seq: u64) {
+        let folded = self.options.folded;
+        let mut resident = self.resident.write();
+        let Resident {
+            events,
+            sequences,
+            bytes,
+            ..
+        } = &mut *resident;
+        let keep: Vec<bool> = events
+            .iter()
+            .zip(sequences.iter())
+            .map(|(event, sequence)| {
+                *sequence > covered_seq || !folded.iter().any(|d| in_domain(event, *d))
+            })
+            .collect();
+        let released: u64 = events
+            .iter()
+            .zip(keep.iter())
+            .filter(|(_, kept)| !**kept)
+            .map(|(event, _)| serialized_len(event))
+            .sum();
+        *bytes -= released;
+        let mut mask = keep.iter().copied();
+        events.retain(|_| mask.next().unwrap_or(true));
+        let mut mask = keep.iter().copied();
+        sequences.retain(|_| mask.next().unwrap_or(true));
+        events.shrink_to_fit();
+        sequences.shrink_to_fit();
     }
 
     /// Everything a checkpoint at the current sequence needs, read with
@@ -481,6 +525,12 @@ impl SystemMetadataStore {
         self.resident.read().events.len()
     }
 
+    /// Serialized size of the events held in memory. An estimate; process
+    /// RSS is measured separately.
+    pub fn resident_bytes(&self) -> u64 {
+        self.resident.read().bytes
+    }
+
     /// Get the data directory path.
     pub fn data_dir(&self) -> &Path {
         &self.data_dir
@@ -640,6 +690,39 @@ mod tests {
 
         // Total
         assert_eq!(store.total_events(), 3);
+    }
+
+    #[test]
+    fn resident_bytes_tracks_appends_and_release() {
+        let (store, _dir) = create_test_store();
+        store
+            .append_system_event(
+                tenant_events::CREATED,
+                system_entity_id_value(SystemDomain::Tenant, "acme"),
+                serde_json::json!({"name": "ACME"}),
+                None,
+            )
+            .unwrap();
+        store
+            .append_system_event(
+                "_system.config.set",
+                system_entity_id_value(SystemDomain::Config, "max_conn"),
+                serde_json::json!({"value": 100}),
+                None,
+            )
+            .unwrap();
+        let serialized_total = |store: &SystemMetadataStore| -> u64 {
+            store
+                .read_all()
+                .iter()
+                .map(|event| serde_json::to_vec(event).unwrap().len() as u64)
+                .sum()
+        };
+        assert_eq!(store.resident_bytes(), serialized_total(&store));
+
+        store.release_folded(u64::MAX);
+        assert_eq!(store.resident_events(), 1);
+        assert_eq!(store.resident_bytes(), serialized_total(&store));
     }
 
     #[test]

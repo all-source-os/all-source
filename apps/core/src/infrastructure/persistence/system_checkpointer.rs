@@ -127,10 +127,10 @@ impl SystemCheckpointer {
             return;
         }
         let built = {
-            let mut base = self.base.lock();
+            let _base = self.base.lock();
             self.store.capture(u64::MAX).and_then(|capture| {
                 let fold = tenant.export_fold()?;
-                Ok(self.build(&mut base, capture, fold))
+                Ok(self.build(capture, fold))
             })
         };
         let checkpoint = match built {
@@ -142,10 +142,14 @@ impl SystemCheckpointer {
         };
         let this = Arc::clone(self);
         let handle = std::thread::spawn(move || {
+            let mut base = this.base.lock();
             let outcome = this.persist(&checkpoint, 0);
             match &outcome {
                 Ok(o) => tracing::info!("Boot system checkpoint written at {}", o.covered_seq),
                 Err(e) => tracing::error!("Boot system checkpoint not written: {e}"),
+            }
+            if outcome.is_ok() {
+                this.commit(&mut base, &checkpoint);
             }
             outcome
         });
@@ -169,35 +173,45 @@ impl SystemCheckpointer {
             return Ok(None);
         }
         self.refuse_if_rejected()?;
-        let checkpoint = {
-            let mut base = self.base.lock();
-            let after = base.as_ref().map_or(0, |b| b.covered_seq);
-            let capture = self.store.capture(after)?;
-            if base.is_some() && capture.covered_seq == after {
-                return Ok(None);
-            }
-            let fold = EventSourcedTenantRepository::fold_checkpoint(
-                Arc::clone(&self.store),
-                base.as_ref().map(|b| &b.tenant),
-                &capture.tail,
-            )?;
-            let tail = capture.tail.len();
-            (self.build(&mut base, capture, fold), tail)
-        };
-        let (checkpoint, tail) = checkpoint;
-        self.persist(&checkpoint, tail).map(Some)
+        let mut base = self.base.lock();
+        let after = base.as_ref().map_or(0, |b| b.covered_seq);
+        let capture = self.store.capture(after)?;
+        if base.is_some() && capture.covered_seq == after {
+            return Ok(None);
+        }
+        let fold = EventSourcedTenantRepository::fold_checkpoint(
+            Arc::clone(&self.store),
+            base.as_ref().map(|b| &b.tenant),
+            &capture.tail,
+        )?;
+        let tail = capture.tail.len();
+        let checkpoint = self.build(capture, fold);
+        let outcome = self.persist(&checkpoint, tail)?;
+        self.commit(&mut base, &checkpoint);
+        Ok(Some(outcome))
     }
 
-    fn build(
-        &self,
-        base: &mut Option<Base>,
-        capture: CheckpointCapture,
-        tenant: FoldedStream,
-    ) -> SystemCheckpoint {
+    /// Makes a durable checkpoint the base the next build folds onto, then
+    /// drops the folded events it covers. A checkpoint no newer than the base
+    /// changes nothing, since the base already covers it.
+    fn commit(&self, base: &mut Option<Base>, checkpoint: &SystemCheckpoint) {
+        if base
+            .as_ref()
+            .is_some_and(|b| b.covered_seq >= checkpoint.covered_seq)
+        {
+            return;
+        }
+        let Some(tenant) = checkpoint.folds.get(SystemDomain::Tenant.as_str()) else {
+            return;
+        };
         *base = Some(Base {
-            covered_seq: capture.covered_seq,
+            covered_seq: checkpoint.covered_seq,
             tenant: tenant.clone(),
         });
+        self.store.release_folded(checkpoint.covered_seq);
+    }
+
+    fn build(&self, capture: CheckpointCapture, tenant: FoldedStream) -> SystemCheckpoint {
         SystemCheckpoint {
             format: system_checkpoint::format(),
             covered_seq: capture.covered_seq,

@@ -50,7 +50,8 @@ primary_region = "iad"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"
+  # Peak RSS 15 MB over 2 days (2026-11-08).
+  memory = "256mb"
 
 # Mounted but UNUSED in hosted mode (see header). Retained so deploys don't have
 # to destroy+recreate the live machine; remove in a maintenance window.

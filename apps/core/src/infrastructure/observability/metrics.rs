@@ -110,6 +110,12 @@ pub struct MetricsRegistry {
     pub cache_evictions_total: IntCounter,
     pub cache_bytes: IntGauge,
 
+    // Held by the system metadata store, outside the tenant cache.
+    pub system_resident_events: IntGauge,
+    pub system_resident_bytes: IntGauge,
+    /// Resident set size of this process, from `/proc/self/status`.
+    pub process_resident_bytes: IntGauge,
+
     // WAL replay metric (Step 6 of the sustainable data strategy).
     // Set on each successful WAL recovery; reflects the size of the
     // last replay. After a checkpoint truncates the WAL, the next
@@ -403,6 +409,24 @@ impl MetricsRegistry {
         ))
         .unwrap();
 
+        let system_resident_events = IntGauge::with_opts(Opts::new(
+            "allsource_system_resident_events",
+            "Events held in memory by the system metadata store",
+        ))
+        .unwrap();
+
+        let system_resident_bytes = IntGauge::with_opts(Opts::new(
+            "allsource_system_resident_bytes",
+            "Serialized bytes of the events held in memory by the system metadata store",
+        ))
+        .unwrap();
+
+        let process_resident_bytes = IntGauge::with_opts(Opts::new(
+            "allsource_process_resident_bytes",
+            "Resident set size of the process; 0 where the platform does not report it",
+        ))
+        .unwrap();
+
         // WAL replay metric (Step 6): size of last recovery.
         let wal_replay_events_total = IntGauge::with_opts(Opts::new(
             "allsource_core_wal_replay_events_total",
@@ -669,6 +693,15 @@ impl MetricsRegistry {
             .unwrap();
         registry.register(Box::new(cache_bytes.clone())).unwrap();
         registry
+            .register(Box::new(system_resident_events.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(system_resident_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(process_resident_bytes.clone()))
+            .unwrap();
+        registry
             .register(Box::new(wal_replay_events_total.clone()))
             .unwrap();
 
@@ -793,6 +826,9 @@ impl MetricsRegistry {
             replication_reconnects_total,
             cache_evictions_total,
             cache_bytes,
+            system_resident_events,
+            system_resident_bytes,
+            process_resident_bytes,
             wal_replay_events_total,
         })
     }
@@ -800,6 +836,17 @@ impl MetricsRegistry {
     /// Get the Prometheus registry
     pub fn registry(&self) -> &Registry {
         &self.registry
+    }
+
+    /// Set the memory gauges read on the 60 s refresh. `rss` is `None` where
+    /// the platform does not report it, and the gauge then reads 0.
+    pub fn record_memory(&self, system_events: usize, system_bytes: u64, rss: Option<u64>) {
+        self.system_resident_events
+            .set(i64::try_from(system_events).unwrap_or(i64::MAX));
+        self.system_resident_bytes
+            .set(i64::try_from(system_bytes).unwrap_or(i64::MAX));
+        self.process_resident_bytes
+            .set(rss.map_or(0, |bytes| i64::try_from(bytes).unwrap_or(i64::MAX)));
     }
 
     /// Record one completed compaction sweep.
@@ -841,6 +888,17 @@ mod tests {
         let metrics = MetricsRegistry::new();
         assert_eq!(metrics.events_ingested_total.get(), 0);
         assert_eq!(metrics.storage_events_total.get(), 0);
+    }
+
+    #[test]
+    fn memory_gauges_hold_the_values_last_recorded() {
+        let metrics = MetricsRegistry::new();
+        metrics.record_memory(7, 4096, Some(1 << 30));
+        assert_eq!(metrics.system_resident_events.get(), 7);
+        assert_eq!(metrics.system_resident_bytes.get(), 4096);
+        assert_eq!(metrics.process_resident_bytes.get(), 1 << 30);
+        metrics.record_memory(0, 0, None);
+        assert_eq!(metrics.process_resident_bytes.get(), 0);
     }
 
     #[test]

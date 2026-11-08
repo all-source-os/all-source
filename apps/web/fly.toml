@@ -36,9 +36,10 @@ primary_region = "iad"
 [http_service]
   internal_port = 3000
   force_https = true
-  auto_stop_machines = "stop"
+  # Idle visitors wake a suspended machine (docs/plans/2026-11-08-fly-cost-reduction.md).
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
   processes = ["app"]
 
   [http_service.concurrency]

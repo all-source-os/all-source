@@ -1,0 +1,28 @@
+groups:
+  - name: memory
+    rules:
+      - alert: CoreMemoryHigh
+        expr: |
+          1 - max by (app) (fly_instance_memory_mem_available{app="allsource-core"})
+            / max by (app) (fly_instance_memory_mem_total{app="allsource-core"}) > 0.85
+        for: 10m
+        labels:
+          severity: critical
+          service: allsource-core
+        annotations:
+          summary: Core uses more than 85% of its machine memory
+          action: Read fly_instance_memory_mem_available for allsource-core and the allsource_* series on Core's /metrics. Plan and levers are in docs/plans/2026-11-08-fly-cost-reduction.md.
+      - alert: CoreMemoryGrowing
+        expr: |
+          predict_linear((
+            max by (app) (fly_instance_memory_mem_total{app="allsource-core"})
+            - max by (app) (fly_instance_memory_mem_available{app="allsource-core"})
+          )[1d:5m], 3 * 24 * 3600)
+          > max by (app) (fly_instance_memory_mem_total{app="allsource-core"})
+        for: 1h
+        labels:
+          severity: warning
+          service: allsource-core
+        annotations:
+          summary: Core memory is on track to reach its machine size within 3 days
+          action: Memory rises between restarts. Compare the slope with the last restart in Fly machine events and the cache and checkpoint settings in apps/core/fly.toml before the limit is reached.

@@ -55,6 +55,7 @@ RUN mkdir -p tooling/performance/src sdks/rust/src sdks/rust/examples \
     echo 'fn main() {}' > tooling/performance/src/main.rs && \
     echo '' > sdks/rust/src/lib.rs && \
     echo 'fn main() {}' > sdks/rust/examples/asset_projection.rs && \
+    echo 'fn main() {}' > sdks/rust/examples/asserted_client.rs && \
     printf '[package]\nname = "core_nif"\nversion = "0.1.0"\nedition = "2021"\n\n[lib]\nname = "core_nif"\npath = "src/lib.rs"\n\n[dependencies]\n' \
         > apps/mcp-server-elixir/native/core_nif/Cargo.toml && \
     echo '' > apps/mcp-server-elixir/native/core_nif/src/lib.rs && \
@@ -131,6 +132,7 @@ RUN mkdir -p apps/core/src tooling/performance/src sdks/rust/src sdks/rust/examp
     echo 'fn main() {}' > tooling/performance/src/main.rs && \
     echo '' > sdks/rust/src/lib.rs && \
     echo 'fn main() {}' > sdks/rust/examples/asset_projection.rs && \
+    echo 'fn main() {}' > sdks/rust/examples/asserted_client.rs && \
     printf '[package]\nname = "core_nif"\nversion = "0.1.0"\nedition = "2021"\n\n[lib]\nname = "core_nif"\npath = "src/lib.rs"\n\n[dependencies]\n' \
         > apps/mcp-server-elixir/native/core_nif/Cargo.toml && \
     echo '' > apps/mcp-server-elixir/native/core_nif/src/lib.rs && \

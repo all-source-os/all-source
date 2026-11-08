@@ -14,8 +14,10 @@ use allsource_core::{
             ClusterManager, ClusterMember, GeoReplicationConfig, GeoReplicationManager, MemberRole,
         },
         di::ContainerBuilder,
+        observability::memory,
         persistence::{
-            SystemBootstrap, SystemCheckpointSettings, SystemCheckpointer, VerifyOutcome,
+            SystemBootstrap, SystemCheckpointSettings, SystemCheckpointer, SystemMetadataStore,
+            VerifyOutcome,
         },
         repositories::InMemoryTenantRepository,
         web::boot_gate::BootGate,
@@ -182,6 +184,11 @@ async fn main() -> Result<()> {
         let store_for_metrics = Arc::clone(&store);
         tokio::task::spawn_blocking(move || store_for_metrics.refresh_storage_metrics_now());
     }
+
+    spawn_memory_upkeep(
+        Arc::clone(&store),
+        system_repos.as_ref().map(|r| Arc::clone(&r.system_store)),
+    );
 
     // Step 6: spawn the background checkpoint loop if a cadence is
     // configured. Each tick flushes pending Parquet batches and, on
@@ -532,6 +539,32 @@ async fn main() -> Result<()> {
     }
     tracing::info!("🛑 AllSource Core shutdown complete");
     Ok(())
+}
+
+/// Every 60 s: apply the cache budget, which otherwise runs only when a tenant
+/// hydrates, and set the memory gauges.
+fn spawn_memory_upkeep(store: Arc<EventStore>, system_store: Option<Arc<SystemMetadataStore>>) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(60));
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let store = Arc::clone(&store);
+            let system_store = system_store.clone();
+            let sampled = tokio::task::spawn_blocking(move || {
+                store.enforce_cache_budget_now();
+                let (events, bytes) =
+                    system_store.map_or((0, 0), |s| (s.resident_events(), s.resident_bytes()));
+                store
+                    .metrics()
+                    .record_memory(events, bytes, memory::resident_set_bytes());
+            })
+            .await;
+            if let Err(e) = sampled {
+                tracing::warn!("Memory upkeep task panicked: {e}");
+            }
+        }
+    });
 }
 
 /// Periodic system checkpoints bound how much of the tenant stream a crash
