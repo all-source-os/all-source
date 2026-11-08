@@ -14,6 +14,7 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 - [Prime against HASH: gap status (2026-11-06)](./reports/2026-11-06-prime-hash-gap-status.md): the seven gaps with HASH re-verified on its source, what is deployed, the Prime image build fix, `warn` by default, server-stamped `recorded_by`, the extraction contract, and what is still open.
 
+- [Fly cost reduction (2026-11-08)](plans/2026-11-08-fly-cost-reduction.md): $144.87/month serves four tenants, all ours; the steps from Core memory work to fewer apps that bring it to about $55, with evidence, constraints and open questions.
 - [Two time axes: valid time and record time](plans/2026-11-04-bitemporal-time-axes.md): every `as_of` path, the bitemporal model, and the slices that add it.
 
 - [Core restarts without refused clients](plans/2026-11-01-core-zero-downtime-restart.md): why a Core deploy refuses clients for minutes, and the phased fix.
