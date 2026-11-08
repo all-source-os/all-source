@@ -59,6 +59,23 @@ fn read_u64(path: &str) -> Option<u64> {
     std::fs::read_to_string(path).ok()?.trim().parse().ok()
 }
 
+/// `VmRSS` from `/proc/self/status`, in bytes; `None` off Linux.
+#[cfg(target_os = "linux")]
+pub fn resident_set_bytes() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmRSS:"))
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|kb| kb.parse::<u64>().ok())
+        .map(|kb| kb * 1024)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn resident_set_bytes() -> Option<u64> {
+    None
+}
+
 /// True when the process still has `reserve_bytes` to spare, and when the
 /// platform does not say.
 ///
@@ -85,6 +102,16 @@ mod tests {
         // must read as "allowed".
         let measured = available_bytes();
         assert_eq!(has_headroom(u64::MAX), measured.is_none());
+    }
+
+    #[test]
+    fn process_rss_gauge_is_nonzero_on_linux() {
+        let rss = resident_set_bytes();
+        if cfg!(target_os = "linux") {
+            assert!(rss.is_some_and(|bytes| bytes > 0));
+        } else {
+            assert_eq!(rss, None);
+        }
     }
 
     #[test]

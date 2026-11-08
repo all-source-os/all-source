@@ -1,0 +1,63 @@
+rule_files:
+  - ../rules/memory.yml
+evaluation_interval: 1m
+tests:
+  - name: a steady 47 percent of machine memory stays quiet
+    interval: 1m
+    input_series:
+      - series: 'fly_instance_memory_mem_total{app="allsource-core", host="a635", instance="85777d6c1d17d8", region="iad"}'
+        values: '16000000000x1500'
+      - series: 'fly_instance_memory_mem_available{app="allsource-core", host="a635", instance="85777d6c1d17d8", region="iad"}'
+        values: '8500000000x1500'
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: CoreMemoryHigh
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: CoreMemoryGrowing
+        exp_alerts: []
+  - name: memory above 85 percent pages after ten minutes
+    interval: 1m
+    input_series:
+      - series: 'fly_instance_memory_mem_total{app="allsource-core", host="a635", instance="85777d6c1d17d8", region="iad"}'
+        values: '16000000000x60'
+      - series: 'fly_instance_memory_mem_available{app="allsource-core", host="a635", instance="85777d6c1d17d8", region="iad"}'
+        values: '1600000000x60'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: CoreMemoryHigh
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: CoreMemoryHigh
+        exp_alerts:
+          - exp_labels:
+              app: allsource-core
+              severity: critical
+              service: allsource-core
+            exp_annotations:
+              summary: Core uses more than 85% of its machine memory
+              action: Read fly_instance_memory_mem_available for allsource-core and the allsource_* series on Core's /metrics. Plan and levers are in docs/plans/2026-11-08-fly-cost-reduction.md.
+      - eval_time: 30m
+        alertname: CoreMemoryGrowing
+        exp_alerts: []
+  - name: a climb that reaches the machine size within three days warns
+    interval: 1m
+    input_series:
+      - series: 'fly_instance_memory_mem_total{app="allsource-core", host="a635", instance="85777d6c1d17d8", region="iad"}'
+        values: '16000000000x1500'
+      - series: 'fly_instance_memory_mem_available{app="allsource-core", host="a635", instance="85777d6c1d17d8", region="iad"}'
+        values: '4400000000-833333x1500'
+    alert_rule_test:
+      - eval_time: 1500m
+        alertname: CoreMemoryHigh
+        exp_alerts: []
+      - eval_time: 1500m
+        alertname: CoreMemoryGrowing
+        exp_alerts:
+          - exp_labels:
+              app: allsource-core
+              severity: warning
+              service: allsource-core
+            exp_annotations:
+              summary: Core memory is on track to reach its machine size within 3 days
+              action: Memory rises between restarts. Compare the slope with the last restart in Fly machine events and the cache and checkpoint settings in apps/core/fly.toml before the limit is reached.

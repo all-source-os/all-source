@@ -147,6 +147,20 @@ fn state_of(store: &Arc<SystemMetadataStore>) -> Value {
     let config = allsource_core::infrastructure::repositories::EventSourcedConfigRepository::new(
         Arc::clone(store),
     );
+    state_from(&tenants, &config)
+}
+
+/// The state of a running repository set. A fresh repository over a live
+/// store would boot from the store's resident events, which a checkpoint
+/// has already folded out of.
+fn live_state(repos: &SystemRepositories) -> Value {
+    state_from(&repos.tenant_repository, &repos.config_repository)
+}
+
+fn state_from(
+    tenants: &EventSourcedTenantRepository,
+    config: &allsource_core::infrastructure::repositories::EventSourcedConfigRepository,
+) -> Value {
     let mut fold = tenants.export_fold().unwrap().state;
     for tenant in fold["tenants"].as_array_mut().unwrap() {
         let tenant = tenant.as_object_mut().unwrap();
@@ -606,4 +620,58 @@ async fn verify_accepts_a_true_checkpoint_and_rejects_a_forged_one() {
         covered, None,
         "a rejected checkpoint is not booted from again"
     );
+}
+
+#[tokio::test]
+async fn folded_resident_drops_at_checkpoint_persist() {
+    let directory = TempDir::new().unwrap();
+    let dir = directory.path().join("system");
+    let store = {
+        let repos = boot(&dir, settings()).await;
+        traffic(&repos, 1).await;
+        let store = Arc::clone(&repos.system_store);
+        let tenant_events = store.count_stream(SystemDomain::Tenant);
+        assert_eq!(store.resident_events(), store.total_events());
+        repos.checkpointer.checkpoint().unwrap().unwrap();
+        assert_eq!(
+            store.resident_events(),
+            store.total_events() - tenant_events,
+            "only the tenant events the checkpoint folded leave memory"
+        );
+        assert_eq!(store.count_stream(SystemDomain::Tenant), tenant_events);
+        traffic(&repos, 2).await;
+        let live = live_state(&repos);
+        drop(repos);
+        (store, live)
+    };
+    let (store, live) = store;
+    drop(store);
+    let (state, covered, _, _) = booted_state(&dir);
+    assert!(covered.is_some());
+    assert_eq!(state, live);
+    assert_eq!(state, replayed_state(&dir));
+}
+
+#[tokio::test]
+async fn checkpoint_failure_keeps_folded_resident() {
+    let directory = TempDir::new().unwrap();
+    let dir = directory.path().join("system");
+    let repos = boot(&dir, settings()).await;
+    traffic(&repos, 1).await;
+    let store = Arc::clone(&repos.system_store);
+    let resident = store.resident_events();
+
+    let checkpoint_dir = store.checkpoint_dir();
+    let _ = std::fs::remove_dir_all(&checkpoint_dir);
+    std::fs::write(&checkpoint_dir, b"a file where the directory belongs").unwrap();
+    assert!(repos.checkpointer.checkpoint().is_err());
+    assert_eq!(store.resident_events(), resident);
+
+    std::fs::remove_file(&checkpoint_dir).unwrap();
+    repos.checkpointer.checkpoint().unwrap().unwrap();
+    assert!(store.resident_events() < resident);
+    drop(repos);
+    let (state, covered, _, _) = booted_state(&dir);
+    assert!(covered.is_some());
+    assert_eq!(state, replayed_state(&dir));
 }

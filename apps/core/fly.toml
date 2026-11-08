@@ -76,12 +76,13 @@ kill_timeout = 65
 
   # System checkpoints (docs/runbooks/SYSTEM_CHECKPOINTS.md). A boot loads the
   # newest valid checkpoint and replays only the system WAL after it; the WAL
-  # itself is never pruned. VERIFY compares that checkpoint with a full replay
-  # in the background 30 s after boot; on a difference it moves every
-  # checkpoint aside and exits so the restart replays the WAL.
+  # itself is never pruned. VERIFY off: boot does not replay the whole system
+  # WAL into memory to compare it with the loaded checkpoint, so a checkpoint
+  # is trusted on its CRC alone and a wrong fold is not detected at boot.
+  # VERIFY on at 8 GB loads the full WAL and is not safe there.
   ALLSOURCE_SYSTEM_CHECKPOINT = "true"
   ALLSOURCE_SYSTEM_CHECKPOINT_INTERVAL_SECONDS = "300"
-  ALLSOURCE_SYSTEM_CHECKPOINT_VERIFY = "true"
+  ALLSOURCE_SYSTEM_CHECKPOINT_VERIFY = "false"
 
 # Core is internal-only (bead t-0ff8). Public ingress removed 2026-04-17.
 # All user-facing traffic enters through Control Plane's delegation layer.

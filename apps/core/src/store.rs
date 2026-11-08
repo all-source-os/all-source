@@ -2033,6 +2033,23 @@ impl EventStore {
         if !self.tenant_loader.over_budget() && self.has_memory_headroom() {
             return;
         }
+        self.evict_lru_until(recently_touched, || {
+            !self.tenant_loader.over_budget() && self.has_memory_headroom()
+        });
+    }
+
+    /// Applies the byte budget with no tenant exempt. Called on a timer, so it
+    /// ignores kernel headroom: when available memory stays under the reserve,
+    /// evicting frees nothing the kernel can see, and a headroom-driven loop
+    /// would empty the cache on every tick.
+    pub fn enforce_cache_budget_now(&self) {
+        if !self.tenant_loader.over_budget() {
+            return;
+        }
+        self.evict_lru_until("", || !self.tenant_loader.over_budget());
+    }
+
+    fn evict_lru_until(&self, recently_touched: &str, satisfied: impl Fn() -> bool) {
         loop {
             let Some(victim) = self.tenant_loader.pick_lru_excluding(recently_touched) else {
                 tracing::warn!(
@@ -2053,7 +2070,7 @@ impl EventStore {
                 );
                 return;
             }
-            if !self.tenant_loader.over_budget() && self.has_memory_headroom() {
+            if satisfied() {
                 return;
             }
         }
@@ -2171,6 +2188,9 @@ impl EventStore {
                 );
             }
         }
+        // retain() keeps the old capacity, which is the memory an eviction
+        // exists to return.
+        events.shrink_to_fit();
         self.tenant_loader.mark_unloaded(tenant_id);
 
         // total_ingested under Steps 2-3 means "events currently
@@ -4066,6 +4086,49 @@ mod tests {
             "gauge should equal Parquet bytes ({}) + WAL bytes ({wal_bytes})",
             parquet_stats.total_size_bytes
         );
+    }
+
+    #[test]
+    fn budget_enforced_without_hydration() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage_dir = temp_dir.path().to_path_buf();
+        let big_payload = serde_json::json!({"data": "x".repeat(1000)});
+        {
+            let store = EventStore::with_config(EventStoreConfig::with_persistence(&storage_dir));
+            for tenant in ["alice", "bob"] {
+                for i in 0..5 {
+                    store
+                        .ingest(
+                            &Event::from_strings(
+                                "test.event".to_string(),
+                                format!("{tenant}-{i}"),
+                                tenant.to_string(),
+                                big_payload.clone(),
+                                None,
+                            )
+                            .unwrap(),
+                        )
+                        .unwrap();
+                }
+            }
+            store.flush_storage().unwrap();
+        }
+
+        let store = EventStore::with_config(EventStoreConfig::with_persistence(&storage_dir));
+        store.ensure_tenant_loaded("alice").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        store.ensure_tenant_loaded("bob").unwrap();
+        assert!(store.is_tenant_loaded("alice") && store.is_tenant_loaded("bob"));
+
+        // A budget one byte under what both tenants hold: no hydration runs,
+        // so only the timer's enforcement can evict.
+        store
+            .tenant_loader
+            .set_byte_budget(store.tenant_loader.total_bytes() - 1);
+        store.enforce_cache_budget_now();
+
+        assert!(!store.is_tenant_loaded("alice"), "LRU tenant is evicted");
+        assert!(store.is_tenant_loaded("bob"), "the newer tenant stays");
     }
 
     #[test]

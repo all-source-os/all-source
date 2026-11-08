@@ -7,6 +7,34 @@
 - No user denied access unless the owner says so.
 - Core changes go in the planned morning window.
 
+**Owner decisions, 2026-11-08: all yes.**
+- Core restart in the morning window is acceptable.
+- Checkpoint verify may go off.
+- Longhand's old `team_queue.snapshot.chunk` events may be compacted.
+- System retention with a cold tier is approved, as in step 3.4.
+
+## Status
+
+- **Step 1: done.** `allsource-auth` and `allsource-prime` are 2 × 256 MB. The remote builder app is destroyed. Unattached volume `vol_vwjoq95l03qzy88r` was snapshotted as `vs_9Z9kew82zK3sjAkgx0eaxzw`, then destroyed. `apps/web` runs with `min_machines_running = 0` and suspend.
+- **Step 0: partly done in code.** Core exports `allsource_system_resident_events`, `allsource_system_resident_bytes` and `allsource_process_resident_bytes` (60 s refresh). Per-tenant resident bytes are not done: the owner has not yet approved tenant ids as a Prometheus label.
+- **Step 2: in progress.** See "Step 2" below for what this change set ships and what stays gated on the rehearsal.
+
+## Measured Core memory growth (2026-11-08)
+
+Core memory used (`mem_total - mem_available`), from Prometheus:
+
+| Window | Observed | Slope |
+|---|---|---|
+| 2026-10-28 → 11-06 ~22:00Z | 10.53 → 12.07 GiB | ~0.16 GiB/day |
+| 2026-11-06 restart | drops to 6.87 GiB | — |
+| 2026-11-08 | 7.38 GiB and climbing | ~0.43 GiB/day in the 15-min series since restart |
+
+The restart time is 16:21Z on 2026-11-06 (the Prometheus series), not ~22:00Z as the midnight samples suggested. A boot curve of 11.84 → 6.52 GB over ~4 minutes shows that most of the verify transient is returned after boot. Growth stays **sand** until the step-2 gauges show what grows. The "6 KB per event" figure is an inference, not a measurement, and is not used.
+
+Rejected explanations:
+- Cache of 2 GiB bounds RSS. Enforcement ran only on hydration (`apps/core/src/store.rs` `ensure_tenant_loaded`), so the cache did not bound RSS.
+- `MALLOC_ARENA_MAX=2` bounds RSS. It has no effect on Rust allocations under mimalloc (`apps/core/src/main.rs` global allocator). Allocations made by C libraries still go through glibc; not measured.
+
 ## What the spend buys
 
 The figures below come from control-plane `/metrics` on both gateway machines over a 15.3 h window ending 2026-11-08 ~11:00Z, from Core `/proc` and `/metrics`, and from `fly machine list`.
@@ -60,20 +88,59 @@ Ordered so that each step ships on its own and is measured before the next.
 
 ### Step 2: Core to shared-cpu-4x / 8 GB ($50.76/month)
 
-Config work, in one Core morning window, after a rehearsal on `allsource-core-rehearsal` from the latest snapshot.
+Config and code work in one Core morning window. The items below marked as shipped go first. The rest waits for a rehearsal on `allsource-core-rehearsal` from the latest snapshot.
 
-1. `ALLSOURCE_SYSTEM_CHECKPOINT_VERIFY=false` (`apps/core/fly.toml:84`).
-   - The checkpoint has matched the WAL on both runs so far (11-05 rehearsal, 11-06 prod).
-   - The kill switch `ALLSOURCE_SYSTEM_CHECKPOINT=false` remains.
-2. `ALLSOURCE_CACHE_BYTES` 2 GiB → 512 MiB.
-3. `swap_size_mb` on Core so that a transient decode peak pages instead of OOM-killing. Steady state must stay under 8 GB.
-4. Rehearse:
-   - Boot, then hydrate each tenant in turn, recording the RSS step for each.
-   - Run one strict feed decode of Longhand.
-   - Pass only if peak RSS stays under ~7 GiB with no `archive_hydration_refused`.
-5. Resize `[[vm]]` to `cpus = 4`, `memory_mb = 8192` and update the stale "Do not downsize" note at `apps/core/fly.toml:128` with the rehearsal evidence.
+Shipped by this change set (code and config only, no deploy):
 
-Confidence: **sand**. It becomes a rock once the rehearsal numbers exist. The resize is a Core restart (6.5–81 s not ready), which is the accepted morning-window exception.
+1. **Checkpoint verify off.** `ALLSOURCE_SYSTEM_CHECKPOINT_VERIFY=false` (`apps/core/fly.toml:83`). Removes the whole-WAL load at boot. Confidence: **rock** as config. The kill switch `ALLSOURCE_SYSTEM_CHECKPOINT=false` remains.
+   - **Detection lost.** With verify off, a checkpoint is accepted on its CRC32 alone (`system_checkpoint.rs` read). Nothing at boot folds the WAL and compares it with the checkpoint, so a fold bug that writes a valid CRC is served until someone notices.
+   - **Recovery copy.** The WAL is never pruned. Recovery from a bad checkpoint is `ALLSOURCE_SYSTEM_CHECKPOINT=false` with a full WAL replay (`system_bootstrap.rs` `load_checkpoint`), which needs the 16 GB machine.
+   - **Compensating check, not built.** An offline verify on a copy of the data directory, run on a machine large enough for the full replay, before each resize.
+2. **Folded events leave memory at each checkpoint.** `SystemMetadataStore::release_folded` runs after a checkpoint is durable (`apps/core/src/infrastructure/persistence/system_store.rs`, `system_checkpointer.rs` `commit`). Before this, resident folded events only grew. Confidence: **rock** on mechanics; the memory magnitude is **sand** until the gauges are read.
+   - This change set does not claim a steady-state RSS reduction. The tenant cache holds 0.82 GiB of the ~6.75 GiB anonymous memory; the rest is not attributed.
+   - Once folded events are released, the checkpoint is the only in-memory copy of folded tenant state (item 1 applies).
+   - Non-tenant domains (`audit`, `config`, `schema`, `policy`, `consumer`, `auth`) are not folded, so they stay resident and grow with `ACK_UPDATED` and audit events. Their growth rate is not measured.
+3. **Gauges for the rehearsal.** `allsource_system_resident_events`, `allsource_system_resident_bytes` and `allsource_process_resident_bytes` (`apps/core/src/infrastructure/observability/metrics.rs`). Confidence: **rock**.
+4. **Cache budget enforced on a 60 s timer.** `EventStore::enforce_cache_budget_now`, driven from `spawn_memory_upkeep` in `apps/core/src/main.rs`. The timer evicts only while the byte budget is exceeded. It does not consult kernel headroom: on a machine under the reserve, evicting frees nothing the kernel can see, and a headroom loop would empty the cache every tick. Headroom eviction stays on the hydration path, where the loaded tenant is exempt. Lowering `ALLSOURCE_CACHE_BYTES` now takes effect without a hydration. Eviction now also returns capacity (`shrink_to_fit`). Confidence: **sand**; an active tenant can be evicted and then rehydrated, which costs admission.
+Rehearsal of this change set, 2026-11-09 00:50Z: image `ghcr.io/all-source-os/allsource-core-alpine@sha256:0492cdb0d482d0f40e15297aff024666050c7ecbda7812d5e3f43cf7fa6c44d2` on `allsource-core-rehearsal` (16 GB, prod `fly.toml`), volume restored from prod snapshot `vs_6M90bpMKMyJ0hXJPYXY5R`.
+- Boot: stage 1 in 530 ms, ready 0.6 s after process start, `Boot system checkpoint written at 2999771`, no whole-WAL load.
+- After the first memory tick: `allsource_system_resident_events` 12,590 (the 61 folded tenant events were released; the rest are config events), `allsource_system_resident_bytes` 30,788,874, `allsource_process_resident_bytes` 121,786,368. Core VmHWM 247 MB, against 13.26 GB at prod's last boot with verify on.
+- Not exercised: client traffic, so no tenant hydrated and the growth slope was not observable. The slope check is the production gauges after deploy.
+
+Still gated on the rehearsal (not changed by this change set):
+
+5. `MALLOC_ARENA_MAX=2` stays in `apps/core/Dockerfile`. Removing it can only raise glibc arena memory for C-library allocations, and nothing has measured those.
+6. `ALLSOURCE_CACHE_BYTES` 2 GiB → 512 MiB (`apps/core/fly.toml:33`).
+7. `ALLSOURCE_STRICT_ARCHIVE_MAX_DECODED_BYTES` 805 MB → 512 MB (`apps/core/fly.toml:43`). Confirm the 149,338,384 B Longhand snapshot and the system tenant decode within it first.
+8. `swap_size_mb` on Core. Key support in `fly.toml` not verified. Confidence: **sand**.
+9. `[[vm]]` to `cpus = 4`, `memory_mb = 8192`. The stale "Do not downsize" note stays until the rehearsal evidence exists. The `[[vm]]` block stays at 16 GB in this change set.
+
+Rehearsal, required before items 6 to 9:
+
+- Clone Core to a separate test app from the same image at 8192 MB, and restore the volume snapshot.
+- Record boot `VmHWM`, then steady RSS over 1 h.
+- Hydrate the largest tenant and check admission refusal for each tenant.
+- Pass criteria: RSS plateau below 6 GiB with cache 512 MiB, and no admission refusal for any tenant.
+
+Admission risk, open: the 429 MB `system` tenant needs ~7.9 GB free under `archive × 16 + 1 GiB` (`hydration_admission.rs:19-22`). Not verified whether the `_system` tenant passes through hydration admission at all. If it does, 8 GB is blocked until the floor drops.
+
+Blocker, projected and not measured on 8 GB. Used memory is ~7.15 GiB (Prometheus, 2026-11-08). On an 8 GiB machine that leaves ~0.7 GiB available, under the 1 GiB reserve (`apps/core/src/infrastructure/observability/memory.rs` `has_headroom`). Consequences:
+- Headroom stays false, so the post-hydration eviction (`store.rs` `enforce_cache_budget`) evicts every other tenant. Eviction does not return RSS to the kernel reliably, so this repeats per hydration.
+- Admission refuses every tenant. Longhand (120 MB archive) needs ~2.9 GiB free.
+- Step 2 is not shippable as a resize until the rehearsal shows steady RSS below the reserve line, or the reserve and ratio are changed with evidence.
+
+Other open items, not changed here:
+- Admission is one pre-check against a ratio measured on one sample. Nothing re-checks during decode, so a tenant admitted near the threshold can overshoot 8 GB mid-load.
+- Strict whole-tenant decode (`ALLSOURCE_STRICT_ARCHIVE_MAX_DECODED_BYTES`, 805 MB) charges uncompressed payload bytes (`archive_budget.rs` `decoded_payload`), not heap. No admission check runs on that path (`store.rs` strict override).
+- `CoreMemoryHigh` (`tooling/monitor-stack/rules/memory.yml`) fires at 85% used. At 8 GiB and current usage it fires continuously. That is the same state as the blocker above, not a new fault.
+
+Confidence for the resize as a whole: **sand**, a rock once the rehearsal numbers exist. The resize is a Core restart, which is the accepted morning-window exception.
+
+### Rollback
+
+- **Config items (verify, cache bytes, decode cap, `[[vm]]`):** set the value back in `apps/core/fly.toml` and deploy the Core window. Verify back on at 8 GB loads the full system WAL in one `Vec` (`system_checkpointer.rs` `verify_loaded`) and is not safe there. Roll back to 16 GB first.
+- **Code items (release_folded, shrink_to_fit, timer eviction, gauges):** these are not config flips. Rollback is an image revert to the previous Core release, followed by the Core deploy window.
+- **Checkpoint damage:** `ALLSOURCE_SYSTEM_CHECKPOINT=false` boots with a full WAL replay, which needs 16 GB. Checkpoint files move to `rejected/` on a verify failure; none are deleted.
 
 ### Step 3: make Core fit 4 GB (another $25.38/month, $76.14 in total)
 
@@ -127,13 +194,17 @@ Confidence: **water** for 4 GB until 1 and 2 are measured. A 2 GB Core ($88.83 s
 
 ## Open questions for the owner
 
-1. Is the 6.5–81 s Core restart in the morning window acceptable for the resize? Every Core step depends on it.
-2. May checkpoint verify go off now (matched twice), or stay on until the streaming fold lands?
-3. May Longhand's old `team_queue.snapshot.chunk` events be compacted once Core supports it?
-4. Can `vol_vwjoq95l03qzy88r` be deleted, or should it be snapshotted first?
+Answered 2026-11-08, all yes:
+1. Core restart in the morning window for the resize.
+2. Checkpoint verify off.
+3. Compaction of Longhand's old `team_queue.snapshot.chunk` events.
+4. Volume `vol_vwjoq95l03qzy88r`: snapshotted as `vs_9Z9kew82zK3sjAkgx0eaxzw`, then destroyed.
+
+Still open:
 5. Does the invoice bill the builder's 50 GB volume? The billed machine total is $7.44 above list prices, unattributed.
-6. Is a cold start on the marketing site acceptable?
+6. Is a cold start on the marketing site acceptable? Step 1 set `apps/web` to `min_machines_running = 0` with suspend.
 7. Is a separate hosted Prime still needed?
+8. Per-tenant resident bytes as a Prometheus series with a `tenant` label. The `[metrics]` comment in `apps/core/fly.toml` says series carry no tenant label. Needs the owner's OK before tenant ids enter the org Prometheus.
 
 ## Not measured
 
