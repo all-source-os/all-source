@@ -51,7 +51,7 @@ allsource-core = { path = "apps/core", default-features = false }
 
 # Error handling
 anyhow = "1.0"
-argon2 = "0.5"
+argon2 = "0.6"
 
 # Data / Arrow / Parquet
 arrow = { version = "59.2", features = ["ipc", "json"] }
