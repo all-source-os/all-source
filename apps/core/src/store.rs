@@ -1841,6 +1841,8 @@ impl EventStore {
         match admission::admit(archive_bytes, available, reserve, ratio) {
             Ok(()) => Ok(()),
             Err(refusal) => {
+                #[cfg(feature = "server")]
+                self.metrics.hydration_refusals_total.inc();
                 tracing::warn!(
                     tenant_id = tenant_id,
                     archive_bytes = archive_bytes,
@@ -1990,6 +1992,7 @@ impl EventStore {
             read = read_count,
             applied = applied,
             elapsed_ms = started.elapsed().as_millis() as u64,
+            rss_bytes = crate::infrastructure::observability::memory::resident_set_bytes(),
             "ensure_tenant_loaded: tenant hydrated"
         );
 
@@ -3446,6 +3449,9 @@ mod prefix_read;
 
 #[path = "store_refresh.rs"]
 mod refresh;
+
+#[path = "store_resident.rs"]
+mod resident;
 pub use refresh::RefreshReport;
 
 #[cfg(all(test, feature = "server"))]

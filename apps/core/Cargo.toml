@@ -137,6 +137,7 @@ http = { workspace = true, optional = true }
 instant-distance = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 mimalloc = { version = "0.1", default-features = false }
+cap = "0.1"
 # default-features = false keeps the azure/gcp/http backends out; only the aws
 # client is compiled, and it covers every S3-compatible endpoint we target.
 object_store = { version = "0.14", default-features = false, features = ["aws"], optional = true }

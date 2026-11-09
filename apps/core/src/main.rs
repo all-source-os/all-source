@@ -1,5 +1,6 @@
+// `cap` counts live bytes for the heap gauges; no limit is set.
 #[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static GLOBAL: cap::Cap<mimalloc::MiMalloc> = cap::Cap::new(mimalloc::MiMalloc, usize::MAX);
 
 #[cfg(feature = "replication")]
 use allsource_core::replication::{ReplicationMode, WalReceiver, WalShipper};
@@ -542,7 +543,8 @@ async fn main() -> Result<()> {
 }
 
 /// Every 60 s: apply the cache budget, which otherwise runs only when a tenant
-/// hydrates, and set the memory gauges.
+/// hydrates, and set the memory gauges. RSS is read once so live and retained
+/// bytes come from the same moment.
 fn spawn_memory_upkeep(store: Arc<EventStore>, system_store: Option<Arc<SystemMetadataStore>>) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(60));
@@ -555,9 +557,10 @@ fn spawn_memory_upkeep(store: Arc<EventStore>, system_store: Option<Arc<SystemMe
                 store.enforce_cache_budget_now();
                 let (events, bytes) =
                     system_store.map_or((0, 0), |s| (s.resident_events(), s.resident_bytes()));
-                store
-                    .metrics()
-                    .record_memory(events, bytes, memory::resident_set_bytes());
+                let rss = memory::resident_set_bytes();
+                let metrics = store.metrics();
+                metrics.record_memory(events, bytes, rss);
+                metrics.record_heap(GLOBAL.allocated() as u64, rss, &store.resident_structures());
             })
             .await;
             if let Err(e) = sampled {

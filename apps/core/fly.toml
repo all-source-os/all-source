@@ -38,8 +38,9 @@ kill_timeout = 65
   # 128 MiB default refused Longhand's control-plane tenant (one 2026-04
   # snapshot alone decodes to 149,338,384 B), failing its feed and read
   # models on every call. Decoding peaks near 8.25x the text (~6.3 GiB at
-  # this limit) on this 16 GiB machine; admit_hydration still refuses a load
-  # the free memory cannot hold.
+  # this limit). Tenant hydration also passes admit_hydration, which refuses
+  # a load free memory cannot hold; the narrow feed scan does not, and this
+  # limit is its only bound.
   ALLSOURCE_STRICT_ARCHIVE_MAX_DECODED_BYTES = "805306368"
   ALLSOURCE_STRICT_ARCHIVE_TIMEOUT_SECONDS = "60"
   # Step 6: checkpoint cadence (Parquet flush + WAL truncate). Bounds

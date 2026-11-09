@@ -1,5 +1,6 @@
 // Observability module - metrics, tracing, and logging
 
+pub mod heap;
 pub mod memory;
 pub mod metrics;
 

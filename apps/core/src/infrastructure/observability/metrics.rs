@@ -1,3 +1,4 @@
+use super::heap::StructureSize;
 use prometheus::{
     Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Opts,
     Registry,
@@ -115,6 +116,11 @@ pub struct MetricsRegistry {
     pub system_resident_bytes: IntGauge,
     /// Resident set size of this process, from `/proc/self/status`.
     pub process_resident_bytes: IntGauge,
+    pub hydration_refusals_total: IntCounter,
+    pub heap_live_bytes: IntGauge,
+    pub allocator_retained_bytes: IntGauge,
+    pub resident_structure_entries: IntGaugeVec,
+    pub resident_structure_bytes: IntGaugeVec,
 
     // WAL replay metric (Step 6 of the sustainable data strategy).
     // Set on each successful WAL recovery; reflects the size of the
@@ -427,6 +433,42 @@ impl MetricsRegistry {
         ))
         .unwrap();
 
+        let hydration_refusals_total = IntCounter::with_opts(Opts::new(
+            "allsource_hydration_refusals_total",
+            "Tenant hydrations refused because free memory could not hold the archive",
+        ))
+        .unwrap();
+
+        let heap_live_bytes = IntGauge::with_opts(Opts::new(
+            "allsource_heap_live_bytes",
+            "Bytes allocated and not yet freed, counted at the global allocator",
+        ))
+        .unwrap();
+
+        let allocator_retained_bytes = IntGauge::with_opts(Opts::new(
+            "allsource_allocator_retained_bytes",
+            "Resident bytes not held by live allocations: freed memory the allocator kept, plus stacks and code",
+        ))
+        .unwrap();
+
+        let resident_structure_entries = IntGaugeVec::new(
+            Opts::new(
+                "allsource_resident_structure_entries",
+                "Entries held by each in-memory structure",
+            ),
+            &["structure"],
+        )
+        .unwrap();
+
+        let resident_structure_bytes = IntGaugeVec::new(
+            Opts::new(
+                "allsource_resident_structure_bytes",
+                "Estimated heap bytes held by each in-memory structure",
+            ),
+            &["structure"],
+        )
+        .unwrap();
+
         // WAL replay metric (Step 6): size of last recovery.
         let wal_replay_events_total = IntGauge::with_opts(Opts::new(
             "allsource_core_wal_replay_events_total",
@@ -702,6 +744,21 @@ impl MetricsRegistry {
             .register(Box::new(process_resident_bytes.clone()))
             .unwrap();
         registry
+            .register(Box::new(hydration_refusals_total.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(heap_live_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(allocator_retained_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(resident_structure_entries.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(resident_structure_bytes.clone()))
+            .unwrap();
+        registry
             .register(Box::new(wal_replay_events_total.clone()))
             .unwrap();
 
@@ -829,6 +886,11 @@ impl MetricsRegistry {
             system_resident_events,
             system_resident_bytes,
             process_resident_bytes,
+            hydration_refusals_total,
+            heap_live_bytes,
+            allocator_retained_bytes,
+            resident_structure_entries,
+            resident_structure_bytes,
             wal_replay_events_total,
         })
     }
@@ -847,6 +909,26 @@ impl MetricsRegistry {
             .set(i64::try_from(system_bytes).unwrap_or(i64::MAX));
         self.process_resident_bytes
             .set(rss.map_or(0, |bytes| i64::try_from(bytes).unwrap_or(i64::MAX)));
+    }
+
+    /// Set the heap split: live bytes from the counting allocator, the rest of
+    /// RSS as retained, and each structure's estimate. Retained stays 0 where
+    /// RSS is not reported.
+    pub fn record_heap(&self, live: u64, rss: Option<u64>, structures: &[StructureSize]) {
+        let gauge = |bytes: u64| i64::try_from(bytes).unwrap_or(i64::MAX);
+        self.heap_live_bytes.set(gauge(live));
+        self.allocator_retained_bytes
+            .set(rss.map_or(0, |rss| gauge(rss.saturating_sub(live))));
+        for structure in structures {
+            self.resident_structure_entries
+                .with_label_values(&[structure.name])
+                .set(gauge(structure.entries));
+            if let Some(bytes) = structure.bytes {
+                self.resident_structure_bytes
+                    .with_label_values(&[structure.name])
+                    .set(gauge(bytes));
+            }
+        }
     }
 
     /// Record one completed compaction sweep.

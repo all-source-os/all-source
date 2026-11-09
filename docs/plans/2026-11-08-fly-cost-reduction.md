@@ -33,7 +33,7 @@ The restart time is 16:21Z on 2026-11-06 (the Prometheus series), not ~22:00Z as
 
 Rejected explanations:
 - Cache of 2 GiB bounds RSS. Enforcement ran only on hydration (`apps/core/src/store.rs` `ensure_tenant_loaded`), so the cache did not bound RSS.
-- `MALLOC_ARENA_MAX=2` bounds RSS. It has no effect on Rust allocations under mimalloc (`apps/core/src/main.rs` global allocator). Allocations made by C libraries still go through glibc; not measured.
+- `MALLOC_ARENA_MAX=2` bounds RSS. Every Core runtime ships a static musl binary built on `rust:*-alpine` (`apps/core/Dockerfile:24`), so there is no glibc for it to configure, and Rust allocations go through mimalloc (`apps/core/src/main.rs`).
 
 ## What the spend buys
 
@@ -109,7 +109,7 @@ Rehearsal of this change set, 2026-11-09 00:50Z: image `ghcr.io/all-source-os/al
 
 Still gated on the rehearsal (not changed by this change set):
 
-5. `MALLOC_ARENA_MAX=2` stays in `apps/core/Dockerfile`. Removing it can only raise glibc arena memory for C-library allocations, and nothing has measured those.
+5. `MALLOC_ARENA_MAX=2` removed from `apps/core/Dockerfile` (PR #407): the image has no glibc.
 6. `ALLSOURCE_CACHE_BYTES` 2 GiB → 512 MiB (`apps/core/fly.toml:33`).
 7. `ALLSOURCE_STRICT_ARCHIVE_MAX_DECODED_BYTES` 805 MB → 512 MB (`apps/core/fly.toml:43`). Confirm the 149,338,384 B Longhand snapshot and the system tenant decode within it first.
 8. `swap_size_mb` on Core. Key support in `fly.toml` not verified. Confidence: **sand**.

@@ -233,7 +233,7 @@ grype ghcr.io/all-source-os/chronos-core:latest
 
 ### Memory Optimization
 
-All images include `MALLOC_ARENA_MAX=2` to reduce memory fragmentation in containerized environments.
+Core is a static musl binary using mimalloc, so glibc malloc settings such as `MALLOC_ARENA_MAX` have no effect on it. Its memory split is exported at `/metrics`: `allsource_heap_live_bytes`, `allsource_allocator_retained_bytes` and `allsource_resident_structure_bytes`.
 
 ### Elixir BEAM Tuning
 
