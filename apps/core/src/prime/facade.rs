@@ -1446,9 +1446,29 @@ impl Prime {
         query: &[f32],
         top_k: usize,
     ) -> Vec<super::vectors::VectorSearchResult> {
-        self.vector_index
-            .search(query, top_k)
-            .into_iter()
+        Self::vector_results(self.vector_index.search(query, top_k))
+    }
+
+    /// Exact vector search limited to ids starting with `id_prefix`.
+    #[cfg(feature = "prime-vectors")]
+    pub fn vector_search_prefix(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        id_prefix: &str,
+    ) -> Vec<super::vectors::VectorSearchResult> {
+        let entity_prefix = super::vectors::vector_entity_id(id_prefix);
+        Self::vector_results(
+            self.vector_index
+                .search_prefix(query, top_k, &entity_prefix),
+        )
+    }
+
+    #[cfg(feature = "prime-vectors")]
+    fn vector_results(
+        hits: Vec<super::vectors::SearchHit>,
+    ) -> Vec<super::vectors::VectorSearchResult> {
+        hits.into_iter()
             .map(|hit| super::vectors::VectorSearchResult {
                 id: hit.entity_id,
                 score: 1.0 - f64::from(hit.distance), // Convert distance to similarity

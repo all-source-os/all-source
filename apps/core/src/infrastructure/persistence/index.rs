@@ -1,6 +1,10 @@
-use crate::{domain::entities::Event, error::Result};
+use crate::{
+    domain::entities::Event,
+    error::Result,
+    infrastructure::observability::heap::{StructureSize, hash_entry_bytes},
+};
 use dashmap::DashMap;
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 use uuid::Uuid;
 
 /// Valid-time interval of an indexed event. `from` is the effective start
@@ -162,6 +166,36 @@ impl EventIndex {
             total_entities: self.entity_index.len(),
             total_event_types: self.type_index.len(),
         }
+    }
+
+    /// Estimated resident size of each of the three maps. Walks every key, one
+    /// shard lock at a time, so it belongs on a slow timer.
+    pub fn resident_structures(&self) -> [StructureSize; 3] {
+        let list_map = |name, map: &DashMap<String, Vec<IndexEntry>>| {
+            let bytes: usize = map
+                .iter()
+                .map(|item| {
+                    hash_entry_bytes::<String, Vec<IndexEntry>>()
+                        + item.key().len()
+                        + item.value().capacity() * size_of::<IndexEntry>()
+                })
+                .sum();
+            StructureSize {
+                name,
+                entries: map.len() as u64,
+                bytes: Some(bytes as u64),
+            }
+        };
+        let ids = self.id_index.len();
+        [
+            list_map("entity_index", &self.entity_index),
+            list_map("type_index", &self.type_index),
+            StructureSize {
+                name: "id_index",
+                entries: ids as u64,
+                bytes: Some((ids * hash_entry_bytes::<Uuid, usize>()) as u64),
+            },
+        ]
     }
 
     /// Clear all indices (useful for testing)

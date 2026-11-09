@@ -23,81 +23,28 @@ func newTestServer(status int, body string) *httptest.Server {
 
 func testContext() context.Context { return context.Background() }
 
-func TestProjectStatus_PicksNewestPerService(t *testing.T) {
-	now := time.Date(2026, 4, 17, 20, 0, 0, 0, time.UTC)
-	old := now.Add(-45 * time.Second)  // > heartbeatTTL (25s) → stale
-	fresh := now.Add(-5 * time.Second) // < heartbeatTTL → honors reported status
-
-	events := []clients.EventEntry{
-		// Two heartbeats for "core": an old-healthy and a fresher-unhealthy.
-		// Projection should pick the newer one.
-		{
-			EventType: heartbeatEventType,
-			EntityID:  "core",
-			Timestamp: old.Format(time.RFC3339Nano),
-			Payload: map[string]any{
-				"status":     "healthy",
-				"latency_ms": float64(12),
-			},
-		},
-		{
-			EventType: heartbeatEventType,
-			EntityID:  "core",
-			Timestamp: fresh.Format(time.RFC3339Nano),
-			Payload: map[string]any{
-				"status":     "unhealthy",
-				"latency_ms": float64(5000),
-				"error":      "http 502",
-			},
-		},
-		// One service whose only heartbeat is old — should flip to "stale"
-		// regardless of what the payload says.
-		{
-			EventType: heartbeatEventType,
-			EntityID:  "query",
-			Timestamp: old.Format(time.RFC3339Nano),
-			Payload:   map[string]any{"status": "healthy"},
-		},
-		// Noise: a non-heartbeat event in the same query window should be
-		// ignored, not treated as a service.
-		{
-			EventType: "user.signed_up",
-			EntityID:  "alice",
-			Timestamp: fresh.Format(time.RFC3339Nano),
-		},
-	}
-
-	out := projectStatus(events, now)
-	if len(out) != 2 {
-		t.Fatalf("want 2 services, got %d: %+v", len(out), out)
-	}
-
-	// Output is sorted by service name.
-	if out[0].Service != "core" {
-		t.Errorf("out[0]: got %q, want core", out[0].Service)
-	}
-	if out[0].Status != "unhealthy" {
-		t.Errorf("core status: got %q, want unhealthy (newer heartbeat wins)", out[0].Status)
-	}
-	if out[0].Error != "http 502" {
-		t.Errorf("core error: got %q, want http 502", out[0].Error)
-	}
-	if out[0].LatencyMs != 5000 {
-		t.Errorf("core latency: got %d, want 5000", out[0].LatencyMs)
-	}
-
-	if out[1].Service != "query" {
-		t.Errorf("out[1]: got %q, want query", out[1].Service)
-	}
-	if out[1].Status != "stale" {
-		t.Errorf("query status: got %q, want stale (heartbeat older than TTL)", out[1].Status)
-	}
+type queryCountingCore struct {
+	clients.CoreClient
+	mu      sync.Mutex
+	queries int
 }
 
-func TestProjectStatus_EmptyInput(t *testing.T) {
-	out := projectStatus(nil, time.Now())
-	if len(out) != 0 {
-		t.Errorf("want empty slice, got %d entries", len(out))
+func (c *queryCountingCore) QueryEvents(_ context.Context, _ clients.QueryEventsRequest) (*clients.QueryEventsResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.queries++
+	return &clients.QueryEventsResponse{}, nil
+}
+
+func TestCurrentServiceStatus_ColdCacheNeverQueriesCore(t *testing.T) {
+	core := &queryCountingCore{}
+	cp := &ControlPlane{coreClient: core, heartbeats: newHeartbeatEmitter(core, nil, nil)}
+
+	if out := cp.currentServiceStatus(); len(out) != 0 {
+		t.Errorf("cold cache: want no services, got %+v", out)
+	}
+	if core.queries != 0 {
+		t.Errorf("core queries: got %d, want 0 — an unscoped tenant=system read loads that tenant into Core memory", core.queries)
 	}
 }
 
@@ -208,7 +155,7 @@ func TestShouldWriteBeat_FirstBeatForAServiceIsAlwaysWritten(t *testing.T) {
 	now := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
 
 	if !h.shouldWriteBeat("core", statusHealthy, now) {
-		t.Error("a service with no recorded write must be written, or a cold projectStatus has nothing inside its TTL")
+		t.Error("a service with no recorded write must be written, or its history starts with a gap")
 	}
 }
 

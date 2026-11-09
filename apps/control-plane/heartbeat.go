@@ -10,8 +10,8 @@ package main
 // Every tick probes every backend and updates the in-memory gauge. A
 // `service.heartbeat` event reaches Core under tenant=system only when a
 // service's status changes, when the process starts, or when a service has
-// gone heartbeatKeepaliveInterval without a write. The status endpoint folds
-// those events into a current-view projection.
+// gone heartbeatKeepaliveInterval without a write. Those events are history;
+// the status endpoint renders the in-memory gauge.
 
 import (
 	"bytes"
@@ -180,8 +180,7 @@ func (h *heartbeatEmitter) markBeatWritten(name, status string, at time.Time) {
 }
 
 // snapshot returns the current in-memory probe state as serviceStatus
-// entries. Anything older than heartbeatTTL flips to "stale" — same rule
-// as the Core-backed projection, kept consistent so callers see one shape.
+// entries. Anything older than heartbeatTTL flips to "stale".
 func (h *heartbeatEmitter) snapshot(now time.Time) []serviceStatus {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -334,64 +333,6 @@ type serviceStatus struct {
 	ProbedURL  string  `json:"probed_url,omitempty"`
 }
 
-// projectStatus folds the recent heartbeat events into one entry per
-// service, picking the newest heartbeat and flagging anything older than
-// heartbeatTTL as "stale".
-func projectStatus(events []clients.EventEntry, now time.Time) []serviceStatus {
-	// newest heartbeat per entity_id
-	latest := map[string]clients.EventEntry{}
-	for _, e := range events {
-		if e.EventType != heartbeatEventType {
-			continue
-		}
-		if prev, ok := latest[e.EntityID]; ok {
-			if e.Timestamp <= prev.Timestamp {
-				continue
-			}
-		}
-		latest[e.EntityID] = e
-	}
-
-	out := make([]serviceStatus, 0, len(latest))
-	for _, e := range latest {
-		s := serviceStatus{Service: e.EntityID, LastSeen: e.Timestamp}
-		ts, err := time.Parse(time.RFC3339Nano, e.Timestamp)
-		if err != nil {
-			var fallbackErr error
-			ts, fallbackErr = time.Parse(time.RFC3339, e.Timestamp)
-			if fallbackErr != nil {
-				log.Printf("heartbeat: unparseable timestamp %q for %s: %v", e.Timestamp, e.EntityID, fallbackErr)
-			}
-		}
-		age := now.Sub(ts)
-		s.AgeSeconds = age.Seconds()
-
-		var reported string
-		if v, ok := e.Payload["status"].(string); ok {
-			reported = v
-		}
-		switch {
-		case age > heartbeatTTL:
-			s.Status = statusStale
-		default:
-			s.Status = reported
-		}
-		if v, ok := e.Payload["latency_ms"].(float64); ok {
-			s.LatencyMs = int64(v)
-		}
-		if v, ok := e.Payload["error"].(string); ok {
-			s.Error = v
-		}
-		if v, ok := e.Payload["probed_url"].(string); ok {
-			s.ProbedURL = v
-		}
-		out = append(out, s)
-	}
-
-	sort.Slice(out, func(i, j int) bool { return out[i].Service < out[j].Service })
-	return out
-}
-
 // statusServicesHandler returns the JSON projection. The marketing site's
 // /status page (www.all-source.xyz/status) is the canonical user-facing UI;
 // this is the stable JSON feed it polls.
@@ -399,38 +340,13 @@ func (cp *ControlPlane) statusServicesHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"services": cp.currentServiceStatus()})
 }
 
-// currentServiceStatus returns the live projection. Reads first from the
-// in-process probe cache (always available — survives Core outages) and
-// falls back to merging in older heartbeats from Core if the cache is
-// cold (e.g. CP just started). The cache is the load-bearing path; Core
-// is for history and external consumers, not for rendering "is X up right
-// now?" — that would be a circular dependency on Core itself.
+// currentServiceStatus is the in-process probe cache, empty until the first
+// probe round finishes. It never reads Core: this route is public, and an
+// unscoped query on tenant=system makes Core load that whole tenant into
+// memory.
 func (cp *ControlPlane) currentServiceStatus() []serviceStatus {
-	if cp.heartbeats != nil {
-		if live := cp.heartbeats.snapshot(time.Now()); len(live) > 0 {
-			return live
-		}
-	}
-
-	// Cold cache (CP just booted): try Core for any recent heartbeats so
-	// the page isn't blank during startup. Tight 1s timeout so a slow Core
-	// can't make the status page hang.
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	// The window must exceed heartbeatKeepaliveInterval, or a steady service
-	// that has not changed status since its last keepalive falls outside it
-	// and the page renders blank. projectStatus still ages these to "stale",
-	// which is the honest reading of a beat this old.
-	since := time.Now().Add(-2 * heartbeatKeepaliveInterval).UTC().Format(time.RFC3339)
-	resp, err := cp.coreClient.QueryEvents(ctx, clients.QueryEventsRequest{
-		EventType: heartbeatEventType,
-		TenantID:  heartbeatTenant,
-		Since:     since,
-		Limit:     500,
-	})
-	if err != nil || resp == nil {
+	if cp.heartbeats == nil {
 		return nil
 	}
-	return projectStatus(resp.Events, time.Now())
+	return cp.heartbeats.snapshot(time.Now())
 }

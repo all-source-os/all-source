@@ -217,8 +217,7 @@ ENV RUST_LOG=allsource_core=info,tower_http=info \
     ALLSOURCE_HOST=0.0.0.0 \
     ALLSOURCE_PORT=3900 \
     ALLSOURCE_DATA_DIR=/app/data \
-    PORT=3900 \
-    MALLOC_ARENA_MAX=2
+    PORT=3900
 
 ENTRYPOINT ["./allsource-core"]
 
@@ -251,8 +250,7 @@ ENV RUST_LOG=allsource_core=info,tower_http=info \
     ALLSOURCE_HOST=0.0.0.0 \
     ALLSOURCE_PORT=3900 \
     ALLSOURCE_DATA_DIR=/app/data \
-    PORT=3900 \
-    MALLOC_ARENA_MAX=2
+    PORT=3900
 
 ENTRYPOINT ["./allsource-core"]
 
@@ -294,8 +292,7 @@ ENV RUST_LOG=allsource_core=info,tower_http=info \
     ALLSOURCE_HOST=0.0.0.0 \
     ALLSOURCE_PORT=3900 \
     ALLSOURCE_DATA_DIR=/app/data \
-    PORT=3900 \
-    MALLOC_ARENA_MAX=2
+    PORT=3900
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:3900/health || exit 1
@@ -342,8 +339,7 @@ ENV RUST_LOG=allsource_core=info,tower_http=info \
     ALLSOURCE_HOST=0.0.0.0 \
     ALLSOURCE_PORT=3900 \
     ALLSOURCE_DATA_DIR=/app/data \
-    PORT=3900 \
-    MALLOC_ARENA_MAX=2
+    PORT=3900
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:3900/health || exit 1

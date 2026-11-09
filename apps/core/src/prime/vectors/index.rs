@@ -2,7 +2,9 @@
 //!
 //! Uses `instant-distance` for pure-Rust HNSW (ADR-015). Since the crate is
 //! batch-only (no incremental insert), vectors are accumulated in a `DashMap`
-//! and the HNSW index is lazily rebuilt when a search is performed after mutations.
+//! and the HNSW index is rebuilt after mutations by one builder at a time.
+//! Only a search with no index yet waits for it; the rest keep using the last
+//! build and brute-force whatever was written since.
 //!
 //! ## Key design decisions (ADR-015)
 //!
@@ -13,12 +15,15 @@
 
 use dashmap::DashMap;
 use instant_distance::{Builder, HnswMap, Point, Search};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::Instant,
 };
 
 use crate::{
@@ -33,16 +38,20 @@ struct VecPoint(Vec<f32>);
 
 impl Point for VecPoint {
     fn distance(&self, other: &Self) -> f32 {
-        // Cosine distance = 1.0 - cosine_similarity
-        let dot: f32 = self.0.iter().zip(other.0.iter()).map(|(a, b)| a * b).sum();
-        let norm_a: f32 = self.0.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let norm_b: f32 = other.0.iter().map(|x| x * x).sum::<f32>().sqrt();
-        let denom = norm_a * norm_b;
-        if denom < f32::EPSILON {
-            1.0
-        } else {
-            1.0 - (dot / denom)
-        }
+        cosine_distance(&self.0, &other.0)
+    }
+}
+
+/// Cosine distance = 1.0 - cosine_similarity
+fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let denom = norm_a * norm_b;
+    if denom < f32::EPSILON {
+        1.0
+    } else {
+        1.0 - (dot / denom)
     }
 }
 
@@ -53,6 +62,10 @@ struct VectorRecord {
     vector: Vec<f32>,
     text: Option<String>,
     metadata: Option<Value>,
+    /// Generation that made this record current; above `built_generation` means
+    /// the last build does not reflect it.
+    #[serde(skip)]
+    written_at: u64,
 }
 
 /// Configuration for the HNSW index.
@@ -94,7 +107,22 @@ pub struct VectorIndexProjection {
     generation: Arc<AtomicU64>,
     /// Generation at which the index was last built.
     built_generation: Arc<AtomicU64>,
+    /// Held for the whole of a build, so at most one runs.
+    build_lock: Arc<Mutex<()>>,
+    /// A background rebuild is queued or running.
+    rebuilding: Arc<AtomicBool>,
+    /// Completed builds.
+    builds: Arc<AtomicU64>,
     config: VectorIndexConfig,
+}
+
+/// Clears `rebuilding` even if the build panics, so later rebuilds still start.
+struct RebuildingFlag(Arc<AtomicBool>);
+
+impl Drop for RebuildingFlag {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 impl VectorIndexProjection {
@@ -109,6 +137,9 @@ impl VectorIndexProjection {
             index: Arc::new(RwLock::new(None)),
             generation: Arc::new(AtomicU64::new(0)),
             built_generation: Arc::new(AtomicU64::new(0)),
+            build_lock: Arc::new(Mutex::new(())),
+            rebuilding: Arc::new(AtomicBool::new(false)),
+            builds: Arc::new(AtomicU64::new(0)),
             config,
         }
     }
@@ -137,47 +168,139 @@ impl VectorIndexProjection {
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<SearchHit> {
         self.ensure_index();
 
-        let guard = self.index.read();
-        let Some(hnsw) = guard.as_ref() else {
-            return Vec::new();
-        };
+        // Read before the index, which a build publishes first: a record newer
+        // than this counter is then always scanned, even if the index has it.
+        let built_gen = self.built_generation.load(Ordering::Acquire);
+        let mut hits: Vec<SearchHit> = Vec::new();
 
-        let query_point = VecPoint(query.to_vec());
-        let mut search = Search::default();
+        if let Some(hnsw) = self.index.read().as_ref() {
+            let query_point = VecPoint(query.to_vec());
+            let mut search = Search::default();
+            hits.extend(
+                hnsw.search(&query_point, &mut search)
+                    .filter_map(|item| {
+                        let record = self.vectors.get(item.value)?;
+                        (record.written_at <= built_gen).then(|| SearchHit {
+                            entity_id: item.value.clone(),
+                            distance: item.distance,
+                            text: record.text.clone(),
+                            metadata: record.metadata.clone(),
+                        })
+                    })
+                    .take(top_k),
+            );
+        }
 
-        hnsw.search(&query_point, &mut search)
-            .take(top_k)
-            .filter_map(|item| {
-                let entity_id = item.value;
-                // Double-check existence (may have been deleted between rebuild and now)
-                let record = self.vectors.get(entity_id)?;
-                Some(SearchHit {
-                    entity_id: entity_id.clone(),
-                    distance: item.distance,
+        if self.generation.load(Ordering::Acquire) != built_gen {
+            hits.extend(self.scan(query, |record| record.written_at > built_gen));
+            Self::keep_nearest(&mut hits, top_k);
+        }
+        hits
+    }
+
+    /// Exact search over vectors whose entity id starts with `entity_prefix`.
+    ///
+    /// Never touches the HNSW, so a small typed subset neither waits for a
+    /// rebuild nor loses its top-k to vectors of other types.
+    pub fn search_prefix(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        entity_prefix: &str,
+    ) -> Vec<SearchHit> {
+        let mut hits = self.scan(query, |record| record.entity_id.starts_with(entity_prefix));
+        Self::keep_nearest(&mut hits, top_k);
+        hits
+    }
+
+    fn scan(&self, query: &[f32], keep: impl Fn(&VectorRecord) -> bool) -> Vec<SearchHit> {
+        self.vectors
+            .iter()
+            .filter(|entry| keep(entry.value()))
+            .map(|entry| {
+                let record = entry.value();
+                SearchHit {
+                    entity_id: record.entity_id.clone(),
+                    distance: cosine_distance(query, &record.vector),
                     text: record.text.clone(),
                     metadata: record.metadata.clone(),
-                })
+                }
             })
             .collect()
     }
 
-    /// Rebuild the HNSW index if the generation has advanced since last build.
+    fn keep_nearest(hits: &mut Vec<SearchHit>, top_k: usize) {
+        hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+        hits.truncate(top_k);
+    }
+
+    /// Bring the index up to date, or start that happening.
     fn ensure_index(&self) {
-        let current_gen = self.generation.load(Ordering::Acquire);
-        let built_gen = self.built_generation.load(Ordering::Acquire);
-        if current_gen == built_gen {
-            return; // Index is up to date
+        if self.is_current() {
+            return;
+        }
+        if self.index.read().is_some() {
+            self.spawn_rebuild();
+            return;
         }
 
-        // Collect live vectors
+        let _build = self.build_lock.lock();
+        if self.index.read().is_none() && !self.is_current() {
+            self.rebuild();
+        }
+    }
+
+    fn is_current(&self) -> bool {
+        self.generation.load(Ordering::Acquire) == self.built_generation.load(Ordering::Acquire)
+    }
+
+    fn spawn_rebuild(&self) {
+        if self.rebuilding.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let flag = RebuildingFlag(Arc::clone(&self.rebuilding));
+        let worker = self.background_handle();
+        let spawned = std::thread::Builder::new()
+            .name("prime-vector-rebuild".to_string())
+            .spawn(move || {
+                let _flag = flag;
+                let _build = worker.build_lock.lock();
+                worker.rebuild();
+            });
+        if let Err(error) = spawned {
+            tracing::warn!(%error, index = %self.name, "could not start vector index rebuild");
+        }
+    }
+
+    fn background_handle(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            vectors: Arc::clone(&self.vectors),
+            index: Arc::clone(&self.index),
+            generation: Arc::clone(&self.generation),
+            built_generation: Arc::clone(&self.built_generation),
+            build_lock: Arc::clone(&self.build_lock),
+            rebuilding: Arc::clone(&self.rebuilding),
+            builds: Arc::clone(&self.builds),
+            config: self.config.clone(),
+        }
+    }
+
+    /// Caller holds `build_lock`.
+    fn rebuild(&self) {
+        // Read before collecting: a write landing mid-collect leaves
+        // `built_generation` behind `generation`, so it is picked up again.
+        let target = self.generation.load(Ordering::Acquire);
+
         let mut points = Vec::new();
         let mut values = Vec::new();
-
         for entry in self.vectors.iter() {
             points.push(VecPoint(entry.value().vector.clone()));
             values.push(entry.key().clone());
         }
+        let vector_count = points.len();
 
+        let started = Instant::now();
         if points.is_empty() {
             *self.index.write() = None;
         } else {
@@ -186,13 +309,14 @@ impl VectorIndexProjection {
                 .build(points, values);
             *self.index.write() = Some(hnsw);
         }
+        self.built_generation.store(target, Ordering::Release);
+        self.builds.fetch_add(1, Ordering::Relaxed);
 
-        // CAS: only update if no concurrent mutations happened during build
-        let _ = self.built_generation.compare_exchange(
-            built_gen,
-            current_gen,
-            Ordering::Release,
-            Ordering::Relaxed,
+        tracing::info!(
+            index = %self.name,
+            vector_count,
+            build_ms = started.elapsed().as_millis() as u64,
+            "vector index built"
         );
     }
 }
@@ -222,6 +346,7 @@ impl Projection for VectorIndexProjection {
                     .map(String::from);
 
                 let metadata = payload.get("metadata").cloned();
+                let written_at = self.generation.load(Ordering::Acquire) + 1;
 
                 self.vectors.insert(
                     entity_id.clone(),
@@ -230,6 +355,7 @@ impl Projection for VectorIndexProjection {
                         vector,
                         text,
                         metadata,
+                        written_at,
                     },
                 );
                 self.generation.fetch_add(1, Ordering::Release);
@@ -268,6 +394,8 @@ impl Projection for VectorIndexProjection {
         for record in records {
             self.vectors.insert(record.entity_id.clone(), record);
         }
+        // Restored records carry no generation, so the old build cannot serve them.
+        *self.index.write() = None;
         self.generation.fetch_add(1, Ordering::Release);
         Ok(())
     }
@@ -436,6 +564,116 @@ mod tests {
         let proj = VectorIndexProjection::new("vec_idx");
         proj.process(&make_delete_event("vec:ghost")).unwrap();
         assert_eq!(proj.len(), 0);
+    }
+
+    fn wait_until_current(proj: &VectorIndexProjection) {
+        for _ in 0..500 {
+            if proj.is_current() && !proj.rebuilding.load(Ordering::Acquire) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("vector index rebuild did not finish");
+    }
+
+    #[test]
+    fn a_write_after_a_build_is_found_by_the_very_next_search() {
+        let proj = VectorIndexProjection::new("vec_idx");
+        proj.process(&make_vector_event("vec:old", &[0.0, 1.0], Some("old")))
+            .unwrap();
+        proj.search(&[1.0, 0.0], 1);
+
+        proj.process(&make_vector_event("vec:new", &[1.0, 0.0], Some("new")))
+            .unwrap();
+
+        let hits = proj.search(&[1.0, 0.0], 1);
+        assert_eq!(hits[0].entity_id, "vec:new");
+    }
+
+    #[test]
+    fn a_rewritten_vector_is_returned_once_at_its_new_position() {
+        let proj = VectorIndexProjection::new("vec_idx");
+        proj.process(&make_vector_event("vec:a", &[0.0, 1.0], Some("before")))
+            .unwrap();
+        proj.search(&[1.0, 0.0], 1);
+
+        proj.process(&make_vector_event("vec:a", &[1.0, 0.0], Some("after")))
+            .unwrap();
+
+        let hits = proj.search(&[1.0, 0.0], 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].text.as_deref(), Some("after"));
+        assert!(hits[0].distance < 0.01);
+    }
+
+    #[test]
+    fn a_delete_after_a_build_is_not_served_from_the_old_build() {
+        let proj = VectorIndexProjection::new("vec_idx");
+        proj.process(&make_vector_event("vec:a", &[1.0, 0.0], Some("a")))
+            .unwrap();
+        proj.process(&make_vector_event("vec:b", &[0.0, 1.0], Some("b")))
+            .unwrap();
+        proj.search(&[1.0, 0.0], 2);
+
+        proj.process(&make_delete_event("vec:a")).unwrap();
+
+        let hits = proj.search(&[1.0, 0.0], 2);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].entity_id, "vec:b");
+    }
+
+    #[test]
+    fn concurrent_searches_share_one_build() {
+        let proj = Arc::new(VectorIndexProjection::new("vec_idx"));
+        for i in 0..200 {
+            let vector = vec![i as f32, 1.0, (200 - i) as f32];
+            proj.process(&make_vector_event(&format!("vec:{i}"), &vector, None))
+                .unwrap();
+        }
+
+        let search_from_many_threads = |proj: &Arc<VectorIndexProjection>| {
+            let handles: Vec<_> = (0..8)
+                .map(|_| {
+                    let proj = Arc::clone(proj);
+                    std::thread::spawn(move || proj.search(&[1.0, 1.0, 1.0], 5))
+                })
+                .collect();
+            for handle in handles {
+                assert_eq!(handle.join().unwrap().len(), 5);
+            }
+        };
+
+        search_from_many_threads(&proj);
+        assert_eq!(proj.builds.load(Ordering::Relaxed), 1);
+
+        proj.process(&make_vector_event("vec:late", &[1.0, 1.0, 1.0], None))
+            .unwrap();
+        search_from_many_threads(&proj);
+        wait_until_current(&proj);
+        assert_eq!(proj.builds.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn prefix_search_finds_a_small_subset_behind_closer_vectors_without_a_build() {
+        let proj = VectorIndexProjection::new("vec_idx");
+        for i in 0..50 {
+            proj.process(&make_vector_event(
+                &format!("vec:output:{i}"),
+                &[1.0, 0.0],
+                None,
+            ))
+            .unwrap();
+        }
+        proj.process(&make_vector_event("vec:tool:far", &[0.0, 1.0], None))
+            .unwrap();
+        proj.process(&make_vector_event("vec:tool:near", &[0.5, 0.5], None))
+            .unwrap();
+
+        let hits = proj.search_prefix(&[1.0, 0.0], 5, "vec:tool:");
+
+        let ids: Vec<_> = hits.iter().map(|hit| hit.entity_id.as_str()).collect();
+        assert_eq!(ids, ["vec:tool:near", "vec:tool:far"]);
+        assert_eq!(proj.builds.load(Ordering::Relaxed), 0);
     }
 
     #[test]
