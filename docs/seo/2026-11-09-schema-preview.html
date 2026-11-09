@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preview: event schema evolution example</title>
+  <style>
+    body { max-width: 760px; margin: 3rem auto; padding: 0 1rem; font: 16px/1.6 system-ui, sans-serif; color: #17212b; }
+    .notice { border-left: 4px solid #2563eb; background: #eff6ff; padding: 1rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #17212b; color: #f8fafc; border-radius: 6px; }
+    a { color: #174eb6; }
+  </style>
+</head>
+<body>
+  <p class="notice">Review preview of the proposed example only. This is not the production page or a rendering of the complete site.</p>
+  <h1>Event Schema Evolution Without Rewriting History</h1>
+  <h2>Compatible order event evolution</h2>
+  <pre id="proposed-example">v1 order.placed { "total_pence": 14999, "contract_version": "uk-1" }
+v2 order.placed { "total_pence": 14999, "currency": "GBP" }
+
+read v1 -> resolve uk-1 against retained immutable contract evidence
+if contract evidence is missing -> mark currency unknown; do not guess
+read v2 -> use explicit currency
+stored v1 payload remains unchanged</pre>
+  <p>The contract identifier and values are illustrative; they do not establish an AllSource API field or contract lookup capability.</p>
+  <p><a href="https://www.all-source.xyz/event-sourcing/patterns/event-schema-evolution">View current production guide</a> · <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing">Microsoft: Event Sourcing pattern</a></p>
+</body>
+</html>

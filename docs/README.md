@@ -54,6 +54,9 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 - [Search-content implementation (2026-10-01)](./seo/2026-10-01-search-content-implementation.md): page intent, content changes, technical verification and measurement limits for both sites.
 - [AllSource editorial review (2026-11-07)](./seo/2026-11-07-editorial-review/README.md): factual corrections and contextual links for product-owner review.
 - [Agent memory after compaction search evidence (2026-11-07)](./seo/2026-11-07-compaction-search-evidence.md): search intent, sources, and trend-data limits.
+- [AllSource SEO strategy (2026-11-08)](./seo/2026-11-08-allsource-seo-strategy.md): delivery, topic priorities, evidence and measurement.
+- [Schema evolution example evidence (2026-11-08)](./seo/2026-11-08-schema-evolution-evidence.md): replay example, source evidence, and release limits.
+- [Schema evolution SEO review (2026-11-09)](./seo/2026-11-09-schema-review.md): proposed correction and local HTML preview.
 - [Directory and registry listings (2026-10-21)](./outreach/2026-10-21-directory-listings.md): product facts for listings, MCP registry and ClawHub routes, curated directories and the submission log.
 
 | | Link | Description |
