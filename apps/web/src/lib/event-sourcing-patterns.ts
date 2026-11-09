@@ -468,10 +468,11 @@ ack durable consumer position`,
       "Store original event unchanged. Consumer identifies schema or event version, runs required upcasters, then applies current reducer. Before release, replay representative histories—including oldest retained payloads—into new projection version. If semantic default cannot be derived from event itself, emit compensating enrichment fact rather than querying today's mutable external state during replay.",
     ],
     exampleTitle: "Compatible order event evolution",
-    example: `v1 order.placed { "total_pence": 14999 }
+    example: `v1 order.placed { "total_pence": 14999, "contract_version": "uk-1" }
 v2 order.placed { "total_pence": 14999, "currency": "GBP" }
 
-read v1 -> default currency from recorded tenant contract version
+read v1 -> resolve uk-1 against retained immutable contract evidence
+if contract evidence is missing -> mark currency unknown; do not guess
 read v2 -> use explicit currency
 stored v1 payload remains unchanged`,
     failureModes: [
