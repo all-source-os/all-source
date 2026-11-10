@@ -119,6 +119,7 @@ base64.workspace = true
 bumpalo.workspace = true
 # Security: bytes 1.11.1+ required for RUSTSEC-2026-0007
 bytes.workspace = true
+cap = "0.1"
 chrono.workspace = true
 crc32fast.workspace = true
 crossbeam.workspace = true
@@ -137,7 +138,6 @@ http = { workspace = true, optional = true }
 instant-distance = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 mimalloc = { version = "0.1", default-features = false }
-cap = "0.1"
 # default-features = false keeps the azure/gcp/http backends out; only the aws
 # client is compiled, and it covers every S3-compatible endpoint we target.
 object_store = { version = "0.14", default-features = false, features = ["aws"], optional = true }

@@ -73,6 +73,8 @@ jobs:
         # RUSTSEC-2026-0112/0113/0145 (astral-tokio-tar): dev-only, pulled via
         # testcontainers, never in a shipped artifact; no upstream fix yet
         # (0145 wants >=0.6.2; testcontainers 0.26.3 pins 0.5.x).
+        # RUSTSEC-2026-0459 (libsqlite3-sys): lockfile-only, listed by sqlx's
+        # macro crate; sqlx is built with postgres only, so nothing compiles it.
         run: |
           timeout -k 15 120 cargo audit \
             --file "${{ matrix.lockfile }}" \
@@ -84,7 +86,8 @@ jobs:
             --ignore RUSTSEC-2026-0068 \
             --ignore RUSTSEC-2026-0112 \
             --ignore RUSTSEC-2026-0113 \
-            --ignore RUSTSEC-2026-0145
+            --ignore RUSTSEC-2026-0145 \
+            --ignore RUSTSEC-2026-0459
 
       # Go dependencies
       - name: Set up Go
