@@ -38,7 +38,7 @@ const MICROSOFT_EVENT_SOURCING = {
 
 const AWS_EVENT_SOURCING = {
   label: "AWS Prescriptive Guidance: Event sourcing pattern",
-  href: "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/event-sourcing.html",
+  href: "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/event-sourcing-pattern.html",
 } as const;
 
 export const eventSourcingPatterns: readonly EventSourcingPattern[] = [

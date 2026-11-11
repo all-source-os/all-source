@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Event sourcing AWS reference review (2026-11-11)](./seo/2026-11-11-aws-reference-review.md): corrected reference destination, search evidence and verification limits.
+
 - [Prime against HASH: gap status (2026-11-06)](./reports/2026-11-06-prime-hash-gap-status.md): the seven gaps with HASH re-verified on its source, what is deployed, the Prime image build fix, `warn` by default, server-stamped `recorded_by`, the extraction contract, and what is still open.
 
 - [Fly cost reduction (2026-11-08)](plans/2026-11-08-fly-cost-reduction.md): $144.87/month serves four tenants, all ours; the steps from Core memory work to fewer apps that bring it to about $55, with evidence, constraints and open questions.
