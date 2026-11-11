@@ -150,9 +150,6 @@ How-to documentation for common tasks.
 | [MCP Quick Reference](./guides/mcp-server/QUICK_REFERENCE.md) | MCP tool reference card | ✅ |
 | [Claude Code Skills](./guides/CLAUDE_CODE_SKILLS.md) | Automated testing, release, and diagnostics skills | ✅ |
 | [Embedded Prime Integration](./guides/EMBEDDED_PRIME_INTEGRATION.md) | Use Prime as an embedded library in Tauri / Rust apps — graph, HNSW vectors, tiered recall | ✅ |
-| [Allstack CLI and recovery](./reference/allstack.md) | Repository setup and recovery for the local Allstack workflow: Core keeps its history, Chronis its tasks and claims, Prime its recall | ✅ |
-| [Allstack native skills](./reference/allstack-skills.md) | The `allstack-*` skills for Codex and Claude Code, and what each is for | ✅ |
-| [Allstack workflow catalog](./reference/allstack-catalog.md) | The `delivery` and `bugfix` workflows in `workflows/catalog.toml` and how to start one | ✅ |
 
 ---
 
@@ -191,6 +188,7 @@ For DevOps and platform engineers.
 | [Client keys and the legacy sunset](./runbooks/CLIENT_KEY_ROTATION.md) | Registering, rotating and revoking a tenant client's ES256 key with the operator routes, reading assertion denials, and setting `ALLSOURCE_LEGACY_KEY_SUNSET` | Operator runbook |
 | [Gateway config strip outage (2026-11-06)](./reports/2026-11-06-gateway-config-strip-outage.md) | `api.all-source.xyz` served nothing for 32.5 min (23:31:29Z–00:03:56Z) after a 0-byte `fly.toml` from `git show --output` replaced the only machine's config; missed signals and the read-back rule | ✅ |
 | [Infra costs status (2026-11-08)](./reports/2026-11-08-infra-costs-status.html) | Fly machines and volumes by app ($144.87/month, Core 70%), hourly and daily gateway egress against the alert thresholds, the largest reads, Actions run time by workflow, plan allowances against Fly's egress cost, and the actions that cut cost | ✅ |
+| [Ritual-full flow adoption (2026-11-11)](./reports/2026-11-11-ritual-full-adoption.md) | Vendored ritual skills, planning rules in CLAUDE.md and AGENTS.md, AllStack skills and workflows removed, text-only checks and what was not checked | ✅ |
 | [Latest-state views](./runbooks/LATEST_STATE_VIEWS.md) | Turning views on (`ALLSOURCE_VIEWS`, admin `CORE_API_KEY` for the Query Service folder, optional `ALLSOURCE_FEED_DURABLE_LOG`), defining the ops-status view, folder counters and the gateway changes lane | Operator runbook |
 | [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
 | [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |
@@ -311,9 +309,6 @@ Use relative paths for internal links:
 
 
 - [Allstack delivery plan 2432f3f6-c468-46ca-99ba-45fa6185deba](plans/allstack-2432f3f6-c468-46ca-99ba-45fa6185deba.md)
-- [Allstack CLI and recovery](reference/allstack.md)
-- [Allstack workflow catalog](reference/allstack-catalog.md)
-- [Allstack native skills](reference/allstack-skills.md)
 
 - [Allstack delivery plan b67f2a72-0d88-40b5-bf4d-efdc492f4f99](plans/allstack-b67f2a72-0d88-40b5-bf4d-efdc492f4f99.md)
 

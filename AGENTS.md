@@ -22,6 +22,16 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Planning
+
+Planned work runs as one `ritual-full` flow: Think, Spec, Plan, Build, Review, Ship, Reflect. It runs on a Chronis epic whose `ritual-*` lines name each step's file. Flow: `.claude/skills/ritual-full/SKILL.md`. Guide: https://github.com/decebal/decebal-claude-skills/blob/main/docs/ritual-zero-to-hero.md.
+
+- Ship follows the Git Workflow in `CLAUDE.md`. It opens a PR only when the user asked for one; otherwise it commits and pushes to `main`.
+- Design approval is the user's decision. Approve only after the user tells you to approve in the conversation, and quote that instruction in your report. Never approve on your own initiative.
+- Approve with `cos ritual approve <epic> <design> --by "<name>" --review <path> --yes`, or `cn approve <epic>` without `cos`. `--yes` needs decebal/chief-of-staff-v2#23.
+- A bug with a clear reproduction skips Think and Spec and goes through `systematic-debugging`.
+- `.claude/skills/ritual*` and `semantic-isa` are vendored. Do not edit them here; change them upstream in decebal/decebal-claude-skills.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.

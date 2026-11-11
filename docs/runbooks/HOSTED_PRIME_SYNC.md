@@ -1,6 +1,6 @@
 # Verify hosted Prime sync with native skills
 
-Use `allstack-plan`, `allstack-review`, and `allstack-qa` in Codex or Claude. The executable acceptance lives in `apps/prime-mcp/tests/hosted_sync.rs`; native skills interpret its result and inspect the actual hosted records. AllSource owns events, Chronis owns delivery, and Prime holds source-linked context.
+Run the `ritual-full` flow (Plan, Review, Build, Ship) in Codex or Claude. The executable acceptance lives in `apps/prime-mcp/tests/hosted_sync.rs`; the Review step interprets its result and inspect the actual hosted records. AllSource owns events, Chronis owns delivery, and Prime holds source-linked context.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ Use `allstack-plan`, `allstack-review`, and `allstack-qa` in Codex or Claude. Th
 
 ## Codex writer
 
-Ask Codex to use `allstack-qa` and run:
+Ask Codex to run this as the Build step's verification:
 
 ```text
 cargo test --locked --manifest-path apps/prime-mcp/Cargo.toml \
@@ -26,7 +26,7 @@ The writer checks authentication rejection, creates two uniquely named synthetic
 
 ## Claude independent reader
 
-Give Claude the same source revision and sanitized receipt. Supply its credential separately. Ask it to use `allstack-qa` and run:
+Give Claude the same source revision and sanitized receipt. Supply its credential separately. Ask it to run this as the Review step's verification:
 
 ```text
 cargo test --locked --manifest-path apps/prime-mcp/Cargo.toml \
@@ -40,6 +40,6 @@ The reader opens no writer store and starts no local Prime process. It checks bo
 
 Inspect the two named decisions in the hosted Memory page. Revoke the temporary key and verify a subsequent exact-entity query returns HTTP 401. Keep the synthetic decisions in the tenant's audit trail. Remove private credential files and retain source-bound evidence before deleting your own proof worktree or build cache.
 
-Save the outcome under indexed `docs/reports/`. Native `allstack-ship` can adopt the accepted candidate, run the frozen policy against its exact final commit, publish the authorized PR, and read back Chronis completion and Prime context. Publication does not authorize a merge or deployment.
+Save the outcome under indexed `docs/reports/`. The Ship step can adopt the accepted candidate, run the repo gates against its exact final commit, publish the authorized PR, and read back Chronis completion and Prime context. Publication does not authorize a merge or deployment.
 
 Codex and Claude can run sequentially on one machine. That proves separate coding-host processes; it does not prove a second physical computer, another tenant, hosted-server restart durability, or vector retrieval.
