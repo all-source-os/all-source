@@ -1,9 +1,0 @@
-schema_version = 1
-
-[[workflows]]
-id = "delivery"
-path = "workflows/delivery.toml"
-
-[[workflows]]
-id = "bugfix"
-path = "workflows/bugfix.toml"
