@@ -97,7 +97,7 @@ An agent writes facts into Prime through MCP or HTTP, embedded or hosted, and ge
 
 ## Acceptance
 
-Tests carry BDD names and run in the gates of `workflows/verification-prime-contracts.toml`. New Core tests live in the library under a path containing `prime` or `search` so those gates execute them; zero selected tests is a failure.
+Tests carry BDD names and run in CI: the Core test step and the `prime-quality` job in `.github/workflows/ci.yml`.
 
 - A user correction written before a newer extraction wins under `highest_priority`, written through the public write API, not hand-built observations; provenance returns the user's actor and source.
 - Provenance for an extracted field returns model, run id, derived-from and confidence.
