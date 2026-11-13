@@ -299,6 +299,19 @@ impl EventStore {
 
     /// Create event store with custom configuration
     pub fn with_config(config: EventStoreConfig) -> Self {
+        Self::try_with_config(config)
+            .expect("Core cannot open while erasure maintenance is unfinished")
+    }
+
+    pub fn try_with_config(config: EventStoreConfig) -> Result<Self> {
+        crate::infrastructure::persistence::erasure_maintenance::require_no_pending(
+            config.storage_dir.as_deref(),
+            config.wal_dir.as_deref(),
+        )?;
+        Ok(Self::open_config(config))
+    }
+
+    fn open_config(config: EventStoreConfig) -> Self {
         let mut projections = ProjectionManager::new();
 
         // Register built-in projections
