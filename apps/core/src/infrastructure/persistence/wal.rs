@@ -10,7 +10,10 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::SystemTime,
 };
 
@@ -64,6 +67,7 @@ pub struct WriteAheadLog {
 
     /// Segments in which `recover()` met a line it could not read.
     unreadable_segments: parking_lot::Mutex<HashSet<PathBuf>>,
+    erasure_floor_readable: AtomicBool,
 }
 
 #[derive(Debug, Clone)]
@@ -244,6 +248,8 @@ impl WriteAheadLog {
         // Create initial WAL file
         let initial_file_path = Self::generate_wal_filename(&wal_dir, 0);
         let current_file = WALFile::new(initial_file_path)?;
+        let erasure_floor = super::wal_sequence::read_floor(&wal_dir);
+        let erasure_floor_readable = erasure_floor.is_ok();
 
         tracing::info!("✅ WAL initialized at: {}", wal_dir.display());
 
@@ -252,9 +258,10 @@ impl WriteAheadLog {
             current_file: Arc::new(RwLock::new(current_file)),
             config,
             stats: Arc::new(RwLock::new(WALStats::default())),
-            sequence: Arc::new(RwLock::new(0)),
+            sequence: Arc::new(RwLock::new(erasure_floor.unwrap_or(0))),
             replication_tx: parking_lot::Mutex::new(None),
             unreadable_segments: parking_lot::Mutex::new(HashSet::new()),
+            erasure_floor_readable: AtomicBool::new(erasure_floor_readable),
         })
     }
 
@@ -266,6 +273,12 @@ impl WriteAheadLog {
     /// Write an event to the WAL
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn append(&self, event: Event) -> Result<u64> {
+        // EventStore may remain open after a recovery error; sequence reuse must fail closed.
+        if !self.erasure_floor_readable.load(Ordering::Acquire) {
+            return Err(AllSourceError::StorageError(
+                "WAL erasure sequence floor is unreadable; repair it before writing".into(),
+            ));
+        }
         // Get next sequence number
         let mut seq = self.sequence.write();
         *seq += 1;
@@ -670,7 +683,10 @@ impl WriteAheadLog {
         wal_files.sort();
 
         let mut recovered = Vec::new();
-        let mut max_sequence = 0u64;
+        let floor = super::wal_sequence::read_floor(&self.wal_dir);
+        self.erasure_floor_readable
+            .store(floor.is_ok(), Ordering::Release);
+        let mut max_sequence = floor?;
         let mut corrupted_entries = 0;
 
         for wal_file_path in &wal_files {
@@ -744,6 +760,11 @@ impl WriteAheadLog {
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn truncate(&self) -> Result<()> {
         tracing::info!("🧹 Truncating WAL after checkpoint");
+        let mut floor = super::wal_sequence::read_floor(&self.wal_dir)?;
+        if floor > 0 {
+            floor = floor.max(self.current_sequence());
+            super::wal_sequence::preserve_floor(&self.wal_dir, floor)?;
+        }
 
         // Close current file
         let mut current = self.current_file.write();
@@ -758,9 +779,8 @@ impl WriteAheadLog {
         let new_file_path = Self::generate_wal_filename(&self.wal_dir, 0);
         *current = WALFile::new(new_file_path)?;
 
-        // Reset sequence
         let mut seq = self.sequence.write();
-        *seq = 0;
+        *seq = floor;
 
         tracing::info!("✅ WAL truncated successfully");
 
