@@ -18,7 +18,10 @@ use crate::{
     },
     domain::{entities::Event, repositories::EventRepository, value_objects::EmbeddingVector},
     error::{AllSourceError, Result},
-    infrastructure::repositories::InMemoryVectorSearchRepository,
+    infrastructure::{
+        memory::ledger::{Owner, Tally},
+        repositories::InMemoryVectorSearchRepository,
+    },
     store::EventStore,
 };
 use async_trait::async_trait;
@@ -123,6 +126,9 @@ pub struct EventSearch {
     hybrid: HybridSearchEngine,
     indexer: Mutex<IndexerState>,
     ready: AtomicBool,
+    /// Indexed ids, the event payloads the keyword and hybrid indexes keep, and
+    /// the embeddings: charged to `search` as they are added.
+    charged: Tally,
 }
 
 impl EventSearch {
@@ -160,6 +166,7 @@ impl EventSearch {
                 expected_total: 0,
             }),
             ready: AtomicBool::new(false),
+            charged: Tally::new(Owner::Search),
         }))
     }
 
@@ -384,8 +391,11 @@ impl EventSearch {
         };
 
         let mut documents = Vec::with_capacity(fresh.len());
+        let mut charge = 0u64;
         for (event, embedding) in fresh.iter().zip(embeddings) {
+            charge += event.resident_bytes();
             if let Some(values) = &embedding {
+                charge += (values.len() * size_of::<f32>()) as u64;
                 let source_text = VectorSearchEngine::extract_text_from_payload(event.payload());
                 self.vector_service
                     .index_event(IndexEventRequest {
@@ -408,7 +418,11 @@ impl EventSearch {
         }
         self.hybrid.index_embedded(documents)?;
 
+        self.charged.add(charge);
+        let slots_before = state.indexed.capacity();
         state.indexed.extend(fresh.iter().map(|e| e.id()));
+        self.charged
+            .grow(slots_before, state.indexed.capacity(), size_of::<Uuid>());
         Ok(fresh.len())
     }
 

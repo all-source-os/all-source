@@ -20,22 +20,28 @@ fn bench_open_in_memory() {
     std::hint::black_box(rt.block_on(Prime::open_in_memory()).unwrap());
 }
 
+async fn add_nodes(n: usize) {
+    let prime = Prime::open_in_memory().await.unwrap();
+    for i in 0..n {
+        std::hint::black_box(
+            prime
+                .add_node("person", json!({ "name": format!("p{i}"), "index": i }))
+                .await
+                .unwrap(),
+        );
+    }
+}
+
+// The future passed to `block_on` is a module-level `async fn`. The default
+// entry point toggles collection on any symbol under the benchmark's wrapper
+// module, and `block_on::<{closure}>` of a closure defined in a benchmark is
+// one, so when it is not inlined everything it runs goes uncounted.
 #[library_benchmark]
 #[bench::small(100)]
 #[bench::medium(1_000)]
 fn bench_add_node_batch(n: usize) {
     let rt = rt();
-    rt.block_on(async {
-        let prime = Prime::open_in_memory().await.unwrap();
-        for i in 0..n {
-            std::hint::black_box(
-                prime
-                    .add_node("person", json!({ "name": format!("p{i}"), "index": i }))
-                    .await
-                    .unwrap(),
-            );
-        }
-    });
+    rt.block_on(add_nodes(n));
 }
 
 fn populated_graph() -> (Runtime, Prime) {

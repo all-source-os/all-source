@@ -8,9 +8,11 @@ use crate::{
         value_objects::{EntityId, EventType, TenantId},
     },
     error::{AllSourceError, Result},
-    infrastructure::persistence::archive_budget::ArchiveReadBudget,
+    infrastructure::{
+        hash_state::{FastDashMap, fast_dashmap, fast_map},
+        persistence::archive_budget::ArchiveReadBudget,
+    },
 };
-use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -26,7 +28,7 @@ pub const MAX_PAGE_BYTES: usize = 128 * 1024;
 /// Commit signals for long-polling readers, keyed by store address, tenant
 /// and model. Lives outside the model cache so a waiter holds no cache entry
 /// and no request slot.
-static WATCHERS: LazyLock<DashMap<String, watch::Sender<u64>>> = LazyLock::new(DashMap::new);
+static WATCHERS: LazyLock<FastDashMap<String, watch::Sender<u64>>> = LazyLock::new(fast_dashmap);
 
 fn watch_key(store: &EventStore, tenant: &str, name: &str) -> String {
     format!("{store:p}/{tenant}/{name}")
@@ -166,6 +168,10 @@ fn bound_cache(models: &mut HashMap<String, ReadModel>, keep: &str) {
     }
 }
 
+fn model_bytes(models: &HashMap<String, ReadModel>) -> u64 {
+    models.values().map(|model| model.bytes as u64).sum()
+}
+
 impl ReadModel {
     fn apply(&mut self, commit: &ModelCommit, revision: u64) -> Result<()> {
         if commit.reset {
@@ -251,12 +257,12 @@ impl EventStore {
     /// The model's journal is one entity, so only that entity's archived rows
     /// are decoded; the rest of the tenant's history never counts against the
     /// strict budget.
-    fn read_model_journal(&self, tenant: &str, entity: &str) -> Result<Vec<Event>> {
+    pub(super) fn read_model_journal(&self, tenant: &str, entity: &str) -> Result<Vec<Event>> {
         let mut budget = ArchiveReadBudget::new(self.strict_archive_limits.clone());
         // Held across both reads so eviction cannot drop a flushed commit
         // from memory between the archive scan and the memory scan.
         let _resident = self.cache_residency_gate.read();
-        let mut journal = HashMap::new();
+        let mut journal = fast_map();
         if let Some(storage) = &self.storage {
             storage
                 .read()
@@ -277,7 +283,8 @@ impl EventStore {
             journal.entry(event.id).or_insert_with(|| event.clone());
         }
         let mut commits: Vec<_> = journal.into_values().collect();
-        commits.sort_by_key(Event::version);
+        // Id breaks version ties so the replay order is reproducible.
+        commits.sort_by_key(|event| (event.version(), event.id));
         Ok(commits)
     }
 
@@ -341,6 +348,7 @@ impl EventStore {
             }
             models.insert(key.clone(), self.restore_read_model(tenant, &entity)?);
             bound_cache(&mut models, &key);
+            self.read_models_charge.set_to(model_bytes(&models));
         }
         let model = models.get(&key).expect("inserted read model");
         if model.revision != commit.expected_revision {
@@ -371,6 +379,7 @@ impl EventStore {
         self.ingest_with_expected_version(&event, Some(model.revision))?;
         models.insert(key, next);
         bound_cache(&mut models, &format!("{tenant}/{name}"));
+        self.read_models_charge.set_to(model_bytes(&models));
         drop(models);
         if let Some(sender) = WATCHERS.get(&watch_key(self, tenant, name)) {
             sender.send_replace(revision);
@@ -404,6 +413,7 @@ impl EventStore {
             }
             models.insert(key.clone(), self.restore_read_model(tenant, &entity)?);
             bound_cache(&mut models, &key);
+            self.read_models_charge.set_to(model_bytes(&models));
         }
         let model = models.get_mut(&key).expect("inserted read model");
         model.accessed = Some(std::time::Instant::now());

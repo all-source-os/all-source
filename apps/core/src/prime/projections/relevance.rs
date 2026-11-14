@@ -16,9 +16,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
+use super::charge;
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
-    prime::types::event_types,
+    infrastructure::memory::ledger::Tally, prime::types::event_types,
 };
 
 /// Event type for explicit memory access tracking.
@@ -67,6 +68,7 @@ pub struct RelevanceDecayProjection {
     default_decay_rate: f64,
     /// entity_id -> RelevanceScore
     scores: Arc<DashMap<String, RelevanceScore>>,
+    charge: Tally,
 }
 
 impl RelevanceDecayProjection {
@@ -75,6 +77,16 @@ impl RelevanceDecayProjection {
             name: name.into(),
             default_decay_rate: 0.01,
             scores: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    /// Every score is a fixed-size value, so an entry costs its key and slot.
+    fn store(&self, entity_id: String, score: RelevanceScore) {
+        let key_bytes = charge::text(&entity_id);
+        if self.scores.insert(entity_id, score).is_none() {
+            self.charge
+                .add(charge::entry::<String, RelevanceScore>(key_bytes));
         }
     }
 
@@ -120,7 +132,7 @@ impl Projection for RelevanceDecayProjection {
 
         match event_type {
             event_types::NODE_CREATED | event_types::EDGE_CREATED => {
-                self.scores.insert(
+                self.store(
                     entity_id,
                     RelevanceScore::new(timestamp, self.default_decay_rate),
                 );
@@ -147,6 +159,7 @@ impl Projection for RelevanceDecayProjection {
 
     fn clear(&self) {
         self.scores.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -161,9 +174,9 @@ impl Projection for RelevanceDecayProjection {
     fn restore(&self, snapshot: &Value) -> Result<()> {
         let entries: Vec<(String, RelevanceScore)> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
-        self.scores.clear();
+        self.clear();
         for (k, v) in entries {
-            self.scores.insert(k, v);
+            self.store(k, v);
         }
         Ok(())
     }

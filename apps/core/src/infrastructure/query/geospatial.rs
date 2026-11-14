@@ -23,8 +23,15 @@
 //! - Haversine assumes spherical Earth (max ~0.3% error vs ellipsoidal)
 //! - Events without coordinates are silently excluded from spatial queries
 
-use dashmap::DashMap;
+use crate::infrastructure::{
+    hash_state::{FastDashMap, fast_dashmap},
+    memory::ledger::{MapCharge, Owner, Tally},
+};
 use serde::{Deserialize, Serialize};
+use std::{
+    mem::size_of,
+    sync::atomic::{AtomicU64, Ordering},
+};
 use uuid::Uuid;
 
 use crate::domain::entities::Event;
@@ -34,6 +41,9 @@ const EARTH_RADIUS_KM: f64 = 6371.0;
 
 /// Grid cell size in degrees (approximately 11km at equator)
 const GRID_CELL_SIZE: f64 = 0.1;
+
+/// Results per geo query when the request names no limit, and the ceiling for any limit.
+pub const GEO_QUERY_MAX_RESULTS: usize = 10_000;
 
 /// A geographic coordinate
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -90,8 +100,6 @@ pub struct GeoQueryRequest {
     pub radius: Option<RadiusQuery>,
     /// Additional event_type filter
     pub event_type: Option<String>,
-    /// Additional tenant_id filter
-    pub tenant_id: Option<String>,
     /// Maximum results
     pub limit: Option<usize>,
     /// Sort by distance from a point (only meaningful with radius query)
@@ -126,9 +134,14 @@ impl GridCell {
 /// In-memory geospatial index using grid cells
 pub struct GeoIndex {
     /// Grid cell → list of (event_id, coordinate) entries
-    grid: DashMap<(i32, i32), Vec<(Uuid, Coordinate)>>,
-    /// Event ID → coordinate for quick lookups
-    coordinates: DashMap<Uuid, Coordinate>,
+    grid: FastDashMap<(i32, i32), Vec<(Uuid, Coordinate)>>,
+    grid_charge: MapCharge,
+    grid_entries: Tally,
+    /// Event ID → (index call sequence, coordinate). The sequence restores the
+    /// ingest order that query results have always had.
+    coordinates: FastDashMap<Uuid, (u64, Coordinate)>,
+    coordinates_charge: MapCharge,
+    next_sequence: AtomicU64,
 }
 
 impl Default for GeoIndex {
@@ -140,26 +153,54 @@ impl Default for GeoIndex {
 impl GeoIndex {
     pub fn new() -> Self {
         Self {
-            grid: DashMap::new(),
-            coordinates: DashMap::new(),
+            grid: fast_dashmap(),
+            grid_charge: MapCharge::new(
+                Owner::GeoIndex,
+                size_of::<((i32, i32), Vec<(Uuid, Coordinate)>)>(),
+            ),
+            grid_entries: Tally::new(Owner::GeoIndex),
+            coordinates: fast_dashmap(),
+            coordinates_charge: MapCharge::new(
+                Owner::GeoIndex,
+                size_of::<(Uuid, (u64, Coordinate))>(),
+            ),
+            next_sequence: AtomicU64::new(0),
         }
     }
 
     /// Index an event's coordinates (if extractable)
     pub fn index_event(&self, event: &Event) {
         if let Some(coord) = extract_coordinates(event) {
+            let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
             let cell = GridCell::from_coordinate(&coord);
-            self.grid
-                .entry((cell.lat_cell, cell.lng_cell))
-                .or_default()
-                .push((event.id, coord));
-            self.coordinates.insert(event.id, coord);
+            let key = (cell.lat_cell, cell.lng_cell);
+            self.grid_charge
+                .ensure(&self.grid, &key, || key, Vec::new, 0);
+            {
+                let mut entries = self.grid.entry(key).or_default();
+                let before = entries.capacity();
+                entries.push((event.id, coord));
+                self.grid_entries
+                    .grow(before, entries.capacity(), size_of::<(Uuid, Coordinate)>());
+            }
+            self.coordinates_charge.ensure(
+                &self.coordinates,
+                &event.id,
+                || event.id,
+                || (sequence, coord),
+                0,
+            );
+            self.coordinates.insert(event.id, (sequence, coord));
         }
     }
 
     /// Get coordinate for an event
     pub fn get_coordinate(&self, event_id: &Uuid) -> Option<Coordinate> {
-        self.coordinates.get(event_id).map(|c| *c)
+        self.coordinates.get(event_id).map(|c| c.1)
+    }
+
+    fn sequence_of(&self, event_id: &Uuid) -> Option<u64> {
+        self.coordinates.get(event_id).map(|c| c.0)
     }
 
     /// Find all event IDs within a bounding box
@@ -310,15 +351,14 @@ fn try_extract_coord(value: &serde_json::Value) -> Option<Coordinate> {
     None
 }
 
-/// Execute a geospatial query against events using the geo index
+/// Execute a geospatial query. `resolve` maps a candidate id to its event, or `None`
+/// when the event is not visible to the caller; only resolved events are materialized.
 pub fn execute_geo_query(
-    events: &[Event],
+    resolve: &dyn Fn(Uuid) -> Option<Event>,
     geo_index: &GeoIndex,
     request: &GeoQueryRequest,
 ) -> Vec<GeoEventResult> {
-    // Determine candidate event IDs from spatial filters
-    let candidates: Vec<(Uuid, Coordinate, Option<f64>)> = if let Some(ref radius) = request.radius
-    {
+    let spatial: Vec<(Uuid, Coordinate, Option<f64>)> = if let Some(ref radius) = request.radius {
         geo_index
             .query_radius(radius)
             .into_iter()
@@ -331,70 +371,60 @@ pub fn execute_geo_query(
             .map(|(id, coord)| (id, coord, None))
             .collect()
     } else {
-        // No spatial filter — return all geo-indexed events
         geo_index
             .coordinates
             .iter()
-            .map(|entry| (*entry.key(), *entry.value(), None))
+            .map(|entry| (*entry.key(), entry.value().1, None))
             .collect()
     };
 
-    // Build a set of candidate IDs for fast lookup
-    let candidate_map: std::collections::HashMap<Uuid, (Coordinate, Option<f64>)> = candidates
+    let mut candidates: Vec<(u64, Uuid, Coordinate, Option<f64>)> = spatial
         .into_iter()
-        .map(|(id, coord, dist)| (id, (coord, dist)))
+        .filter_map(|(id, coord, dist)| Some((geo_index.sequence_of(&id)?, id, coord, dist)))
         .collect();
+    candidates.sort_unstable_by_key(|candidate| candidate.0);
 
-    // Filter events by candidates + additional filters
-    let mut results: Vec<GeoEventResult> = events
-        .iter()
-        .filter_map(|event| {
-            let (coord, dist) = candidate_map.get(&event.id)?;
-
-            // Apply event_type filter
-            if let Some(ref et) = request.event_type
-                && event.event_type_str() != et
-            {
-                return None;
-            }
-
-            // Apply tenant_id filter
-            if let Some(ref tid) = request.tenant_id
-                && event.tenant_id_str() != tid
-            {
-                return None;
-            }
-
-            Some(GeoEventResult {
-                event: serde_json::json!({
-                    "id": event.id.to_string(),
-                    "event_type": event.event_type_str(),
-                    "entity_id": event.entity_id_str(),
-                    "tenant_id": event.tenant_id_str(),
-                    "payload": event.payload,
-                    "metadata": event.metadata,
-                    "timestamp": event.timestamp.to_rfc3339(),
-                    "version": event.version,
-                }),
-                coordinate: *coord,
-                distance_km: *dist,
-            })
-        })
-        .collect();
-
-    // Sort by distance if requested
+    let limit = request
+        .limit
+        .unwrap_or(GEO_QUERY_MAX_RESULTS)
+        .min(GEO_QUERY_MAX_RESULTS);
+    // A stable sort before resolution keeps the result identical to sorting the
+    // resolved events, and lets the loop stop at `limit` clones.
     if request.sort_by_distance.unwrap_or(false) {
-        results.sort_by(|a, b| {
-            a.distance_km
-                .unwrap_or(f64::MAX)
-                .partial_cmp(&b.distance_km.unwrap_or(f64::MAX))
+        candidates.sort_by(|a, b| {
+            a.3.unwrap_or(f64::MAX)
+                .partial_cmp(&b.3.unwrap_or(f64::MAX))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
     }
 
-    // Apply limit
-    if let Some(limit) = request.limit {
-        results.truncate(limit);
+    let mut results: Vec<GeoEventResult> = Vec::new();
+    for (_, id, coord, dist) in candidates {
+        if results.len() == limit {
+            break;
+        }
+        let Some(event) = resolve(id) else {
+            continue;
+        };
+        if let Some(ref et) = request.event_type
+            && event.event_type_str() != et
+        {
+            continue;
+        }
+        results.push(GeoEventResult {
+            event: serde_json::json!({
+                "id": event.id.to_string(),
+                "event_type": event.event_type_str(),
+                "entity_id": event.entity_id_str(),
+                "tenant_id": event.tenant_id_str(),
+                "payload": event.payload,
+                "metadata": event.metadata,
+                "timestamp": event.timestamp.to_rfc3339(),
+                "version": event.version,
+            }),
+            coordinate: coord,
+            distance_km: dist,
+        });
     }
 
     results
@@ -569,11 +599,11 @@ mod tests {
             }),
             radius: None,
             event_type: Some("location.update".to_string()),
-            tenant_id: None,
             limit: None,
             sort_by_distance: None,
         };
-        let results = execute_geo_query(&events, &index, &req);
+        let resolve = |id: Uuid| events.iter().find(|e| e.id == id).cloned();
+        let results = execute_geo_query(&resolve, &index, &req);
         assert_eq!(results.len(), 1);
     }
 

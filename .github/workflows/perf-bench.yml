@@ -298,7 +298,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
-          shared-key: iai-perf-${{ matrix.package }}${{ matrix.package == 'allsource-prime' && '-phased-v2' || '' }}
+          shared-key: iai-perf-${{ matrix.package }}${{ matrix.package == 'allsource-prime' && '-phased-v3' || '' }}
+          # ort-sys links the onnxruntime it downloaded into this directory. A
+          # restored target/ without it fails: "could not find native static
+          # library `onnxruntime`".
+          cache-directories: ${{ matrix.package == 'allsource-prime' && '~/.cache/ort.pyke.io' || '' }}
           cache-on-failure: true
 
       # iai-callgrind needs its companion runner binary on PATH; without it the
@@ -471,6 +475,7 @@ jobs:
         working-directory: baseline/${{ matrix.working-directory }}
         env:
           BENCHMARK_PACKAGE: ${{ matrix.package }}
+          BENCHMARK_DIRECTORY: ${{ matrix.working-directory }}
         run: |
           node <<'NODE'
           const fs = require('node:fs');
@@ -485,6 +490,12 @@ jobs:
           let scoped = lines.join('\n').replace('[package]\n', '[package]\nautobins = false\n');
           if (process.env.BENCHMARK_PACKAGE !== 'allsource-core' && !/^\[workspace\]\s*$/m.test(scoped)) scoped += '\n[workspace]\nresolver = "3"\n';
           fs.writeFileSync('Cargo.toml', scoped);
+          // Both sides run the PR's harness, so a harness change measures base
+          // and PR the same way. The next step restores base's own harness when
+          // base cannot compile the PR's.
+          const harness = path.join(process.env.GITHUB_WORKSPACE, process.env.BENCHMARK_DIRECTORY, 'benches/iai.rs');
+          if (fs.existsSync('benches/iai.rs')) fs.copyFileSync('benches/iai.rs', path.join(process.env.RUNNER_TEMP, 'base-iai.rs'));
+          fs.copyFileSync(harness, 'benches/iai.rs');
           const now = new Date();
           const root = path.join(process.env.GITHUB_WORKSPACE, 'baseline');
           for (const member of ['apps/core', 'apps/prime-mcp', 'apps/chronis']) {
@@ -500,7 +511,15 @@ jobs:
         working-directory: baseline/${{ matrix.working-directory }}
         run: |
           set -o pipefail
-          timeout -k 15 285 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee /tmp/iai-base-dependencies.json
+          status=0
+          timeout -k 15 230 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen > /tmp/iai-base-dependencies.json || status=$?
+          # A timeout is a failure, never a reason to change harness.
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then exit "$status"; fi
+          if [ "$status" -ne 0 ]; then
+            echo "::notice::base cannot compile the PR's harness; measuring base with its own"
+            cp "$RUNNER_TEMP/base-iai.rs" benches/iai.rs
+            timeout -k 15 50 cargo rustc --profile bench --bench iai --message-format=json-render-diagnostics -- -Z no-codegen | tee -a /tmp/iai-base-dependencies.json
+          fi
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');

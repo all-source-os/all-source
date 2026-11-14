@@ -19,6 +19,7 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    mem::size_of,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -28,6 +29,7 @@ use std::{
 
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
+    infrastructure::memory::ledger::Tally, prime::projections::charge,
 };
 
 use super::types::event_types as vec_events;
@@ -114,6 +116,15 @@ pub struct VectorIndexProjection {
     /// Completed builds.
     builds: Arc<AtomicU64>,
     config: VectorIndexConfig,
+    /// Shared with the background handle, so one projection holds one charge.
+    charge: Arc<Tally>,
+}
+
+fn record_bytes(record: &VectorRecord) -> u64 {
+    charge::text(&record.entity_id)
+        + (record.vector.len() * size_of::<f32>()) as u64
+        + charge::opt_text(record.text.as_deref())
+        + record.metadata.as_ref().map_or(0, charge::json)
 }
 
 /// Clears `rebuilding` even if the build panics, so later rebuilds still start.
@@ -141,6 +152,17 @@ impl VectorIndexProjection {
             rebuilding: Arc::new(AtomicBool::new(false)),
             builds: Arc::new(AtomicU64::new(0)),
             config,
+            charge: Arc::new(charge::tally()),
+        }
+    }
+
+    fn store(&self, record: VectorRecord) {
+        let owned = record_bytes(&record);
+        match self.vectors.insert(record.entity_id.clone(), record) {
+            Some(old) => self.charge.adjust(record_bytes(&old), owned),
+            None => self
+                .charge
+                .add(charge::entry::<String, VectorRecord>(owned)),
         }
     }
 
@@ -283,6 +305,7 @@ impl VectorIndexProjection {
             rebuilding: Arc::clone(&self.rebuilding),
             builds: Arc::clone(&self.builds),
             config: self.config.clone(),
+            charge: Arc::clone(&self.charge),
         }
     }
 
@@ -348,20 +371,20 @@ impl Projection for VectorIndexProjection {
                 let metadata = payload.get("metadata").cloned();
                 let written_at = self.generation.load(Ordering::Acquire) + 1;
 
-                self.vectors.insert(
-                    entity_id.clone(),
-                    VectorRecord {
-                        entity_id,
-                        vector,
-                        text,
-                        metadata,
-                        written_at,
-                    },
-                );
+                self.store(VectorRecord {
+                    entity_id,
+                    vector,
+                    text,
+                    metadata,
+                    written_at,
+                });
                 self.generation.fetch_add(1, Ordering::Release);
             }
             vec_events::VECTOR_DELETED => {
-                self.vectors.remove(&entity_id);
+                if let Some((_, record)) = self.vectors.remove(&entity_id) {
+                    self.charge
+                        .sub(charge::entry::<String, VectorRecord>(record_bytes(&record)));
+                }
                 self.generation.fetch_add(1, Ordering::Release);
             }
             _ => {}
@@ -378,6 +401,7 @@ impl Projection for VectorIndexProjection {
 
     fn clear(&self) {
         self.vectors.clear();
+        self.charge.take();
         *self.index.write() = None;
         self.generation.fetch_add(1, Ordering::Release);
     }
@@ -391,8 +415,9 @@ impl Projection for VectorIndexProjection {
         let records: Vec<VectorRecord> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
         self.vectors.clear();
+        self.charge.take();
         for record in records {
-            self.vectors.insert(record.entity_id.clone(), record);
+            self.store(record);
         }
         // Restored records carry no generation, so the old build cannot serve them.
         *self.index.write() = None;

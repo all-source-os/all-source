@@ -23,6 +23,10 @@ use std::fmt;
 pub struct EntityId(String);
 
 impl EntityId {
+    pub(crate) fn heap_capacity(&self) -> usize {
+        self.0.capacity()
+    }
+
     /// Create a new EntityId with validation
     ///
     /// # Errors

@@ -1,4 +1,5 @@
 use super::heap::StructureSize;
+use crate::infrastructure::memory::ledger::{Owner, ResidentLedger, Tally};
 use prometheus::{
     Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Opts,
     Registry,
@@ -7,11 +8,67 @@ use serde::Serialize;
 use std::{
     collections::HashMap,
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
+
+/// Heap one `MetricsRegistry::new` allocates, measured with a counting
+/// allocator. `ledger_owns_heap` fails when it drifts more than 10%.
+pub const METRICS_REGISTRY_BYTES: u64 = 38_700;
+
+/// The resident ledger's gauges. Registered on first use, because only the
+/// server's memory upkeep records them and every store builds a registry.
+pub struct LedgerMetrics {
+    pub heap_unattributed_bytes: IntGauge,
+    pub ledger_owner_bytes: IntGaugeVec,
+    pub permanent_bytes: IntGauge,
+    pub rows_decoded_total: IntCounter,
+}
+
+impl LedgerMetrics {
+    fn register(registry: &Registry) -> Self {
+        let metrics = Self {
+            heap_unattributed_bytes: IntGauge::with_opts(Opts::new(
+                "allsource_heap_unattributed_bytes",
+                "Live heap bytes minus the resident ledger total; negative when the ledger counts bytes that are no longer live",
+            ))
+            .unwrap(),
+            ledger_owner_bytes: IntGaugeVec::new(
+                Opts::new(
+                    "allsource_core_ledger_owner_bytes",
+                    "Resident heap bytes charged to each owner in the resident ledger",
+                ),
+                &["owner"],
+            )
+            .unwrap(),
+            permanent_bytes: IntGauge::with_opts(Opts::new(
+                "allsource_core_permanent_bytes",
+                "Resident heap bytes of owners that are never released",
+            ))
+            .unwrap(),
+            rows_decoded_total: IntCounter::with_opts(Opts::new(
+                "allsource_core_rows_decoded_total",
+                "Event rows decoded from Parquet files",
+            ))
+            .unwrap(),
+        };
+        registry
+            .register(Box::new(metrics.heap_unattributed_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(metrics.ledger_owner_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(metrics.permanent_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(metrics.rows_decoded_total.clone()))
+            .unwrap();
+        metrics
+    }
+}
 
 /// Centralized metrics registry for AllSource
 pub struct MetricsRegistry {
@@ -129,6 +186,9 @@ pub struct MetricsRegistry {
     // interval — that's the metric to graph to verify Step 6's
     // bounded-replay invariant.
     pub wal_replay_events_total: IntGauge,
+
+    ledger: OnceLock<LedgerMetrics>,
+    startup: Tally,
 }
 
 impl MetricsRegistry {
@@ -892,6 +952,12 @@ impl MetricsRegistry {
             resident_structure_entries,
             resident_structure_bytes,
             wal_replay_events_total,
+            ledger: OnceLock::new(),
+            startup: {
+                let startup = Tally::new(Owner::Metrics);
+                startup.add(METRICS_REGISTRY_BYTES);
+                startup
+            },
         })
     }
 
@@ -929,6 +995,34 @@ impl MetricsRegistry {
                     .set(gauge(bytes));
             }
         }
+    }
+
+    /// Set the ledger gauges against the live heap. The decoded-rows counter
+    /// advances by the ledger's count since the last call.
+    pub fn record_ledger(&self, live: u64, ledger: &ResidentLedger) {
+        let metrics = self.ledger_metrics();
+        let live = i64::try_from(live).unwrap_or(i64::MAX);
+        metrics
+            .heap_unattributed_bytes
+            .set(live.saturating_sub(ledger.total_bytes()));
+        for owner in Owner::ALL {
+            metrics
+                .ledger_owner_bytes
+                .with_label_values(&[owner.label()])
+                .set(ledger.owner_bytes(owner));
+        }
+        metrics.permanent_bytes.set(ledger.permanent_bytes());
+        let decoded = ledger.rows_decoded_total();
+        let seen = metrics.rows_decoded_total.get();
+        if decoded > seen {
+            metrics.rows_decoded_total.inc_by(decoded - seen);
+        }
+    }
+
+    /// The ledger gauges, registered with this registry on the first call.
+    pub fn ledger_metrics(&self) -> &LedgerMetrics {
+        self.ledger
+            .get_or_init(|| LedgerMetrics::register(&self.registry))
     }
 
     /// Record one completed compaction sweep.

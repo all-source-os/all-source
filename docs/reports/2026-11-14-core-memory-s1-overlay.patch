@@ -1,0 +1,1030 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index c8064400..17272315 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -182,3 +182,12 @@ inherits = "release"
+ debug = true
+ split-debuginfo = "unpacked"
+ strip = false
++
++# Heap replay evaluator builds: release codegen without fat LTO so two builds fit
++# the 270 s evaluator deadline; line tables let jemalloc profiles symbolize.
++[profile.heap-replay]
++inherits = "release"
++codegen-units = 16
++debug = "line-tables-only"
++lto = false
++strip = false
+diff --git a/apps/core/Cargo.toml b/apps/core/Cargo.toml
+index 82cb7146..17df53bb 100644
+--- a/apps/core/Cargo.toml
++++ b/apps/core/Cargo.toml
+@@ -174,6 +174,7 @@ uuid.workspace = true
+ 
+ [dev-dependencies]
+ criterion.workspace = true
++cap = { version = "0.1", features = ["stats"] }
+ ctrlc.workspace = true
+ iai-callgrind = "0.16"
+ proptest = "1"
+diff --git a/apps/core/examples/heap_fixture.rs b/apps/core/examples/heap_fixture.rs
+new file mode 100644
+index 00000000..3ad4bf11
+--- /dev/null
++++ b/apps/core/examples/heap_fixture.rs
+@@ -0,0 +1,288 @@
++//! Writes the heap replay fixture: synthetic events sized from `shape.toml`.
++//!
++//! Tenant counts and the payload-size distribution come from the shape file
++//! and nothing else. Events are written through `ParquetStorage`, which encodes
++//! every row with `event_codec`, so the fixture is in the production format.
++//!
++//! Usage:
++//!   cargo run --example heap_fixture -p allsource-core --features community -- \
++//!       --shape <abs path to shape.toml> --out <abs empty dir>
++//!
++//! The output directory holds one tenant-partitioned Parquet tree and a
++//! `fixture.json` with per-tenant counts, the estimated total, the bounding box
++//! for the geo query, and a content digest over every Parquet file.
++
++use allsource_core::{Event, ParquetStorage};
++use chrono::{DateTime, Utc};
++use serde::{Deserialize, Serialize};
++use sha2::{Digest, Sha256};
++use std::path::{Path, PathBuf};
++
++const CHUNK_EVENTS: u64 = 50_000;
++const EVENT_TYPES: [&str; 3] = ["replay.created", "replay.updated", "replay.closed"];
++const BASE_TIMESTAMP: i64 = 1_735_689_600; // 2025-01-01T00:00:00Z
++const LAT_RANGE: (f64, f64) = (-60.0, 60.0);
++const LNG_RANGE: (f64, f64) = (-170.0, 170.0);
++const MIN_PAYLOAD_BYTES: u64 = 96;
++const MAX_PAYLOAD_BYTES: u64 = 200_000;
++
++#[derive(Deserialize)]
++struct Shape {
++    seed: u64,
++    tenants: Tenants,
++    payload: Payload,
++    entities: Entities,
++}
++
++#[derive(Deserialize)]
++struct Tenants {
++    counts: Vec<u64>,
++}
++
++#[derive(Deserialize)]
++struct Payload {
++    mean_bytes: u64,
++    sigma_milli: u64,
++}
++
++#[derive(Deserialize)]
++struct Entities {
++    events_per_entity: u64,
++}
++
++#[derive(Serialize)]
++struct Manifest {
++    schema: &'static str,
++    seed: u64,
++    shape_sha256: String,
++    tenants: Vec<TenantEntry>,
++    total_events: u64,
++    estimated_total_bytes: u64,
++    payload_mean_bytes: u64,
++    bbox: BBox,
++    content_sha256: String,
++}
++
++#[derive(Serialize)]
++struct TenantEntry {
++    id: String,
++    events: u64,
++    entities: u64,
++    estimated_bytes: u64,
++}
++
++#[derive(Serialize, Clone, Copy)]
++struct BBox {
++    min_lat: f64,
++    min_lng: f64,
++    max_lat: f64,
++    max_lng: f64,
++}
++
++/// splitmix64: a fixed, portable generator. No clock, no OS randomness.
++struct Rng(u64);
++
++impl Rng {
++    fn next_u64(&mut self) -> u64 {
++        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
++        let mut z = self.0;
++        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
++        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
++        z ^ (z >> 31)
++    }
++
++    /// Uniform in (0, 1].
++    fn unit(&mut self) -> f64 {
++        ((self.next_u64() >> 11) as f64 + 1.0) / (1u64 << 53) as f64
++    }
++
++    /// Standard normal by Box-Muller.
++    fn normal(&mut self) -> f64 {
++        let (u1, u2) = (self.unit(), self.unit());
++        (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
++    }
++}
++
++/// Log-normal payload sizes with the given arithmetic mean and sigma.
++struct SizeDraw {
++    mu: f64,
++    sigma: f64,
++}
++
++impl SizeDraw {
++    fn new(mean_bytes: u64, sigma_milli: u64) -> Self {
++        let sigma = sigma_milli as f64 / 1000.0;
++        Self {
++            mu: (mean_bytes as f64).ln() - sigma * sigma / 2.0,
++            sigma,
++        }
++    }
++
++    fn draw(&self, rng: &mut Rng) -> u64 {
++        let size = (self.mu + self.sigma * rng.normal()).exp().round() as u64;
++        size.clamp(MIN_PAYLOAD_BYTES, MAX_PAYLOAD_BYTES)
++    }
++}
++
++/// A payload of about `target` bytes of JSON text, carrying a location.
++fn payload(seq: u64, target: u64, lat: f64, lng: f64) -> serde_json::Value {
++    let overhead = 120;
++    let pad = target.saturating_sub(overhead) as usize;
++    serde_json::json!({
++        "seq": seq,
++        "location": { "lat": lat, "lng": lng },
++        "pad": "x".repeat(pad),
++    })
++}
++
++fn tenant_id(index: usize) -> String {
++    format!("tenant-{:02}", index + 1)
++}
++
++fn main() {
++    let args: Vec<String> = std::env::args().collect();
++    let shape_path = flag(&args, "--shape").expect("--shape <path> is required");
++    let out = PathBuf::from(flag(&args, "--out").expect("--out <dir> is required"));
++    let shape_bytes = std::fs::read(&shape_path).expect("read shape");
++    let shape: Shape = toml::from_str(std::str::from_utf8(&shape_bytes).expect("utf8 shape"))
++        .expect("parse shape");
++
++    std::fs::create_dir_all(&out).expect("create out dir");
++    let storage = ParquetStorage::new(&out).expect("storage");
++
++    let sizes = SizeDraw::new(shape.payload.mean_bytes, shape.payload.sigma_milli);
++    let bbox = BBox {
++        min_lat: LAT_RANGE.0,
++        min_lng: LNG_RANGE.0,
++        max_lat: LAT_RANGE.1,
++        max_lng: LNG_RANGE.1,
++    };
++
++    let mut rng = Rng(shape.seed);
++    let mut tenants = Vec::new();
++    let mut total_payload = 0u64;
++    let mut total_events = 0u64;
++    let mut estimated_total = 0u64;
++
++    for (index, count) in shape.tenants.counts.iter().copied().enumerate() {
++        let tenant = tenant_id(index);
++        let entities = count.div_ceil(shape.entities.events_per_entity).max(1);
++        let mut tenant_estimate = 0u64;
++        let mut written = 0u64;
++        let mut chunk_index = 0u32;
++        while written < count {
++            let take = (count - written).min(CHUNK_EVENTS);
++            let mut events = Vec::with_capacity(take as usize);
++            for offset in 0..take {
++                let seq = written + offset;
++                let size = sizes.draw(&mut rng);
++                let lat = LAT_RANGE.0 + (LAT_RANGE.1 - LAT_RANGE.0) * rng.unit();
++                let lng = LNG_RANGE.0 + (LNG_RANGE.1 - LNG_RANGE.0) * rng.unit();
++                let event = event_at(&tenant, seq, entities, payload(seq, size, lat, lng));
++                tenant_estimate += event.estimated_size_bytes();
++                total_payload += size;
++                events.push(event);
++            }
++            storage
++                .write_atomic_parquet(&tenant, &format!("events-replay-{chunk_index:03}"), &events)
++                .expect("write parquet");
++            written += take;
++            chunk_index += 1;
++        }
++        total_events += count;
++        estimated_total += tenant_estimate;
++        tenants.push(TenantEntry {
++            id: tenant,
++            events: count,
++            entities,
++            estimated_bytes: tenant_estimate,
++        });
++    }
++
++    let manifest = Manifest {
++        schema: "heap-fixture.v1",
++        seed: shape.seed,
++        shape_sha256: hex_sha256(&shape_bytes),
++        tenants,
++        total_events,
++        estimated_total_bytes: estimated_total,
++        payload_mean_bytes: total_payload / total_events.max(1),
++        bbox,
++        content_sha256: content_digest(&out),
++    };
++    let text = serde_json::to_string_pretty(&manifest).expect("manifest json");
++    std::fs::write(out.join("fixture.json"), format!("{text}\n")).expect("write manifest");
++    println!(
++        "fixture events={} tenants={} estimated_total_bytes={}",
++        manifest.total_events,
++        manifest.tenants.len(),
++        manifest.estimated_total_bytes
++    );
++}
++
++/// One fixture event. Ids and timestamps are functions of the tenant and the
++/// sequence number, so every write produces the same rows.
++fn event_at(tenant: &str, seq: u64, entities: u64, payload: serde_json::Value) -> Event {
++    let tenant_no = tenant
++        .rsplit('-')
++        .next()
++        .and_then(|n| n.parse::<u128>().ok())
++        .unwrap_or(0);
++    let id = uuid::Uuid::from_u128((tenant_no << 64) | u128::from(seq) | (1u128 << 127));
++    let timestamp =
++        DateTime::<Utc>::from_timestamp(BASE_TIMESTAMP + seq as i64, 0).expect("timestamp");
++    Event::reconstruct_from_strings(
++        id,
++        EVENT_TYPES[(seq % 3) as usize].to_string(),
++        format!("e{:06}", seq % entities),
++        tenant.to_string(),
++        payload,
++        timestamp,
++        None,
++        1,
++    )
++}
++
++fn flag(args: &[String], name: &str) -> Option<String> {
++    args.iter()
++        .position(|a| a == name)
++        .and_then(|i| args.get(i + 1).cloned())
++}
++
++fn hex_sha256(bytes: &[u8]) -> String {
++    hex::encode(Sha256::digest(bytes))
++}
++
++/// SHA-256 over every file under `root` (except `fixture.json`), in path order.
++fn content_digest(root: &Path) -> String {
++    let mut files = Vec::new();
++    collect(root, root, &mut files);
++    files.sort();
++    let mut hasher = Sha256::new();
++    for relative in files {
++        let bytes = std::fs::read(root.join(&relative)).expect("read fixture file");
++        hasher.update(relative.as_bytes());
++        hasher.update(b"\n");
++        hasher.update(Sha256::digest(&bytes));
++        hasher.update(b"\n");
++    }
++    hex::encode(hasher.finalize())
++}
++
++fn collect(root: &Path, dir: &Path, out: &mut Vec<String>) {
++    for entry in std::fs::read_dir(dir).expect("read fixture dir").flatten() {
++        let path = entry.path();
++        if path.is_dir() {
++            collect(root, &path, out);
++        } else {
++            let relative = path
++                .strip_prefix(root)
++                .expect("under root")
++                .to_string_lossy()
++                .into_owned();
++            if relative != "fixture.json" {
++                out.push(relative);
++            }
++        }
++    }
++}
+diff --git a/apps/core/examples/heap_replay.rs b/apps/core/examples/heap_replay.rs
+new file mode 100644
+index 00000000..11968708
+--- /dev/null
++++ b/apps/core/examples/heap_replay.rs
+@@ -0,0 +1,627 @@
++//! Deterministic in-process replay of the v1 API over a fixture volume.
++//!
++//! The router is `build_v1_router`, the same stack `serve_v1` serves. Requests
++//! go through it with `tower::oneshot`, on a current-thread runtime, with no
++//! checkpoint loop and no memory upkeep task.
++//!
++//! Usage (run on a private clone of the fixture, never on the fixture itself):
++//!   heap_replay --volume <abs dir> --scenario main|eviction [--heap-profile <abs file>]
++//!
++//! `--heap-profile` needs the `heap-profile` feature on linux.
++//!
++//! Prints one line: `{"heap_replay": {...}}`. Built by the evaluator in
++//! `tooling/core-heap-replay`; see that crate for the gates.
++
++use allsource_core::{
++    AuthManager, Event, ParquetStorage, RateLimiter, Role,
++    api_v1::NodeRole,
++    infrastructure::{
++        di::ContainerBuilder, repositories::InMemoryTenantRepository, web::api_v1::build_v1_router,
++    },
++    rate_limit::RateLimitConfig,
++    store::{EventStore, EventStoreConfig},
++};
++use axum::{
++    Router,
++    body::{Body, to_bytes},
++    http::{Method, Request, StatusCode},
++};
++use chrono::{DateTime, Utc};
++use serde::Deserialize;
++use serde_json::{Value, json};
++use sha2::{Digest, Sha256};
++use std::{
++    collections::HashMap,
++    io::Write,
++    path::{Path, PathBuf},
++    sync::Arc,
++    time::Instant,
++};
++use tower::ServiceExt;
++
++#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
++#[global_allocator]
++static GLOBAL: cap::Cap<std::alloc::System> = cap::Cap::new(std::alloc::System, usize::MAX);
++
++#[cfg(all(feature = "heap-profile", target_os = "linux"))]
++#[global_allocator]
++static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
++
++#[cfg(all(feature = "heap-profile", target_os = "linux"))]
++#[allow(non_upper_case_globals)]
++#[expect(
++    unsafe_code,
++    reason = "jemalloc reads malloc_conf from the binary's symbol table"
++)]
++#[unsafe(export_name = "malloc_conf")]
++pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
++
++#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
++fn heap_live_bytes() -> u64 {
++    GLOBAL.allocated() as u64
++}
++
++#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
++fn peak_live_bytes() -> u64 {
++    GLOBAL.max_allocated() as u64
++}
++
++#[cfg(all(feature = "heap-profile", target_os = "linux"))]
++fn heap_live_bytes() -> u64 {
++    allsource_core::infrastructure::observability::heap::jemalloc_live_bytes()
++}
++
++// The profiling build reports attribution only; peak comes from the default build.
++#[cfg(all(feature = "heap-profile", target_os = "linux"))]
++fn peak_live_bytes() -> u64 {
++    0
++}
++
++#[cfg(all(feature = "heap-profile", target_os = "linux"))]
++async fn write_heap_profile(path: &Path) {
++    let bytes = allsource_core::infrastructure::observability::heap::heap_profile_pprof()
++        .await
++        .expect("heap profile dump");
++    std::fs::write(path, bytes).expect("heap profile write");
++}
++
++#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
++async fn write_heap_profile(path: &Path) {
++    panic!(
++        "--heap-profile {} needs the heap-profile feature on linux",
++        path.display()
++    );
++}
++
++/// 2 GiB: today's production budget, so the main scenario evicts nothing.
++const MAIN_BUDGET_BYTES: u64 = 2_147_483_648;
++const SEED_TENANT: &str = "replay-ingest";
++const SEED_EVENTS: u64 = 2_000;
++const READ_MODEL: &str = "replay-model";
++/// Core's `MODEL_EVENT` (`store_feed.rs`), which the replay must never digest.
++const MODEL_EVENT: &str = "allsource.read_model.committed";
++/// JSON numbers above 2^52 lose integer precision, so a larger epoch would not
++/// survive the digest. The driver asserts this bound on every feed page.
++const EPOCH_LIMIT: u64 = 1 << 52;
++const ENTITIES_CHECKED: usize = 20;
++const FIXTURE_BASE: i64 = 1_735_689_600; // 2025-01-01T00:00:00Z
++const EVENT_TYPES: [&str; 3] = ["replay.created", "replay.updated", "replay.closed"];
++
++#[derive(Deserialize)]
++struct Manifest {
++    tenants: Vec<TenantEntry>,
++    estimated_total_bytes: u64,
++    bbox: Value,
++}
++
++#[derive(Deserialize)]
++struct TenantEntry {
++    id: String,
++}
++
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum Scenario {
++    Main,
++    Eviction,
++    SpacedEviction,
++}
++
++struct Args {
++    volume: PathBuf,
++    scenario: Scenario,
++    /// One line per request: status, method, target, body SHA-256.
++    trace: Option<PathBuf>,
++    /// pprof dump of the live heap, written after the replay.
++    heap_profile: Option<PathBuf>,
++}
++
++fn parse_args() -> Args {
++    let argv: Vec<String> = std::env::args().collect();
++    let flag = |name: &str| {
++        argv.iter()
++            .position(|a| a == name)
++            .and_then(|i| argv.get(i + 1).cloned())
++    };
++    let volume = PathBuf::from(flag("--volume").expect("--volume <dir> is required"));
++    let scenario = match flag("--scenario").as_deref() {
++        Some("main") => Scenario::Main,
++        Some("eviction") => Scenario::Eviction,
++        Some("spaced-eviction") => Scenario::SpacedEviction,
++        other => panic!("--scenario must be main or eviction, got {other:?}"),
++    };
++    let trace = flag("--trace").map(PathBuf::from);
++    let heap_profile = flag("--heap-profile").map(PathBuf::from);
++    Args {
++        volume,
++        scenario,
++        trace,
++        heap_profile,
++    }
++}
++
++/// Digests and counters for one process.
++#[derive(Default)]
++struct Ledger {
++    query: Sha256,
++    geo: Sha256,
++    requests: u64,
++    status_mismatches: u64,
++    epoch_mismatches: u64,
++    model_event_leaks: u64,
++}
++
++struct Driver {
++    app: Router,
++    keys: HashMap<String, String>,
++    ledger: Ledger,
++    revisions: HashMap<String, u64>,
++    trace: Option<std::fs::File>,
++}
++
++/// Which digest a response feeds. Geo has its own digest.
++#[derive(Clone, Copy)]
++enum Lane {
++    Query,
++    Geo,
++}
++
++impl Driver {
++    /// Send one request through the router and count its status. Nothing is
++    /// digested here: the caller records the body it wants pinned.
++    async fn request(
++        &mut self,
++        method: Method,
++        target: &str,
++        key: &str,
++        body: Option<Value>,
++    ) -> (StatusCode, Vec<u8>) {
++        let request_body = match &body {
++            Some(value) => Body::from(serde_json::to_vec(value).expect("request json")),
++            None => Body::empty(),
++        };
++        let mut builder = Request::builder()
++            .method(method.clone())
++            .uri(target)
++            .header("authorization", format!("Bearer {key}"));
++        if body.is_some() {
++            builder = builder.header("content-type", "application/json");
++        }
++        let request = builder.body(request_body).expect("request");
++        let response = self
++            .app
++            .clone()
++            .oneshot(request)
++            .await
++            .expect("infallible router");
++        let status = response.status();
++        let bytes = to_bytes(response.into_body(), 512 << 20)
++            .await
++            .expect("response body")
++            .to_vec();
++        self.ledger.requests += 1;
++        if let Some(trace) = self.trace.as_mut() {
++            let line = format!(
++                "{} {method} {target} {}\n",
++                status.as_u16(),
++                hex::encode(Sha256::digest(&bytes))
++            );
++            let _ = trace.write_all(line.as_bytes());
++        }
++        (status, bytes)
++    }
++
++    /// Check a status against the expected one. `may_413` marks the 10,000-row
++    /// page, which sits near the egress cap: Core answers 413 when the page is
++    /// over it and 200 when under. The status is digested, so either is pinned.
++    fn check_status(&mut self, method: &Method, target: &str, status: StatusCode, may_413: bool) {
++        let expected =
++            status == StatusCode::OK || (may_413 && status == StatusCode::PAYLOAD_TOO_LARGE);
++        if !expected {
++            self.ledger.status_mismatches += 1;
++            eprintln!(
++                "unexpected status {} for {method} {target}",
++                status.as_u16()
++            );
++        }
++    }
++
++    fn digest(
++        &mut self,
++        lane: Lane,
++        method: &Method,
++        target: &str,
++        status: StatusCode,
++        body: &[u8],
++    ) {
++        let digest = match lane {
++            Lane::Query => &mut self.ledger.query,
++            Lane::Geo => &mut self.ledger.geo,
++        };
++        digest.update(method.as_str().as_bytes());
++        digest.update(b"\n");
++        digest.update(target.as_bytes());
++        digest.update(b"\n");
++        digest.update(status.as_u16().to_be_bytes());
++        digest.update((body.len() as u64).to_be_bytes());
++        digest.update(body);
++    }
++
++    /// One request, checked and digested.
++    async fn call(
++        &mut self,
++        lane: Lane,
++        method: Method,
++        target: &str,
++        key: &str,
++        body: Option<Value>,
++        may_413: bool,
++    ) -> (StatusCode, Vec<u8>) {
++        let (status, bytes) = self.request(method.clone(), target, key, body).await;
++        self.check_status(&method, target, status, may_413);
++        self.digest(lane, &method, target, status, &bytes);
++        (status, bytes)
++    }
++
++    /// Feed page with epochs zeroed for the digest. Returns the page as sent
++    /// plus the raw head cursor, which the read-model commit needs. Raw epochs
++    /// are random per process, so the raw bytes are never digested.
++    fn normalize_feed(&mut self, bytes: &[u8]) -> Option<(Vec<u8>, Value)> {
++        let mut value: Value = serde_json::from_slice(bytes).ok()?;
++        let cursor = value.get("cursor")?.get("epoch")?.as_u64()?;
++        let head = value.get("head")?.get("epoch")?.as_u64()?;
++        if cursor != head || head >= EPOCH_LIMIT {
++            self.ledger.epoch_mismatches += 1;
++        }
++        let raw_head = value.get("head")?.clone();
++        for key in ["cursor", "head"] {
++            if let Some(epoch) = value.get_mut(key).and_then(|c| c.get_mut("epoch")) {
++                *epoch = json!(0);
++            }
++        }
++        Some((serde_json::to_vec(&value).ok()?, raw_head))
++    }
++
++    fn key(&self, tenant: &str) -> String {
++        self.keys.get(tenant).expect("key for tenant").clone()
++    }
++}
++
++/// The per-tenant replay set, in the order the design fixes.
++async fn replay_tenant(driver: &mut Driver, tenant: &str, bbox: &Value) {
++    let key = driver.key(tenant);
++
++    for entity in ["e000000", "e000001", "e000002"] {
++        let target =
++            format!("/api/v1/events/query?tenant_id={tenant}&entity_id={entity}&limit=100");
++        let (_, body) = driver
++            .call(Lane::Query, Method::GET, &target, &key, None, false)
++            .await;
++        check_no_model_event(driver, &body);
++    }
++
++    let target =
++        format!("/api/v1/events/query?tenant_id={tenant}&event_type=replay.updated&limit=10000");
++    let (_, body) = driver
++        .call(Lane::Query, Method::GET, &target, &key, None, true)
++        .await;
++    check_no_model_event(driver, &body);
++
++    let target = format!(
++        "/api/v1/events/query?tenant_id={tenant}&since=2025-01-01T00:00:00Z&until=2025-01-31T00:00:00Z&limit=500"
++    );
++    let (_, body) = driver
++        .call(Lane::Query, Method::GET, &target, &key, None, false)
++        .await;
++    check_no_model_event(driver, &body);
++
++    for index in 0..ENTITIES_CHECKED {
++        let entity = format!("e{index:06}");
++        let state = format!("/api/v1/entities/{entity}/state");
++        driver
++            .call(Lane::Query, Method::GET, &state, &key, None, false)
++            .await;
++        let snapshot = format!("/api/v1/entities/{entity}/snapshot");
++        driver
++            .call(Lane::Query, Method::GET, &snapshot, &key, None, false)
++            .await;
++    }
++
++    let geo_body = json!({ "bbox": bbox });
++    driver
++        .call(
++            Lane::Geo,
++            Method::POST,
++            "/api/v1/geospatial/query",
++            &key,
++            Some(geo_body),
++            false,
++        )
++        .await;
++
++    let feed_target = format!("/api/v1/event-feed?tenant_id={tenant}");
++    let (status, feed_bytes) = driver.request(Method::GET, &feed_target, &key, None).await;
++    driver.check_status(&Method::GET, &feed_target, status, false);
++    let Some((normalized, head)) = driver.normalize_feed(&feed_bytes) else {
++        driver.ledger.epoch_mismatches += 1;
++        return;
++    };
++    driver.digest(Lane::Query, &Method::GET, &feed_target, status, &normalized);
++
++    let expected_revision = driver.revisions.get(tenant).copied().unwrap_or(0);
++    let commit = json!({
++        "expected_revision": expected_revision,
++        "checkpoint": head,
++        "ready": true,
++        "changes": { "summary": { "tenant": tenant } },
++    });
++    let commit_target = format!("/api/v1/read-models/{READ_MODEL}?tenant_id={tenant}");
++    let (status, body) = driver
++        .call(
++            Lane::Query,
++            Method::PUT,
++            &commit_target,
++            &key,
++            Some(commit),
++            false,
++        )
++        .await;
++    if status == StatusCode::OK
++        && let Some(revision) = serde_json::from_slice::<Value>(&body)
++            .ok()
++            .and_then(|v| v.get("revision").and_then(Value::as_u64))
++    {
++        driver.revisions.insert(tenant.to_string(), revision);
++    }
++}
++
++fn check_no_model_event(driver: &mut Driver, body: &[u8]) {
++    if body
++        .windows(MODEL_EVENT.len())
++        .any(|w| w == MODEL_EVENT.as_bytes())
++    {
++        driver.ledger.model_event_leaks += 1;
++    }
++}
++
++/// Fixed-id events for the seeded tenant. Outside the pinned shape.
++fn seed_events() -> Vec<Event> {
++    (0..SEED_EVENTS)
++        .map(|seq| {
++            let id =
++                uuid::Uuid::from_u128(0x5eed_0000_0000_0000_0000_0000_0000_0000 | u128::from(seq));
++            let timestamp =
++                DateTime::<Utc>::from_timestamp(FIXTURE_BASE + seq as i64, 0).expect("timestamp");
++            Event::reconstruct_from_strings(
++                id,
++                EVENT_TYPES[(seq % 3) as usize].to_string(),
++                format!("seed-{}", seq % 10),
++                SEED_TENANT.to_string(),
++                json!({ "seq": seq }),
++                timestamp,
++                None,
++                1,
++            )
++        })
++        .collect()
++}
++
++/// SHA-256 over the bytes of a 1,000-event Parquet write.
++fn codec_digest(volume: &Path) -> String {
++    let dir = volume.join("codec-probe");
++    let storage = ParquetStorage::new(&dir).expect("codec storage");
++    let events: Vec<Event> = (0..1_000u64)
++        .map(|seq| {
++            let id =
++                uuid::Uuid::from_u128(0xc0de_c0de_0000_0000_0000_0000_0000_0000 | u128::from(seq));
++            let timestamp =
++                DateTime::<Utc>::from_timestamp(FIXTURE_BASE + seq as i64, 0).expect("timestamp");
++            Event::reconstruct_from_strings(
++                id,
++                EVENT_TYPES[(seq % 3) as usize].to_string(),
++                format!("codec-{}", seq % 17),
++                "codec-probe".to_string(),
++                json!({ "seq": seq, "pad": "y".repeat((seq % 40) as usize) }),
++                timestamp,
++                Some(json!({ "source": "codec" })),
++                1,
++            )
++        })
++        .collect();
++    storage
++        .write_atomic_parquet("codec-probe", "events-codec", &events)
++        .expect("codec write");
++    let mut files = storage
++        .list_parquet_files_for_tenant("codec-probe")
++        .expect("codec list");
++    files.sort();
++    let mut hasher = Sha256::new();
++    for file in files {
++        hasher.update(std::fs::read(file).expect("codec file"));
++    }
++    hex::encode(hasher.finalize())
++}
++
++fn read_manifest(volume: &Path) -> Manifest {
++    let text = std::fs::read_to_string(volume.join("fixture.json")).expect("fixture.json");
++    serde_json::from_str(&text).expect("fixture manifest")
++}
++
++async fn run(args: Args) -> Value {
++    let manifest = read_manifest(&args.volume);
++    let budget = match args.scenario {
++        Scenario::Main => MAIN_BUDGET_BYTES,
++        Scenario::Eviction | Scenario::SpacedEviction => manifest.estimated_total_bytes / 2,
++    };
++
++    let config = EventStoreConfig {
++        storage_dir: Some(args.volume.clone()),
++        cache_byte_budget: Some(budget),
++        ..EventStoreConfig::default()
++    };
++    let store = Arc::new(EventStore::with_config(config));
++
++    let auth = Arc::new(AuthManager::default());
++    let mut keys = HashMap::new();
++    let mut tenant_ids: Vec<String> = manifest.tenants.iter().map(|t| t.id.clone()).collect();
++    tenant_ids.push(SEED_TENANT.to_string());
++    for tenant in &tenant_ids {
++        let (_, key) = auth.create_api_key(
++            format!("replay-{tenant}"),
++            tenant.clone(),
++            Role::ServiceAccount,
++            None,
++        );
++        keys.insert(tenant.clone(), key);
++    }
++
++    let app = build_v1_router(
++        Arc::clone(&store),
++        Arc::clone(&auth),
++        Arc::new(InMemoryTenantRepository::new()),
++        Arc::new(RateLimiter::new(RateLimitConfig::dev_mode())),
++        ContainerBuilder::new()
++            .with_in_memory_repositories()
++            .build(),
++        NodeRole::Leader,
++        None,
++        None,
++        3910,
++        None,
++        None,
++    )
++    .await;
++
++    for event in seed_events() {
++        store.ingest(&event).expect("seed ingest");
++    }
++
++    let trace = args
++        .trace
++        .as_deref()
++        .map(|path| std::fs::File::create(path).expect("trace file"));
++    let mut driver = Driver {
++        app,
++        keys,
++        ledger: Ledger::default(),
++        revisions: HashMap::new(),
++        trace,
++    };
++    let mut evictions: Vec<String> = Vec::new();
++    let mut cold_load_ms = 0u64;
++
++    let passes = match args.scenario {
++        Scenario::Main => 2,
++        Scenario::Eviction | Scenario::SpacedEviction => 1,
++    };
++    let mut touches: Vec<Instant> = Vec::new();
++    for pass in 0..passes {
++        let mut resident: Vec<bool> = manifest
++            .tenants
++            .iter()
++            .map(|t| store.is_tenant_loaded(&t.id))
++            .collect();
++        for (index, tenant) in manifest.tenants.iter().enumerate() {
++            let started = Instant::now();
++            replay_tenant(&mut driver, &tenant.id, &manifest.bbox).await;
++            if pass == 0 && index == 0 {
++                cold_load_ms = started.elapsed().as_millis() as u64;
++            }
++            if args.scenario == Scenario::SpacedEviction {
++                touches.push(started);
++                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
++            }
++            if args.scenario != Scenario::Main {
++                // Pending events pin a tenant in memory, so flush each tenant's
++                // commit before the next load can pick it as a victim.
++                store.flush_storage().expect("flush at fixed step");
++                let flags: Vec<bool> = manifest
++                    .tenants
++                    .iter()
++                    .map(|other| store.is_tenant_loaded(&other.id))
++                    .collect();
++                eprintln!("residency after {}: {flags:?}", tenant.id);
++                for ((other, was_loaded), now) in
++                    manifest.tenants.iter().zip(resident.iter_mut()).zip(flags)
++                {
++                    if *was_loaded && !now {
++                        evictions.push(other.id.clone());
++                    }
++                    *was_loaded = now;
++                }
++            }
++        }
++        if pass == 0 && args.scenario == Scenario::Main {
++            store.flush_storage().expect("flush at fixed step");
++        }
++    }
++
++    if args.scenario == Scenario::SpacedEviction {
++        assert!(
++            touches.windows(2).all(|pair| pair[0] < pair[1]),
++            "tenant touch instants are not strictly increasing"
++        );
++    }
++
++    if let Some(path) = &args.heap_profile {
++        write_heap_profile(path).await;
++    }
++    let steady = heap_live_bytes();
++    let peak = peak_live_bytes();
++    let codec = codec_digest(&args.volume);
++    // Overlay has no residency ledger; these fields are reported as zero.
++    let ledger_bytes = 0u64;
++    let rows_decoded = 0u64;
++    let owner_bytes: serde_json::Map<String, Value> = serde_json::Map::new();
++
++    let ledger = driver.ledger;
++    json!({
++        "heap_replay": {
++            "scenario": match args.scenario { Scenario::Main => "main", Scenario::Eviction => "eviction", Scenario::SpacedEviction => "spaced-eviction" },
++            "hasher": if cfg!(feature = "deterministic-hash") { "deterministic" } else { "production" },
++            "peak_live_bytes": peak,
++            "steady_live_bytes": steady,
++            "ledger_bytes": ledger_bytes,
++            "ledger_owner_bytes": owner_bytes,
++            "rows_decoded": rows_decoded,
++            "query_digest": hex::encode(ledger.query.finalize()),
++            "geo_digest": hex::encode(ledger.geo.finalize()),
++            "codec_digest": codec,
++            "evictions": evictions,
++            "requests": ledger.requests,
++            "status_mismatches": ledger.status_mismatches,
++            "epoch_mismatches": ledger.epoch_mismatches,
++            "model_event_leaks": ledger.model_event_leaks,
++            "cold_load_largest_ms": cold_load_ms,
++        }
++    })
++}
++
++fn main() {
++    let args = parse_args();
++    let runtime = tokio::runtime::Builder::new_current_thread()
++        .enable_all()
++        .build()
++        .expect("runtime");
++    let report = runtime.block_on(run(args));
++    println!("{report}");
++}
+diff --git a/apps/core/src/infrastructure/web/api_v1.rs b/apps/core/src/infrastructure/web/api_v1.rs
+index 97813f31..c0bf9a54 100644
+--- a/apps/core/src/infrastructure/web/api_v1.rs
++++ b/apps/core/src/infrastructure/web/api_v1.rs
+@@ -162,6 +162,39 @@ pub async fn serve_v1(
+     cluster_manager: Option<Arc<ClusterManager>>,
+     geo_replication: Option<Arc<GeoReplicationManager>>,
+ ) -> anyhow::Result<()> {
++    let app = build_v1_router(
++        store,
++        auth_manager,
++        tenant_repo,
++        rate_limiter,
++        service_container,
++        role,
++        wal_shipper,
++        wal_receiver,
++        replication_port,
++        cluster_manager,
++        geo_replication,
++    )
++    .await;
++    gate.open(app);
++    Ok(())
++}
++
++/// The full v1 router with every layer `serve_v1` serves. The heap replay
++/// drives it in-process, so it must stay the exact production stack.
++pub async fn build_v1_router(
++    store: Arc<EventStore>,
++    auth_manager: Arc<AuthManager>,
++    tenant_repo: Arc<dyn TenantRepository>,
++    rate_limiter: Arc<RateLimiter>,
++    service_container: ServiceContainer,
++    role: NodeRole,
++    wal_shipper: Option<Arc<WalShipper>>,
++    wal_receiver: Option<Arc<WalReceiver>>,
++    replication_port: u16,
++    cluster_manager: Option<Arc<ClusterManager>>,
++    geo_replication: Option<Arc<GeoReplicationManager>>,
++) -> Router {
+     let http_metrics = store.metrics();
+     let app_state = AppState {
+         store,
+@@ -249,6 +282,11 @@ pub async fn serve_v1(
+             post(activate_tenant_handler),
+         )
+         .route("/api/v1/tenants/{id}", delete(delete_tenant_handler));
++    #[cfg(all(feature = "heap-profile", target_os = "linux"))]
++    let app = app.route(
++        "/api/v1/admin/heap-profile",
++        get(super::heap_profile_api::heap_profile),
++    );
+     let app = app
+         // Audit endpoints (admin only)
+         .route("/api/v1/audit/events", post(log_audit_event))
+@@ -555,15 +593,12 @@ pub async fn serve_v1(
+         }
+     };
+ 
+-    let app = app
+-        .layer(middleware::from_fn(super::response_limit::bounded))
++    app.layer(middleware::from_fn(super::response_limit::bounded))
+         .layer(middleware::from_fn_with_state(
+             http_metrics,
+             super::http_metrics::record,
+         ))
+-        .layer(super::response_limit::compression());
+-    gate.open(app);
+-    Ok(())
++        .layer(super::response_limit::compression())
+ }
+ 
+ /// Write paths that should be rejected when running as a follower.

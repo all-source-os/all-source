@@ -1,11 +1,19 @@
 use crate::{
     domain::value_objects::system_stream::{SystemDomain, consumer_events, system_entity_id_value},
-    infrastructure::persistence::SystemMetadataStore,
+    infrastructure::{
+        memory::ledger::{MapCharge, Owner, string_heap, strings_heap},
+        persistence::SystemMetadataStore,
+    },
 };
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
+
+/// Owned heap of a consumer: its id and filter strings, not the inline value.
+fn consumer_heap(consumer: &Consumer) -> u64 {
+    string_heap(&consumer.consumer_id) + strings_heap(&consumer.event_type_filters)
+}
 
 /// A durable consumer tracks a cursor (last-acknowledged position) so it can
 /// resume from where it left off after disconnection or restart.
@@ -31,6 +39,7 @@ pub struct Consumer {
 /// - **Durable** (`new_durable()`): backed by `SystemMetadataStore`, survives restarts
 pub struct ConsumerRegistry {
     consumers: Arc<DashMap<String, Consumer>>,
+    consumers_charge: MapCharge,
     system_store: Option<Arc<SystemMetadataStore>>,
 }
 
@@ -45,6 +54,7 @@ impl ConsumerRegistry {
     pub fn new() -> Self {
         Self {
             consumers: Arc::new(DashMap::new()),
+            consumers_charge: MapCharge::new(Owner::Misc, size_of::<(String, Consumer)>()),
             system_store: None,
         }
     }
@@ -56,6 +66,7 @@ impl ConsumerRegistry {
     pub fn new_durable(system_store: Arc<SystemMetadataStore>) -> Self {
         let registry = Self {
             consumers: Arc::new(DashMap::new()),
+            consumers_charge: MapCharge::new(Owner::Misc, size_of::<(String, Consumer)>()),
             system_store: Some(system_store),
         };
         registry.rebuild_cache();
@@ -64,25 +75,22 @@ impl ConsumerRegistry {
 
     /// Register a consumer (or update its filters if it already exists).
     pub fn register(&self, consumer_id: &str, event_type_filters: &[String]) -> Consumer {
-        let consumer = self
-            .consumers
-            .entry(consumer_id.to_string())
-            .or_insert_with(|| Consumer {
+        let c = self.consumers_charge.upsert(
+            &self.consumers,
+            consumer_id.to_string(),
+            || Consumer {
                 consumer_id: consumer_id.to_string(),
                 event_type_filters: event_type_filters.to_vec(),
                 cursor_position: None,
-            });
-
-        // Update filters if consumer already existed
-        let mut c = consumer.clone();
-        if c.event_type_filters != event_type_filters {
-            drop(consumer);
-            self.consumers.alter(consumer_id, |_, mut existing| {
-                existing.event_type_filters = event_type_filters.to_vec();
-                c = existing.clone();
-                existing
-            });
-        }
+            },
+            |_, c| consumer_heap(c),
+            |existing| {
+                if existing.event_type_filters != event_type_filters {
+                    existing.event_type_filters = event_type_filters.to_vec();
+                }
+                existing.clone()
+            },
+        );
 
         // Persist registration event
         if let Some(ref store) = self.system_store {
@@ -108,14 +116,17 @@ impl ConsumerRegistry {
 
     /// Get or implicitly create a consumer.
     pub fn get_or_create(&self, consumer_id: &str) -> Consumer {
-        self.consumers
-            .entry(consumer_id.to_string())
-            .or_insert_with(|| Consumer {
+        self.consumers_charge.upsert(
+            &self.consumers,
+            consumer_id.to_string(),
+            || Consumer {
                 consumer_id: consumer_id.to_string(),
                 event_type_filters: vec![],
                 cursor_position: None,
-            })
-            .clone()
+            },
+            |_, c| consumer_heap(c),
+            |c| c.clone(),
+        )
     }
 
     /// Acknowledge events up to a given global offset.
@@ -127,45 +138,50 @@ impl ConsumerRegistry {
             ));
         }
 
-        let mut entry = self
-            .consumers
-            .entry(consumer_id.to_string())
-            .or_insert_with(|| Consumer {
+        self.consumers_charge.upsert(
+            &self.consumers,
+            consumer_id.to_string(),
+            || Consumer {
                 consumer_id: consumer_id.to_string(),
                 event_type_filters: vec![],
                 cursor_position: None,
-            });
+            },
+            |_, c| consumer_heap(c),
+            |entry| {
+                let current = entry.cursor_position.unwrap_or(0);
+                if position > current {
+                    entry.cursor_position = Some(position);
 
-        // Only advance the cursor (idempotent: acking an older position is a no-op)
-        let current = entry.cursor_position.unwrap_or(0);
-        if position > current {
-            entry.cursor_position = Some(position);
-
-            // Persist ack event
-            if let Some(ref store) = self.system_store {
-                let entity_id = system_entity_id_value(SystemDomain::Consumer, consumer_id);
-                let payload = json!({
-                    "consumer_id": consumer_id,
-                    "position": position,
-                });
-                if let Err(e) = store.append_system_event(
-                    consumer_events::ACK_UPDATED,
-                    entity_id,
-                    payload,
-                    None,
-                ) {
-                    tracing::warn!("Failed to persist consumer ack: {}", e);
+                    if let Some(ref store) = self.system_store {
+                        let entity_id = system_entity_id_value(SystemDomain::Consumer, consumer_id);
+                        let payload = json!({
+                            "consumer_id": consumer_id,
+                            "position": position,
+                        });
+                        if let Err(e) = store.append_system_event(
+                            consumer_events::ACK_UPDATED,
+                            entity_id,
+                            payload,
+                            None,
+                        ) {
+                            tracing::warn!("Failed to persist consumer ack: {}", e);
+                        }
+                    }
                 }
-            }
-        }
+            },
+        );
 
         Ok(())
     }
 
     /// Restore consumer state (called during WAL recovery).
     pub fn restore(&self, consumer: Consumer) {
-        self.consumers
-            .insert(consumer.consumer_id.clone(), consumer);
+        self.consumers_charge.insert(
+            &self.consumers,
+            consumer.consumer_id.clone(),
+            consumer,
+            |_, c| consumer_heap(c),
+        );
     }
 
     /// Number of registered consumers.
@@ -212,13 +228,15 @@ impl ConsumerRegistry {
                     .unwrap_or_default();
 
                 if !consumer_id.is_empty() {
-                    self.consumers.insert(
+                    self.consumers_charge.insert(
+                        &self.consumers,
                         consumer_id.clone(),
                         Consumer {
                             consumer_id,
                             event_type_filters,
                             cursor_position: None,
                         },
+                        |_, c| consumer_heap(c),
                     );
                 }
             }
@@ -231,22 +249,24 @@ impl ConsumerRegistry {
                 let position = payload.get("position").and_then(serde_json::Value::as_u64);
 
                 if !consumer_id.is_empty() {
-                    self.consumers
-                        .entry(consumer_id.clone())
-                        .and_modify(|c| {
-                            // Only advance — never regress
+                    self.consumers_charge.upsert(
+                        &self.consumers,
+                        consumer_id.clone(),
+                        || Consumer {
+                            consumer_id: consumer_id.clone(),
+                            event_type_filters: vec![],
+                            cursor_position: position,
+                        },
+                        |_, c| consumer_heap(c),
+                        |c| {
                             if let Some(pos) = position {
                                 let current = c.cursor_position.unwrap_or(0);
                                 if pos > current {
                                     c.cursor_position = Some(pos);
                                 }
                             }
-                        })
-                        .or_insert_with(|| Consumer {
-                            consumer_id,
-                            event_type_filters: vec![],
-                            cursor_position: position,
-                        });
+                        },
+                    );
                 }
             }
             consumer_events::DELETED => {
@@ -255,7 +275,8 @@ impl ConsumerRegistry {
                     .and_then(|v| v.as_str())
                     .unwrap_or_default();
                 if !consumer_id.is_empty() {
-                    self.consumers.remove(consumer_id);
+                    self.consumers_charge
+                        .remove_entry(&self.consumers, consumer_id, |_, c| consumer_heap(c));
                 }
             }
             _ => {}

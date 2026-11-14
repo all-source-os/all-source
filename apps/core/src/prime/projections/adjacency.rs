@@ -15,9 +15,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
+use super::charge;
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
-    prime::types::event_types,
+    infrastructure::memory::ledger::Tally, prime::types::event_types,
 };
 
 /// A single adjacency entry: (relation, peer_node, edge_id, weight).
@@ -27,6 +28,13 @@ pub struct AdjEntry {
     pub peer: String,
     pub edge_id: String,
     pub weight: Option<f64>,
+}
+
+fn entry_bytes(entry: &AdjEntry) -> u64 {
+    std::mem::size_of::<AdjEntry>() as u64
+        + charge::text(&entry.relation)
+        + charge::text(&entry.peer)
+        + charge::text(&entry.edge_id)
 }
 
 /// Which end of an edge is the lookup key.
@@ -50,6 +58,7 @@ pub struct DirectedAdjacencyProjection {
     adj: Arc<DashMap<String, Vec<AdjEntry>>>,
     /// Secondary index: edge_id → key for O(1) deletion
     edge_index: Arc<DashMap<String, String>>,
+    charge: Tally,
 }
 
 impl DirectedAdjacencyProjection {
@@ -59,7 +68,45 @@ impl DirectedAdjacencyProjection {
             direction,
             adj: Arc::new(DashMap::new()),
             edge_index: Arc::new(DashMap::new()),
+            charge: charge::tally(),
         }
+    }
+
+    fn index_edge(&self, edge_id: &str, key: &str) {
+        match self.edge_index.insert(edge_id.to_string(), key.to_string()) {
+            Some(old_key) => self
+                .charge
+                .adjust(charge::text(&old_key), charge::text(key)),
+            None => self.charge.add(charge::entry::<String, String>(
+                charge::text(edge_id) + charge::text(key),
+            )),
+        }
+    }
+
+    fn store_adj(&self, key: String, entries: Vec<AdjEntry>) {
+        let key_bytes = charge::text(&key);
+        let owned = key_bytes + entries.iter().map(entry_bytes).sum::<u64>();
+        match self.adj.insert(key, entries) {
+            Some(old) => {
+                let old_owned = key_bytes + old.iter().map(entry_bytes).sum::<u64>();
+                self.charge.adjust(old_owned, owned);
+            }
+            None => self
+                .charge
+                .add(charge::entry::<String, Vec<AdjEntry>>(owned)),
+        }
+    }
+
+    fn push_entry(&self, key: String, entry: AdjEntry) {
+        let owned = entry_bytes(&entry);
+        let is_new = !self.adj.contains_key(&key);
+        let key_bytes = charge::text(&key);
+        self.adj.entry(key).or_default().push(entry);
+        if is_new {
+            self.charge
+                .add(charge::entry::<String, Vec<AdjEntry>>(key_bytes));
+        }
+        self.charge.add(owned);
     }
 
     /// Create a forward (outgoing) adjacency projection.
@@ -156,23 +203,35 @@ impl Projection for DirectedAdjacencyProjection {
                 let weight = payload.get("weight").and_then(serde_json::Value::as_f64);
 
                 // Secondary index for O(1) deletion
-                self.edge_index.insert(edge_id.clone(), key.clone());
+                self.index_edge(&edge_id, &key);
 
-                self.adj.entry(key).or_default().push(AdjEntry {
-                    relation,
-                    peer,
-                    edge_id,
-                    weight,
-                });
+                self.push_entry(
+                    key,
+                    AdjEntry {
+                        relation,
+                        peer,
+                        edge_id,
+                        weight,
+                    },
+                );
             }
             event_types::EDGE_DELETED => {
                 let edge_id = payload.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
                 // O(1) lookup via secondary index
-                if let Some((_, key)) = self.edge_index.remove(edge_id)
-                    && let Some(mut entries) = self.adj.get_mut(&key)
-                {
-                    entries.retain(|e| e.edge_id != edge_id);
+                if let Some((_, key)) = self.edge_index.remove(edge_id) {
+                    self.charge.sub(charge::entry::<String, String>(
+                        charge::text(edge_id) + charge::text(&key),
+                    ));
+                    if let Some(mut entries) = self.adj.get_mut(&key) {
+                        let released: u64 = entries
+                            .iter()
+                            .filter(|e| e.edge_id == edge_id)
+                            .map(entry_bytes)
+                            .sum();
+                        entries.retain(|e| e.edge_id != edge_id);
+                        self.charge.sub(released);
+                    }
                 }
             }
             _ => {}
@@ -190,6 +249,7 @@ impl Projection for DirectedAdjacencyProjection {
     fn clear(&self) {
         self.adj.clear();
         self.edge_index.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -204,13 +264,12 @@ impl Projection for DirectedAdjacencyProjection {
     fn restore(&self, snapshot: &Value) -> Result<()> {
         let entries: Vec<(String, Vec<AdjEntry>)> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
-        self.adj.clear();
-        self.edge_index.clear();
+        self.clear();
         for (key, adj_entries) in entries {
             for entry in &adj_entries {
-                self.edge_index.insert(entry.edge_id.clone(), key.clone());
+                self.index_edge(&entry.edge_id, &key);
             }
-            self.adj.insert(key, adj_entries);
+            self.store_adj(key, adj_entries);
         }
         Ok(())
     }

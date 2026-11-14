@@ -1,0 +1,9 @@
+{
+  "rows_decoded_max": 230302,
+  "host": "aarch64-apple-darwin",
+  "evaluator_wall_s": {
+    "heap_replay": 22,
+    "core_tests": 39
+  },
+  "evaluator_limit_s": 270
+}

@@ -1,10 +1,12 @@
-use crate::error::{AllSourceError, Result};
+use crate::{
+    error::{AllSourceError, Result},
+    infrastructure::hash_state::{FastDashMap, fast_dashmap},
+};
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 use chrono::{Duration, Utc};
-use dashmap::DashMap;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -223,11 +225,11 @@ pub struct AuthManager {
     /// JWT validation rules
     validation: Validation,
     /// Users storage (in production, use database)
-    users: Arc<DashMap<Uuid, User>>,
+    users: Arc<FastDashMap<Uuid, User>>,
     /// API keys storage (in production, use database)
-    api_keys: Arc<DashMap<Uuid, ApiKey>>,
+    api_keys: Arc<FastDashMap<Uuid, ApiKey>>,
     /// Username to user ID mapping
-    username_index: Arc<DashMap<String, Uuid>>,
+    username_index: Arc<FastDashMap<String, Uuid>>,
     /// Optional event-sourced auth repository for durable key storage.
     /// When set, API key operations are persisted to the system WAL.
     auth_repo: Option<Arc<crate::infrastructure::repositories::EventSourcedAuthRepository>>,
@@ -246,9 +248,9 @@ impl AuthManager {
             encoding_key,
             decoding_key,
             validation,
-            users: Arc::new(DashMap::new()),
-            api_keys: Arc::new(DashMap::new()),
-            username_index: Arc::new(DashMap::new()),
+            users: Arc::new(fast_dashmap()),
+            api_keys: Arc::new(fast_dashmap()),
+            username_index: Arc::new(fast_dashmap()),
             auth_repo: None,
         }
     }

@@ -1,4 +1,6 @@
-use crate::{domain::entities::Event, store::EventStore};
+use crate::{
+    domain::entities::Event, infrastructure::memory::ledger::BroadcastRing, store::EventStore,
+};
 use axum::extract::ws::{Message, WebSocket};
 use dashmap::DashMap;
 use futures::{sink::SinkExt, stream::StreamExt};
@@ -33,6 +35,7 @@ impl Default for WebSocketConfig {
 pub struct WebSocketManager {
     /// Broadcast channel for sending events to all connected clients
     event_tx: broadcast::Sender<Arc<Event>>,
+    event_ring: BroadcastRing,
 
     /// Connected clients by ID - using DashMap for lock-free concurrent access
     clients: Arc<DashMap<Uuid, ClientInfo>>,
@@ -78,6 +81,7 @@ impl WebSocketManager {
 
         Self {
             event_tx,
+            event_ring: BroadcastRing::new(config.capacity),
             clients: Arc::new(DashMap::new()),
             config,
         }
@@ -86,8 +90,9 @@ impl WebSocketManager {
     /// Broadcast an event to all connected WebSocket clients
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn broadcast_event(&self, event: Arc<Event>) {
-        // Send to broadcast channel (non-blocking)
-        let _ = self.event_tx.send(event);
+        let bytes = event.resident_bytes();
+        let delivered = self.event_tx.send(event).is_ok();
+        self.event_ring.observe(delivered, bytes);
     }
 
     /// Subscribe to the event broadcast channel (used by RESP3 SUBSCRIBE).
