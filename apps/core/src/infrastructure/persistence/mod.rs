@@ -11,6 +11,7 @@ pub mod cold_tier;
 #[cfg(feature = "cold-tier-s3")]
 pub mod cold_tier_s3;
 pub mod compaction;
+mod event_codec;
 pub mod feed_log;
 pub mod hydration_admission;
 pub mod index;
@@ -52,7 +53,7 @@ pub use simd_filter::{
 };
 pub use simd_json::{BatchEventParser, SimdJsonError, SimdJsonParser, SimdJsonStats, ZeroCopyJson};
 pub use storage::{
-    BatchWriteResult, BatchWriteStats, DEFAULT_BATCH_SIZE, DEFAULT_FLUSH_TIMEOUT_MS,
+    BatchWriteResult, BatchWriteStats, DEFAULT_BATCH_SIZE, DEFAULT_FLUSH_TIMEOUT_MS, FileNamer,
     MigrationReport, ParquetStorage, ParquetStorageConfig,
 };
 pub use storage_integrity::{IntegrityCheckResult, StorageIntegrity};

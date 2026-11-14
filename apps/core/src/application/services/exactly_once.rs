@@ -20,9 +20,11 @@
 //! Idempotency keys expire after a configurable window (default 24 hours) to
 //! bound memory usage. Consumer offsets persist indefinitely.
 
+use crate::infrastructure::memory::ledger::{MapCharge, Owner, string_heap};
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
+use std::mem::size_of;
 use uuid::Uuid;
 
 /// Configuration for exactly-once processing
@@ -88,10 +90,13 @@ pub struct ExactlyOnceRegistry {
     config: ExactlyOnceConfig,
     /// Idempotency key → record
     idempotency_keys: DashMap<String, IdempotencyRecord>,
+    idempotency_charge: MapCharge,
     /// (pipeline_id, stream_id) → consumer offset
     consumer_offsets: DashMap<(String, String), ConsumerOffset>,
+    consumer_offsets_charge: MapCharge,
     /// Set of processing receipts
     processing_receipts: DashMap<ProcessingReceipt, DateTime<Utc>>,
+    processing_receipts_charge: MapCharge,
 }
 
 impl ExactlyOnceRegistry {
@@ -99,8 +104,20 @@ impl ExactlyOnceRegistry {
         Self {
             config,
             idempotency_keys: DashMap::new(),
+            idempotency_charge: MapCharge::new(
+                Owner::Misc,
+                size_of::<(String, IdempotencyRecord)>(),
+            ),
             consumer_offsets: DashMap::new(),
+            consumer_offsets_charge: MapCharge::new(
+                Owner::Misc,
+                size_of::<((String, String), ConsumerOffset)>(),
+            ),
             processing_receipts: DashMap::new(),
+            processing_receipts_charge: MapCharge::new(
+                Owner::Misc,
+                size_of::<(ProcessingReceipt, DateTime<Utc>)>(),
+            ),
         }
     }
 
@@ -121,7 +138,8 @@ impl ExactlyOnceRegistry {
             }
             // Expired — remove and treat as new
             drop(existing);
-            self.idempotency_keys.remove(key);
+            self.idempotency_charge
+                .remove_entry(&self.idempotency_keys, key, |k, _| string_heap(k));
         }
 
         // Evict oldest keys if at capacity
@@ -130,12 +148,14 @@ impl ExactlyOnceRegistry {
         }
 
         // Register the new key
-        self.idempotency_keys.insert(
+        self.idempotency_charge.insert(
+            &self.idempotency_keys,
             key.to_string(),
             IdempotencyRecord {
                 event_id,
                 created_at: now,
             },
+            |k, _| string_heap(k),
         );
 
         IdempotencyResult::New
@@ -144,7 +164,8 @@ impl ExactlyOnceRegistry {
     /// Commit a consumer offset for a pipeline
     pub fn commit_offset(&self, pipeline_id: &str, stream_id: &str, offset: usize, event_id: Uuid) {
         let key = (pipeline_id.to_string(), stream_id.to_string());
-        self.consumer_offsets.insert(
+        self.consumer_offsets_charge.insert(
+            &self.consumer_offsets,
             key,
             ConsumerOffset {
                 pipeline_id: pipeline_id.to_string(),
@@ -152,6 +173,12 @@ impl ExactlyOnceRegistry {
                 offset,
                 last_event_id: event_id,
                 updated_at: Utc::now(),
+            },
+            |(pipeline, stream), offset| {
+                string_heap(pipeline)
+                    + string_heap(stream)
+                    + string_heap(&offset.pipeline_id)
+                    + string_heap(&offset.stream_id)
             },
         );
     }
@@ -168,7 +195,12 @@ impl ExactlyOnceRegistry {
             pipeline_id: pipeline_id.to_string(),
             event_id,
         };
-        self.processing_receipts.insert(receipt, Utc::now());
+        self.processing_receipts_charge.insert(
+            &self.processing_receipts,
+            receipt,
+            Utc::now(),
+            |receipt, _| string_heap(&receipt.pipeline_id),
+        );
     }
 
     /// Check if a pipeline has already processed an event
@@ -184,8 +216,20 @@ impl ExactlyOnceRegistry {
     fn evict_expired_keys(&self) {
         let now = Utc::now();
         let ttl = self.config.idempotency_ttl;
-        self.idempotency_keys
-            .retain(|_, record| now - record.created_at < ttl);
+        let expired: Vec<String> = self
+            .idempotency_keys
+            .iter()
+            .filter(|entry| now - entry.value().created_at >= ttl)
+            .map(|entry| entry.key().clone())
+            .collect();
+        for key in &expired {
+            self.idempotency_charge.remove_entry_if(
+                &self.idempotency_keys,
+                key,
+                |record| now - record.created_at >= ttl,
+                |k, _| string_heap(k),
+            );
+        }
     }
 
     /// Statistics about the exactly-once registry

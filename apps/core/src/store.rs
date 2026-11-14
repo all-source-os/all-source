@@ -1,6 +1,8 @@
 #[cfg(feature = "server")]
 use crate::application::services::webhook::WebhookRegistry;
 #[cfg(feature = "server")]
+use crate::infrastructure::memory::ledger::Lease;
+#[cfg(feature = "server")]
 use crate::infrastructure::observability::metrics::MetricsRegistry;
 #[cfg(feature = "server")]
 use crate::infrastructure::web::websocket::WebSocketManager;
@@ -20,11 +22,13 @@ use crate::{
     domain::entities::Event,
     error::{AllSourceError, Result},
     infrastructure::{
+        hash_state::{FastDashMap, FastSet, fast_dashmap},
+        memory::ledger::{BroadcastRing, MapCharge, Owner, Tally, string_heap},
         persistence::{
             archive_budget::{ArchiveReadBudget, ArchiveReadLimits, check_cancelled},
             compaction::{CompactionConfig, CompactionManager},
             index::{EventIndex, IndexEntry, ValidWindow},
-            storage::ParquetStorage,
+            storage::{FileNamer, ParquetStorage, ParquetStorageConfig},
             tenant_loader::TenantLoader,
             version_manifest::ResolvedVersion,
             wal::{WALConfig, WriteAheadLog},
@@ -33,9 +37,11 @@ use crate::{
     },
 };
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use parking_lot::RwLock;
-use std::{path::PathBuf, sync::Arc};
+use std::{mem::size_of, path::PathBuf, sync::Arc};
+
+/// Slots the in-process event ring keeps for its receivers.
+const STORE_RING_CAPACITY: usize = 1024;
 #[path = "store_feed.rs"]
 pub mod feed;
 #[path = "store_read_model.rs"]
@@ -141,14 +147,17 @@ pub struct EventStore {
     /// Total events ingested (for metrics)
     total_ingested: Arc<RwLock<u64>>,
 
-    feed_indexes: DashMap<String, feed::FeedIndex>,
+    feed_indexes: FastDashMap<String, feed::FeedIndex>,
+    feed_indexes_charge: MapCharge,
     /// `ALLSOURCE_FEED_DURABLE_LOG`; `None` when off.
     feed_log: Option<Arc<crate::infrastructure::persistence::feed_log::FeedLog>>,
     read_models: parking_lot::Mutex<std::collections::HashMap<String, read_model::ReadModel>>,
+    read_models_charge: Tally,
 
     /// Projection status overrides (v0.13 feature)
     /// Tracks pause/start state per projection name: "running" or "paused"
-    projection_status: Arc<DashMap<String, String>>,
+    projection_status: Arc<FastDashMap<String, String>>,
+    projection_status_charge: MapCharge,
 
     /// Webhook registry for outbound event delivery (v0.11 feature)
     #[cfg(feature = "server")]
@@ -170,7 +179,8 @@ pub struct EventStore {
     /// Per-entity version marks for optimistic concurrency control (v0.14 feature)
     /// Key: entity_id string, Value: highest version persisted for that entity.
     /// Monotonic, and never lowered by a cache eviction.
-    entity_versions: Arc<DashMap<String, u64>>,
+    entity_versions: Arc<FastDashMap<String, u64>>,
+    entity_versions_charge: MapCharge,
 
     /// Tenants whose archived versions have been folded into `entity_versions`.
     /// A conditional write needs the archive's high-water marks exactly once;
@@ -179,11 +189,13 @@ pub struct EventStore {
     /// Tenants are certified only by a complete strict hydration. A
     /// conditional write certifies the one entity it targets, so a tenant too
     /// large to hydrate strictly can still take conditional writes.
-    version_index_tenants: Arc<DashMap<String, ()>>,
+    version_index_tenants: Arc<FastDashMap<String, ()>>,
+    version_tenants_charge: MapCharge,
 
     /// Entities whose archived version has been resolved. See
     /// [`version_index_tenants`](Self::version_index_tenants).
-    version_index_entities: Arc<DashMap<String, ()>>,
+    version_index_entities: Arc<FastDashMap<String, ()>>,
+    version_entities_charge: MapCharge,
 
     /// Durable consumer registry for subscription cursor tracking (v0.14 feature)
     consumer_registry: Arc<ConsumerRegistry>,
@@ -192,6 +204,12 @@ pub struct EventStore {
     /// so embedded consumers (TUI, web) can tail changes without the `server`
     /// feature / HTTP stack. Lagging receivers see `RecvError::Lagged`.
     event_broadcast_tx: tokio::sync::broadcast::Sender<Arc<Event>>,
+    event_ring: BroadcastRing,
+
+    /// Heap of the resident events (`events.resident`).
+    events_resident: Tally,
+    #[cfg(feature = "server")]
+    metrics_startup: Tally,
 
     /// Per-tenant lazy-load bookkeeping. Tracks which tenants have
     /// been hydrated from Parquet into the in-memory pile and
@@ -203,7 +221,8 @@ pub struct EventStore {
     /// Eviction must not reset indexes/versions underneath a writer or a
     /// certified cache load. Acquire before durability, events and storage locks.
     cache_residency_gate: RwLock<()>,
-    cache_generations: DashMap<String, u64>,
+    cache_generations: FastDashMap<String, u64>,
+    cache_generations_charge: MapCharge,
 
     /// Cadence of the runtime checkpoint loop (Step 6). `None` means
     /// the loop is disabled — WAL grows until boot. Production reads
@@ -230,10 +249,12 @@ pub struct EventStore {
 
 /// A task queued for async webhook delivery
 #[cfg(feature = "server")]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WebhookDeliveryTask {
     pub webhook: crate::application::services::webhook::WebhookSubscription,
     pub event: Event,
+    /// Released when the task is dropped, which is when its delivery ends.
+    _queued: Lease,
 }
 
 /// Time axis a query window is ordered by.
@@ -302,13 +323,23 @@ impl EventStore {
         let mut projections = ProjectionManager::new();
 
         // Register built-in projections
-        projections.register(Arc::new(EntitySnapshotProjection::new("entity_snapshots")));
+        if config.register_entity_snapshots {
+            projections.register(Arc::new(EntitySnapshotProjection::new("entity_snapshots")));
+        }
         projections.register(Arc::new(EventCounterProjection::new("event_counters")));
 
         // Initialize persistent storage if configured
         let storage = config.storage_dir.as_ref().and_then(|dir| {
             match if config.read_only {
                 ParquetStorage::open_existing(dir)
+            } else if let Some(namer) = &config.parquet_file_namer {
+                ParquetStorage::with_config(
+                    dir,
+                    ParquetStorageConfig {
+                        file_namer: Some(namer.clone()),
+                        ..ParquetStorageConfig::default()
+                    },
+                )
             } else {
                 ParquetStorage::new(dir)
             } {
@@ -373,12 +404,24 @@ impl EventStore {
 
         // Unconditional in-process event broadcaster so embedded consumers
         // (TUI, web) can live-reload without the `server` feature.
-        let (event_broadcast_tx, _) = tokio::sync::broadcast::channel(1024);
+        let (event_broadcast_tx, _) = tokio::sync::broadcast::channel(STORE_RING_CAPACITY);
 
         let store = Self {
             strict_archive_limits: config.strict_archive_limits,
             cache_residency_gate: RwLock::new(()),
-            cache_generations: DashMap::new(),
+            cache_generations: fast_dashmap(),
+            cache_generations_charge: MapCharge::new(
+                Owner::CacheGenerations,
+                size_of::<(String, u64)>(),
+            ),
+            events_resident: Tally::new(Owner::EventsResident),
+            #[cfg(feature = "server")]
+            metrics_startup: {
+                let startup = Tally::new(Owner::Metrics);
+                startup.add(crate::infrastructure::observability::metrics::METRICS_STARTUP_BYTES);
+                startup
+            },
+            event_ring: BroadcastRing::new(STORE_RING_CAPACITY),
             events: Arc::new(RwLock::new(Vec::new())),
             index: Arc::new(EventIndex::new()),
             projections: Arc::new(RwLock::new(projections)),
@@ -393,10 +436,16 @@ impl EventStore {
             #[cfg(feature = "server")]
             metrics,
             total_ingested: Arc::new(RwLock::new(0)),
-            feed_indexes: DashMap::new(),
+            feed_indexes: fast_dashmap(),
+            feed_indexes_charge: MapCharge::new(
+                Owner::FeedIndex,
+                size_of::<(String, feed::FeedIndex)>(),
+            ),
             feed_log: feed::open_feed_log(config.wal_dir.as_deref(), config.read_only),
             read_models: parking_lot::Mutex::new(std::collections::HashMap::new()),
-            projection_status: Arc::new(DashMap::new()),
+            read_models_charge: Tally::new(Owner::ReadModels),
+            projection_status: Arc::new(fast_dashmap()),
+            projection_status_charge: MapCharge::new(Owner::Misc, size_of::<(String, String)>()),
             #[cfg(feature = "server")]
             webhook_registry,
             #[cfg(feature = "server")]
@@ -404,9 +453,21 @@ impl EventStore {
             geo_index: Arc::new(GeoIndex::new()),
             exactly_once: Arc::new(ExactlyOnceRegistry::new(ExactlyOnceConfig::default())),
             schema_evolution: Arc::new(SchemaEvolutionManager::new()),
-            entity_versions: Arc::new(DashMap::new()),
-            version_index_tenants: Arc::new(DashMap::new()),
-            version_index_entities: Arc::new(DashMap::new()),
+            entity_versions: Arc::new(fast_dashmap()),
+            entity_versions_charge: MapCharge::new(
+                Owner::EntityVersions,
+                size_of::<(String, u64)>(),
+            ),
+            version_index_tenants: Arc::new(fast_dashmap()),
+            version_tenants_charge: MapCharge::new(
+                Owner::VersionIndexTenants,
+                size_of::<(String, ())>(),
+            ),
+            version_index_entities: Arc::new(fast_dashmap()),
+            version_entities_charge: MapCharge::new(
+                Owner::VersionIndexEntities,
+                size_of::<(String, ())>(),
+            ),
             consumer_registry: Arc::new(ConsumerRegistry::new()),
             event_broadcast_tx,
             tenant_loader: {
@@ -486,6 +547,7 @@ impl EventStore {
                             tracing::error!("Failed to re-process WAL event {}: {}", event.id, e);
                         }
 
+                        store.charge_entity_version(event.entity_id_str());
                         *store
                             .entity_versions
                             .entry(event.entity_id_str().to_string())
@@ -493,6 +555,7 @@ impl EventStore {
 
                         let mut events = store.events.write();
                         store.observe_feed_head(&event, events.len() + 1);
+                        store.events_resident.add(event.resident_bytes());
                         events.push(event);
                         wal_new += 1;
                     }
@@ -674,6 +737,7 @@ impl EventStore {
         // Atomic version check + append: hold the DashMap entry lock
         // to prevent TOCTOU races between check and write.
         let new_version = {
+            self.charge_entity_version(&entity_id);
             let mut version_entry = self.entity_versions.entry(entity_id.clone()).or_insert(0);
             check_cancelled(cancellation.map(Arc::as_ref))?;
             let current = *version_entry;
@@ -714,6 +778,7 @@ impl EventStore {
         #[cfg(feature = "server")]
         let timer = self.metrics.ingestion_duration_seconds.start_timer();
 
+        let resident_bytes = event.resident_bytes();
         let mut events = self.events.write();
         let offset = events.len();
 
@@ -754,14 +819,12 @@ impl EventStore {
         // Store the event in memory
         self.observe_feed_head(event, events.len() + 1);
         events.push(event.clone());
+        self.events_resident.add(resident_bytes);
         let total_events = events.len();
         drop(events);
 
         // Broadcast to in-process subscribers (always on) + optional WS.
-        let event_arc = Arc::new(event.clone());
-        let _ = self.event_broadcast_tx.send(Arc::clone(&event_arc));
-        #[cfg(feature = "server")]
-        self.websocket_manager.broadcast_event(event_arc);
+        self.broadcast_ingested(Arc::new(event.clone()), resident_bytes);
 
         // Dispatch to matching webhook subscriptions
         #[cfg(feature = "server")]
@@ -833,6 +896,7 @@ impl EventStore {
         // The WAL append stays inside the entry lock: a version handed out but
         // not persisted is one the next reader hands out again.
         let stored_event = {
+            self.charge_entity_version(event.entity_id_str());
             let mut version_entry = self
                 .entity_versions
                 .entry(event.entity_id_str().to_string())
@@ -861,6 +925,7 @@ impl EventStore {
         };
         let event = &stored_event;
 
+        let resident_bytes = event.resident_bytes();
         let mut events = self.events.write();
         let offset = events.len();
 
@@ -904,14 +969,12 @@ impl EventStore {
         // Store the event in memory
         self.observe_feed_head(event, events.len() + 1);
         events.push(event.clone());
+        self.events_resident.add(resident_bytes);
         let total_events = events.len();
         drop(events); // Release lock early
 
         // Broadcast to in-process subscribers + optional WS.
-        let event_arc = Arc::new(event.clone());
-        let _ = self.event_broadcast_tx.send(Arc::clone(&event_arc));
-        #[cfg(feature = "server")]
-        self.websocket_manager.broadcast_event(event_arc);
+        self.broadcast_ingested(Arc::new(event.clone()), resident_bytes);
 
         // Dispatch to matching webhook subscriptions (v0.11 feature)
         #[cfg(feature = "server")]
@@ -976,6 +1039,7 @@ impl EventStore {
         // failure after a bump leaves the mark above what is persisted, which
         // only ever skips a version — the reverse would reissue one.
         for event in &mut batch {
+            self.charge_entity_version(event.entity_id_str());
             let mut version_entry = self
                 .entity_versions
                 .entry(event.entity_id_str().to_string())
@@ -995,11 +1059,13 @@ impl EventStore {
             }
         }
 
+        let resident_sizes: Vec<u64> = batch.iter().map(Event::resident_bytes).collect();
+
         // Phase 3: Single write lock for index + projections + push
         let mut events = self.events.write();
         let projections = self.projections.read();
 
-        for event in batch {
+        for (event, resident_bytes) in batch.into_iter().zip(resident_sizes) {
             let offset = events.len();
 
             self.index.index_event(
@@ -1024,9 +1090,10 @@ impl EventStore {
                 .analyze_event(event.event_type_str(), &event.payload);
 
             // Broadcast to in-process subscribers
-            let _ = self.event_broadcast_tx.send(Arc::new(event.clone()));
+            self.broadcast_store_ring(Arc::new(event.clone()), resident_bytes);
 
             self.observe_feed_head(&event, events.len() + 1);
+            self.events_resident.add(resident_bytes);
             events.push(event);
         }
 
@@ -1051,6 +1118,7 @@ impl EventStore {
         let timer = self.metrics.ingestion_duration_seconds.start_timer();
 
         let _resident = self.cache_residency_gate.read();
+        let resident_bytes = event.resident_bytes();
         let mut events = self.events.write();
         let offset = events.len();
 
@@ -1093,14 +1161,12 @@ impl EventStore {
         // Store the event in memory
         self.observe_feed_head(event, events.len() + 1);
         events.push(event.clone());
+        self.events_resident.add(resident_bytes);
         let total_events = events.len();
         drop(events);
 
         // Broadcast to in-process subscribers + optional WS.
-        let event_arc = Arc::new(event.clone());
-        let _ = self.event_broadcast_tx.send(Arc::clone(&event_arc));
-        #[cfg(feature = "server")]
-        self.websocket_manager.broadcast_event(event_arc);
+        self.broadcast_ingested(Arc::new(event.clone()), resident_bytes);
 
         // Update metrics
         #[cfg(feature = "server")]
@@ -1135,6 +1201,29 @@ impl EventStore {
         self.entity_versions.get(entity_id).map_or(0, |v| *v)
     }
 
+    fn broadcast_store_ring(&self, event: Arc<Event>, resident_bytes: u64) {
+        let delivered = self.event_broadcast_tx.send(event).is_ok();
+        self.event_ring.observe(delivered, resident_bytes);
+    }
+
+    fn broadcast_ingested(&self, event: Arc<Event>, resident_bytes: u64) {
+        #[cfg(feature = "server")]
+        let for_websocket = Arc::clone(&event);
+        self.broadcast_store_ring(event, resident_bytes);
+        #[cfg(feature = "server")]
+        self.websocket_manager.broadcast_event(for_websocket);
+    }
+
+    fn charge_entity_version(&self, entity_id: &str) {
+        self.entity_versions_charge.ensure(
+            &self.entity_versions,
+            entity_id,
+            || entity_id.to_string(),
+            || 0,
+            entity_id.len() as u64,
+        );
+    }
+
     /// Raise an entity's version high-water mark to the version `event` carries.
     ///
     /// The version is READ from the event, never derived from how many events
@@ -1146,6 +1235,7 @@ impl EventStore {
     /// archive, or loading the same event twice, cannot lower the mark.
     fn observe_entity_version(&self, event: &Event) {
         let version = u64::try_from(event.version).unwrap_or(0);
+        self.charge_entity_version(event.entity_id_str());
         self.entity_versions
             .entry(event.entity_id_str().to_string())
             .and_modify(|current| *current = (*current).max(version))
@@ -1328,7 +1418,7 @@ impl EventStore {
         let tenants: Vec<String> = events
             .iter()
             .map(Event::tenant_id_str)
-            .collect::<std::collections::HashSet<_>>()
+            .collect::<FastSet<_>>()
             .into_iter()
             .map(str::to_owned)
             .collect();
@@ -1352,7 +1442,14 @@ impl EventStore {
     }
 
     /// Get the projection status map (v0.13 feature)
-    pub fn projection_status(&self) -> Arc<DashMap<String, String>> {
+    pub fn set_projection_status(&self, name: String, status: String) {
+        self.projection_status_charge
+            .insert(&self.projection_status, name, status, |k, v| {
+                string_heap(k) + string_heap(v)
+            });
+    }
+
+    pub fn projection_status(&self) -> Arc<FastDashMap<String, String>> {
         Arc::clone(&self.projection_status)
     }
 
@@ -1437,10 +1534,14 @@ impl EventStore {
             })
             .map(|event| event.tenant_id_str().to_owned())
             .collect();
+        self.events_resident.release_matching(&events, |e| {
+            e.entity_id_str() == entity_id && e.event_type_str() == token_event_type
+        });
         events.retain(|e| {
             !(e.entity_id_str() == entity_id && e.event_type_str() == token_event_type)
         });
 
+        self.events_resident.add(merged_event.resident_bytes());
         events.push(merged_event);
         for tenant in affected_tenants {
             self.rebuild_tenant_feed(&tenant, &events);
@@ -1498,6 +1599,7 @@ impl EventStore {
                 let task = WebhookDeliveryTask {
                     webhook,
                     event: event.clone(),
+                    _queued: Lease::new(Owner::WebhookQueue, event.resident_bytes()),
                 };
                 if let Err(e) = tx.send(task) {
                     tracing::warn!("Failed to queue webhook delivery: {}", e);
@@ -1748,8 +1850,13 @@ impl EventStore {
         }
 
         let Some(storage) = self.storage.as_ref().map(Arc::clone) else {
-            self.version_index_entities
-                .insert(entity_id.to_string(), ());
+            self.version_entities_charge.ensure(
+                &self.version_index_entities,
+                entity_id,
+                || entity_id.to_string(),
+                || (),
+                entity_id.len() as u64,
+            );
             return Ok(());
         };
 
@@ -1762,13 +1869,19 @@ impl EventStore {
         {
             ResolvedVersion::Complete(archived) => {
                 if let Some(version) = archived {
+                    self.charge_entity_version(entity_id);
                     self.entity_versions
                         .entry(entity_id.to_string())
                         .and_modify(|current| *current = (*current).max(version))
                         .or_insert(version);
                 }
-                self.version_index_entities
-                    .insert(entity_id.to_string(), ());
+                self.version_entities_charge.ensure(
+                    &self.version_index_entities,
+                    entity_id,
+                    || entity_id.to_string(),
+                    || (),
+                    entity_id.len() as u64,
+                );
                 Ok(())
             }
             ResolvedVersion::Incomplete { remaining, reason } => {
@@ -1983,7 +2096,13 @@ impl EventStore {
         self.tenant_loader
             .mark_loaded_with_integrity(tenant_id, complete);
         if complete {
-            self.version_index_tenants.insert(tenant_id.to_string(), ());
+            self.version_tenants_charge.ensure(
+                &self.version_index_tenants,
+                tenant_id,
+                || tenant_id.to_string(),
+                || (),
+                tenant_id.len() as u64,
+            );
         }
         drop(resident);
 
@@ -2142,6 +2261,13 @@ impl EventStore {
             return false;
         }
         {
+            self.cache_generations_charge.ensure(
+                &self.cache_generations,
+                tenant_id,
+                || tenant_id.to_string(),
+                || 0,
+                tenant_id.len() as u64,
+            );
             let mut generation = self
                 .cache_generations
                 .entry(tenant_id.to_string())
@@ -2155,7 +2281,11 @@ impl EventStore {
         let before = events.len();
         let evicted_bytes = self.tenant_loader.bytes_for(tenant_id);
 
+        self.events_resident
+            .release_matching(&events, |e| e.tenant_id_str() == tenant_id);
         events.retain(|e| e.tenant_id_str() != tenant_id);
+        self.feed_indexes_charge
+            .forget(&self.feed_indexes, tenant_id, tenant_id.len() as u64);
         self.feed_indexes.remove(tenant_id);
         let after = events.len();
         let dropped = before - after;
@@ -2285,6 +2415,7 @@ impl EventStore {
         self.observe_entity_version(&event);
 
         self.observe_feed_head(&event, events.len() + 1);
+        self.events_resident.add(event.resident_bytes());
         events.push(event);
         // Account for the bytes AFTER the push so a panic in the
         // index/projection path doesn't leave the counter inflated.
@@ -2351,6 +2482,37 @@ impl EventStore {
         } else {
             Ok(None)
         }
+    }
+
+    /// A resident event by UUID, cloned only when it belongs to `tenant`.
+    pub fn resident_event_for_tenant(&self, event_id: &uuid::Uuid, tenant: &str) -> Option<Event> {
+        let offset = self.index.get_by_id(event_id)?;
+        let events = self.events.read();
+        let event = events.get(offset)?;
+        (event.id == *event_id && event.tenant_id_str() == tenant).then(|| event.clone())
+    }
+
+    /// Geo query within `tenant`, with the resident bytes of every event it cloned.
+    pub fn geo_query_for_tenant(
+        &self,
+        request: &crate::infrastructure::query::geospatial::GeoQueryRequest,
+        tenant: &str,
+    ) -> (
+        Vec<crate::infrastructure::query::geospatial::GeoEventResult>,
+        u64,
+    ) {
+        let geo_index = self.geo_index();
+        let cloned = std::cell::Cell::new(0u64);
+        let results = crate::infrastructure::query::geospatial::execute_geo_query(
+            &|id| {
+                let event = self.resident_event_for_tenant(&id, tenant)?;
+                cloned.set(cloned.get() + event.resident_bytes());
+                Some(event)
+            },
+            &geo_index,
+            request,
+        );
+        (results, cloned.get())
     }
 
     /// Query events based on filters (optimized with indices).
@@ -3183,6 +3345,13 @@ pub struct EventStoreConfig {
     /// Defaults to `false` (read-write owner). Set by Prime when it fails to
     /// acquire the exclusive data-dir lock because another process owns it.
     pub read_only: bool,
+
+    /// Flush file stem for Parquet storage. `None` keeps the default name.
+    pub parquet_file_namer: Option<FileNamer>,
+
+    /// Register the `entity_snapshots` projection. Defaults to `false`, so
+    /// server stores do not hold its state; embedded configs set it.
+    pub register_entity_snapshots: bool,
 }
 
 impl EventStoreConfig {
@@ -3311,23 +3480,7 @@ impl EventStoreConfig {
             .filter(|s| !s.is_empty())
             .or_else(|| data_dir.as_ref().map(|d| format!("{d}/wal")));
         let wal_enabled = wal_enabled_var.is_none_or(|v| v == "true");
-        // ALLSOURCE_CACHE_BYTES: parse decimal bytes. Unparseable
-        // input is logged and ignored rather than failing boot —
-        // the unbounded fallback is safe (worst case is the
-        // original pre-Step-3 behavior).
-        let cache_byte_budget =
-            cache_bytes_var
-                .filter(|s| !s.is_empty())
-                .and_then(|s| match s.parse::<u64>() {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        tracing::warn!(
-                            "ALLSOURCE_CACHE_BYTES={s:?} could not be parsed as u64: {e}; \
-                         cache budget disabled"
-                        );
-                        None
-                    }
-                });
+        let cache_byte_budget = parse_cache_byte_budget(cache_bytes_var);
         let compaction_config =
             CompactionConfig::from_env_vars(snapshot_interval_var, retention_system_days_var);
 
@@ -3375,6 +3528,25 @@ impl EventStoreConfig {
         };
         (config, mode)
     }
+}
+
+/// ALLSOURCE_CACHE_BYTES: decimal bytes. Unparseable input is logged and
+/// ignored rather than failing boot; the unbounded fallback is safe (worst case
+/// is the original pre-Step-3 behavior). Part of the eviction policy: its
+/// digest is frozen by `eviction_policy_unchanged`.
+fn parse_cache_byte_budget(cache_bytes_var: Option<String>) -> Option<u64> {
+    cache_bytes_var
+        .filter(|s| !s.is_empty())
+        .and_then(|s| match s.parse::<u64>() {
+            Ok(v) => Some(v),
+            Err(e) => {
+                tracing::warn!(
+                    "ALLSOURCE_CACHE_BYTES={s:?} could not be parsed as u64: {e}; \
+                     cache budget disabled"
+                );
+                None
+            }
+        })
 }
 
 fn positive_override(name: &str, value: Option<String>) -> Option<u64> {
@@ -3465,6 +3637,10 @@ mod archive_consistency_tests;
 #[cfg(test)]
 #[path = "store_version_index_reuse_tests.rs"]
 mod version_index_reuse_tests;
+
+#[cfg(test)]
+#[path = "store_tie_break_tests.rs"]
+mod tie_break_tests;
 
 #[cfg(test)]
 mod tests {
@@ -5051,9 +5227,8 @@ mod tests {
     fn test_projection_manager() {
         let store = EventStore::new();
         let manager = store.projection_manager();
-        // Built-in projections should be registered
-        let projections = manager.list_projections();
-        assert!(projections.len() >= 2); // entity_snapshots and event_counters
+        assert!(manager.get_projection("event_counters").is_some());
+        assert!(manager.get_projection("entity_snapshots").is_none());
     }
 
     #[test]

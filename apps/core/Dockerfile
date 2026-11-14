@@ -23,7 +23,8 @@ ARG CORE_DEPS_IMAGE=ghcr.io/all-source-os/allsource-core-community@sha256:735073
 # =============================================================================
 FROM rust:${RUST_VERSION}-alpine AS chef
 
-RUN apk add --no-cache musl-dev coreutils && \
+# make: tikv-jemalloc-sys builds jemalloc with it under the heap-profile feature.
+RUN apk add --no-cache musl-dev coreutils make && \
     timeout -k 15 240 cargo install cargo-chef --locked
 
 WORKDIR /app

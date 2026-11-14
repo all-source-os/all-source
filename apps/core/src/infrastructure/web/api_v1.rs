@@ -162,6 +162,39 @@ pub async fn serve_v1(
     cluster_manager: Option<Arc<ClusterManager>>,
     geo_replication: Option<Arc<GeoReplicationManager>>,
 ) -> anyhow::Result<()> {
+    let app = build_v1_router(
+        store,
+        auth_manager,
+        tenant_repo,
+        rate_limiter,
+        service_container,
+        role,
+        wal_shipper,
+        wal_receiver,
+        replication_port,
+        cluster_manager,
+        geo_replication,
+    )
+    .await;
+    gate.open(app);
+    Ok(())
+}
+
+/// The full v1 router with every layer `serve_v1` serves. The heap replay
+/// drives it in-process, so it must stay the exact production stack.
+pub async fn build_v1_router(
+    store: Arc<EventStore>,
+    auth_manager: Arc<AuthManager>,
+    tenant_repo: Arc<dyn TenantRepository>,
+    rate_limiter: Arc<RateLimiter>,
+    service_container: ServiceContainer,
+    role: NodeRole,
+    wal_shipper: Option<Arc<WalShipper>>,
+    wal_receiver: Option<Arc<WalReceiver>>,
+    replication_port: u16,
+    cluster_manager: Option<Arc<ClusterManager>>,
+    geo_replication: Option<Arc<GeoReplicationManager>>,
+) -> Router {
     let http_metrics = store.metrics();
     let app_state = AppState {
         store,
@@ -249,6 +282,11 @@ pub async fn serve_v1(
             post(activate_tenant_handler),
         )
         .route("/api/v1/tenants/{id}", delete(delete_tenant_handler));
+    #[cfg(all(feature = "heap-profile", target_os = "linux"))]
+    let app = app.route(
+        "/api/v1/admin/heap-profile",
+        get(super::heap_profile_api::heap_profile),
+    );
     let app = app
         // Audit endpoints (admin only)
         .route("/api/v1/audit/events", post(log_audit_event))
@@ -555,15 +593,12 @@ pub async fn serve_v1(
         }
     };
 
-    let app = app
-        .layer(middleware::from_fn(super::response_limit::bounded))
+    app.layer(middleware::from_fn(super::response_limit::bounded))
         .layer(middleware::from_fn_with_state(
             http_metrics,
             super::http_metrics::record,
         ))
-        .layer(super::response_limit::compression());
-    gate.open(app);
-    Ok(())
+        .layer(super::response_limit::compression())
 }
 
 /// Write paths that should be rejected when running as a follower.

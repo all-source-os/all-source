@@ -40,12 +40,13 @@ use serde_json::{Value, json};
 use super::{
     assertion::Assertion,
     error::{PrimeError, PrimeResult},
-    projections::{AdjacencyListProjection, NodeStateProjection},
+    projections::{AdjacencyListProjection, NodeStateProjection, charge},
 };
 use crate::{
     application::services::{projection::Projection, schema::CompatibilityMode},
     domain::entities::Event,
     error::Result,
+    infrastructure::memory::ledger::Tally,
 };
 
 /// Event type for kind registration.
@@ -462,6 +463,11 @@ pub struct SchemaProjection {
     name: String,
     kinds: Arc<DashMap<KindKey, SchemaEntry>>,
     enforcement: Arc<DashMap<String, (DateTime<Utc>, EnforcementMode)>>,
+    charge: Tally,
+}
+
+fn kind_bytes(entry: &SchemaEntry) -> u64 {
+    charge::text(&entry.tenant) + charge::text(&entry.type_name) + charge::json(&entry.schema)
 }
 
 impl SchemaProjection {
@@ -470,11 +476,32 @@ impl SchemaProjection {
             name: name.into(),
             kinds: Arc::new(DashMap::new()),
             enforcement: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    fn store_kind(&self, key: KindKey, entry: SchemaEntry) {
+        let owned = kind_bytes(&entry);
+        match self.kinds.insert(key, entry) {
+            Some(old) => self.charge.adjust(kind_bytes(&old), owned),
+            None => self
+                .charge
+                .add(charge::entry::<KindKey, SchemaEntry>(owned)),
+        }
+    }
+
+    fn set_enforcement(&self, tenant: String, value: (DateTime<Utc>, EnforcementMode)) {
+        let key_bytes = charge::text(&tenant);
+        if self.enforcement.insert(tenant, value).is_none() {
+            self.charge
+                .add(charge::entry::<String, (DateTime<Utc>, EnforcementMode)>(
+                    key_bytes,
+                ));
         }
     }
 
     fn insert(&self, tenant: &str, kind: SchemaKind, type_name: &str, schema: Value, version: u32) {
-        self.kinds.insert(
+        self.store_kind(
             (tenant.to_string(), kind, type_name.to_string()),
             SchemaEntry {
                 type_name: type_name.to_string(),
@@ -942,7 +969,7 @@ impl Projection for SchemaProjection {
                     .get(tenant)
                     .is_none_or(|e| at >= e.value().0);
                 if newer {
-                    self.enforcement.insert(tenant.to_string(), (at, mode));
+                    self.set_enforcement(tenant.to_string(), (at, mode));
                 }
             }
             _ => {}
@@ -957,6 +984,7 @@ impl Projection for SchemaProjection {
     fn clear(&self) {
         self.kinds.clear();
         self.enforcement.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -989,13 +1017,13 @@ impl Projection for SchemaProjection {
         };
         self.clear();
         for entry in snap.kinds {
-            self.kinds.insert(
+            self.store_kind(
                 (entry.tenant.clone(), entry.kind, entry.type_name.clone()),
                 entry,
             );
         }
         for e in snap.enforcement {
-            self.enforcement.insert(e.tenant, (e.at, e.mode));
+            self.set_enforcement(e.tenant, (e.at, e.mode));
         }
         Ok(())
     }

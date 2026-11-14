@@ -8,16 +8,26 @@ use dashmap::DashMap;
 use serde_json::Value;
 use std::{collections::HashSet, sync::Arc};
 
+use super::charge;
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
-    prime::types::event_types,
+    infrastructure::memory::ledger::Tally, prime::types::event_types,
 };
+
+fn id_slot_bytes(id: &str) -> u64 {
+    charge::entry::<String, ()>(charge::text(id))
+}
+
+fn ids_bytes(ids: &HashSet<String>) -> u64 {
+    ids.iter().map(|id| id_slot_bytes(id)).sum()
+}
 
 /// Projection that indexes nodes by type for O(1) type-scoped queries.
 pub struct NodeTypeIndexProjection {
     name: String,
     /// node_type -> set of entity_ids
     index: Arc<DashMap<String, HashSet<String>>>,
+    charge: Tally,
 }
 
 impl NodeTypeIndexProjection {
@@ -25,6 +35,34 @@ impl NodeTypeIndexProjection {
         Self {
             name: name.into(),
             index: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    fn insert_id(&self, node_type: String, entity_id: String) {
+        let key_bytes = charge::text(&node_type);
+        let is_new_key = !self.index.contains_key(&node_type);
+        let slot = id_slot_bytes(&entity_id);
+        let inserted = self.index.entry(node_type).or_default().insert(entity_id);
+        if inserted {
+            self.charge.add(slot);
+        }
+        if is_new_key {
+            self.charge
+                .add(charge::entry::<String, HashSet<String>>(key_bytes));
+        }
+    }
+
+    fn store_ids(&self, node_type: String, ids: HashSet<String>) {
+        let key_bytes = charge::text(&node_type);
+        let owned = key_bytes + ids_bytes(&ids);
+        match self.index.insert(node_type, ids) {
+            Some(old) => {
+                self.charge.adjust(key_bytes + ids_bytes(&old), owned);
+            }
+            None => self
+                .charge
+                .add(charge::entry::<String, HashSet<String>>(owned)),
         }
     }
 
@@ -68,7 +106,7 @@ impl Projection for NodeTypeIndexProjection {
                     .unwrap_or("unknown")
                     .to_string();
 
-                self.index.entry(node_type).or_default().insert(entity_id);
+                self.insert_id(node_type, entity_id);
             }
             event_types::NODE_DELETED => {
                 // Extract type from entity_id format "node:{type}:{id}"
@@ -76,8 +114,9 @@ impl Projection for NodeTypeIndexProjection {
                     .split(':')
                     .nth(1)
                     .and_then(|node_type| self.index.get_mut(node_type))
+                    && set.remove(&entity_id)
                 {
-                    set.remove(&entity_id);
+                    self.charge.sub(id_slot_bytes(&entity_id));
                 }
             }
             _ => {}
@@ -95,6 +134,7 @@ impl Projection for NodeTypeIndexProjection {
 
     fn clear(&self) {
         self.index.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -112,9 +152,9 @@ impl Projection for NodeTypeIndexProjection {
     fn restore(&self, snapshot: &Value) -> Result<()> {
         let entries: Vec<(String, Vec<String>)> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
-        self.index.clear();
+        self.clear();
         for (key, ids) in entries {
-            self.index.insert(key, ids.into_iter().collect());
+            self.store_ids(key, ids.into_iter().collect());
         }
         Ok(())
     }

@@ -25,7 +25,7 @@ use allsource_core::{
     },
     infrastructure::repositories::InMemoryTenantRepository,
     rate_limit::{RateLimitConfig, RateLimiter},
-    store::EventStore,
+    store::{EventStore, EventStoreConfig},
 };
 use serde_json::json;
 use std::{sync::Arc, thread};
@@ -387,7 +387,10 @@ fn test_embedded_concurrent_operations() {
 
 #[test]
 fn test_embedded_projection_manager() {
-    let store = EventStore::new();
+    let store = EventStore::with_config(EventStoreConfig {
+        register_entity_snapshots: true,
+        ..EventStoreConfig::default()
+    });
 
     // Ingest some events
     for i in 0..5 {

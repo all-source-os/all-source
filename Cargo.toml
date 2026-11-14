@@ -37,6 +37,9 @@ exclude = [
     # pull apps/core into a tooling build — see
     # docs/runbooks/SEO_EVIDENCE_SETUP.md.
     "tooling/seo-evidence",
+    # Core heap-replay evaluators. Own Cargo.lock so autoresearch candidates,
+    # which may not touch a manifest or lock, never change its dependencies.
+    "tooling/core-heap-replay",
 ]
 
 [workspace.dependencies]
@@ -181,4 +184,13 @@ strip = true
 inherits = "release"
 debug = true
 split-debuginfo = "unpacked"
+strip = false
+
+# Heap replay evaluator builds: release codegen without fat LTO so two builds fit
+# the 270 s evaluator deadline; line tables let jemalloc profiles symbolize.
+[profile.heap-replay]
+inherits = "release"
+codegen-units = 16
+debug = "line-tables-only"
+lto = false
 strip = false

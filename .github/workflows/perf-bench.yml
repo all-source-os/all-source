@@ -298,7 +298,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
-          shared-key: iai-perf-${{ matrix.package }}${{ matrix.package == 'allsource-prime' && '-phased-v2' || '' }}
+          shared-key: iai-perf-${{ matrix.package }}${{ matrix.package == 'allsource-prime' && '-phased-v3' || '' }}
+          # ort-sys links the onnxruntime it downloaded into this directory. A
+          # restored target/ without it fails: "could not find native static
+          # library `onnxruntime`".
+          cache-directories: ${{ matrix.package == 'allsource-prime' && '~/.cache/ort.pyke.io' || '' }}
           cache-on-failure: true
 
       # iai-callgrind needs its companion runner binary on PATH; without it the

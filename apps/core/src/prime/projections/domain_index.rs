@@ -7,21 +7,28 @@ use dashmap::DashMap;
 use serde_json::Value;
 use std::sync::Arc;
 
+use super::charge;
 use crate::{
     application::services::projection::Projection,
     domain::entities::Event,
     error::Result,
+    infrastructure::memory::ledger::Tally,
     prime::types::{NodeId, event_types},
 };
 
 /// Projection name constant.
 pub const PROJ_DOMAIN_INDEX: &str = "prime.domain_index";
 
+fn node_slot(id: &NodeId) -> u64 {
+    std::mem::size_of::<NodeId>() as u64 + charge::text(&id.0)
+}
+
 /// Maps domain names → node IDs that belong to each domain.
 pub struct DomainIndexProjection {
     name: String,
     /// domain -> list of node IDs
     index: Arc<DashMap<String, Vec<NodeId>>>,
+    charge: Tally,
 }
 
 impl DomainIndexProjection {
@@ -29,6 +36,18 @@ impl DomainIndexProjection {
         Self {
             name: PROJ_DOMAIN_INDEX.to_string(),
             index: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    fn store(&self, domain: String, nodes: Vec<NodeId>) {
+        let key_bytes = charge::text(&domain);
+        let owned = key_bytes + nodes.iter().map(node_slot).sum::<u64>();
+        match self.index.insert(domain, nodes) {
+            Some(old) => self
+                .charge
+                .adjust(key_bytes + old.iter().map(node_slot).sum::<u64>(), owned),
+            None => self.charge.add(charge::entry::<String, Vec<NodeId>>(owned)),
         }
     }
 
@@ -92,15 +111,26 @@ impl Projection for DomainIndexProjection {
                     .or_else(|| event.payload.get("node_id").and_then(Value::as_str));
                 if let (Some(domain), Some(node_id_str)) = (domain, node_id_str) {
                     let node_id = NodeId::new(node_id_str);
+                    let is_new_domain = !self.index.contains_key(domain);
+                    let slot = node_slot(&node_id);
+                    let mut pushed = false;
 
                     self.index
                         .entry(domain.to_string())
                         .and_modify(|nodes| {
                             if !nodes.contains(&node_id) {
                                 nodes.push(node_id.clone());
+                                pushed = true;
                             }
                         })
                         .or_insert_with(|| vec![node_id]);
+                    if is_new_domain {
+                        self.charge.add(charge::entry::<String, Vec<NodeId>>(
+                            charge::text(domain) + slot,
+                        ));
+                    } else if pushed {
+                        self.charge.add(slot);
+                    }
                 }
             }
             event_types::NODE_DELETED => {
@@ -114,12 +144,26 @@ impl Projection for DomainIndexProjection {
                     .or_else(|| event.payload.get("node_id").and_then(Value::as_str));
                 if let Some(node_id) = node_id {
                     let target = NodeId::new(node_id);
+                    let mut released = 0;
                     // Remove from all domains (node may have changed domain)
                     for mut entry in self.index.iter_mut() {
-                        entry.value_mut().retain(|id| id != &target);
+                        entry.value_mut().retain(|id| {
+                            let keep = id != &target;
+                            if !keep {
+                                released += node_slot(id);
+                            }
+                            keep
+                        });
                     }
                     // Remove empty domain entries
-                    self.index.retain(|_, nodes| !nodes.is_empty());
+                    self.index.retain(|domain, nodes| {
+                        let keep = !nodes.is_empty();
+                        if !keep {
+                            released += charge::entry::<String, Vec<NodeId>>(charge::text(domain));
+                        }
+                        keep
+                    });
+                    self.charge.sub(released);
                 }
             }
             _ => {}
@@ -137,6 +181,7 @@ impl Projection for DomainIndexProjection {
 
     fn clear(&self) {
         self.index.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -157,10 +202,9 @@ impl Projection for DomainIndexProjection {
         if let Ok(data) = serde_json::from_value::<std::collections::HashMap<String, Vec<String>>>(
             snapshot.clone(),
         ) {
-            self.index.clear();
+            self.clear();
             for (domain, ids) in data {
-                self.index
-                    .insert(domain, ids.into_iter().map(NodeId::new).collect());
+                self.store(domain, ids.into_iter().map(NodeId::new).collect());
             }
         }
         Ok(())

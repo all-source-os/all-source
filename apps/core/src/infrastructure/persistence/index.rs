@@ -1,10 +1,20 @@
 use crate::{
     domain::entities::Event,
     error::Result,
-    infrastructure::observability::heap::{StructureSize, hash_entry_bytes},
+    infrastructure::{
+        hash_state::{FastDashMap, fast_dashmap},
+        memory::ledger::{Owner, Tally},
+        observability::heap::{StructureSize, hash_entry_bytes},
+    },
 };
-use dashmap::DashMap;
-use std::{mem::size_of, sync::Arc};
+use dashmap::mapref::entry::Entry;
+use std::{
+    mem::size_of,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 use uuid::Uuid;
 
 /// Valid-time interval of an indexed event. `from` is the effective start
@@ -36,25 +46,42 @@ pub struct IndexEntry {
 /// High-performance concurrent index for fast event lookups
 pub struct EventIndex {
     /// Index by entity_id -> list of event entries
-    entity_index: Arc<DashMap<String, Vec<IndexEntry>>>,
+    entity_index: Arc<FastDashMap<String, Vec<IndexEntry>>>,
 
     /// Index by event_type -> list of event entries
-    type_index: Arc<DashMap<String, Vec<IndexEntry>>>,
+    type_index: Arc<FastDashMap<String, Vec<IndexEntry>>>,
 
     /// Index by event_id -> offset (for direct lookups)
-    id_index: Arc<DashMap<Uuid, usize>>,
+    id_index: Arc<FastDashMap<Uuid, usize>>,
 
     /// Total indexed events
     total_events: parking_lot::RwLock<usize>,
+
+    entity_entries: Tally,
+    entity_table: Tally,
+    entity_slots: AtomicUsize,
+    type_entries: Tally,
+    type_table: Tally,
+    type_slots: AtomicUsize,
+    id_table: Tally,
+    id_slots: AtomicUsize,
 }
 
 impl EventIndex {
     pub fn new() -> Self {
         Self {
-            entity_index: Arc::new(DashMap::new()),
-            type_index: Arc::new(DashMap::new()),
-            id_index: Arc::new(DashMap::new()),
+            entity_index: Arc::new(fast_dashmap()),
+            type_index: Arc::new(fast_dashmap()),
+            id_index: Arc::new(fast_dashmap()),
             total_events: parking_lot::RwLock::new(0),
+            entity_entries: Tally::new(Owner::IndexEntity),
+            entity_table: Tally::new(Owner::IndexEntity),
+            entity_slots: AtomicUsize::new(0),
+            type_entries: Tally::new(Owner::IndexType),
+            type_table: Tally::new(Owner::IndexType),
+            type_slots: AtomicUsize::new(0),
+            id_table: Tally::new(Owner::IndexId),
+            id_slots: AtomicUsize::new(0),
         }
     }
 
@@ -76,22 +103,40 @@ impl EventIndex {
             valid,
         };
 
-        // Index by entity_id
-        self.entity_index
-            .entry(entity_id.to_string())
-            .or_default()
-            .push(entry.clone());
+        let entity_new = push_entry(
+            &self.entity_index,
+            &self.entity_entries,
+            entity_id,
+            entry.clone(),
+        );
+        if entity_new {
+            charge_table(
+                &self.entity_index,
+                &self.entity_table,
+                &self.entity_slots,
+                size_of::<(String, Vec<IndexEntry>)>(),
+            );
+        }
 
-        // Index by event_type
-        self.type_index
-            .entry(event_type.to_string())
-            .or_default()
-            .push(entry.clone());
+        let type_new = push_entry(&self.type_index, &self.type_entries, event_type, entry);
+        if type_new {
+            charge_table(
+                &self.type_index,
+                &self.type_table,
+                &self.type_slots,
+                size_of::<(String, Vec<IndexEntry>)>(),
+            );
+        }
 
-        // Index by event_id
-        self.id_index.insert(event_id, offset);
+        if self.id_index.insert(event_id, offset).is_none() {
+            charge_table(
+                &self.id_index,
+                &self.id_table,
+                &self.id_slots,
+                size_of::<(Uuid, usize)>(),
+            );
+        }
 
-        // Increment total
         let mut total = self.total_events.write();
         *total += 1;
 
@@ -104,6 +149,13 @@ impl EventIndex {
         self.entity_index
             .get(entity_id)
             .map(|entries| entries.clone())
+    }
+
+    /// Allocated slots of one entity's offset vector, 0 when the key is absent.
+    pub fn entity_capacity(&self, entity_id: &str) -> usize {
+        self.entity_index
+            .get(entity_id)
+            .map_or(0, |entries| entries.capacity())
     }
 
     /// Refuse an oversized entity before allocating its offset vector.
@@ -171,7 +223,7 @@ impl EventIndex {
     /// Estimated resident size of each of the three maps. Walks every key, one
     /// shard lock at a time, so it belongs on a slow timer.
     pub fn resident_structures(&self) -> [StructureSize; 3] {
-        let list_map = |name, map: &DashMap<String, Vec<IndexEntry>>| {
+        let list_map = |name, map: &FastDashMap<String, Vec<IndexEntry>>| {
             let bytes: usize = map
                 .iter()
                 .map(|item| {
@@ -199,13 +251,57 @@ impl EventIndex {
     }
 
     /// Clear all indices (useful for testing)
+    ///
+    /// The maps keep their tables, so only the owned key and offset-vector
+    /// bytes are released. The table charge stays until the index is dropped.
     pub fn clear(&self) {
         self.entity_index.clear();
+        self.entity_entries.take();
         self.type_index.clear();
+        self.type_entries.take();
         self.id_index.clear();
         let mut total = self.total_events.write();
         *total = 0;
     }
+}
+
+/// Push onto `key`'s offset vector and charge the owned bytes. Returns whether
+/// the key was new, which is when the caller re-reads the table.
+fn push_entry(
+    map: &FastDashMap<String, Vec<IndexEntry>>,
+    entries: &Tally,
+    key: &str,
+    entry: IndexEntry,
+) -> bool {
+    match map.entry(key.to_string()) {
+        Entry::Occupied(mut occupied) => {
+            let vec = occupied.get_mut();
+            let before = vec.capacity();
+            vec.push(entry);
+            entries.grow(before, vec.capacity(), size_of::<IndexEntry>());
+            false
+        }
+        Entry::Vacant(vacant) => {
+            let key_bytes = vacant.key().len() as u64;
+            let vec = vacant.insert(vec![entry]);
+            entries.add(key_bytes + (vec.capacity() * size_of::<IndexEntry>()) as u64);
+            true
+        }
+    }
+}
+
+/// Charge the table growth since the last read. Called after a new key is
+/// inserted and the entry guard is dropped, because reading the capacity takes
+/// every shard lock.
+fn charge_table<K: Eq + std::hash::Hash, V>(
+    map: &FastDashMap<K, V>,
+    table: &Tally,
+    slots: &AtomicUsize,
+    slot_bytes: usize,
+) {
+    let now = map.capacity();
+    let before = slots.swap(now, Ordering::Relaxed);
+    table.grow(before, now, slot_bytes);
 }
 
 impl Default for EventIndex {

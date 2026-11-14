@@ -8,18 +8,19 @@ use super::{
     archive_output::{
         ArchiveOutput, PublishedPart, pending_marker, pending_part, recover_pending_outputs,
     },
+    event_codec::{
+        self, ENTITY_ID_COLUMN, VALID_FROM_COLUMN, VALID_TO_COLUMN, VERSION_COLUMN, event_schema,
+    },
     version_manifest::{ResolvedVersion, VersionManifest},
 };
 use crate::{
     domain::entities::Event,
     error::{AllSourceError, Result},
+    infrastructure::memory::ledger::{Owner, Tally},
 };
 use arrow::{
-    array::{
-        Array, ArrayRef, StringBuilder, TimestampMicrosecondArray, TimestampMicrosecondBuilder,
-        UInt64Builder,
-    },
-    datatypes::{DataType, Field, Schema, TimeUnit},
+    array::{Array, TimestampMicrosecondArray},
+    datatypes::Schema,
     record_batch::RecordBatch,
 };
 use std::{
@@ -82,29 +83,31 @@ fn valid_time_at(
     }
 }
 
-/// Position of `entity_id` in the event schema. All fields are flat
-/// primitives, so this is both the field index and the Parquet leaf index.
-const ENTITY_ID_COLUMN: usize = 2;
-
-/// Position of `payload` in the event schema. See [`ENTITY_ID_COLUMN`].
-const PAYLOAD_COLUMN: usize = 3;
-
-/// Position of `metadata` in the event schema. See [`ENTITY_ID_COLUMN`].
-const METADATA_COLUMN: usize = 5;
-
-/// Position of `version` in the event schema. See [`ENTITY_ID_COLUMN`].
-const VERSION_COLUMN: usize = 6;
-
-/// Nullable valid-time columns, resolved by name on read. Null or absent means
-/// the event's valid time is its record time (`timestamp`) and open-ended.
-const VALID_FROM_COLUMN: &str = "valid_from";
-const VALID_TO_COLUMN: &str = "valid_to";
-
 /// Default batch size for Parquet writes (10,000 events as per US-023)
 pub const DEFAULT_BATCH_SIZE: usize = 10_000;
 
 /// Default flush timeout in milliseconds
 pub const DEFAULT_FLUSH_TIMEOUT_MS: u64 = 5_000;
+
+/// Names a flushed archive file's stem from its tenant and flush time. The
+/// archive output still appends its own unique suffix, so the stem only has to
+/// order files; the heap replay supplies one so flush order is reproducible.
+#[derive(Clone)]
+pub struct FileNamer(Arc<dyn Fn(&str, chrono::DateTime<chrono::Utc>) -> String + Send + Sync>);
+
+impl FileNamer {
+    pub fn new(
+        name: impl Fn(&str, chrono::DateTime<chrono::Utc>) -> String + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(name))
+    }
+}
+
+impl std::fmt::Debug for FileNamer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("FileNamer")
+    }
+}
 
 /// Configuration for ParquetStorage batch processing
 #[derive(Debug, Clone)]
@@ -115,6 +118,8 @@ pub struct ParquetStorageConfig {
     pub flush_timeout: Duration,
     /// Compression codec for Parquet files
     pub compression: parquet::basic::Compression,
+    /// Flush file stem; `None` names files `events-<time>-<uuid>`.
+    pub file_namer: Option<FileNamer>,
 }
 
 impl Default for ParquetStorageConfig {
@@ -123,6 +128,7 @@ impl Default for ParquetStorageConfig {
             batch_size: DEFAULT_BATCH_SIZE,
             flush_timeout: Duration::from_millis(DEFAULT_FLUSH_TIMEOUT_MS),
             compression: parquet::basic::Compression::SNAPPY,
+            file_namer: None,
         }
     }
 }
@@ -134,6 +140,7 @@ impl ParquetStorageConfig {
             batch_size: 50_000,
             flush_timeout: Duration::from_secs(10),
             compression: parquet::basic::Compression::SNAPPY,
+            file_namer: None,
         }
     }
 
@@ -143,6 +150,7 @@ impl ParquetStorageConfig {
             batch_size: 1_000,
             flush_timeout: Duration::from_secs(1),
             compression: parquet::basic::Compression::SNAPPY,
+            file_namer: None,
         }
     }
 }
@@ -202,6 +210,8 @@ pub struct ParquetStorage {
     /// flush takes ownership of a tenant's batch via remove() and writes
     /// after the lock is released.
     current_batches: Mutex<HashMap<String, Vec<Event>>>,
+    /// Heap of the batched events until their flush succeeds (`storage.pending`).
+    pending: Tally,
 
     /// Configuration
     config: ParquetStorageConfig,
@@ -251,37 +261,12 @@ impl ParquetStorage {
             AllSourceError::StorageError(format!("Failed to create storage directory: {e}"))
         })?;
 
-        // Define Arrow schema for events.
-        // ENTITY_ID_COLUMN / VERSION_COLUMN index into this field order.
-        // valid_from / valid_to are appended last and read by name, so files
-        // written before they existed still load.
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("event_id", DataType::Utf8, false),
-            Field::new("event_type", DataType::Utf8, false),
-            Field::new("entity_id", DataType::Utf8, false),
-            Field::new("payload", DataType::Utf8, false),
-            Field::new(
-                "timestamp",
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                false,
-            ),
-            Field::new("metadata", DataType::Utf8, true),
-            Field::new("version", DataType::UInt64, false),
-            Field::new(
-                VALID_FROM_COLUMN,
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                true,
-            ),
-            Field::new(
-                VALID_TO_COLUMN,
-                DataType::Timestamp(TimeUnit::Microsecond, None),
-                true,
-            ),
-        ]));
+        let schema = event_schema();
 
         let storage = Self {
             storage_dir,
             current_batches: Mutex::new(HashMap::new()),
+            pending: Tally::new(Owner::StoragePending),
             config,
             schema,
             last_flush_time: Mutex::new(Instant::now()),
@@ -335,6 +320,7 @@ impl ParquetStorage {
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn append_event(&self, event: Event) -> Result<()> {
         let tenant = event.tenant_id_str().to_string();
+        self.pending.add(event.resident_bytes());
         let should_flush_tenant = {
             let mut batches = self.current_batches.lock().unwrap();
             let entry = batches.entry(tenant.clone()).or_default();
@@ -364,6 +350,7 @@ impl ParquetStorage {
         // one extend per tenant, decide which tenants are over threshold.
         let mut grouped: HashMap<String, Vec<Event>> = HashMap::new();
         for event in events {
+            self.pending.add(event.resident_bytes());
             grouped
                 .entry(event.tenant_id_str().to_string())
                 .or_default()
@@ -500,6 +487,8 @@ impl ParquetStorage {
         };
 
         let duration = start.elapsed();
+        self.pending
+            .sub(events_to_write.iter().map(Event::resident_bytes).sum());
 
         // Only after the events are durable. A manifest naming a file whose
         // write failed would authorise a version nothing on disk supports;
@@ -558,11 +547,14 @@ impl ParquetStorage {
                 partition_dir.display()
             ))
         })?;
-        let file_stem = format!(
-            "events-{}-{}",
-            now.format("%Y%m%d-%H%M%S%3f"),
-            uuid::Uuid::new_v4().as_simple()
-        );
+        let file_stem = match &self.config.file_namer {
+            Some(FileNamer(name)) => name(tenant_id, now),
+            None => format!(
+                "events-{}-{}",
+                now.format("%Y%m%d-%H%M%S%3f"),
+                uuid::Uuid::new_v4().as_simple()
+            ),
+        };
 
         tracing::info!(
             "Flushing {} events for tenant={} to {}/{}.parquet",
@@ -881,55 +873,8 @@ impl ParquetStorage {
         self.config.flush_timeout
     }
 
-    /// Convert events to Arrow RecordBatch
-    #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn events_to_record_batch(&self, events: &[Event]) -> Result<RecordBatch> {
-        let mut event_id_builder = StringBuilder::new();
-        let mut event_type_builder = StringBuilder::new();
-        let mut entity_id_builder = StringBuilder::new();
-        let mut payload_builder = StringBuilder::new();
-        let mut timestamp_builder = TimestampMicrosecondBuilder::new();
-        let mut metadata_builder = StringBuilder::new();
-        let mut version_builder = UInt64Builder::new();
-        let mut valid_from_builder = TimestampMicrosecondBuilder::new();
-        let mut valid_to_builder = TimestampMicrosecondBuilder::new();
-
-        for event in events {
-            event_id_builder.append_value(event.id.to_string());
-            event_type_builder.append_value(event.event_type_str());
-            entity_id_builder.append_value(event.entity_id_str());
-            payload_builder.append_value(serde_json::to_string(&event.payload)?);
-
-            // Convert timestamp to microseconds
-            let timestamp_micros = event.timestamp.timestamp_micros();
-            timestamp_builder.append_value(timestamp_micros);
-
-            if let Some(ref metadata) = event.metadata {
-                metadata_builder.append_value(serde_json::to_string(metadata)?);
-            } else {
-                metadata_builder.append_null();
-            }
-
-            version_builder.append_value(event.version as u64);
-            valid_from_builder.append_option(event.valid_from.map(|t| t.timestamp_micros()));
-            valid_to_builder.append_option(event.valid_to.map(|t| t.timestamp_micros()));
-        }
-
-        let arrays: Vec<ArrayRef> = vec![
-            Arc::new(event_id_builder.finish()),
-            Arc::new(event_type_builder.finish()),
-            Arc::new(entity_id_builder.finish()),
-            Arc::new(payload_builder.finish()),
-            Arc::new(timestamp_builder.finish()),
-            Arc::new(metadata_builder.finish()),
-            Arc::new(version_builder.finish()),
-            Arc::new(valid_from_builder.finish()),
-            Arc::new(valid_to_builder.finish()),
-        ];
-
-        let record_batch = RecordBatch::try_new(self.schema.clone(), arrays)?;
-
-        Ok(record_batch)
+        event_codec::events_to_record_batch(&self.schema, events)
     }
 
     /// Load events from all Parquet files under the storage directory.
@@ -1156,6 +1101,8 @@ impl ParquetStorage {
     /// caller passes the value derived from the file path.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn record_batch_to_events(&self, batch: &RecordBatch, tenant_id: &str) -> Result<Vec<Event>> {
+        crate::infrastructure::memory::ledger::resident()
+            .record_rows_decoded(batch.num_rows() as u64);
         let event_ids = batch
             .column(0)
             .as_any()
@@ -2033,6 +1980,7 @@ pub struct StorageStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arrow::datatypes::{DataType, Field, TimeUnit};
     use serde_json::json;
     use std::sync::Arc;
     use tempfile::TempDir;
@@ -2191,6 +2139,7 @@ mod tests {
             batch_size: 5_000,
             flush_timeout: Duration::from_secs(2),
             compression: parquet::basic::Compression::SNAPPY,
+            file_namer: None,
         };
         let storage = ParquetStorage::with_config(temp_dir.path(), config).unwrap();
 
