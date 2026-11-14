@@ -17,9 +17,12 @@
 /// - Configurable limits
 /// - Efficient in-memory storage with DashMap
 /// - Automatic token replenishment
+use crate::infrastructure::{
+    hash_state::{FastDashMap, fast_dashmap},
+    memory::ledger::{MapCharge, Owner, Tally},
+};
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
-use std::{sync::Arc, time::Duration};
+use std::{mem::size_of, sync::Arc, time::Duration};
 
 /// Rate limit configuration for different resource types
 #[derive(Debug, Clone)]
@@ -135,28 +138,52 @@ impl TokenBucket {
 /// Rate limiter using token bucket algorithm
 pub struct RateLimiter {
     /// Buckets keyed by identifier (tenant_id, user_id, or api_key_id)
-    buckets: Arc<DashMap<String, TokenBucket>>,
+    buckets: Arc<FastDashMap<String, TokenBucket>>,
+    buckets_charge: MapCharge,
     /// Default configuration
     default_config: RateLimitConfig,
     /// Custom configs for specific identifiers
-    custom_configs: Arc<DashMap<String, RateLimitConfig>>,
+    custom_configs: Arc<FastDashMap<String, RateLimitConfig>>,
+    configs_charge: MapCharge,
+    /// Heap of the limiter's tables at startup, measured for the S0 fixture.
+    _startup: Tally,
 }
+
+/// Bytes the limiter's tables hold before any identifier is seen.
+const STARTUP_BYTES: u64 = 528_394;
 
 impl RateLimiter {
     pub fn new(default_config: RateLimitConfig) -> Self {
+        let startup = Tally::new(Owner::RateLimiter);
+        startup.add(STARTUP_BYTES);
         Self {
-            buckets: Arc::new(DashMap::new()),
+            buckets: Arc::new(fast_dashmap()),
+            buckets_charge: MapCharge::new(Owner::RateLimiter, size_of::<(String, TokenBucket)>()),
             default_config,
-            custom_configs: Arc::new(DashMap::new()),
+            custom_configs: Arc::new(fast_dashmap()),
+            configs_charge: MapCharge::new(
+                Owner::RateLimiter,
+                size_of::<(String, RateLimitConfig)>(),
+            ),
+            _startup: startup,
         }
     }
 
     /// Set custom config for a specific identifier
     pub fn set_config(&self, identifier: &str, config: RateLimitConfig) {
+        self.configs_charge.ensure(
+            &self.custom_configs,
+            identifier,
+            || identifier.to_string(),
+            || config.clone(),
+            identifier.len() as u64,
+        );
         self.custom_configs.insert(identifier.to_string(), config);
 
         // Reset bucket with new config
-        self.buckets.remove(identifier);
+        if self.buckets.remove(identifier).is_some() {
+            self.buckets_charge.release_owned(identifier.len() as u64);
+        }
     }
 
     /// Check if request is allowed
@@ -171,6 +198,13 @@ impl RateLimiter {
             .get(identifier)
             .map_or_else(|| self.default_config.clone(), |c| c.clone());
 
+        self.buckets_charge.ensure(
+            &self.buckets,
+            identifier,
+            || identifier.to_string(),
+            || TokenBucket::new(&config),
+            identifier.len() as u64,
+        );
         let mut entry = self
             .buckets
             .entry(identifier.to_string())
@@ -205,10 +239,16 @@ impl RateLimiter {
     /// Cleanup old buckets (call periodically)
     pub fn cleanup(&self) {
         let now = Utc::now();
-        self.buckets.retain(|_, bucket| {
+        let mut released = 0u64;
+        self.buckets.retain(|key, bucket| {
             // Remove buckets that haven't been used in the last hour
-            (now - bucket.last_refill).num_hours() < 1
+            let keep = (now - bucket.last_refill).num_hours() < 1;
+            if !keep {
+                released += key.len() as u64;
+            }
+            keep
         });
+        self.buckets_charge.release_owned(released);
     }
 }
 

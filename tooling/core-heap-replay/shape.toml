@@ -1,0 +1,17 @@
+# Fixture shape for the heap replay. Numbers only: no tenant names, no payload text.
+# Counts are the hydrated-tenant event counts observed in production (design, Resident events).
+
+seed = 20251101
+
+[tenants]
+counts = [201785, 16840, 5484, 3447, 1662, 28]
+
+[payload]
+mean_bytes = 3892
+sigma_milli = 900
+
+[ingest]
+events = 2000
+
+[entities]
+events_per_entity = 50

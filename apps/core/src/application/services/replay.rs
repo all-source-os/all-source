@@ -2,14 +2,18 @@ use crate::{
     application::{dto::QueryEventsRequest, services::projection::Projection},
     domain::entities::Event,
     error::{AllSourceError, Result},
+    infrastructure::memory::ledger::{Owner, Tally, option_string_heap},
     store::EventStore,
 };
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+use std::{
+    mem::size_of,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
 };
 use uuid::Uuid;
 
@@ -111,6 +115,23 @@ pub struct ReplayProgress {
 pub struct ReplayManager {
     /// Active replay operations
     replays: Arc<RwLock<Vec<ReplayState>>>,
+    /// The history vector's buffer and each state's owned heap.
+    replays_charge: Tally,
+}
+
+/// Heap of one `Arc` allocation holding a `T`: the value and the two counts.
+const fn arc_bytes<T>() -> u64 {
+    (size_of::<T>() + 2 * size_of::<usize>()) as u64
+}
+
+/// Owned heap of a replay state: its projection name and its shared cells.
+fn replay_heap(state: &ReplayState) -> u64 {
+    option_string_heap(&state.projection_name)
+        + arc_bytes::<RwLock<ReplayStatus>>()
+        + arc_bytes::<RwLock<Option<DateTime<Utc>>>>()
+        + 2 * arc_bytes::<AtomicU64>()
+        + arc_bytes::<RwLock<Option<String>>>()
+        + arc_bytes::<AtomicBool>()
 }
 
 /// Internal state for a replay operation
@@ -131,6 +152,7 @@ impl ReplayManager {
     pub fn new() -> Self {
         Self {
             replays: Arc::new(RwLock::new(Vec::new())),
+            replays_charge: Tally::new(Owner::Misc),
         }
     }
 
@@ -190,7 +212,14 @@ impl ReplayManager {
         };
 
         // Store replay state
-        self.replays.write().push(state);
+        {
+            let mut replays = self.replays.write();
+            let before = replays.capacity();
+            self.replays_charge.add(replay_heap(&state));
+            replays.push(state);
+            self.replays_charge
+                .grow(before, replays.capacity(), size_of::<ReplayState>());
+        }
 
         // Get the state references we need
         let replays = Arc::clone(&self.replays);
@@ -446,7 +475,8 @@ impl ReplayManager {
             ));
         }
 
-        replays.remove(idx);
+        let removed = replays.remove(idx);
+        self.replays_charge.sub(replay_heap(&removed));
         tracing::info!("🗑️  Deleted replay {}", replay_id);
 
         Ok(true)

@@ -1,4 +1,5 @@
 use super::heap::StructureSize;
+use crate::infrastructure::memory::ledger::{Owner, ResidentLedger};
 use prometheus::{
     Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec, Opts,
     Registry,
@@ -14,6 +15,10 @@ use std::{
 };
 
 /// Centralized metrics registry for AllSource
+/// Heap the metrics registries of one store hold at startup, measured on the
+/// S0 fixture. Charged once per store, not per registry.
+pub const METRICS_STARTUP_BYTES: u64 = 524_480;
+
 pub struct MetricsRegistry {
     /// Prometheus registry
     registry: Registry,
@@ -129,6 +134,11 @@ pub struct MetricsRegistry {
     // interval — that's the metric to graph to verify Step 6's
     // bounded-replay invariant.
     pub wal_replay_events_total: IntGauge,
+
+    pub heap_unattributed_bytes: IntGauge,
+    pub ledger_owner_bytes: IntGaugeVec,
+    pub permanent_bytes: IntGauge,
+    pub rows_decoded_total: IntCounter,
 }
 
 impl MetricsRegistry {
@@ -469,6 +479,33 @@ impl MetricsRegistry {
         )
         .unwrap();
 
+        let heap_unattributed_bytes = IntGauge::with_opts(Opts::new(
+            "allsource_heap_unattributed_bytes",
+            "Live heap bytes minus the resident ledger total; negative when the ledger counts bytes that are no longer live",
+        ))
+        .unwrap();
+
+        let ledger_owner_bytes = IntGaugeVec::new(
+            Opts::new(
+                "allsource_core_ledger_owner_bytes",
+                "Resident heap bytes charged to each owner in the resident ledger",
+            ),
+            &["owner"],
+        )
+        .unwrap();
+
+        let permanent_bytes = IntGauge::with_opts(Opts::new(
+            "allsource_core_permanent_bytes",
+            "Resident heap bytes of owners that are never released",
+        ))
+        .unwrap();
+
+        let rows_decoded_total = IntCounter::with_opts(Opts::new(
+            "allsource_core_rows_decoded_total",
+            "Event rows decoded from Parquet files",
+        ))
+        .unwrap();
+
         // WAL replay metric (Step 6): size of last recovery.
         let wal_replay_events_total = IntGauge::with_opts(Opts::new(
             "allsource_core_wal_replay_events_total",
@@ -761,6 +798,18 @@ impl MetricsRegistry {
         registry
             .register(Box::new(wal_replay_events_total.clone()))
             .unwrap();
+        registry
+            .register(Box::new(heap_unattributed_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(ledger_owner_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(permanent_bytes.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(rows_decoded_total.clone()))
+            .unwrap();
 
         registry
             .register(Box::new(websocket_connections_active.clone()))
@@ -892,6 +941,10 @@ impl MetricsRegistry {
             resident_structure_entries,
             resident_structure_bytes,
             wal_replay_events_total,
+            heap_unattributed_bytes,
+            ledger_owner_bytes,
+            permanent_bytes,
+            rows_decoded_total,
         })
     }
 
@@ -928,6 +981,25 @@ impl MetricsRegistry {
                     .with_label_values(&[structure.name])
                     .set(gauge(bytes));
             }
+        }
+    }
+
+    /// Set the ledger gauges against the live heap. The decoded-rows counter
+    /// advances by the ledger's count since the last call.
+    pub fn record_ledger(&self, live: u64, ledger: &ResidentLedger) {
+        let live = i64::try_from(live).unwrap_or(i64::MAX);
+        self.heap_unattributed_bytes
+            .set(live.saturating_sub(ledger.total_bytes()));
+        for owner in Owner::ALL {
+            self.ledger_owner_bytes
+                .with_label_values(&[owner.label()])
+                .set(ledger.owner_bytes(owner));
+        }
+        self.permanent_bytes.set(ledger.permanent_bytes());
+        let decoded = ledger.rows_decoded_total();
+        let seen = self.rows_decoded_total.get();
+        if decoded > seen {
+            self.rows_decoded_total.inc_by(decoded - seen);
         }
     }
 

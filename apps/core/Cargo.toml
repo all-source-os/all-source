@@ -103,6 +103,21 @@ hotpath = ["dep:hotpath"]
 hotpath-alloc = ["hotpath/hotpath-alloc"]
 # Heap profiling via dhat-rs; replaces the global allocator when active.
 dhat-heap = ["dep:dhat"]
+# jemalloc heap attribution by allocation site. Linux-only; release builds must
+# never enable it (checked by release_build_has_no_heap_profile).
+heap-profile = ["dep:tikv-jemallocator", "dep:tikv-jemalloc-ctl", "dep:jemalloc_pprof"]
+# Fixed hasher on replay-path maps so the heap replay is reproducible. Loses
+# hash-flooding resistance: never enable in a deployed build.
+deterministic-hash = []
+
+[target.'cfg(target_os = "linux")'.dependencies]
+jemalloc_pprof = { version = "0.9", optional = true }
+tikv-jemalloc-ctl = { version = "0.7", optional = true, features = ["stats"] }
+tikv-jemallocator = { version = "0.7", optional = true, features = [
+    "profiling",
+    "stats",
+    "unprefixed_malloc_on_supported_platforms",
+] }
 
 [dependencies]
 aes-gcm = { workspace = true, optional = true }
@@ -173,6 +188,8 @@ url = "2.5"
 uuid.workspace = true
 
 [dev-dependencies]
+# `stats` gives Cap::max_allocated, the heap replay's peak_live_bytes.
+cap = { version = "0.1", features = ["stats"] }
 criterion.workspace = true
 ctrlc.workspace = true
 iai-callgrind = "0.16"

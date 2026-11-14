@@ -315,6 +315,18 @@ impl Event {
         FIXED_OVERHEAD + payload_bytes + metadata_bytes
     }
 
+    /// Heap footprint of this event as held in memory: the inline `Event` plus
+    /// the capacity of every owned allocation. Object maps are charged by
+    /// the map type the build compiles, see `map_bytes`.
+    pub fn resident_bytes(&self) -> u64 {
+        let heap = self.event_type.heap_capacity()
+            + self.entity_id.heap_capacity()
+            + self.tenant_id.heap_capacity()
+            + value_heap_bytes(&self.payload)
+            + self.metadata.as_ref().map_or(0, value_heap_bytes);
+        (std::mem::size_of::<Event>() + heap) as u64
+    }
+
     // Domain behavior methods
 
     /// Check if this event belongs to a specific tenant
@@ -365,6 +377,107 @@ impl Event {
     /// Check if event occurred after a specific time
     pub fn occurred_after(&self, time: DateTime<Utc>) -> bool {
         self.timestamp > time
+    }
+}
+
+/// Keys per node of `std`'s `BTreeMap`, which `serde_json::Map` uses without
+/// `preserve_order`. Decoding inserts keys in sorted order, and a full node
+/// split by an insert at its right end keeps `BTREE_SPLIT_KEPT` keys, so every
+/// node but the last holds that many.
+const BTREE_NODE_KEYS: usize = 11;
+const BTREE_NODE_EDGES: usize = 12;
+const BTREE_NODE_HEADER: usize = 16;
+const BTREE_SPLIT_KEPT: usize = 6;
+
+/// Nodes holding `keys` keys inserted in order.
+fn btree_nodes(keys: usize) -> usize {
+    if keys <= BTREE_NODE_KEYS {
+        1
+    } else {
+        1 + (keys - BTREE_NODE_KEYS).div_ceil(BTREE_SPLIT_KEPT + 1)
+    }
+}
+
+fn btree_map_bytes(len: usize) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    let leaf =
+        BTREE_NODE_HEADER + BTREE_NODE_KEYS * std::mem::size_of::<(String, serde_json::Value)>();
+    let internal = leaf + BTREE_NODE_EDGES * std::mem::size_of::<usize>();
+    let mut nodes = btree_nodes(len);
+    let mut total = nodes * leaf;
+    while nodes > 1 {
+        nodes = btree_nodes(nodes - 1);
+        total += nodes * internal;
+    }
+    total
+}
+
+/// `serde_json::Map` is an `IndexMap` when any crate in the build enables
+/// `serde_json/preserve_order`; datafusion does, so server builds use it.
+static MAP_PRESERVES_ORDER: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    let mut map = serde_json::Map::new();
+    map.insert("b".into(), serde_json::Value::Null);
+    map.insert("a".into(), serde_json::Value::Null);
+    map.keys().next().is_some_and(|key| key == "b")
+});
+
+/// hashbrown's SIMD group width, the trailing control bytes of every table.
+const HASHBROWN_GROUP_WIDTH: usize = if cfg!(any(target_arch = "x86", target_arch = "x86_64")) {
+    16
+} else {
+    8
+};
+
+/// An `IndexMap<String, Value>` filled by inserts from empty: a hashbrown
+/// table of `usize` indices and an entry `Vec` reserved to the table's
+/// capacity, each entry a cached hash, the key and the value.
+fn index_map_bytes(len: usize) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    let mut buckets = 4;
+    while bucket_capacity(buckets) < len {
+        buckets *= 2;
+    }
+    let entry = std::mem::size_of::<usize>() + std::mem::size_of::<(String, serde_json::Value)>();
+    let table = buckets * std::mem::size_of::<usize>() + buckets + HASHBROWN_GROUP_WIDTH;
+    table + bucket_capacity(buckets) * entry
+}
+
+fn bucket_capacity(buckets: usize) -> usize {
+    if buckets < 8 {
+        buckets - 1
+    } else {
+        buckets / 8 * 7
+    }
+}
+
+fn map_bytes(len: usize) -> usize {
+    if *MAP_PRESERVES_ORDER {
+        index_map_bytes(len)
+    } else {
+        btree_map_bytes(len)
+    }
+}
+
+pub(crate) fn value_heap_bytes(value: &serde_json::Value) -> usize {
+    use serde_json::Value;
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) => 0,
+        Value::String(text) => text.capacity(),
+        Value::Array(items) => {
+            items.capacity() * std::mem::size_of::<Value>()
+                + items.iter().map(value_heap_bytes).sum::<usize>()
+        }
+        Value::Object(map) => {
+            map_bytes(map.len())
+                + map
+                    .iter()
+                    .map(|(key, child)| key.capacity() + value_heap_bytes(child))
+                    .sum::<usize>()
+        }
     }
 }
 

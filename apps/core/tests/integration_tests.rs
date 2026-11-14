@@ -360,10 +360,11 @@ fn test_projection_aggregations() {
         store.ingest(&event).unwrap();
     }
 
-    // Get snapshot (uses projection)
-    let snapshot = store.get_snapshot("user-1");
-    // May not exist for all entities, but should not error
-    assert!(snapshot.is_ok() || snapshot.is_err());
+    // Server stores do not register entity_snapshots, so no snapshot is served.
+    assert!(matches!(
+        store.get_snapshot("user-1"),
+        Err(allsource_core::error::AllSourceError::EntityNotFound(_))
+    ));
 
     let stats = store.stats();
     assert_eq!(stats.total_event_types, 2);

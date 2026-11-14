@@ -1,6 +1,30 @@
 // `cap` counts live bytes for the heap gauges; no limit is set.
+#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
 #[global_allocator]
 static GLOBAL: cap::Cap<mimalloc::MiMalloc> = cap::Cap::new(mimalloc::MiMalloc, usize::MAX);
+
+#[cfg(all(feature = "heap-profile", target_os = "linux"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
+#[cfg(all(feature = "heap-profile", target_os = "linux"))]
+#[allow(non_upper_case_globals)]
+#[expect(
+    unsafe_code,
+    reason = "jemalloc reads malloc_conf from the binary's symbol table"
+)]
+#[unsafe(export_name = "malloc_conf")]
+pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
+
+#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
+fn heap_live_bytes() -> u64 {
+    GLOBAL.allocated() as u64
+}
+
+#[cfg(all(feature = "heap-profile", target_os = "linux"))]
+fn heap_live_bytes() -> u64 {
+    allsource_core::infrastructure::observability::heap::jemalloc_live_bytes()
+}
 
 #[cfg(feature = "replication")]
 use allsource_core::replication::{ReplicationMode, WalReceiver, WalShipper};
@@ -560,7 +584,12 @@ fn spawn_memory_upkeep(store: Arc<EventStore>, system_store: Option<Arc<SystemMe
                 let rss = memory::resident_set_bytes();
                 let metrics = store.metrics();
                 metrics.record_memory(events, bytes, rss);
-                metrics.record_heap(GLOBAL.allocated() as u64, rss, &store.resident_structures());
+                let heap_live = heap_live_bytes();
+                metrics.record_heap(heap_live, rss, &store.resident_structures());
+                metrics.record_ledger(
+                    heap_live,
+                    allsource_core::infrastructure::memory::ledger::resident(),
+                );
             })
             .await;
             if let Err(e) = sampled {

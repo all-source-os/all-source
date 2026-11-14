@@ -1,0 +1,1323 @@
+{
+  "command": "report",
+  "schema_version": 1,
+  "run_id": "run-1794635113319-54657-506698b1",
+  "base_commit": "506698b19e9e05653a9c4964f0d240dc8ef73c73",
+  "current_best_commit": "506698b19e9e05653a9c4964f0d240dc8ef73c73",
+  "frozen_identity_sha256": "45c2f6f932cd8b214d9c61323a9d6155f5375bf4d7880e6d7ea95a0139ff2590",
+  "environment": {
+    "fingerprint_sha256": "4512daf96cd23f9c90894b2c6318421414f4eff5f8869cd0fc86bbf722df7a75",
+    "record": null,
+    "status": "fingerprint_captured"
+  },
+  "objective": {
+    "name": "peak_live_bytes",
+    "direction": "minimize"
+  },
+  "recovery_action": "finished",
+  "baseline": {
+    "commit": "506698b19e9e05653a9c4964f0d240dc8ef73c73",
+    "snapshot": {
+      "measurements": [
+        {
+          "kind": "hard_gate",
+          "name": "fixture_present",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "fixture_verified",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "build_ok",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "replay_completed",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "replay_repeatable",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "peak_nonzero",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "replay_expected_status",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "ledger_two_sided",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "rows_decoded_ok",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "eviction_policy_unchanged",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "policy_digest_pinned",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "query_digest_equal",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "prod_hasher_digest_equal",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "codec_digest_equal",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "geo_digest_equal",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "evictions_match",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "protected_paths_exist",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "heap_eval_self_sha",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "numeric",
+          "name": "peak_live_bytes",
+          "metric_kind": "objective",
+          "direction": "minimize",
+          "value": 1301282816.0
+        },
+        {
+          "kind": "numeric",
+          "name": "rows_decoded",
+          "metric_kind": "diagnostic",
+          "direction": "minimize",
+          "value": 230302.0
+        },
+        {
+          "kind": "numeric",
+          "name": "requests",
+          "metric_kind": "diagnostic",
+          "direction": "minimize",
+          "value": 576.0
+        },
+        {
+          "kind": "hard_gate",
+          "name": "tests_pass",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "expected_tests_ran",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "tests_unchanged",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "tests_digest_pinned",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "tooling_tests_pass",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "hard_gate",
+          "name": "tests_eval_self_sha",
+          "outcome": {
+            "passed": true,
+            "detail": null
+          }
+        },
+        {
+          "kind": "numeric",
+          "name": "core_passed",
+          "metric_kind": "diagnostic",
+          "direction": "minimize",
+          "value": 1772.0
+        },
+        {
+          "kind": "numeric",
+          "name": "core_failed",
+          "metric_kind": "diagnostic",
+          "direction": "minimize",
+          "value": 0.0
+        },
+        {
+          "kind": "numeric",
+          "name": "core_ignored",
+          "metric_kind": "diagnostic",
+          "direction": "minimize",
+          "value": 2.0
+        },
+        {
+          "kind": "numeric",
+          "name": "tooling_passed",
+          "metric_kind": "diagnostic",
+          "direction": "minimize",
+          "value": 90.0
+        }
+      ],
+      "complexity": {
+        "changed_lines": 0,
+        "dependency_delta": 0,
+        "runtime_ms": 0
+      }
+    },
+    "artifact_references_status": "not_recorded_in_baseline_journal"
+  },
+  "baseline_failure": null,
+  "current_best_snapshot": {
+    "measurements": [
+      {
+        "kind": "hard_gate",
+        "name": "fixture_present",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "fixture_verified",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "build_ok",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "replay_completed",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "replay_repeatable",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "peak_nonzero",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "replay_expected_status",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "ledger_two_sided",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "rows_decoded_ok",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "eviction_policy_unchanged",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "policy_digest_pinned",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "query_digest_equal",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "prod_hasher_digest_equal",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "codec_digest_equal",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "geo_digest_equal",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "evictions_match",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "protected_paths_exist",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "heap_eval_self_sha",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "numeric",
+        "name": "peak_live_bytes",
+        "metric_kind": "objective",
+        "direction": "minimize",
+        "value": 1301282816.0
+      },
+      {
+        "kind": "numeric",
+        "name": "rows_decoded",
+        "metric_kind": "diagnostic",
+        "direction": "minimize",
+        "value": 230302.0
+      },
+      {
+        "kind": "numeric",
+        "name": "requests",
+        "metric_kind": "diagnostic",
+        "direction": "minimize",
+        "value": 576.0
+      },
+      {
+        "kind": "hard_gate",
+        "name": "tests_pass",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "expected_tests_ran",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "tests_unchanged",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "tests_digest_pinned",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "tooling_tests_pass",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "hard_gate",
+        "name": "tests_eval_self_sha",
+        "outcome": {
+          "passed": true,
+          "detail": null
+        }
+      },
+      {
+        "kind": "numeric",
+        "name": "core_passed",
+        "metric_kind": "diagnostic",
+        "direction": "minimize",
+        "value": 1772.0
+      },
+      {
+        "kind": "numeric",
+        "name": "core_failed",
+        "metric_kind": "diagnostic",
+        "direction": "minimize",
+        "value": 0.0
+      },
+      {
+        "kind": "numeric",
+        "name": "core_ignored",
+        "metric_kind": "diagnostic",
+        "direction": "minimize",
+        "value": 2.0
+      },
+      {
+        "kind": "numeric",
+        "name": "tooling_passed",
+        "metric_kind": "diagnostic",
+        "direction": "minimize",
+        "value": 90.0
+      }
+    ],
+    "complexity": {
+      "changed_lines": 0,
+      "dependency_delta": 0,
+      "runtime_ms": 0
+    }
+  },
+  "candidates": [
+    {
+      "index": 1,
+      "parent_commit": "506698b19e9e05653a9c4964f0d240dc8ef73c73",
+      "candidate_commit": "0aea27363d285aba0f15e15e2955e1198a4cb442",
+      "changed_paths": [
+        "apps/core/src/infrastructure/persistence/storage.rs",
+        "apps/core/src/store.rs"
+      ],
+      "changed_paths_status": "journaled",
+      "hard_gates": [
+        {
+          "name": "fixture_present",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "fixture_verified",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "build_ok",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "replay_completed",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "replay_repeatable",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "peak_nonzero",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "replay_expected_status",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "ledger_two_sided",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "rows_decoded_ok",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "eviction_policy_unchanged",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "policy_digest_pinned",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "query_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "prod_hasher_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "codec_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "geo_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "evictions_match",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "protected_paths_exist",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "heap_eval_self_sha",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_pass",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "expected_tests_ran",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_unchanged",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_digest_pinned",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tooling_tests_pass",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_eval_self_sha",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        }
+      ],
+      "objective_delta": 0.0,
+      "runtime_ms": 187091,
+      "snapshot": {
+        "measurements": [
+          {
+            "kind": "hard_gate",
+            "name": "fixture_present",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "fixture_verified",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "build_ok",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "replay_completed",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "replay_repeatable",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "peak_nonzero",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "replay_expected_status",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "ledger_two_sided",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "rows_decoded_ok",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "eviction_policy_unchanged",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "policy_digest_pinned",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "query_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "prod_hasher_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "codec_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "geo_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "evictions_match",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "protected_paths_exist",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "heap_eval_self_sha",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "numeric",
+            "name": "peak_live_bytes",
+            "metric_kind": "objective",
+            "direction": "minimize",
+            "value": 1301282816.0
+          },
+          {
+            "kind": "numeric",
+            "name": "rows_decoded",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 230302.0
+          },
+          {
+            "kind": "numeric",
+            "name": "requests",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 576.0
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_pass",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "expected_tests_ran",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_unchanged",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_digest_pinned",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tooling_tests_pass",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_eval_self_sha",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "numeric",
+            "name": "core_passed",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 1772.0
+          },
+          {
+            "kind": "numeric",
+            "name": "core_failed",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 0.0
+          },
+          {
+            "kind": "numeric",
+            "name": "core_ignored",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 2.0
+          },
+          {
+            "kind": "numeric",
+            "name": "tooling_passed",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 90.0
+          }
+        ],
+        "complexity": {
+          "changed_lines": 21,
+          "dependency_delta": 0,
+          "runtime_ms": 187091
+        }
+      },
+      "decision": {
+        "disposition": "discard",
+        "reason": {
+          "reason": "tie_breaker",
+          "field": "changed_lines"
+        }
+      },
+      "finalization": {
+        "outcome": "discarded"
+      },
+      "artifacts": [],
+      "failures": [],
+      "state": "discarded"
+    },
+    {
+      "index": 2,
+      "parent_commit": "506698b19e9e05653a9c4964f0d240dc8ef73c73",
+      "candidate_commit": "63181d345389fa8e85ec365c12ad6c77a6038786",
+      "changed_paths": [
+        "apps/core/src/infrastructure/persistence/storage.rs"
+      ],
+      "changed_paths_status": "journaled",
+      "hard_gates": [
+        {
+          "name": "fixture_present",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "fixture_verified",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "build_ok",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "replay_completed",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "replay_repeatable",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "peak_nonzero",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "replay_expected_status",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "ledger_two_sided",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "rows_decoded_ok",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "eviction_policy_unchanged",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "policy_digest_pinned",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "query_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "prod_hasher_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "codec_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "geo_digest_equal",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "evictions_match",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "protected_paths_exist",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "heap_eval_self_sha",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_pass",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "expected_tests_ran",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_unchanged",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_digest_pinned",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tooling_tests_pass",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        },
+        {
+          "name": "tests_eval_self_sha",
+          "prior_best_passed": true,
+          "candidate_passed": true
+        }
+      ],
+      "objective_delta": 0.0,
+      "runtime_ms": 254628,
+      "snapshot": {
+        "measurements": [
+          {
+            "kind": "hard_gate",
+            "name": "fixture_present",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "fixture_verified",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "build_ok",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "replay_completed",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "replay_repeatable",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "peak_nonzero",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "replay_expected_status",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "ledger_two_sided",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "rows_decoded_ok",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "eviction_policy_unchanged",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "policy_digest_pinned",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "query_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "prod_hasher_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "codec_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "geo_digest_equal",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "evictions_match",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "protected_paths_exist",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "heap_eval_self_sha",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "numeric",
+            "name": "peak_live_bytes",
+            "metric_kind": "objective",
+            "direction": "minimize",
+            "value": 1301282816.0
+          },
+          {
+            "kind": "numeric",
+            "name": "rows_decoded",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 230302.0
+          },
+          {
+            "kind": "numeric",
+            "name": "requests",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 576.0
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_pass",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "expected_tests_ran",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_unchanged",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_digest_pinned",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tooling_tests_pass",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "hard_gate",
+            "name": "tests_eval_self_sha",
+            "outcome": {
+              "passed": true,
+              "detail": null
+            }
+          },
+          {
+            "kind": "numeric",
+            "name": "core_passed",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 1772.0
+          },
+          {
+            "kind": "numeric",
+            "name": "core_failed",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 0.0
+          },
+          {
+            "kind": "numeric",
+            "name": "core_ignored",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 2.0
+          },
+          {
+            "kind": "numeric",
+            "name": "tooling_passed",
+            "metric_kind": "diagnostic",
+            "direction": "minimize",
+            "value": 90.0
+          }
+        ],
+        "complexity": {
+          "changed_lines": 9,
+          "dependency_delta": 0,
+          "runtime_ms": 254628
+        }
+      },
+      "decision": {
+        "disposition": "discard",
+        "reason": {
+          "reason": "tie_breaker",
+          "field": "changed_lines"
+        }
+      },
+      "finalization": {
+        "outcome": "discarded"
+      },
+      "artifacts": [],
+      "failures": [],
+      "state": "discarded"
+    }
+  ],
+  "stop_reason": "operator_cancelled",
+  "market_evidence": {
+    "receipts": []
+  },
+  "commercial_validation_status": "not_assessed_by_internal_evaluators"
+}

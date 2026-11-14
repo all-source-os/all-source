@@ -22,6 +22,10 @@ use std::fmt;
 pub struct TenantId(String);
 
 impl TenantId {
+    pub(crate) fn heap_capacity(&self) -> usize {
+        self.0.capacity()
+    }
+
     /// Create a new TenantId with validation
     ///
     /// # Errors

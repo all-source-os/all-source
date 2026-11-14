@@ -29,12 +29,13 @@ use crate::{
     },
     error::Result,
     infrastructure::{
+        memory::ledger::{Lease, Owner},
         persistence::compaction::CompactionResult,
         query::{
             geospatial::GeoQueryRequest,
             graphql::{GraphQLError, GraphQLRequest, GraphQLResponse},
         },
-        security::middleware::OptionalAuth,
+        security::middleware::{Authenticated, OptionalAuth},
         web::{api_v1::AppState, conditional::conditional_json},
     },
     store::{EventStore, EventTypeInfo, StreamInfo},
@@ -660,6 +661,7 @@ pub async fn query_events_json(
     } else {
         store.query_window(&scoped_req, offset, descending)?
     };
+    let _query_held = Lease::for_events(Owner::Query, &limited_events);
 
     let count = limited_events.len();
     // `has_more` is relative to the window actually served, not to the page
@@ -708,6 +710,7 @@ pub async fn list_entities(
         payload_filter: req.payload_filter,
     };
     let events = store.query(&query_req)?;
+    let _query_held = Lease::for_events(Owner::Query, &events);
 
     // Group by entity_id
     let mut entity_map: HashMap<String, Vec<&Event>> = HashMap::new();
@@ -1650,9 +1653,7 @@ pub async fn pause_projection(
         crate::error::AllSourceError::EntityNotFound(format!("Projection '{name}' not found"))
     })?;
 
-    store
-        .projection_status()
-        .insert(name.clone(), "paused".to_string());
+    store.set_projection_status(name.clone(), "paused".to_string());
 
     tracing::info!("Projection paused: {}", name);
 
@@ -1676,9 +1677,7 @@ pub async fn start_projection(
         crate::error::AllSourceError::EntityNotFound(format!("Projection '{name}' not found"))
     })?;
 
-    store
-        .projection_status()
-        .insert(name.clone(), "running".to_string());
+    store.set_projection_status(name.clone(), "running".to_string());
 
     tracing::info!("Projection started: {}", name);
 
@@ -1833,6 +1832,7 @@ pub async fn eventql_query(
     Json(req): Json<crate::infrastructure::query::eventql::EventQLRequest>,
 ) -> Result<Json<serde_json::Value>> {
     let events = store.snapshot_events();
+    let _query_held = Lease::for_events(Owner::Query, &events);
     match crate::infrastructure::query::eventql::execute_eventql(&events, &req).await {
         Ok(response) => Ok(Json(serde_json::json!({
             "columns": response.columns,
@@ -1884,6 +1884,7 @@ pub async fn graphql_query(
                 };
                 match store.query(&request) {
                     Ok(events) => {
+                        let _query_held = Lease::for_events(Owner::Query, &events);
                         let json_events: Vec<serde_json::Value> = events
                             .iter()
                             .map(|e| {
@@ -1974,15 +1975,14 @@ pub async fn graphql_query(
     )
 }
 
-/// Geospatial: Query events by location
+/// Geospatial: Query events by location, within the caller's tenant.
 pub async fn geo_query(
     State(store): State<SharedStore>,
+    Authenticated(auth): Authenticated,
     Json(req): Json<GeoQueryRequest>,
 ) -> Json<serde_json::Value> {
-    let events = store.snapshot_events();
-    let geo_index = store.geo_index();
-    let results =
-        crate::infrastructure::query::geospatial::execute_geo_query(&events, &geo_index, &req);
+    let (results, materialized) = store.geo_query_for_tenant(&req, auth.tenant_id());
+    let _query_held = Lease::new(Owner::Query, materialized);
     let total = results.len();
     Json(serde_json::json!({
         "results": results,
@@ -2087,6 +2087,7 @@ pub async fn sync_pull_handler(
         exclude_event_type_prefix: None,
         payload_filter: None,
     })?;
+    let _query_held = Lease::for_events(Owner::Query, &events);
 
     // Convert domain events to ReplicatedEvent wire format
     let mut replicated = Vec::with_capacity(events.len());
@@ -2276,10 +2277,20 @@ pub async fn ack_consumer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{domain::entities::Event, store::EventStore};
+    use crate::{
+        domain::entities::Event,
+        store::{EventStore, EventStoreConfig},
+    };
 
     fn create_test_store() -> Arc<EventStore> {
         Arc::new(EventStore::new())
+    }
+
+    fn create_snapshot_store() -> Arc<EventStore> {
+        Arc::new(EventStore::with_config(EventStoreConfig {
+            register_entity_snapshots: true,
+            ..EventStoreConfig::default()
+        }))
     }
 
     /// Call the REAL `GET /api/v1/events/query` handler with `query` as the
@@ -3875,7 +3886,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_projection_manager_list_projections() {
-        let store = create_test_store();
+        let store = create_snapshot_store();
 
         // List projections (built-in projections should be available)
         let projection_manager = store.projection_manager();
@@ -3891,7 +3902,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_projection_state_after_event_ingestion() {
-        let store = create_test_store();
+        let store = create_snapshot_store();
 
         // Ingest an event
         let event = create_test_event("user-456", "user.created");
@@ -3951,7 +3962,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_nonexistent_entity_state() {
-        let store = create_test_store();
+        let store = create_snapshot_store();
         let projection_manager = store.projection_manager();
 
         // Get state for non-existent entity
@@ -3964,7 +3975,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_projection_manager_get_entity_snapshots() {
-        let store = create_test_store();
+        let store = create_snapshot_store();
         let projection_manager = store.projection_manager();
 
         // Get entity_snapshots projection specifically
@@ -3986,7 +3997,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bulk_projection_state_access() {
-        let store = create_test_store();
+        let store = create_snapshot_store();
 
         // Ingest multiple events for different entities
         for i in 0..5 {

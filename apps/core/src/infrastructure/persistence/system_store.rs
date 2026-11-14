@@ -10,9 +10,12 @@ use crate::{
         },
     },
     error::{AllSourceError, Result},
-    infrastructure::persistence::{
-        system_checkpoint::{self, CHECKPOINT_DIR, FoldedStream, SystemCheckpoint},
-        wal::{CoveredSegment, WALConfig, WALEntry, WriteAheadLog},
+    infrastructure::{
+        memory::ledger::{Owner, Tally},
+        persistence::{
+            system_checkpoint::{self, CHECKPOINT_DIR, FoldedStream, SystemCheckpoint},
+            wal::{CoveredSegment, WALConfig, WALEntry, WriteAheadLog},
+        },
     },
 };
 use chrono::{DateTime, Utc};
@@ -29,7 +32,6 @@ use std::{
 
 /// Events held in memory, each with its WAL sequence. A folded domain holds
 /// only the events after the checkpoint the store booted from.
-#[derive(Default)]
 struct Resident {
     events: Vec<Event>,
     sequences: Vec<u64>,
@@ -38,10 +40,24 @@ struct Resident {
     /// Serialized size of `events`, kept current on push and release so the
     /// memory sampler never walks the resident set under the lock.
     bytes: u64,
+    /// `resident_bytes()` of `events`, charged to `system_store`.
+    heap: Tally,
 }
 
 fn serialized_len(event: &Event) -> u64 {
     serde_json::to_vec(event).map_or(0, |bytes| bytes.len() as u64)
+}
+
+impl Default for Resident {
+    fn default() -> Self {
+        Self {
+            events: Vec::new(),
+            sequences: Vec::new(),
+            counts: BTreeMap::new(),
+            bytes: 0,
+            heap: Tally::new(Owner::SystemStore),
+        }
+    }
 }
 
 impl Resident {
@@ -51,6 +67,7 @@ impl Resident {
             .entry(domain_of(&event).to_string())
             .or_default() += 1;
         self.bytes += serialized_len(&event);
+        self.heap.add(event.resident_bytes());
         self.sequences.push(sequence);
         self.events.push(event);
     }
@@ -223,6 +240,7 @@ impl SystemMetadataStore {
             for (sequence, event) in &checkpoint.verbatim {
                 resident.sequences.push(*sequence);
                 resident.bytes += serialized_len(event);
+                resident.heap.add(event.resident_bytes());
                 resident.events.push(event.clone());
             }
             resident.counts.clone_from(&checkpoint.domain_counts);
@@ -310,6 +328,7 @@ impl SystemMetadataStore {
             events,
             sequences,
             bytes,
+            heap,
             ..
         } = &mut *resident;
         let keep: Vec<bool> = events
@@ -325,6 +344,13 @@ impl SystemMetadataStore {
             .filter(|(_, kept)| !**kept)
             .map(|(event, _)| serialized_len(event))
             .sum();
+        let released_heap: u64 = events
+            .iter()
+            .zip(keep.iter())
+            .filter(|(_, kept)| !**kept)
+            .map(|(event, _)| event.resident_bytes())
+            .sum();
+        heap.sub(released_heap);
         *bytes -= released;
         let mut mask = keep.iter().copied();
         events.retain(|_| mask.next().unwrap_or(true));

@@ -16,8 +16,9 @@ use fs4::{FileExt, TryLockError};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
+#[cfg(feature = "prime-vectors")]
+use crate::application::services::projection::Projection as _;
 use crate::{
-    application::services::projection::Projection as _,
     embedded::{Config, EmbeddedCore, IngestEvent, Query},
     error::Result,
     infrastructure::cluster::crdt::MergeStrategy,

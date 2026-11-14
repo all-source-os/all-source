@@ -1,9 +1,11 @@
 use super::EventStore;
 use crate::{
     domain::entities::Event,
-    infrastructure::observability::heap::{StructureSize, hash_entry_bytes, json_heap_bytes},
+    infrastructure::{
+        hash_state::FastDashMap,
+        observability::heap::{StructureSize, hash_entry_bytes, json_heap_bytes},
+    },
 };
-use dashmap::DashMap;
 use std::mem::size_of;
 
 /// Events walked per estimate; the rest are extrapolated from them, which
@@ -18,7 +20,7 @@ fn event_heap_bytes(event: &Event) -> usize {
         + event.metadata.as_ref().map_or(0, json_heap_bytes)
 }
 
-fn keyed_map<V>(name: &'static str, map: &DashMap<String, V>) -> StructureSize {
+fn keyed_map<V>(name: &'static str, map: &FastDashMap<String, V>) -> StructureSize {
     let bytes: usize = map
         .iter()
         .map(|item| hash_entry_bytes::<String, V>() + item.key().len())

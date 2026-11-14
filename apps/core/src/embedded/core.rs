@@ -1064,10 +1064,12 @@ impl EmbeddedCore {
                     CompactionConfig::default(),
                 );
                 store_config.read_only = config.read_only();
+                store_config.register_entity_snapshots = true;
                 store_config
             }
             None => EventStoreConfig {
                 read_only: config.read_only(),
+                register_entity_snapshots: true,
                 ..EventStoreConfig::default()
             },
         }

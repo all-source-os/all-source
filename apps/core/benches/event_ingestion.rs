@@ -169,12 +169,6 @@ fn bench_state_reconstruction(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("snapshot_retrieval", |b| {
-        b.iter(|| {
-            store.get_snapshot(black_box("entity-1")).unwrap();
-        });
-    });
-
     group.finish();
 }
 

@@ -3,7 +3,7 @@
 //! Maintains counters for nodes, edges, types, and relations so that
 //! `prime.stats()` is O(1) without scanning the entire graph.
 
-use dashmap::DashMap;
+use dashmap::{DashMap, mapref::entry::Entry};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::{
@@ -11,10 +11,12 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+use super::charge;
 use crate::{
     application::services::projection::Projection,
     domain::entities::Event,
     error::Result,
+    infrastructure::memory::ledger::Tally,
     prime::types::{PrimeStats, event_types},
 };
 
@@ -44,6 +46,7 @@ pub struct GraphStatsProjection {
     nodes_by_type: Arc<DashMap<String, usize>>,
     /// relation -> count of live edges
     edges_by_relation: Arc<DashMap<String, usize>>,
+    charge: Tally,
 }
 
 impl GraphStatsProjection {
@@ -57,6 +60,26 @@ impl GraphStatsProjection {
             event_count: AtomicUsize::new(0),
             nodes_by_type: Arc::new(DashMap::new()),
             edges_by_relation: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    /// Counts are never removed, only decremented, so a key is charged once.
+    fn increment(&self, counts: &DashMap<String, usize>, key: &str) {
+        match counts.entry(key.to_string()) {
+            Entry::Occupied(mut count) => *count.get_mut() += 1,
+            Entry::Vacant(vacant) => {
+                self.charge
+                    .add(charge::entry::<String, usize>(charge::text(key)));
+                vacant.insert(1);
+            }
+        }
+    }
+
+    fn store(&self, counts: &DashMap<String, usize>, key: String, value: usize) {
+        let key_bytes = charge::text(&key);
+        if counts.insert(key, value).is_none() {
+            self.charge.add(charge::entry::<String, usize>(key_bytes));
         }
     }
 
@@ -102,7 +125,7 @@ impl Projection for GraphStatsProjection {
                 self.total_nodes.fetch_add(1, Ordering::Relaxed);
 
                 if let Some(node_type) = event.payload.get("node_type").and_then(|v| v.as_str()) {
-                    *self.nodes_by_type.entry(node_type.to_string()).or_insert(0) += 1;
+                    self.increment(&self.nodes_by_type, node_type);
                 }
             }
             event_types::NODE_DELETED => {
@@ -118,10 +141,7 @@ impl Projection for GraphStatsProjection {
                 self.total_edges.fetch_add(1, Ordering::Relaxed);
 
                 if let Some(relation) = event.payload.get("relation").and_then(|v| v.as_str()) {
-                    *self
-                        .edges_by_relation
-                        .entry(relation.to_string())
-                        .or_insert(0) += 1;
+                    self.increment(&self.edges_by_relation, relation);
                 }
             }
             event_types::EDGE_DELETED => {
@@ -153,6 +173,7 @@ impl Projection for GraphStatsProjection {
         self.event_count.store(0, Ordering::Relaxed);
         self.nodes_by_type.clear();
         self.edges_by_relation.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -189,13 +210,13 @@ impl Projection for GraphStatsProjection {
         self.event_count.store(snap.event_count, Ordering::Relaxed);
 
         self.nodes_by_type.clear();
-        for (k, v) in snap.nodes_by_type {
-            self.nodes_by_type.insert(k, v);
-        }
-
         self.edges_by_relation.clear();
+        self.charge.take();
+        for (k, v) in snap.nodes_by_type {
+            self.store(&self.nodes_by_type, k, v);
+        }
         for (k, v) in snap.edges_by_relation {
-            self.edges_by_relation.insert(k, v);
+            self.store(&self.edges_by_relation, k, v);
         }
 
         Ok(())

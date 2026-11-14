@@ -23,6 +23,10 @@ use std::fmt;
 pub struct EventType(String);
 
 impl EventType {
+    pub(crate) fn heap_capacity(&self) -> usize {
+        self.0.capacity()
+    }
+
     /// Create a new EventType with validation
     ///
     /// # Errors

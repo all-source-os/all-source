@@ -1,7 +1,13 @@
-use crate::domain::entities::Event;
+use crate::{
+    domain::entities::Event,
+    infrastructure::memory::ledger::{
+        MapCharge, Owner, Tally, option_string_heap, string_heap, strings_heap,
+    },
+};
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
+use dashmap::{DashMap, mapref::entry::Entry};
 use serde::{Deserialize, Serialize};
+use std::mem::size_of;
 use uuid::Uuid;
 
 /// A registered webhook subscription
@@ -78,14 +84,40 @@ pub enum DeliveryStatus {
     Retrying,
 }
 
+/// Owned heap of a subscription: its strings and vectors, not the inline value.
+fn subscription_heap(webhook: &WebhookSubscription) -> u64 {
+    string_heap(&webhook.tenant_id)
+        + string_heap(&webhook.url)
+        + strings_heap(&webhook.event_types)
+        + strings_heap(&webhook.entity_ids)
+        + string_heap(&webhook.secret)
+        + option_string_heap(&webhook.description)
+}
+
+fn delivery_heap(delivery: &WebhookDelivery) -> u64 {
+    option_string_heap(&delivery.response_body) + option_string_heap(&delivery.error)
+}
+
+/// Owned heap of a delivery log: its buffer and each record's strings.
+fn deliveries_heap(deliveries: &Vec<WebhookDelivery>) -> u64 {
+    (deliveries.capacity() * size_of::<WebhookDelivery>()) as u64
+        + deliveries.iter().map(delivery_heap).sum::<u64>()
+}
+
 /// Manages webhook subscriptions in-memory using DashMap
 pub struct WebhookRegistry {
     /// Webhooks indexed by ID
     webhooks: DashMap<Uuid, WebhookSubscription>,
+    webhooks_charge: MapCharge,
     /// Index: tenant_id -> list of webhook IDs
     tenant_index: DashMap<String, Vec<Uuid>>,
+    tenant_index_charge: MapCharge,
     /// Delivery log (webhook_id -> deliveries)
     deliveries: DashMap<Uuid, Vec<WebhookDelivery>>,
+    deliveries_charge: MapCharge,
+    /// Buffers of the `tenant_index` and `deliveries` vectors, and the
+    /// tenant-key strings, tracked as their capacities change.
+    vec_slots: Tally,
 }
 
 impl Default for WebhookRegistry {
@@ -98,9 +130,34 @@ impl WebhookRegistry {
     pub fn new() -> Self {
         Self {
             webhooks: DashMap::new(),
+            webhooks_charge: MapCharge::new(Owner::Misc, size_of::<(Uuid, WebhookSubscription)>()),
             tenant_index: DashMap::new(),
+            tenant_index_charge: MapCharge::new(Owner::Misc, size_of::<(String, Vec<Uuid>)>()),
             deliveries: DashMap::new(),
+            deliveries_charge: MapCharge::new(
+                Owner::Misc,
+                size_of::<(Uuid, Vec<WebhookDelivery>)>(),
+            ),
+            vec_slots: Tally::new(Owner::Misc),
         }
+    }
+
+    fn push_tenant_id(&self, tenant_id: String, id: Uuid) {
+        match self.tenant_index.entry(tenant_id) {
+            Entry::Occupied(mut slot) => self.push_id(slot.get_mut(), id),
+            Entry::Vacant(slot) => {
+                self.vec_slots.add(string_heap(slot.key()));
+                self.push_id(&mut slot.insert(Vec::new()), id);
+            }
+        }
+        self.tenant_index_charge.resize(&self.tenant_index);
+    }
+
+    fn push_id(&self, ids: &mut Vec<Uuid>, id: Uuid) {
+        let before = ids.capacity();
+        ids.push(id);
+        self.vec_slots
+            .grow(before, ids.capacity(), size_of::<Uuid>());
     }
 
     /// Register a new webhook subscription
@@ -125,10 +182,12 @@ impl WebhookRegistry {
         };
 
         let id = webhook.id;
-        self.webhooks.insert(id, webhook.clone());
+        self.webhooks_charge
+            .insert(&self.webhooks, id, webhook.clone(), |_, w| {
+                subscription_heap(w)
+            });
 
-        // Update tenant index
-        self.tenant_index.entry(req.tenant_id).or_default().push(id);
+        self.push_tenant_id(req.tenant_id, id);
 
         webhook
     }
@@ -154,6 +213,7 @@ impl WebhookRegistry {
     pub fn update(&self, id: Uuid, req: UpdateWebhookRequest) -> Option<WebhookSubscription> {
         let mut webhook = self.webhooks.get_mut(&id)?;
         let w = webhook.value_mut();
+        let heap_before = subscription_heap(w);
 
         if let Some(url) = req.url {
             w.url = url;
@@ -171,13 +231,17 @@ impl WebhookRegistry {
             w.description = Some(description);
         }
         w.updated_at = Utc::now();
+        self.webhooks_charge
+            .adjust_owned(heap_before, subscription_heap(w));
 
         Some(w.clone())
     }
 
     /// Delete a webhook
     pub fn delete(&self, id: Uuid) -> Option<WebhookSubscription> {
-        let (_, webhook) = self.webhooks.remove(&id)?;
+        let webhook = self
+            .webhooks_charge
+            .remove_entry(&self.webhooks, &id, |_, w| subscription_heap(w))?;
 
         // Remove from tenant index
         if let Some(mut ids) = self.tenant_index.get_mut(&webhook.tenant_id) {
@@ -185,7 +249,10 @@ impl WebhookRegistry {
         }
 
         // Clean up deliveries
-        self.deliveries.remove(&id);
+        if let Some((_, deliveries)) = self.deliveries.remove(&id) {
+            self.vec_slots.sub(deliveries_heap(&deliveries));
+        }
+        self.deliveries_charge.resize(&self.deliveries);
 
         Some(webhook)
     }
@@ -229,10 +296,15 @@ impl WebhookRegistry {
 
     /// Record a delivery attempt
     pub fn record_delivery(&self, delivery: WebhookDelivery) {
-        self.deliveries
-            .entry(delivery.webhook_id)
-            .or_default()
-            .push(delivery);
+        let webhook_id = delivery.webhook_id;
+        self.vec_slots.add(delivery_heap(&delivery));
+        let mut log = self.deliveries.entry(webhook_id).or_default();
+        let before = log.capacity();
+        log.push(delivery);
+        self.vec_slots
+            .grow(before, log.capacity(), size_of::<WebhookDelivery>());
+        drop(log);
+        self.deliveries_charge.resize(&self.deliveries);
     }
 
     /// Get delivery history for a webhook
