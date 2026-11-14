@@ -3,14 +3,22 @@ use crate::{
     application::dto::EventDto,
     domain::entities::Event,
     error::{AllSourceError, Result},
-    infrastructure::persistence::{
-        archive_budget::ArchiveReadBudget,
-        feed_log::{Appended, FeedLog, FeedLogRecord, FeedLogScope},
+    infrastructure::{
+        hash_state::{
+            FastMap, FastSet, fast_map, fast_map_with_capacity, fast_set, fast_set_with_capacity,
+        },
+        memory::ledger::{Owner, Tally},
+        observability::heap::hash_entry_bytes,
+        persistence::{
+            archive_budget::ArchiveReadBudget,
+            feed_log::{Appended, FeedLog, FeedLogRecord, FeedLogScope},
+        },
     },
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::BTreeMap,
+    mem::size_of,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -57,7 +65,7 @@ fn narrow_feed_enabled() -> bool {
 }
 
 #[derive(Clone)]
-enum Locator {
+pub(super) enum Locator {
     Memory,
     Archive { file: Arc<PathBuf>, row: u64 },
 }
@@ -72,13 +80,15 @@ struct FeedEntry {
 pub(super) struct FeedIndex {
     epoch: u64,
     events: Vec<FeedEntry>,
-    ids: HashSet<Uuid>,
+    ids: FastSet<Uuid>,
     /// Built from the tenant's whole archive plus memory, so it numbers every
     /// event without the tenant being resident.
     narrow: bool,
     /// Mirrors the tenant's [`FeedLog`] record for record: same epoch, same
     /// positions.
     durable: bool,
+    /// Released when the tenant's feed is dropped.
+    charged: Tally,
 }
 
 impl Default for FeedIndex {
@@ -86,11 +96,31 @@ impl Default for FeedIndex {
         Self {
             epoch: Uuid::new_v4().as_u64_pair().0 & ((1_u64 << 52) - 1),
             events: Vec::new(),
-            ids: HashSet::new(),
+            ids: fast_set(),
             narrow: false,
             durable: false,
+            charged: Tally::new(Owner::FeedIndex),
         }
     }
+}
+
+/// Bytes a feed entry holds beyond its slot in `events`: the two `Arc<str>`
+/// allocations and its id in the set.
+fn feed_entry_owned_bytes(entry: &FeedEntry) -> u64 {
+    const ARC_HEADER: usize = 2 * size_of::<usize>();
+    (2 * ARC_HEADER
+        + entry.event_type.len()
+        + entry.entity_id.len()
+        + hash_entry_bytes::<Uuid, ()>()) as u64
+}
+
+fn push_entry(feed: &mut FeedIndex, entry: FeedEntry) {
+    let before = feed.events.capacity();
+    let owned = feed_entry_owned_bytes(&entry);
+    feed.events.push(entry);
+    feed.charged
+        .grow(before, feed.events.capacity(), size_of::<FeedEntry>());
+    feed.charged.add(owned);
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,10 +139,10 @@ pub struct FeedPage {
     pub caught_up: bool,
 }
 
-struct Candidate {
-    position: usize,
-    id: Uuid,
-    at: Locator,
+pub(super) struct Candidate {
+    pub(super) position: usize,
+    pub(super) id: Uuid,
+    pub(super) at: Locator,
 }
 
 struct Scan {
@@ -187,22 +217,60 @@ impl EventStore {
             self.observe_durable_feed(log, event);
             return;
         }
-        let mut feed = self
-            .feed_indexes
-            .entry(event.tenant_id_str().to_owned())
-            .or_default();
+        let tenant = event.tenant_id_str();
+        self.feed_indexes_charge.ensure(
+            &self.feed_indexes,
+            tenant,
+            || tenant.to_owned(),
+            FeedIndex::default,
+            tenant.len() as u64,
+        );
+        let mut feed = self.feed_indexes.entry(tenant.to_owned()).or_default();
         if feed.ids.insert(event.id) {
-            feed.events.push(FeedEntry {
-                id: event.id,
-                event_type: Arc::from(event.event_type_str()),
-                entity_id: Arc::from(event.entity_id_str()),
-                at: Locator::Memory,
-            });
+            push_entry(
+                &mut feed,
+                FeedEntry {
+                    id: event.id,
+                    event_type: Arc::from(event.event_type_str()),
+                    entity_id: Arc::from(event.entity_id_str()),
+                    at: Locator::Memory,
+                },
+            );
         }
     }
 
+    /// Drop a tenant's feed and release its key. The feed's own bytes go with
+    /// its [`Tally`].
+    pub(super) fn remove_feed_index(&self, tenant: &str) {
+        if self.feed_indexes.remove(tenant).is_some() {
+            self.feed_indexes_charge.release_owned(tenant.len() as u64);
+        }
+    }
+
+    fn feed_entry_for(&self, tenant: &str) -> dashmap::mapref::one::RefMut<'_, String, FeedIndex> {
+        self.feed_indexes_charge.ensure(
+            &self.feed_indexes,
+            tenant,
+            || tenant.to_owned(),
+            FeedIndex::default,
+            tenant.len() as u64,
+        );
+        self.feed_indexes.entry(tenant.to_owned()).or_default()
+    }
+
+    fn insert_feed_index(&self, tenant: &str, feed: FeedIndex) {
+        self.feed_indexes_charge.ensure(
+            &self.feed_indexes,
+            tenant,
+            || tenant.to_owned(),
+            FeedIndex::default,
+            tenant.len() as u64,
+        );
+        self.feed_indexes.insert(tenant.to_owned(), feed);
+    }
+
     pub(super) fn rebuild_tenant_feed(&self, tenant: &str, events: &[Event]) {
-        self.feed_indexes.remove(tenant);
+        self.remove_feed_index(tenant);
         for event in events
             .iter()
             .filter(|event| event.tenant_id_str() == tenant)
@@ -222,19 +290,22 @@ impl EventStore {
                     && feed.durable
                 {
                     feed.ids.insert(record.id);
-                    feed.events.push(FeedEntry {
-                        id: record.id,
-                        event_type: record.event_type,
-                        entity_id: record.entity_id,
-                        at: Locator::Memory,
-                    });
+                    push_entry(
+                        &mut feed,
+                        FeedEntry {
+                            id: record.id,
+                            event_type: record.event_type,
+                            entity_id: record.entity_id,
+                            at: Locator::Memory,
+                        },
+                    );
                 }
             }
             Ok(Appended::Duplicate | Appended::NotOpen) => {}
             Err(error) => {
                 tracing::error!("Feed log append failed for event {}: {error}", event.id);
                 // The next read rebuilds the index and re-appends what the log lacks.
-                self.feed_indexes.remove(tenant);
+                self.remove_feed_index(tenant);
             }
         }
     }
@@ -300,15 +371,15 @@ impl EventStore {
         {
             return Ok(());
         }
-        let mut names: HashMap<String, Arc<str>> = HashMap::new();
+        let mut names: FastMap<String, Arc<str>> = fast_map();
         let mut intern = |value: String| -> Arc<str> {
             names
                 .entry(value)
                 .or_insert_with_key(|value| Arc::from(value.as_str()))
                 .clone()
         };
-        let mut located: HashMap<Uuid, Locator> = HashMap::with_capacity(keys.len());
-        let mut seen = HashSet::with_capacity(keys.len());
+        let mut located: FastMap<Uuid, Locator> = fast_map_with_capacity(keys.len());
+        let mut seen = fast_set_with_capacity(keys.len());
         let mut history = Vec::new();
         for key in keys {
             if key.event_type == MODEL_EVENT {
@@ -359,20 +430,24 @@ impl EventStore {
         let mut feed = FeedIndex {
             epoch,
             events: Vec::with_capacity(records.len()),
-            ids: HashSet::with_capacity(records.len()),
+            ids: fast_set_with_capacity(records.len()),
             narrow: true,
             durable: true,
+            charged: Tally::new(Owner::FeedIndex),
         };
         for record in records {
             feed.ids.insert(record.id);
-            feed.events.push(FeedEntry {
-                at: located.get(&record.id).cloned().unwrap_or(Locator::Memory),
-                id: record.id,
-                event_type: record.event_type,
-                entity_id: record.entity_id,
-            });
+            push_entry(
+                &mut feed,
+                FeedEntry {
+                    at: located.get(&record.id).cloned().unwrap_or(Locator::Memory),
+                    id: record.id,
+                    event_type: record.event_type,
+                    entity_id: record.entity_id,
+                },
+            );
         }
-        self.feed_indexes.insert(tenant.to_owned(), feed);
+        self.insert_feed_index(tenant, feed);
         drop(events);
         Ok(())
     }
@@ -406,7 +481,7 @@ impl EventStore {
         {
             return Ok(());
         }
-        let mut names: HashMap<String, Arc<str>> = HashMap::new();
+        let mut names: FastMap<String, Arc<str>> = fast_map();
         let mut intern = |value: String| -> Arc<str> {
             names
                 .entry(value)
@@ -421,29 +496,35 @@ impl EventStore {
             if key.event_type == MODEL_EVENT || !feed.ids.insert(key.id) {
                 continue;
             }
-            feed.events.push(FeedEntry {
-                id: key.id,
-                event_type: intern(key.event_type),
-                entity_id: intern(key.entity_id),
-                at: Locator::Archive {
-                    file: key.file,
-                    row: key.row,
+            push_entry(
+                &mut feed,
+                FeedEntry {
+                    id: key.id,
+                    event_type: intern(key.event_type),
+                    entity_id: intern(key.entity_id),
+                    at: Locator::Archive {
+                        file: key.file,
+                        row: key.row,
+                    },
                 },
-            });
+            );
         }
         for event in events.iter().filter(|event| {
             event.tenant_id_str() == tenant && event.event_type_str() != MODEL_EVENT
         }) {
             if feed.ids.insert(event.id) {
-                feed.events.push(FeedEntry {
-                    id: event.id,
-                    event_type: intern(event.event_type_str().to_owned()),
-                    entity_id: intern(event.entity_id_str().to_owned()),
-                    at: Locator::Memory,
-                });
+                push_entry(
+                    &mut feed,
+                    FeedEntry {
+                        id: event.id,
+                        event_type: intern(event.event_type_str().to_owned()),
+                        entity_id: intern(event.entity_id_str().to_owned()),
+                        at: Locator::Memory,
+                    },
+                );
             }
         }
-        self.feed_indexes.insert(tenant.to_owned(), feed);
+        self.insert_feed_index(tenant, feed);
         drop(events);
         Ok(())
     }
@@ -515,7 +596,7 @@ impl EventStore {
                 }
             }
             None => scan_feed(
-                &self.feed_indexes.entry(tenant.to_owned()).or_default(),
+                &self.feed_entry_for(tenant),
                 usize::MAX,
                 cursor,
                 limit,
@@ -580,19 +661,20 @@ impl EventStore {
         }
         let remapped = self.remap_feed_locators(tenant, candidates)?;
         self.read_feed_payloads(tenant, &remapped)?.ok_or_else(|| {
-            self.feed_indexes.remove(tenant);
+            self.remove_feed_index(tenant);
             AllSourceError::StorageError("feed archive changed; retry".into())
         })
     }
 
     /// `None` when a locator no longer resolves.
-    fn read_feed_payloads(
+    pub(super) fn read_feed_payloads(
         &self,
         tenant: &str,
         candidates: &[Candidate],
     ) -> Result<Option<Vec<Event>>> {
-        let mut found: HashMap<Uuid, Event> = HashMap::with_capacity(candidates.len());
-        let mut by_file: HashMap<Arc<PathBuf>, Vec<u64>> = HashMap::new();
+        let mut found: FastMap<Uuid, Event> = fast_map_with_capacity(candidates.len());
+        // Path order fixes which error is reported when several files fail.
+        let mut by_file: BTreeMap<Arc<PathBuf>, Vec<u64>> = BTreeMap::new();
         {
             let events = self.events.read();
             for candidate in candidates {
@@ -658,7 +740,7 @@ impl EventStore {
             }
             None => Vec::new(),
         };
-        let mut located: HashMap<Uuid, Locator> = HashMap::with_capacity(keys.len());
+        let mut located: FastMap<Uuid, Locator> = fast_map_with_capacity(keys.len());
         for key in keys {
             located.entry(key.id).or_insert(Locator::Archive {
                 file: key.file,

@@ -15,6 +15,7 @@ build
 .next
 out
 target
+.autoresearch/
 *.wasm
 *.tsbuildinfo
 

@@ -13,6 +13,8 @@
 pub mod cluster;
 pub mod config;
 pub mod di;
+pub mod hash_state;
+pub mod memory;
 pub mod observability;
 pub mod persistence;
 pub mod query;

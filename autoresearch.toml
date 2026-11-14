@@ -1,0 +1,127 @@
+schema_version = 1
+
+[experiment]
+name = "core memory bound S1"
+
+[experiment.objective]
+name = "peak_live_bytes"
+direction = "minimize"
+
+[experiment.budget]
+max_candidates = 8
+max_failures = 3
+wall_clock_seconds = 14400
+
+[scope]
+mutable_paths = ["apps/core/src"]
+protected_paths = [
+    "apps/core/src/infrastructure/persistence/archive_output.rs",
+    "apps/core/src/infrastructure/persistence/wal.rs",
+    "apps/core/src/infrastructure/persistence/event_codec.rs",
+]
+
+[agent]
+program = "/usr/bin/git"
+args = ["status", "--short"]
+timeout_seconds = 60
+
+[[evaluators]]
+id = "heap_replay"
+hard_gates = [
+    "fixture_present",
+    "fixture_verified",
+    "build_ok",
+    "replay_completed",
+    "replay_repeatable",
+    "peak_nonzero",
+    "replay_expected_status",
+    "ledger_two_sided",
+    "rows_decoded_ok",
+    "eviction_policy_unchanged",
+    "policy_digest_pinned",
+    "query_digest_equal",
+    "prod_hasher_digest_equal",
+    "codec_digest_equal",
+    "geo_digest_equal",
+    "evictions_match",
+    "protected_paths_exist",
+    "heap_eval_self_sha",
+]
+
+[evaluators.command]
+program = "/private/tmp/claude-501/-Users-decebaldobrica-Projects-chronos-all-source/cdabde1e-db73-4e6f-9d85-db6fd4fdad19/scratchpad/eval-v3/oracle-bin/heap-replay-eval"
+args = [
+    "--artifacts", "/private/tmp/claude-501/-Users-decebaldobrica-Projects-chronos-all-source/cdabde1e-db73-4e6f-9d85-db6fd4fdad19/scratchpad/eval-v3",
+    "--fixture-dir", "/private/tmp/claude-501/-Users-decebaldobrica-Projects-chronos-all-source/cdabde1e-db73-4e6f-9d85-db6fd4fdad19/scratchpad/fixture-copy",
+    "--verify-fixture",
+    "--self-sha256", "f94e147fd9498a938e949142a18e156a155badb00d64fbb44c718ca2b48edaac",
+    "--policy-sha256", "8fd12ab84a4c6abed1856730619e4f062e591f8dab01226ef48a661462c65686",
+    "--env", "PATH=/Users/decebaldobrica/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "--env", "HOME=/Users/decebaldobrica",
+    "--env", "CARGO_HOME=/Users/decebaldobrica/.cargo",
+    "--env", "RUSTUP_HOME=/Users/decebaldobrica/.rustup",
+    "--env", "ALLSOURCE_MEMORY_RESERVE_BYTES=1073741824",
+]
+timeout_seconds = 290
+
+[[evaluators.metrics]]
+name = "peak_live_bytes"
+kind = "objective"
+direction = "minimize"
+
+[[evaluators.metrics]]
+name = "rows_decoded"
+kind = "diagnostic"
+direction = "minimize"
+
+[[evaluators.metrics]]
+name = "requests"
+kind = "diagnostic"
+direction = "minimize"
+
+[[evaluators]]
+id = "core_tests"
+hard_gates = [
+    "tests_pass",
+    "expected_tests_ran",
+    "tests_unchanged",
+    "tests_digest_pinned",
+    "tooling_tests_pass",
+    "tests_eval_self_sha",
+]
+
+[evaluators.command]
+program = "/private/tmp/claude-501/-Users-decebaldobrica-Projects-chronos-all-source/cdabde1e-db73-4e6f-9d85-db6fd4fdad19/scratchpad/eval-v3/oracle-bin/core-tests-eval"
+args = [
+    "--artifacts", "/private/tmp/claude-501/-Users-decebaldobrica-Projects-chronos-all-source/cdabde1e-db73-4e6f-9d85-db6fd4fdad19/scratchpad/core-tests",
+    "--self-sha256", "28356096a479ebda7b643c33bfcfb55290a1f35465eb86c9f123f68dffba07b9",
+    "--tests-sha256", "4221d197a3f29fb0b836d25909d1286727f12c3765c3417305bd84e5e7b78bc1",
+    "--env", "PATH=/Users/decebaldobrica/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "--env", "HOME=/Users/decebaldobrica",
+    "--env", "CARGO_HOME=/Users/decebaldobrica/.cargo",
+    "--env", "RUSTUP_HOME=/Users/decebaldobrica/.rustup",
+]
+timeout_seconds = 290
+
+[[evaluators.metrics]]
+name = "core_passed"
+kind = "diagnostic"
+direction = "minimize"
+
+[[evaluators.metrics]]
+name = "core_failed"
+kind = "diagnostic"
+direction = "minimize"
+
+[[evaluators.metrics]]
+name = "core_ignored"
+kind = "diagnostic"
+direction = "minimize"
+
+[[evaluators.metrics]]
+name = "tooling_passed"
+kind = "diagnostic"
+direction = "minimize"
+
+[authority]
+allow = []

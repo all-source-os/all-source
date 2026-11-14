@@ -43,3 +43,22 @@ pub fn json_heap_bytes(value: &serde_json::Value) -> usize {
 pub const fn hash_entry_bytes<K, V>() -> usize {
     size_of::<(K, V)>() * 8 / 7 + 1
 }
+
+/// Live bytes as jemalloc counts them. The stats epoch is advanced first,
+/// because jemalloc serves cached statistics until it is.
+#[cfg(all(feature = "heap-profile", target_os = "linux"))]
+pub fn jemalloc_live_bytes() -> u64 {
+    tikv_jemalloc_ctl::epoch::advance().expect("jemalloc epoch");
+    tikv_jemalloc_ctl::stats::allocated::read().expect("jemalloc allocated") as u64
+}
+
+/// A pprof dump of the live heap profile. Fails when the process was not
+/// started with profiling active.
+#[cfg(all(feature = "heap-profile", target_os = "linux"))]
+pub async fn heap_profile_pprof() -> anyhow::Result<Vec<u8>> {
+    let ctl = jemalloc_pprof::PROF_CTL
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("jemalloc profiling is not compiled in"))?;
+    let mut ctl = ctl.lock().await;
+    ctl.dump_pprof()
+}

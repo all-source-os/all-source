@@ -36,6 +36,28 @@ async fn setup() -> CoreTaskRepository {
     CoreTaskRepository::new(backend)
 }
 
+async fn populated(n: usize) -> CoreTaskRepository {
+    let repo = setup().await;
+    for i in 0..n {
+        repo.create_task(
+            &format!("t-{i:08x}"),
+            &format!("task {i}"),
+            "p2",
+            &[],
+            TaskType::Task,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+    repo
+}
+
+// Every future passed to `block_on` is a module-level `async fn`. The default
+// entry point toggles collection on any symbol under the benchmark's wrapper
+// module, and `block_on::<{closure}>` of a closure defined in a benchmark is
+// one, so when it is not inlined everything it runs goes uncounted.
 #[library_benchmark]
 fn bench_workspace_init() {
     let rt = rt();
@@ -47,45 +69,13 @@ fn bench_workspace_init() {
 #[bench::medium(100)]
 fn bench_create_batch(n: usize) {
     let rt = rt();
-    rt.block_on(async {
-        let repo = setup().await;
-        for i in 0..n {
-            repo.create_task(
-                &format!("t-{i:08x}"),
-                &format!("task {i}"),
-                "p2",
-                &[],
-                TaskType::Task,
-                None,
-                None,
-            )
-            .await
-            .unwrap();
-        }
-        std::hint::black_box(());
-    });
+    std::hint::black_box(rt.block_on(populated(n)));
 }
 
 #[library_benchmark]
 fn bench_list_after_create() {
     let rt = rt();
-    let repo = rt.block_on(async {
-        let repo = setup().await;
-        for i in 0..100usize {
-            repo.create_task(
-                &format!("t-{i:08x}"),
-                &format!("task {i}"),
-                "p2",
-                &[],
-                TaskType::Task,
-                None,
-                None,
-            )
-            .await
-            .unwrap();
-        }
-        repo
-    });
+    let repo = rt.block_on(populated(100));
     std::hint::black_box(repo.list_tasks(None).unwrap());
 }
 

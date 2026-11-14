@@ -10,10 +10,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 
+use super::charge;
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
-    prime::types::event_types,
+    infrastructure::memory::ledger::Tally, prime::types::event_types,
 };
+
+fn node_bytes(key: &str, entry: &NodeEntry) -> u64 {
+    charge::text(key)
+        + charge::text(&entry.node_type)
+        + charge::json(&entry.properties)
+        + charge::opt_text(entry.domain.as_deref())
+        + charge::texts(&entry.labels)
+}
 
 /// Serializable snapshot entry for a single node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +44,7 @@ pub struct NodeStateProjection {
     name: String,
     /// entity_id -> NodeEntry
     nodes: Arc<DashMap<String, NodeEntry>>,
+    charge: Tally,
 }
 
 impl NodeStateProjection {
@@ -42,6 +52,15 @@ impl NodeStateProjection {
         Self {
             name: name.into(),
             nodes: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    fn store(&self, key: &str, entry: NodeEntry) {
+        let owned = node_bytes(key, &entry);
+        match self.nodes.insert(key.to_string(), entry) {
+            Some(old) => self.charge.adjust(node_bytes(key, &old), owned),
+            None => self.charge.add(charge::entry::<String, NodeEntry>(owned)),
         }
     }
 
@@ -158,8 +177,8 @@ impl Projection for NodeStateProjection {
                     })
                     .unwrap_or_default();
 
-                self.nodes.insert(
-                    entity_id,
+                self.store(
+                    &entity_id,
                     NodeEntry {
                         node_type,
                         properties,
@@ -173,6 +192,7 @@ impl Projection for NodeStateProjection {
             }
             event_types::NODE_UPDATED => {
                 if let Some(mut entry) = self.nodes.get_mut(&entity_id) {
+                    let before = node_bytes(entry.key(), &entry);
                     // Deep merge properties
                     if let (Some(Value::Object(updates)), Value::Object(existing)) =
                         (payload.get("properties"), &mut entry.properties)
@@ -196,6 +216,7 @@ impl Projection for NodeStateProjection {
                     }
 
                     entry.updated_at = timestamp;
+                    self.charge.adjust(before, node_bytes(entry.key(), &entry));
                 }
             }
             event_types::NODE_DELETED => {
@@ -218,6 +239,7 @@ impl Projection for NodeStateProjection {
 
     fn clear(&self) {
         self.nodes.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -232,9 +254,9 @@ impl Projection for NodeStateProjection {
     fn restore(&self, snapshot: &Value) -> Result<()> {
         let entries: Vec<(String, NodeEntry)> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
-        self.nodes.clear();
+        self.clear();
         for (key, entry) in entries {
-            self.nodes.insert(key, entry);
+            self.store(&key, entry);
         }
         Ok(())
     }

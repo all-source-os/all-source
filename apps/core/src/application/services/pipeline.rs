@@ -1,7 +1,13 @@
 use crate::{
-    domain::entities::Event,
+    domain::entities::{Event, event::value_heap_bytes},
     error::{AllSourceError, Result},
-    infrastructure::observability::metrics::MetricsRegistry,
+    infrastructure::{
+        memory::ledger::{MapCharge, Owner, Tally},
+        observability::{
+            heap::{hash_entry_bytes, json_heap_bytes},
+            metrics::MetricsRegistry,
+        },
+    },
 };
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
@@ -10,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::{
     collections::{HashMap, VecDeque},
+    mem::size_of,
     sync::Arc,
 };
 use uuid::Uuid;
@@ -138,22 +145,40 @@ pub struct PipelineStats {
 pub struct StatefulOperator {
     /// Operator state storage
     state: Arc<RwLock<HashMap<String, JsonValue>>>,
+    state_charge: Tally,
 
     /// Window buffers for time-based operations
     windows: Arc<RwLock<HashMap<String, VecDeque<(DateTime<Utc>, Event)>>>>,
+    windows_charge: Tally,
+}
+
+/// Heap one state entry holds: its table slot, its key, and the value's owned heap.
+fn state_entry_bytes(key_len: usize, value: &JsonValue) -> u64 {
+    (hash_entry_bytes::<String, JsonValue>() + key_len + json_heap_bytes(value)) as u64
 }
 
 impl StatefulOperator {
     pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(HashMap::new())),
+            state_charge: Tally::new(Owner::PipelineState),
             windows: Arc::new(RwLock::new(HashMap::new())),
+            windows_charge: Tally::new(Owner::PipelineWindows),
         }
     }
 
     /// Store state value
     pub fn set_state(&self, key: String, value: JsonValue) {
-        self.state.write().insert(key, value);
+        let key_len = key.len();
+        let added = state_entry_bytes(key_len, &value);
+        // Every charge and release of state and windows happens under that map's
+        // write guard; otherwise a concurrent replace or clear releases bytes
+        // before they are added, and the clamped sub loses them.
+        let mut state = self.state.write();
+        self.state_charge.add(added);
+        if let Some(old) = state.insert(key, value) {
+            self.state_charge.sub(state_entry_bytes(key_len, &old));
+        }
     }
 
     /// Get state value
@@ -163,7 +188,9 @@ impl StatefulOperator {
 
     /// Add event to window
     pub fn add_to_window(&self, window_key: &str, event: Event, timestamp: DateTime<Utc>) {
+        let bytes = event.resident_bytes();
         let mut windows = self.windows.write();
+        self.windows_charge.add(bytes);
         windows
             .entry(window_key.to_string())
             .or_default()
@@ -182,14 +209,25 @@ impl StatefulOperator {
     /// Evict expired events from window
     pub fn evict_window(&self, window_key: &str, cutoff: DateTime<Utc>) {
         if let Some(window) = self.windows.write().get_mut(window_key) {
+            let released: u64 = window
+                .iter()
+                .filter(|(ts, _)| *ts <= cutoff)
+                .map(|(_, event)| event.resident_bytes())
+                .sum();
             window.retain(|(ts, _)| *ts > cutoff);
+            self.windows_charge.sub(released);
         }
     }
 
     /// Clear all state
     pub fn clear(&self) {
-        self.state.write().clear();
-        self.windows.write().clear();
+        let mut state = self.state.write();
+        state.clear();
+        self.state_charge.take();
+        drop(state);
+        let mut windows = self.windows.write();
+        windows.clear();
+        self.windows_charge.take();
     }
 }
 
@@ -698,7 +736,13 @@ impl Pipeline {
 pub struct PipelineManager {
     // Using DashMap for lock-free concurrent access
     pipelines: Arc<DashMap<Uuid, Arc<Pipeline>>>,
+    pipelines_charge: MapCharge,
     metrics: Arc<MetricsRegistry>,
+}
+
+/// Owned heap of a pipeline's configuration, measured on its JSON form.
+fn config_heap(config: &PipelineConfig) -> u64 {
+    serde_json::to_value(config).map_or(0, |value| value_heap_bytes(&value) as u64)
 }
 
 impl PipelineManager {
@@ -709,6 +753,7 @@ impl PipelineManager {
     pub fn with_metrics(metrics: Arc<MetricsRegistry>) -> Self {
         Self {
             pipelines: Arc::new(DashMap::new()),
+            pipelines_charge: MapCharge::new(Owner::Misc, size_of::<(Uuid, Arc<Pipeline>)>()),
             metrics,
         }
     }
@@ -718,7 +763,8 @@ impl PipelineManager {
         let id = config.id;
         let name = config.name.clone();
         let pipeline = Arc::new(Pipeline::new(config));
-        self.pipelines.insert(id, pipeline);
+        self.pipelines_charge
+            .insert(&self.pipelines, id, pipeline, |_, p| config_heap(&p.config));
 
         let count = self.pipelines.len();
         self.metrics.pipelines_registered_total.set(count as i64);
@@ -784,7 +830,10 @@ impl PipelineManager {
 
     /// Remove a pipeline
     pub fn remove(&self, id: Uuid) -> bool {
-        let removed = self.pipelines.remove(&id).is_some();
+        let removed = self
+            .pipelines_charge
+            .remove_entry(&self.pipelines, &id, |_, p| config_heap(&p.config))
+            .is_some();
 
         if removed {
             let count = self.pipelines.len();

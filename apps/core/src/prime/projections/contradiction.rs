@@ -12,10 +12,23 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use super::charge;
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
-    prime::types::event_types,
+    infrastructure::memory::ledger::Tally, prime::types::event_types,
 };
+
+fn pair_bytes(pair: &(String, String)) -> u64 {
+    charge::text(&pair.0) + charge::text(&pair.1)
+}
+
+fn contradiction_bytes(c: &Contradiction) -> u64 {
+    charge::text(&c.id)
+        + charge::text(&c.entity_id)
+        + charge::text(&c.relation)
+        + charge::text(&c.existing_edge)
+        + charge::text(&c.conflicting_edge)
+}
 
 /// A detected contradiction between two edges.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +67,10 @@ pub struct ContradictionDetectionProjection {
     contradictions: Arc<DashMap<String, Contradiction>>,
     /// Counter for generating contradiction IDs.
     counter: std::sync::atomic::AtomicU64,
+    /// Edges and contradictions. `clear` releases these.
+    charge: Tally,
+    /// Configured relations. `clear` keeps them, so they stay charged.
+    relations_charge: Tally,
 }
 
 impl ContradictionDetectionProjection {
@@ -64,15 +81,46 @@ impl ContradictionDetectionProjection {
             exclusive_edges: Arc::new(DashMap::new()),
             contradictions: Arc::new(DashMap::new()),
             counter: std::sync::atomic::AtomicU64::new(0),
+            charge: charge::tally(),
+            relations_charge: charge::tally(),
         }
     }
 
     /// Register a relation as exclusive (only one target per source).
     pub fn configure_exclusive(&self, relation: &str) {
-        self.exclusive_relations
+        let inserted = self
+            .exclusive_relations
             .write()
             .unwrap()
             .insert(relation.to_string());
+        if inserted {
+            self.relations_charge
+                .add(charge::entry::<String, ()>(charge::text(relation)));
+        }
+    }
+
+    fn put_exclusive(&self, key: (String, String), value: (String, String)) {
+        let owned = pair_bytes(&key) + pair_bytes(&value);
+        let key_bytes = pair_bytes(&key);
+        match self.exclusive_edges.insert(key, value) {
+            Some(old) => self.charge.adjust(key_bytes + pair_bytes(&old), owned),
+            None => self
+                .charge
+                .add(charge::entry::<(String, String), (String, String)>(owned)),
+        }
+    }
+
+    fn put_contradiction(&self, contradiction: Contradiction) {
+        let owned = contradiction_bytes(&contradiction);
+        match self
+            .contradictions
+            .insert(contradiction.id.clone(), contradiction)
+        {
+            Some(old) => self.charge.adjust(contradiction_bytes(&old), owned),
+            None => self
+                .charge
+                .add(charge::entry::<String, Contradiction>(owned)),
+        }
     }
 
     pub fn is_exclusive(&self, relation: &str) -> bool {
@@ -113,8 +161,7 @@ impl ContradictionDetectionProjection {
                 // Record the first edge as the "existing" one
                 let key = (source.clone(), relation.to_string());
                 if let Some(first) = targets.first() {
-                    self.exclusive_edges
-                        .insert(key, (first.0.clone(), first.1.clone()));
+                    self.put_exclusive(key, (first.0.clone(), first.1.clone()));
                 }
 
                 // Each additional target is a contradiction against the first
@@ -124,22 +171,18 @@ impl ContradictionDetectionProjection {
                         self.counter
                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                     );
-                    self.contradictions.insert(
-                        id.clone(),
-                        Contradiction {
-                            id,
-                            entity_id: source.clone(),
-                            relation: relation.to_string(),
-                            existing_edge: targets[0].1.clone(),
-                            conflicting_edge: target.1.clone(),
-                            resolved: false,
-                        },
-                    );
+                    self.put_contradiction(Contradiction {
+                        id,
+                        entity_id: source.clone(),
+                        relation: relation.to_string(),
+                        existing_edge: targets[0].1.clone(),
+                        conflicting_edge: target.1.clone(),
+                        resolved: false,
+                    });
                 }
             } else if let Some(only) = targets.first() {
                 let key = (source.clone(), relation.to_string());
-                self.exclusive_edges
-                    .insert(key, (only.0.clone(), only.1.clone()));
+                self.put_exclusive(key, (only.0.clone(), only.1.clone()));
             }
         }
     }
@@ -168,7 +211,10 @@ impl ContradictionDetectionProjection {
             // Update the exclusive edge to point to the kept edge's target
             let key = (entry.entity_id.clone(), entry.relation.clone());
             if let Some(mut edge_entry) = self.exclusive_edges.get_mut(&key) {
+                let before = pair_bytes(&key) + pair_bytes(&edge_entry);
                 *edge_entry = (String::new(), keep_edge.to_string());
+                self.charge
+                    .adjust(before, pair_bytes(&key) + pair_bytes(&edge_entry));
             }
 
             Some(delete_edge)
@@ -225,20 +271,17 @@ impl Projection for ContradictionDetectionProjection {
                     self.counter
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 );
-                self.contradictions.insert(
-                    id.clone(),
-                    Contradiction {
-                        id,
-                        entity_id: source,
-                        relation: relation.to_string(),
-                        existing_edge: existing_edge_id,
-                        conflicting_edge: edge_id,
-                        resolved: false,
-                    },
-                );
+                self.put_contradiction(Contradiction {
+                    id,
+                    entity_id: source,
+                    relation: relation.to_string(),
+                    existing_edge: existing_edge_id,
+                    conflicting_edge: edge_id,
+                    resolved: false,
+                });
             }
         } else {
-            self.exclusive_edges.insert(key, (target, edge_id));
+            self.put_exclusive(key, (target, edge_id));
         }
 
         Ok(())
@@ -252,6 +295,7 @@ impl Projection for ContradictionDetectionProjection {
     fn clear(&self) {
         self.exclusive_edges.clear();
         self.contradictions.clear();
+        self.charge.take();
         self.counter.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
@@ -295,20 +339,25 @@ impl Projection for ContradictionDetectionProjection {
         {
             let mut relations = self.exclusive_relations.write().unwrap();
             relations.clear();
+            self.relations_charge.take();
             for r in snap.exclusive_relations {
-                relations.insert(r);
+                let bytes = charge::text(&r);
+                if relations.insert(r) {
+                    self.relations_charge
+                        .add(charge::entry::<String, ()>(bytes));
+                }
             }
         }
 
         self.exclusive_edges.clear();
+        self.contradictions.clear();
+        self.charge.take();
         for (source, relation, target, edge_id) in snap.exclusive_edges {
-            self.exclusive_edges
-                .insert((source, relation), (target, edge_id));
+            self.put_exclusive((source, relation), (target, edge_id));
         }
 
-        self.contradictions.clear();
         for c in snap.contradictions {
-            self.contradictions.insert(c.id.clone(), c);
+            self.put_contradiction(c);
         }
 
         Ok(())

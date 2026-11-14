@@ -1,11 +1,17 @@
 use crate::{
-    domain::entities::Event, error::Result, infrastructure::observability::metrics::MetricsRegistry,
+    domain::entities::Event,
+    error::Result,
+    infrastructure::{
+        hash_state::{FastDashMap, fast_dashmap},
+        memory::ledger::{MapCharge, Owner, Tally},
+        observability::{heap::json_heap_bytes, metrics::MetricsRegistry},
+    },
 };
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    mem::size_of,
     path::PathBuf,
     sync::{
         Arc,
@@ -83,15 +89,27 @@ struct ProjectionState {
 pub struct EntitySnapshotProjection {
     name: String,
     /// entity_id -> (latest state, last event timestamp)
-    states: Arc<DashMap<String, (Value, DateTime<Utc>)>>,
+    states: Arc<FastDashMap<String, (Value, DateTime<Utc>)>>,
+    states_charge: MapCharge,
+    states_owned: Tally,
 }
 
 impl EntitySnapshotProjection {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            states: Arc::new(DashMap::new()),
+            states: Arc::new(fast_dashmap()),
+            states_charge: MapCharge::new(
+                Owner::ProjectionPermanent,
+                size_of::<(String, (Value, DateTime<Utc>))>(),
+            ),
+            states_owned: Tally::new(Owner::ProjectionPermanent),
         }
+    }
+
+    fn charge_state(&self, key: &str, state: &Value) {
+        self.states_owned
+            .add(key.len() as u64 + json_heap_bytes(state) as u64);
     }
 
     /// Get all entity states
@@ -114,18 +132,32 @@ impl Projection for EntitySnapshotProjection {
         // convergence during bidirectional sync where events may arrive out of
         // order. In the normal (non-sync) case, events are always in order so
         // this condition is always true.
+        let key = event.entity_id_str();
+        if !self.states.contains_key(key) {
+            self.states_charge.ensure(
+                &self.states,
+                key,
+                || key.to_string(),
+                || (event.payload.clone(), event.timestamp),
+                0,
+            );
+            self.charge_state(key, &event.payload);
+        }
         self.states
-            .entry(event.entity_id_str().to_string())
+            .entry(key.to_string())
             .and_modify(|(state, last_ts)| {
                 if event.timestamp >= *last_ts {
                     // Merge the event payload into existing state
+                    let before = json_heap_bytes(state) as u64;
                     if let (Value::Object(map), Value::Object(payload_map)) =
-                        (state, &event.payload)
+                        (&mut *state, &event.payload)
                     {
                         for (key, value) in payload_map {
                             map.insert(key.clone(), value.clone());
                         }
                     }
+                    self.states_owned
+                        .adjust(before, json_heap_bytes(state) as u64);
                     *last_ts = event.timestamp;
                 }
                 // Out-of-order event: skip merge to ensure convergence
@@ -141,6 +173,7 @@ impl Projection for EntitySnapshotProjection {
 
     fn clear(&self) {
         self.states.clear();
+        self.states_owned.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -159,7 +192,9 @@ impl Projection for EntitySnapshotProjection {
         let entries: Vec<(String, Value, DateTime<Utc>)> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
         self.states.clear();
+        self.states_owned.take();
         for (key, state, ts) in entries {
+            self.charge_state(&key, &state);
             self.states.insert(key, (state, ts));
         }
         Ok(())
@@ -170,14 +205,19 @@ impl Projection for EntitySnapshotProjection {
 pub struct EventCounterProjection {
     name: String,
     /// event_type -> count
-    counts: Arc<DashMap<String, u64>>,
+    counts: Arc<FastDashMap<String, u64>>,
+    counts_charge: MapCharge,
 }
 
 impl EventCounterProjection {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            counts: Arc::new(DashMap::new()),
+            counts: Arc::new(fast_dashmap()),
+            counts_charge: MapCharge::new(
+                Owner::ProjectionEventCounters,
+                size_of::<(String, u64)>(),
+            ),
         }
     }
 
@@ -201,8 +241,16 @@ impl Projection for EventCounterProjection {
     }
 
     fn process(&self, event: &Event) -> Result<()> {
+        let key = event.event_type_str();
+        self.counts_charge.ensure(
+            &self.counts,
+            key,
+            || key.to_string(),
+            || 0,
+            key.len() as u64,
+        );
         self.counts
-            .entry(event.event_type_str().to_string())
+            .entry(key.to_string())
             .and_modify(|count| *count += 1)
             .or_insert(1);
 
@@ -217,6 +265,7 @@ impl Projection for EventCounterProjection {
 
     fn clear(&self) {
         self.counts.clear();
+        self.counts_charge.clear_owned();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -232,7 +281,15 @@ impl Projection for EventCounterProjection {
         let entries: Vec<(String, u64)> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
         self.counts.clear();
+        self.counts_charge.clear_owned();
         for (key, count) in entries {
+            self.counts_charge.ensure(
+                &self.counts,
+                key.as_str(),
+                || key.clone(),
+                || count,
+                key.len() as u64,
+            );
             self.counts.insert(key, count);
         }
         Ok(())

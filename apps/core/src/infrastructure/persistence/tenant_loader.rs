@@ -20,15 +20,38 @@
 //! rather than "ever loaded since boot", and a `mark_unloaded`
 //! method shows up.
 
-use dashmap::DashMap;
+use crate::infrastructure::{
+    hash_state::{FastDashMap, fast_dashmap},
+    memory::ledger::{MapCharge, Owner},
+};
 use parking_lot::Mutex;
 use std::{
+    mem::size_of,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
+    time::Duration,
 };
+
+/// LRU touch stamp. Production orders by `Instant`; the heap replay orders by a
+/// process-wide counter so the eviction victim sequence is reproducible.
+#[cfg(not(feature = "deterministic-hash"))]
+type TouchStamp = std::time::Instant;
+
+#[cfg(not(feature = "deterministic-hash"))]
+fn touch_stamp() -> TouchStamp {
+    std::time::Instant::now()
+}
+
+#[cfg(feature = "deterministic-hash")]
+type TouchStamp = u64;
+
+#[cfg(feature = "deterministic-hash")]
+fn touch_stamp() -> TouchStamp {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
 
 /// Default ceiling on how long a query may wait for an in-flight
 /// load of the same tenant before giving up. The 100k-event load
@@ -59,13 +82,17 @@ pub const DEFAULT_LOAD_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct TenantLoader {
     // The value records whether this load verified every archive file. Tolerant
     // queries may cache partial history; that cannot authorize an OCC write.
-    loaded: DashMap<String, bool>,
-    locks: DashMap<String, Arc<Mutex<()>>>,
-    bytes: DashMap<String, u64>,
+    loaded: FastDashMap<String, bool>,
+    loaded_charge: MapCharge,
+    locks: FastDashMap<String, Arc<Mutex<()>>>,
+    locks_charge: MapCharge,
+    bytes: FastDashMap<String, u64>,
+    bytes_charge: MapCharge,
     /// Last-used Instant per tenant — refreshed on every query
     /// via `touch`. The eviction policy (Step 3 #3) picks the
     /// tenant with the oldest entry as the LRU victim.
-    last_used: DashMap<String, Instant>,
+    last_used: FastDashMap<String, TouchStamp>,
+    last_used_charge: MapCharge,
     /// Cache byte budget. 0 disables enforcement (keep every
     /// loaded tenant resident). Production reads this from the
     /// `ALLSOURCE_CACHE_BYTES` env var.
@@ -80,10 +107,20 @@ impl TenantLoader {
 
     pub fn with_timeout(load_timeout: Duration) -> Self {
         Self {
-            loaded: DashMap::new(),
-            locks: DashMap::new(),
-            bytes: DashMap::new(),
-            last_used: DashMap::new(),
+            loaded: fast_dashmap(),
+            loaded_charge: MapCharge::new(Owner::TenantLoader, size_of::<(String, bool)>()),
+            locks: fast_dashmap(),
+            locks_charge: MapCharge::new(
+                Owner::TenantLoader,
+                size_of::<(String, Arc<Mutex<()>>)>(),
+            ),
+            bytes: fast_dashmap(),
+            bytes_charge: MapCharge::new(Owner::TenantLoader, size_of::<(String, u64)>()),
+            last_used: fast_dashmap(),
+            last_used_charge: MapCharge::new(
+                Owner::TenantLoader,
+                size_of::<(String, TouchStamp)>(),
+            ),
             byte_budget: AtomicU64::new(0),
             load_timeout,
         }
@@ -109,7 +146,14 @@ impl TenantLoader {
     /// touches this tenant. If the eviction policy picks an LRU
     /// victim, the most-recently-touched tenants are last to go.
     pub fn touch(&self, tenant_id: &str) {
-        self.last_used.insert(tenant_id.to_string(), Instant::now());
+        self.last_used_charge.ensure(
+            &self.last_used,
+            tenant_id,
+            || tenant_id.to_string(),
+            touch_stamp,
+            tenant_id.len() as u64,
+        );
+        self.last_used.insert(tenant_id.to_string(), touch_stamp());
     }
 
     /// Pick the loaded tenant with the oldest `last_used` Instant,
@@ -123,7 +167,7 @@ impl TenantLoader {
     /// `mark_loaded` always stamps `last_used`, so every loaded
     /// tenant has a touch timestamp by construction.
     pub fn pick_lru_excluding(&self, excluded: &str) -> Option<String> {
-        let mut victim: Option<(String, Instant)> = None;
+        let mut victim: Option<(String, TouchStamp)> = None;
         for kv in &self.loaded {
             let tenant = kv.key();
             if tenant == excluded {
@@ -169,8 +213,22 @@ impl TenantLoader {
     }
 
     pub(crate) fn mark_loaded_with_integrity(&self, tenant_id: &str, complete: bool) {
+        self.loaded_charge.ensure(
+            &self.loaded,
+            tenant_id,
+            || tenant_id.to_string(),
+            || complete,
+            tenant_id.len() as u64,
+        );
         self.loaded.insert(tenant_id.to_string(), complete);
-        self.last_used.insert(tenant_id.to_string(), Instant::now());
+        self.last_used_charge.ensure(
+            &self.last_used,
+            tenant_id,
+            || tenant_id.to_string(),
+            touch_stamp,
+            tenant_id.len() as u64,
+        );
+        self.last_used.insert(tenant_id.to_string(), touch_stamp());
     }
 
     /// Reverse of `mark_loaded`: forget that this tenant is in
@@ -179,8 +237,14 @@ impl TenantLoader {
     /// re-walk the tenant's subtree from disk. Called by the
     /// eviction path.
     pub fn mark_unloaded(&self, tenant_id: &str) {
+        self.loaded_charge
+            .forget(&self.loaded, tenant_id, tenant_id.len() as u64);
         self.loaded.remove(tenant_id);
+        self.bytes_charge
+            .forget(&self.bytes, tenant_id, tenant_id.len() as u64);
         self.bytes.remove(tenant_id);
+        self.last_used_charge
+            .forget(&self.last_used, tenant_id, tenant_id.len() as u64);
         self.last_used.remove(tenant_id);
     }
 
@@ -188,6 +252,13 @@ impl TenantLoader {
     /// Called once per event spliced into memory for that tenant.
     /// The total is what the budget check compares against.
     pub fn add_bytes(&self, tenant_id: &str, n: u64) {
+        self.bytes_charge.ensure(
+            &self.bytes,
+            tenant_id,
+            || tenant_id.to_string(),
+            || 0,
+            tenant_id.len() as u64,
+        );
         *self.bytes.entry(tenant_id.to_string()).or_insert(0) += n;
     }
 
@@ -221,6 +292,13 @@ impl TenantLoader {
     /// it. Returns an `Arc` so the caller can hold the lock guard
     /// without keeping a borrow into the DashMap.
     pub fn lock_for(&self, tenant_id: &str) -> Arc<Mutex<()>> {
+        self.locks_charge.ensure(
+            &self.locks,
+            tenant_id,
+            || tenant_id.to_string(),
+            || Arc::new(Mutex::new(())),
+            tenant_id.len() as u64,
+        );
         self.locks
             .entry(tenant_id.to_string())
             .or_insert_with(|| Arc::new(Mutex::new(())))

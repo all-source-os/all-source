@@ -7,11 +7,12 @@
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 
+use super::charge;
 use crate::{
     application::services::projection::Projection, domain::entities::Event, error::Result,
-    prime::types::event_types,
+    infrastructure::memory::ledger::Tally, prime::types::event_types,
 };
 
 /// Projection name constant.
@@ -43,6 +44,22 @@ struct CrossDomainEntry {
     relations: Vec<String>, // relation types (deduped, max 5)
 }
 
+fn string_slot(text: &str) -> u64 {
+    size_of::<String>() as u64 + charge::text(text)
+}
+
+fn strings_bytes(values: &[String]) -> u64 {
+    values.iter().map(|value| string_slot(value)).sum()
+}
+
+fn pair_bytes(pair: &(String, String)) -> u64 {
+    charge::text(&pair.0) + charge::text(&pair.1)
+}
+
+fn entry_bytes(entry: &CrossDomainEntry) -> u64 {
+    strings_bytes(&entry.edges) + strings_bytes(&entry.relations)
+}
+
 /// Tracks cross-domain edges and the relationships between domains.
 pub struct CrossDomainProjection {
     name: String,
@@ -50,6 +67,7 @@ pub struct CrossDomainProjection {
     links: Arc<DashMap<(String, String), CrossDomainEntry>>,
     /// node_id -> domain (lightweight cache built from node events)
     node_domains: Arc<DashMap<String, String>>,
+    charge: Tally,
 }
 
 impl CrossDomainProjection {
@@ -58,6 +76,27 @@ impl CrossDomainProjection {
             name: PROJ_CROSS_DOMAIN.to_string(),
             links: Arc::new(DashMap::new()),
             node_domains: Arc::new(DashMap::new()),
+            charge: charge::tally(),
+        }
+    }
+
+    fn put_node_domain(&self, node_id: String, domain: String) {
+        let key_bytes = charge::text(&node_id);
+        let owned = key_bytes + charge::text(&domain);
+        match self.node_domains.insert(node_id, domain) {
+            Some(old) => self.charge.adjust(key_bytes + charge::text(&old), owned),
+            None => self.charge.add(charge::entry::<String, String>(owned)),
+        }
+    }
+
+    fn store_link(&self, key: (String, String), entry: CrossDomainEntry) {
+        let key_bytes = pair_bytes(&key);
+        let owned = key_bytes + entry_bytes(&entry);
+        match self.links.insert(key, entry) {
+            Some(old) => self.charge.adjust(key_bytes + entry_bytes(&old), owned),
+            None => self
+                .charge
+                .add(charge::entry::<(String, String), CrossDomainEntry>(owned)),
         }
     }
 
@@ -146,7 +185,7 @@ impl Projection for CrossDomainProjection {
                     Some(entity_id.to_string())
                 };
                 if let (Some(key), Some(domain)) = (key, domain) {
-                    self.node_domains.insert(key, domain.to_string());
+                    self.put_node_domain(key, domain.to_string());
                 }
             }
 
@@ -175,22 +214,36 @@ impl Projection for CrossDomainProjection {
                                 .unwrap_or("unknown")
                                 .to_string();
 
+                            let key_bytes = pair_bytes(&key);
+                            let is_new = !self.links.contains_key(&key);
+                            let mut grown = 0;
                             self.links
                                 .entry(key)
                                 .and_modify(|entry| {
                                     if !entry.edges.contains(&edge_id.to_string()) {
                                         entry.edges.push(edge_id.to_string());
+                                        grown += string_slot(edge_id);
                                     }
                                     if entry.relations.len() < 5
                                         && !entry.relations.contains(&relation)
                                     {
                                         entry.relations.push(relation.clone());
+                                        grown += string_slot(&relation);
                                     }
                                 })
                                 .or_insert_with(|| CrossDomainEntry {
                                     edges: vec![edge_id.to_string()],
-                                    relations: vec![relation],
+                                    relations: vec![relation.clone()],
                                 });
+                            if is_new {
+                                self.charge.add(
+                                    charge::entry::<(String, String), CrossDomainEntry>(
+                                        key_bytes + string_slot(edge_id) + string_slot(&relation),
+                                    ),
+                                );
+                            } else {
+                                self.charge.add(grown);
+                            }
                         }
                     }
                 }
@@ -206,17 +259,29 @@ impl Projection for CrossDomainProjection {
                     // Remove edge from all cross-domain entries
                     let edge_str = edge_id.to_string();
                     let mut empty_keys = Vec::new();
+                    let mut released = 0;
 
                     for mut entry in self.links.iter_mut() {
-                        entry.value_mut().edges.retain(|e| e != &edge_str);
+                        entry.value_mut().edges.retain(|e| {
+                            let keep = e != &edge_str;
+                            if !keep {
+                                released += string_slot(e);
+                            }
+                            keep
+                        });
                         if entry.value().edges.is_empty() {
                             empty_keys.push(entry.key().clone());
                         }
                     }
 
                     for key in empty_keys {
-                        self.links.remove(&key);
+                        if let Some((removed_key, removed)) = self.links.remove(&key) {
+                            released += charge::entry::<(String, String), CrossDomainEntry>(
+                                pair_bytes(&removed_key) + entry_bytes(&removed),
+                            );
+                        }
                     }
+                    self.charge.sub(released);
                 }
             }
 
@@ -240,6 +305,7 @@ impl Projection for CrossDomainProjection {
     fn clear(&self) {
         self.links.clear();
         self.node_domains.clear();
+        self.charge.take();
     }
 
     fn snapshot(&self) -> Option<Value> {
@@ -271,8 +337,7 @@ impl Projection for CrossDomainProjection {
             for (key_str, entry) in data {
                 let parts: Vec<&str> = key_str.split(':').collect();
                 if parts.len() == 2 {
-                    self.links
-                        .insert((parts[0].to_string(), parts[1].to_string()), entry);
+                    self.store_link((parts[0].to_string(), parts[1].to_string()), entry);
                 }
             }
         }
@@ -282,7 +347,7 @@ impl Projection for CrossDomainProjection {
             .map(|v| serde_json::from_value::<std::collections::HashMap<String, String>>(v.clone()))
         {
             for (node_id, domain) in data {
-                self.node_domains.insert(node_id, domain);
+                self.put_node_domain(node_id, domain);
             }
         }
 

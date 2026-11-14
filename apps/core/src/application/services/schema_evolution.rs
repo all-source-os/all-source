@@ -24,6 +24,7 @@
 //! - Does not handle polymorphic types (field sometimes string, sometimes number)
 //! - No automatic data migration — schemas describe shape, don't transform data
 
+use crate::infrastructure::memory::ledger::{Owner, Tally};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -252,6 +253,7 @@ pub struct SchemaEvolutionManager {
     history: DashMap<String, Vec<EvolutionRecord>>,
     /// Version counter per event type
     versions: DashMap<String, u32>,
+    history_bytes: Tally,
 }
 
 impl Default for SchemaEvolutionManager {
@@ -260,13 +262,31 @@ impl Default for SchemaEvolutionManager {
     }
 }
 
+/// Heap one evolution record holds beyond its slot: its event type and the
+/// field names it lists.
+fn record_owned_bytes(record: &EvolutionRecord) -> u64 {
+    (record.event_type.len()
+        + record.added_fields.iter().map(String::len).sum::<usize>()
+        + record.removed_fields.iter().map(String::len).sum::<usize>()) as u64
+}
+
 impl SchemaEvolutionManager {
     pub fn new() -> Self {
         Self {
             schemas: DashMap::new(),
             history: DashMap::new(),
             versions: DashMap::new(),
+            history_bytes: Tally::new(Owner::SchemaEvolution),
         }
+    }
+
+    fn push_history(&self, record: EvolutionRecord) {
+        self.history_bytes
+            .add(std::mem::size_of::<EvolutionRecord>() as u64 + record_owned_bytes(&record));
+        self.history
+            .entry(record.event_type.clone())
+            .or_default()
+            .push(record);
     }
 
     /// Analyze an event and evolve the schema if needed
@@ -279,20 +299,17 @@ impl SchemaEvolutionManager {
             // First event of this type — infer and register
             self.schemas.insert(event_type.to_string(), new_schema);
             self.versions.insert(event_type.to_string(), 1);
-            self.history
-                .entry(event_type.to_string())
-                .or_default()
-                .push(EvolutionRecord {
-                    id: Uuid::new_v4(),
-                    event_type: event_type.to_string(),
-                    action: EvolutionAction::Inferred,
-                    from_version: None,
-                    to_version: Some(1),
-                    added_fields: vec![],
-                    removed_fields: vec![],
-                    type_changes: vec![],
-                    timestamp: Utc::now(),
-                });
+            self.push_history(EvolutionRecord {
+                id: Uuid::new_v4(),
+                event_type: event_type.to_string(),
+                action: EvolutionAction::Inferred,
+                from_version: None,
+                to_version: Some(1),
+                added_fields: vec![],
+                removed_fields: vec![],
+                type_changes: vec![],
+                timestamp: Utc::now(),
+            });
             return Some(EvolutionAction::Inferred);
         }
 
@@ -323,37 +340,31 @@ impl SchemaEvolutionManager {
             let new_version = current_version + 1;
             self.schemas.insert(event_type.to_string(), merged);
             self.versions.insert(event_type.to_string(), new_version);
-            self.history
-                .entry(event_type.to_string())
-                .or_default()
-                .push(EvolutionRecord {
-                    id: Uuid::new_v4(),
-                    event_type: event_type.to_string(),
-                    action: EvolutionAction::AutoEvolved,
-                    from_version: Some(current_version),
-                    to_version: Some(new_version),
-                    added_fields: diff.added_fields,
-                    removed_fields: vec![],
-                    type_changes: vec![],
-                    timestamp: Utc::now(),
-                });
+            self.push_history(EvolutionRecord {
+                id: Uuid::new_v4(),
+                event_type: event_type.to_string(),
+                action: EvolutionAction::AutoEvolved,
+                from_version: Some(current_version),
+                to_version: Some(new_version),
+                added_fields: diff.added_fields,
+                removed_fields: vec![],
+                type_changes: vec![],
+                timestamp: Utc::now(),
+            });
             Some(EvolutionAction::AutoEvolved)
         } else {
             // Breaking change — record but don't auto-evolve
-            self.history
-                .entry(event_type.to_string())
-                .or_default()
-                .push(EvolutionRecord {
-                    id: Uuid::new_v4(),
-                    event_type: event_type.to_string(),
-                    action: EvolutionAction::BreakingChangeDetected,
-                    from_version: Some(current_version),
-                    to_version: None,
-                    added_fields: diff.added_fields,
-                    removed_fields: diff.removed_fields,
-                    type_changes: diff.type_changes,
-                    timestamp: Utc::now(),
-                });
+            self.push_history(EvolutionRecord {
+                id: Uuid::new_v4(),
+                event_type: event_type.to_string(),
+                action: EvolutionAction::BreakingChangeDetected,
+                from_version: Some(current_version),
+                to_version: None,
+                added_fields: diff.added_fields,
+                removed_fields: diff.removed_fields,
+                type_changes: diff.type_changes,
+                timestamp: Utc::now(),
+            });
             Some(EvolutionAction::BreakingChangeDetected)
         }
     }

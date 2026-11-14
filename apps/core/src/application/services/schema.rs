@@ -1,10 +1,16 @@
-use crate::error::{AllSourceError, Result};
+use crate::{
+    domain::entities::event::value_heap_bytes,
+    error::{AllSourceError, Result},
+    infrastructure::memory::ledger::{
+        MapCharge, Owner, Tally, option_string_heap, string_heap, strings_heap,
+    },
+};
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
+use dashmap::{DashMap, mapref::entry::Entry};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, mem::size_of, sync::Arc};
 use uuid::Uuid;
 
 /// Compatibility mode for schema evolution
@@ -135,17 +141,30 @@ impl Default for SchemaRegistryConfig {
     }
 }
 
+/// Owned heap of a schema: its subject, JSON document, description and tags.
+fn schema_heap(schema: &Schema) -> u64 {
+    string_heap(&schema.subject)
+        + value_heap_bytes(&schema.schema) as u64
+        + option_string_heap(&schema.description)
+        + strings_heap(&schema.tags)
+}
+
 /// Central registry for managing event schemas
 pub struct SchemaRegistry {
     /// Schemas organized by subject and version - using DashMap for lock-free concurrent access
     /// Key: subject -> version -> Schema
     schemas: Arc<DashMap<String, HashMap<u32, Schema>>>,
+    schemas_charge: MapCharge,
+    /// Subject keys, the per-subject version tables and the schemas they hold.
+    schema_slots: Tally,
 
     /// Latest version for each subject
     latest_versions: Arc<DashMap<String, u32>>,
+    latest_versions_charge: MapCharge,
 
     /// Compatibility mode for each subject
     compatibility_modes: Arc<DashMap<String, CompatibilityMode>>,
+    compatibility_modes_charge: MapCharge,
 
     /// Configuration
     config: SchemaRegistryConfig,
@@ -158,8 +177,18 @@ impl SchemaRegistry {
     pub fn new(config: SchemaRegistryConfig) -> Self {
         Self {
             schemas: Arc::new(DashMap::new()),
+            schemas_charge: MapCharge::new(
+                Owner::Misc,
+                size_of::<(String, HashMap<u32, Schema>)>(),
+            ),
+            schema_slots: Tally::new(Owner::Misc),
             latest_versions: Arc::new(DashMap::new()),
+            latest_versions_charge: MapCharge::new(Owner::Misc, size_of::<(String, u32)>()),
             compatibility_modes: Arc::new(DashMap::new()),
+            compatibility_modes_charge: MapCharge::new(
+                Owner::Misc,
+                size_of::<(String, CompatibilityMode)>(),
+            ),
             config,
             stats: Arc::new(RwLock::new(SchemaRegistryStats {
                 total_schemas: 0,
@@ -209,11 +238,28 @@ impl SchemaRegistry {
         let created_at = new_schema.created_at;
 
         // Get or create subject entry and insert the schema
-        self.schemas
-            .entry(subject.clone())
-            .or_default()
-            .insert(next_version, new_schema);
-        self.latest_versions.insert(subject.clone(), next_version);
+        let heap = schema_heap(&new_schema);
+        match self.schemas.entry(subject.clone()) {
+            Entry::Occupied(mut slot) => {
+                self.insert_version(slot.get_mut(), next_version, new_schema, heap);
+            }
+            Entry::Vacant(slot) => {
+                self.schema_slots.add(string_heap(slot.key()));
+                self.insert_version(
+                    &mut slot.insert(HashMap::new()),
+                    next_version,
+                    new_schema,
+                    heap,
+                );
+            }
+        }
+        self.schemas_charge.resize(&self.schemas);
+        self.latest_versions_charge.insert(
+            &self.latest_versions,
+            subject.clone(),
+            next_version,
+            |k, _| string_heap(k),
+        );
 
         // Update stats
         let mut stats = self.stats.write();
@@ -457,7 +503,27 @@ impl SchemaRegistry {
 
     /// Set compatibility mode for a subject
     pub fn set_compatibility_mode(&self, subject: String, mode: CompatibilityMode) {
-        self.compatibility_modes.insert(subject, mode);
+        self.compatibility_modes_charge
+            .insert(&self.compatibility_modes, subject, mode, |k, _| {
+                string_heap(k)
+            });
+    }
+
+    fn insert_version(
+        &self,
+        versions: &mut HashMap<u32, Schema>,
+        version: u32,
+        schema: Schema,
+        heap: u64,
+    ) {
+        let before = versions.capacity();
+        let replaced = versions.insert(version, schema);
+        self.schema_slots
+            .grow(before, versions.capacity(), size_of::<(u32, Schema)>());
+        if let Some(old) = replaced {
+            self.schema_slots.sub(schema_heap(&old));
+        }
+        self.schema_slots.add(heap);
     }
 
     /// Get compatibility mode for a subject (or default)

@@ -4,6 +4,7 @@
 //! rebuilt from WAL on startup (with optional snapshot acceleration).
 
 pub mod adjacency;
+pub(crate) mod charge;
 pub mod contradiction;
 pub mod cross_domain;
 pub mod declarative;
