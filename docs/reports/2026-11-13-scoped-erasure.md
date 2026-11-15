@@ -15,9 +15,9 @@ storage initialization and replay remain in the existing constructor. Extracting
 those blocks is outside this scoped erasure change.
 
 `infrastructure::persistence::erasure` rewrites one explicitly selected local WAL
-segment or partitioned Parquet file. The scope requires an exact tenant and a
-nonempty list of exact entity IDs. It has no network endpoint or automatic
-production execution path.
+segment or partitioned Parquet file. The scope requires an exact tenant and
+explicit entity deletions or exact-event content replacements. It has no network
+endpoint or automatic production execution path.
 
 - WAL entries must deserialize and pass the engine's checksum validation. The
   checksum covers only sequence, timestamp and event ID, so a corrupted tenant,
@@ -71,8 +71,9 @@ The current approval covers implementation and synthetic tests only.
 
 1. Resolve the exact tenant and exclusively owned entity streams through the
    application's ownership rules. Do not erase a shared program or conversation
-   merely because one event mentions the account. Shared-record redaction requires
-   separate application support.
+   merely because one event mentions the account. For a shared stream, resolve
+   individual events and approve replacement payloads/metadata under the
+   application's ownership rules; use a version-2 manifest as described below.
 2. Inventory every replica, retained backup, volume snapshot and cold-tier copy.
    Restore external copies into isolated local directories or retire them under
    an approved retention procedure. Any remaining external copy blocks completion.
@@ -132,11 +133,44 @@ root is not inventoried and the manifest has no field for it; the operator must
 establish that directory's contents separately. The tenant name `__system` is
 rejected.
 
-Verification also checks that the rewrites removed exactly the preview's match
-count. The post-apply scan rereads the same bytes the rewrite used, so it cannot
+Verification also checks that removals and replacements match the preview's
+counts. The post-apply scan rereads the same bytes the rewrite used, so it cannot
 detect a record the classifier misses. Pre-erasure archive-repair receipts retain
 their original fingerprints; rollback through those receipts must fail after file
 contents change. Do not restore an old original to make a receipt match.
+
+## Exact-event shared-record redaction
+
+Version-1 manifests retain their deletion-only behavior. Version 2 also accepts
+`redactions`, an array of records with these fields:
+
+| Field | Required value |
+|---|---|
+| `event_id` | Exact UUID resolved through the store's query engine |
+| `entity_id` | Exact shared stream containing that event |
+| `expected_content_sha256` | Canonical digest of the approved original payload and metadata |
+| `payload` | Complete replacement JSON payload |
+| `metadata` | Complete replacement metadata, or `null` to remove it |
+
+Use `erasure_redaction::content_sha256` for the digest. It hashes the JSON pair
+`[payload, metadata]` after recursively sorting object keys. The replacement must
+have a distinct digest. Every manifest is bounded by the existing 1 MiB limit.
+Duplicate event IDs and overlap between a redacted stream and an erased stream
+are rejected. With only redactions, `entity_ids` may be empty.
+
+Event UUID, tenant, entity, event type, timestamp and version remain unchanged.
+Only payload and metadata are replaced in WAL, Parquet, snapshots, retained
+originals and backups. Other owners' events remain unchanged. A stale source hash,
+wrong stream or target absent from the declared inventory rejects preflight.
+Already-replaced copies are accepted on retry; remaining original copies still
+must match the approved source hash. The receipt counts pending replacements in
+`redactions`; final verification requires both `matches: 0` and `redactions: 0`.
+
+The engine does not infer ownership or decide what to anonymize. The application
+must supply replacements that still replay into valid shared records and contain
+no departing user's personal content. Preserve reusable program structure and
+other clients' fields. Validate replay through the application's projections as
+well as Core before declaring account fulfilment complete.
 
 ## Verification
 
@@ -153,6 +187,15 @@ cap, codec preservation, the excluded system store, unfinished-operation startup
 refusal and private error output.
 Synthetic tests read or change no production files. Cargo reports existing
 future-compatibility warnings in `nix` and `proc-macro-error2`.
+
+The shared-record follow-up reran all 30 per-file/maintenance tests and adds six
+passing `erasure_redaction_tests`. These cover two Core restarts, backup restore,
+unchanged neighboring owners/tenants, all five local copy forms, partially applied
+redaction, stale hashes, missing targets, wrong streams, ambiguous manifests and
+canonical JSON hashes. The persistence-library rerun passes 269 tests with two
+explicitly ignored: 305 passing tests total. Scoped Core library/test Clippy passes with `-D warnings`.
+The owner approved publishing the shared-record follow-up through a fresh branch
+and pull request. Production execution remains outside that authorization.
 
 ## Remaining account-erasure boundary
 

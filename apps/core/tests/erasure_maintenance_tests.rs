@@ -118,6 +118,7 @@ impl Fixture {
                 version: 1,
                 tenant_id: "alpha".into(),
                 entity_ids: vec!["private".into()],
+                redactions: vec![],
                 copies,
                 external_copies: vec![],
             },
@@ -634,6 +635,7 @@ fn wal_segment_over_the_archive_byte_cap_is_erasable() {
         version: 1,
         tenant_id: "alpha".into(),
         entity_ids: vec!["private".into()],
+        redactions: vec![],
         copies: vec![LocalCopy {
             wal_dir: wal_dir.clone(),
             storage_dir: storage_dir.clone(),
