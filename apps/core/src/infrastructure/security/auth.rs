@@ -4,7 +4,7 @@ use crate::{
 };
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -521,11 +521,10 @@ impl Default for AuthManager {
 
 /// Hash password using Argon2
 fn hash_password(password: &str) -> Result<String> {
-    let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
 
-    let hash = argon2
-        .hash_password(password.as_bytes(), &salt)
+    let hash: PasswordHash = argon2
+        .hash_password(password.as_bytes())
         .map_err(|e| AllSourceError::ValidationError(format!("Password hashing failed: {e}")))?;
 
     Ok(hash.to_string())

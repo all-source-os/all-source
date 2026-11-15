@@ -1,6 +1,7 @@
 use super::{
     archive_budget::{ArchiveReadBudget, ArchiveReadLimits},
     archive_output::{ArchiveOutput, clear_pending_output},
+    erasure::open_lock_file,
     storage::decoded_text_bytes,
 };
 use crate::error::{AllSourceError, Result};
@@ -37,17 +38,7 @@ pub(crate) fn archive_mutation_guard(
 }
 
 pub(crate) fn archive_directory_guard(directory: &Path) -> Result<File> {
-    let path = directory.join(".archive-mutation.lock");
-    if path.exists() {
-        regular_file(&path)?;
-    }
-    let file = File::options()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&path)
-        .map_err(io_error)?;
+    let file = open_lock_file(&directory.join(".archive-mutation.lock"))?;
     file.try_lock()
         .map_err(|error| failure(&format!("directory already under maintenance: {error}")))?;
     Ok(file)

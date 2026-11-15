@@ -175,6 +175,7 @@ impl BackupManager {
     /// Restore from backup
     pub fn restore_from_backup(&self, backup_id: &str) -> Result<Vec<Event>> {
         validate_backup_id(backup_id)?;
+        super::erasure_maintenance::require_no_marker(&self.config.backup_dir)?;
         tracing::info!("Restoring from backup: {}", backup_id);
 
         let metadata = self.load_metadata(backup_id)?;
