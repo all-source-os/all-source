@@ -15,6 +15,7 @@ pub mod erasure;
 mod erasure_backup;
 mod erasure_inventory;
 pub mod erasure_maintenance;
+pub mod erasure_redaction;
 mod event_codec;
 pub mod feed_log;
 pub mod hydration_admission;

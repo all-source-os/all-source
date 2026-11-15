@@ -7,6 +7,7 @@ use super::{
     },
     erasure_backup,
     erasure_inventory::{self, Item, Kind},
+    erasure_redaction::EventRedaction,
 };
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
@@ -40,6 +41,8 @@ pub struct ErasureManifest {
     pub version: u32,
     pub tenant_id: String,
     pub entity_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub redactions: Vec<EventRedaction>,
     pub copies: Vec<LocalCopy>,
     pub external_copies: Vec<String>,
 }
@@ -52,6 +55,7 @@ pub struct MaintenanceReport {
     pub files: usize,
     pub records: u64,
     pub matches: u64,
+    pub redactions: u64,
     pub local_copies_verified: bool,
     /// System store directories under a storage root. Not inventoried: their
     /// audit records are outside tenant erasure scope.
@@ -69,9 +73,13 @@ impl ErasureManifest {
     }
 
     fn scope(&self) -> Result<ErasureScope> {
-        if self.version != 1 || self.copies.is_empty() || self.copies.len() > 32 {
+        if !matches!(self.version, 1 | 2)
+            || self.copies.is_empty()
+            || self.copies.len() > 32
+            || (self.version == 1 && !self.redactions.is_empty())
+        {
             return Err(failure(
-                "manifest version 1 and 1..32 explicit copy sets required",
+                "manifest version 1 or 2 and 1..32 explicit copy sets required; redactions require version 2",
             ));
         }
         if !self.external_copies.is_empty() {
@@ -79,7 +87,11 @@ impl ErasureManifest {
                 "external copies remain: restore or retire them before erasure",
             ));
         }
-        ErasureScope::new(self.tenant_id.clone(), self.entity_ids.clone())
+        ErasureScope::with_redactions(
+            self.tenant_id.clone(),
+            self.entity_ids.clone(),
+            self.redactions.clone(),
+        )
     }
 
     fn fingerprint(&self) -> Result<String> {
@@ -126,12 +138,23 @@ fn plan(
     hash.update(manifest_sha256.as_bytes());
     let mut records = 0;
     let mut matches = 0;
+    let mut redactions = 0;
     for item in &items {
         let (report, digest) =
             erasure_inventory::inspect(item, &scope, &manifest_sha256, deadline)?;
         hash.update(serde_json::to_vec(&(&item.path, digest))?);
         records += report.examined;
-        matches += report.removed;
+        matches += report.removed + report.redacted;
+        redactions += report.redacted;
+    }
+    if scope
+        .seen_redactions
+        .lock()
+        .map_err(|_| failure("redaction inventory lock failed"))?
+        .len()
+        != scope.redactions.len()
+    {
+        return Err(failure("redaction target missing from declared copies"));
     }
     Ok((
         MaintenanceReport {
@@ -141,6 +164,7 @@ fn plan(
             files: items.len(),
             records,
             matches,
+            redactions,
             local_copies_verified: false,
             excluded_system_dirs,
         },
@@ -195,23 +219,25 @@ pub fn apply(
         erasure_backup::publish_json(&root.join(MARKER), &before.manifest_sha256)?;
     }
     let mut removed = 0;
+    let mut redacted = 0;
     for item in items {
         check_deadline(deadline)?;
-        removed += match item.kind {
-            Kind::Wal => erase_wal_segment(&item.path, &scope, deadline)?.removed,
-            Kind::Archive(root) => erase_parquet_file(&root, &item.path, &scope, deadline)?.removed,
+        let report = match item.kind {
+            Kind::Wal => erase_wal_segment(&item.path, &scope, deadline)?,
+            Kind::Archive(root) => erase_parquet_file(&root, &item.path, &scope, deadline)?,
             Kind::Backup => {
                 erasure_backup::erase(&item.path, &scope, &before.manifest_sha256, deadline)?
-                    .removed
             }
             Kind::Derived => {
                 remove_synced(&item.path)?;
-                0
+                Default::default()
             }
-            Kind::Sidecar => 0,
+            Kind::Sidecar => Default::default(),
         };
+        removed += report.removed;
+        redacted += report.redacted;
     }
-    if removed != before.matches {
+    if removed + redacted != before.matches || redacted != before.redactions {
         return Err(failure(
             "rewrites removed a different count than the preview; keep writers stopped",
         ));

@@ -5,6 +5,7 @@
 
 use super::{
     archive_repack::{archive_directory_guard, archive_mutation_guard},
+    erasure_redaction::{EventRedaction, redact_batch},
     wal::{WALConfig, WALEntry},
 };
 use crate::error::{AllSourceError, Result};
@@ -20,7 +21,7 @@ use parquet::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, File, Metadata, OpenOptions},
     io::{BufRead, BufReader, Read, Seek, SeekFrom, Write},
     path::{Component, Path},
@@ -43,32 +44,70 @@ pub(super) fn wal_file_limit() -> u64 {
 pub struct ErasureScope {
     pub(super) tenant: String,
     pub(super) entities: HashSet<String>,
+    pub(super) redactions: HashMap<uuid::Uuid, EventRedaction>,
+    pub(super) seen_redactions: std::sync::Mutex<HashSet<uuid::Uuid>>,
 }
 
 impl ErasureScope {
     pub fn new(tenant: String, entities: Vec<String>) -> Result<Self> {
+        Self::with_redactions(tenant, entities, Vec::new())
+    }
+
+    pub fn with_redactions(
+        tenant: String,
+        entities: Vec<String>,
+        redactions: Vec<EventRedaction>,
+    ) -> Result<Self> {
         if tenant.is_empty()
             || tenant.len() > 256
             || tenant == SYSTEM_DIR
             || !tenant
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
-            || entities.is_empty()
+            || (entities.is_empty() && redactions.is_empty())
             || entities.len() > 10_000
+            || redactions.len() > 10_000
             || entities.iter().any(|id| id.is_empty() || id.len() > 1024)
         {
             return Err(failure(
                 "an exact tenant and nonempty, bounded entity list are required",
             ));
         }
+        let mut by_event = HashMap::new();
+        for redaction in redactions {
+            redaction.validate()?;
+            if entities.contains(&redaction.entity_id)
+                || by_event.insert(redaction.event_id, redaction).is_some()
+            {
+                return Err(failure("duplicate redaction or overlap with erased entity"));
+            }
+        }
         Ok(Self {
             tenant,
             entities: entities.into_iter().collect(),
+            redactions: by_event,
+            seen_redactions: std::sync::Mutex::new(HashSet::new()),
         })
     }
 
     pub(super) fn matches(&self, tenant: &str, entity: &str) -> bool {
         tenant == self.tenant && self.entities.contains(entity)
+    }
+
+    pub(super) fn redact(&self, event: &mut crate::domain::entities::Event) -> Result<bool> {
+        if event.tenant_id_str() != self.tenant {
+            return Ok(false);
+        }
+        let entity = event.entity_id_str().to_owned();
+        self.redactions
+            .get(&event.id)
+            .map_or(Ok(false), |redaction| {
+                self.seen_redactions
+                    .lock()
+                    .map_err(|_| failure("redaction inventory lock failed"))?
+                    .insert(event.id);
+                redaction.replace(&entity, &mut event.payload, &mut event.metadata)
+            })
     }
 }
 
@@ -76,6 +115,7 @@ impl ErasureScope {
 pub struct ErasureReport {
     pub examined: u64,
     pub removed: u64,
+    pub redacted: u64,
 }
 
 pub(super) fn failure(message: &str) -> AllSourceError {
@@ -198,7 +238,7 @@ pub(super) fn rewrite(
     let result = (|| {
         let report = transform(&mut source, &mut output)?;
         check_deadline(deadline)?;
-        if report.removed == 0 {
+        if report.removed == 0 && report.redacted == 0 {
             return Ok(report);
         }
         output.sync_all().map_err(io_error)?;
@@ -254,7 +294,7 @@ pub(super) fn scan_wal(
         if line.trim().is_empty() {
             continue;
         }
-        let entry: WALEntry = serde_json::from_str(&line)?;
+        let mut entry: WALEntry = serde_json::from_str(&line)?;
         if !entry.verify() {
             return Err(failure("invalid WAL checksum"));
         }
@@ -262,6 +302,10 @@ pub(super) fn scan_wal(
         report.examined += 1;
         if scope.matches(entry.event.tenant_id_str(), entry.event.entity_id_str()) {
             report.removed += 1;
+        } else if scope.redact(&mut entry.event)? {
+            report.redacted += 1;
+            serde_json::to_writer(&mut *output, &entry)?;
+            writeln!(output).map_err(io_error)?;
         } else {
             writeln!(output, "{line}").map_err(io_error)?;
         }
@@ -368,6 +412,8 @@ pub(super) fn scan_parquet(
         let filtered = filter_record_batch(&batch, &keep)?;
         report.examined += batch.num_rows() as u64;
         report.removed += (batch.num_rows() - filtered.num_rows()) as u64;
+        let (filtered, redacted) = redact_batch(filtered, scope)?;
+        report.redacted += redacted;
         if let Some(writer) = writer.as_mut() {
             writer.write(&filtered)?;
         }

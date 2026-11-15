@@ -147,14 +147,30 @@ pub(super) fn inspect(
     deadline: Instant,
 ) -> Result<ErasureReport> {
     let metadata = effective_metadata(path, scope_hash, deadline)?;
-    let events = events(path, &metadata, deadline)?;
-    Ok(ErasureReport {
+    let (_, report) = transform(events(path, &metadata, deadline)?, scope, deadline)?;
+    Ok(report)
+}
+
+fn transform(
+    events: Vec<Event>,
+    scope: &ErasureScope,
+    deadline: Instant,
+) -> Result<(Vec<Event>, ErasureReport)> {
+    let mut report = ErasureReport {
         examined: events.len() as u64,
-        removed: events
-            .iter()
-            .filter(|e| scope.matches(e.tenant_id_str(), e.entity_id_str()))
-            .count() as u64,
-    })
+        ..Default::default()
+    };
+    let mut kept = Vec::with_capacity(events.len());
+    for mut event in events {
+        check_deadline(deadline)?;
+        if scope.matches(event.tenant_id_str(), event.entity_id_str()) {
+            report.removed += 1;
+        } else {
+            report.redacted += u64::from(scope.redact(&mut event)?);
+            kept.push(event);
+        }
+    }
+    Ok((kept, report))
 }
 
 pub(super) fn erase(
@@ -165,14 +181,8 @@ pub(super) fn erase(
 ) -> Result<ErasureReport> {
     let (metadata_path, pending_path) = paths(path)?;
     let metadata = effective_metadata(path, scope_hash, deadline)?;
-    let all = events(path, &metadata, deadline)?;
-    let examined = all.len() as u64;
-    let kept: Vec<_> = all
-        .into_iter()
-        .filter(|e| !scope.matches(e.tenant_id_str(), e.entity_id_str()))
-        .collect();
-    let removed = examined - kept.len() as u64;
-    if removed > 0 {
+    let (kept, report) = transform(events(path, &metadata, deadline)?, scope, deadline)?;
+    if report.removed > 0 || report.redacted > 0 {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         serde_json::to_writer(&mut encoder, &kept)?;
         let encoded = encoder.finish().map_err(io_error)?;
@@ -194,7 +204,11 @@ pub(super) fn erase(
                     after: after.clone(),
                 },
             )?;
-            Ok(ErasureReport { examined, removed })
+            Ok(ErasureReport {
+                examined: report.examined,
+                removed: report.removed,
+                redacted: report.redacted,
+            })
         })?;
         publish_json(&metadata_path, &after)?;
     } else if pending_path.exists() {
@@ -209,5 +223,5 @@ pub(super) fn erase(
         .and_then(|file| file.sync_all())
         .map_err(io_error)?;
     }
-    Ok(ErasureReport { examined, removed })
+    Ok(report)
 }
