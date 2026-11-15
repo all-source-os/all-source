@@ -17,7 +17,8 @@
 
 - **Step 1: done.** `allsource-auth` and `allsource-prime` are 2 × 256 MB. The remote builder app is destroyed. Unattached volume `vol_vwjoq95l03qzy88r` was snapshotted as `vs_9Z9kew82zK3sjAkgx0eaxzw`, then destroyed. `apps/web` runs with `min_machines_running = 0` and suspend.
 - **Step 0: partly done in code.** Core exports `allsource_system_resident_events`, `allsource_system_resident_bytes` and `allsource_process_resident_bytes` (60 s refresh). Per-tenant resident bytes are not done: the owner has not yet approved tenant ids as a Prometheus label.
-- **Step 2: in progress.** See "Step 2" below for what this change set ships and what stays gated on the rehearsal.
+- **Step 2: in progress.** The shipped items (verify off, `release_folded`, gauges, timer eviction) run in production: release v62 (2026-11-15 22:18Z) is `eddea473`, which contains them. Items 6 to 9, the resize included, stay gated on the rehearsal. See "Measured after the 2026-11-15 deploy".
+- **List price on 2026-11-15: about $122–126/month**, from `fly machine list` and `fly volumes list` on every app, priced as in "Where the bill lands". Not an invoice: on 2026-11-08 the invoice ran $7.44 above list.
 
 ## Measured Core memory growth (2026-11-08)
 
@@ -34,6 +35,26 @@ The restart time is 16:21Z on 2026-11-06 (the Prometheus series), not ~22:00Z as
 Rejected explanations:
 - Cache of 2 GiB bounds RSS. Enforcement ran only on hydration (`apps/core/src/store.rs` `ensure_tenant_loaded`), so the cache did not bound RSS.
 - `MALLOC_ARENA_MAX=2` bounds RSS. Every Core runtime ships a static musl binary built on `rust:*-alpine` (`apps/core/Dockerfile:24`), so there is no glibc for it to configure, and Rust allocations go through mimalloc (`apps/core/src/main.rs`).
+
+## Measured after the 2026-11-15 deploy
+
+Core process `VmRSS` and `VmHWM` from `/proc` over `fly ssh console`, and `MemAvailable` from `/proc/meminfo`, on the 16 GB machine:
+
+| Time (UTC) | Image | Uptime | RSS | Peak | Available |
+|---|---|---|---|---|---|
+| before 22:10 | `f4b53930` (v61) | 4.1 days | 6.95 GiB | 7.15 GiB | 8.28 GiB |
+| 22:19 | `eddea473` (v62) | 25 s | 5.25 GiB | 5.35 GiB | 9.88 GiB |
+| 22:24 | v62 | 5.7 min | 5.67 GiB | 6.01 GiB | 9.46 GiB |
+| 22:34 | v62 | 16 min | 5.73 GiB | 6.02 GiB | 9.40 GiB |
+| 22:44 | v62 | 26 min | 5.86 GiB | 6.03 GiB | 9.27 GiB |
+
+- Boot loaded the system store from checkpoint 3235538 in 360 ms; ready 8.6 s after the old process was signalled. The gateway saw failures from 22:18:41 to 22:18:49.
+- RSS was 251 MB when the first tenant hydrated (`ensure_tenant_loaded` log, 22:18:51). Longhand hydrated three seconds later, so most of the 5.25 GiB at 25 s is Longhand's hydration.
+- Against the step-2 pass criterion (plateau below 6 GiB with cache 512 MiB): 5.86 GiB with the cache still at 2 GiB.
+- Admission on 8 GiB, projected: ~7.7 GiB usable minus 5.9 GiB used leaves ~1.8 GiB. Longhand needs ~2.9 GiB free (`archive × 16 + 1 GiB`, unchanged in `hydration_admission.rs`). Boot hydration fits because almost nothing else is resident; a rehydration after eviction would be refused with 503 `archive_hydration_refused`.
+- Not exercised in the 26 minutes: a compaction sweep and a strict whole-tenant decode (cap 805 MB, ~6.3 GiB peak).
+
+Step 2 stays **sand**. It becomes a rock with a 24 h read on v62, the rehearsal below, and either a measured lower ratio or evidence that Longhand is never evicted.
 
 ## What the spend buys
 
@@ -186,11 +207,13 @@ Confidence: **water** for 4 GB until 1 and 2 are measured. A 2 GB Core ($88.83 s
 
 | After | Core | Everything else | Total |
 |---|---|---|---|
-| Today | $104.52 (machine + 2 volumes) | $40.35 | $144.87 |
-| Step 1 | $103.02 | ~$28–31 | ~$131–134 |
-| Step 2 | $52.26 | ~$28–31 | ~$80–83 |
-| Step 3 | $26.88 | ~$28–31 | ~$55–58 |
-| Step 5 (all) | $26.88 | ~$15–18 | ~$42–45 |
+| 2026-11-08 invoice | $104.52 (machine + 2 volumes) | $40.35 | $144.87 |
+| 2026-11-15, step 1 done (list) | $103.02 | ~$19–22 | ~$122–126 |
+| Step 2 | $52.26 | ~$19–22 | ~$71–74 |
+| Step 3 | $26.88 | ~$19–22 | ~$46–49 |
+| Step 5 (all) | $26.88 | ~$9–12 | ~$36–39 |
+
+The 2026-11-15 row prices what runs: Core shared-cpu-8x 16 GB $101.52 and its 10 GB volume; gateway, auth and Prime at 2 × 256 MB ($3.88 each); query 512 MB ($3.19); web 512 MB with suspend (up to $3.19); bandwidth-alerts 256 MB ($1.94); volumes at $0.15/GB (rehearsal 10 GB, Prime 2 × 1 GB, alerts 1 GB). `allsource-admin` and `allsource-core-rehearsal` machines are stopped. About 15 GiB of volume snapshots are stored; whether any is billed is not checked. Gateway egress (~$9.63 at the 2026-11-08 rate) is on top and not re-measured. Destroying the stopped rehearsal app saves its $1.50 volume and 3.6 GiB of snapshots, but it is where the step-2 rehearsal runs.
 
 ## Open questions for the owner
 
