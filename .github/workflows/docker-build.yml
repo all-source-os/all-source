@@ -205,6 +205,15 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Cache Core build tools
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: chef
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
       - name: Warm Core dependencies
         if: startsWith(matrix.name, 'core')
         uses: ./.github/actions/core-build-phase
@@ -238,6 +247,24 @@ jobs:
         timeout-minutes: 5
         with:
           phase: builder-deps-resume3
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Resume Core dependencies (fourth pass)
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps-resume4
+          cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
+          seed: ${{ needs.compiler-seed.outputs.image }}
+
+      - name: Resume Core dependencies (fifth pass)
+        if: startsWith(matrix.name, 'core')
+        uses: ./.github/actions/core-build-phase
+        timeout-minutes: 5
+        with:
+          phase: builder-deps-resume5
           cache: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:buildcache
           seed: ${{ needs.compiler-seed.outputs.image }}
 
@@ -421,7 +448,7 @@ jobs:
       - uses: actions/setup-go@v7
         timeout-minutes: 5
         with:
-          go-version: '1.26.10'
+          go-version: '1.26.11'
           cache-dependency-path: apps/control-plane/go.sum
 
       - uses: docker/login-action@v4

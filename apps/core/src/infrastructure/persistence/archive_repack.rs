@@ -39,9 +39,20 @@ pub(crate) fn archive_mutation_guard(
 
 pub(crate) fn archive_directory_guard(directory: &Path) -> Result<File> {
     let file = open_lock_file(&directory.join(".archive-mutation.lock"))?;
-    file.try_lock()
-        .map_err(|error| failure(&format!("directory already under maintenance: {error}")))?;
-    Ok(file)
+    // A child spawned between open and exec briefly shares this process's
+    // descriptors, and with them a just-released flock; wait that out.
+    let give_up = Instant::now() + Duration::from_secs(2);
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(_) if Instant::now() < give_up => std::thread::sleep(Duration::from_millis(20)),
+            Err(error) => {
+                return Err(failure(&format!(
+                    "directory already under maintenance: {error}"
+                )));
+            }
+        }
+    }
 }
 
 pub fn read_repack_receipt(path: &Path) -> Result<RepackReceipt> {

@@ -56,21 +56,22 @@ RUN mkdir -p apps/mcp-server-elixir/native/core_nif/src \
 WORKDIR /build/apps/prime-mcp
 
 # Each phase fits one 5-minute CI step. Exit 124 keeps the finished units for
-# the next phase to resume; any other failure stops the build.
+# the next phase to resume; any other failure stops the build. 170s leaves room
+# for source setup (~20s) and the mode=max cache export of target/ (~90s).
 FROM builder-source AS builder-deps-warm
-RUN timeout -k 15 230 cargo build --release --locked; \
+RUN timeout -k 15 170 cargo build --release --locked; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency build paused at its deadline"; exit 0; fi; \
     exit "$status"
 
 FROM builder-deps-warm AS builder-deps-resume
-RUN timeout -k 15 230 cargo build --release --locked; \
+RUN timeout -k 15 170 cargo build --release --locked; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency build paused at its deadline"; exit 0; fi; \
     exit "$status"
 
 FROM builder-deps-resume AS builder-deps
-RUN timeout -k 15 240 cargo build --release --locked; \
+RUN timeout -k 15 170 cargo build --release --locked; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency build paused at its deadline"; exit 0; fi; \
     exit "$status"
