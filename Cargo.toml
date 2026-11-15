@@ -173,7 +173,10 @@ unsafe_code = "deny"
 broken_intra_doc_links = "deny"
 
 [profile.release]
-codegen-units = 1
+# Fat LTO re-optimises the whole program at link time, so per-crate codegen
+# units cost little at runtime. With one unit, allsource-core and the larger
+# datafusion crates compile on a single thread past the 5-minute CI step.
+codegen-units = 16
 lto = true
 opt-level = 3
 strip = true

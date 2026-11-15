@@ -22,15 +22,32 @@ runs:
         set -euo pipefail
         edition=enterprise
         if [[ "$PHASE" == builder-community* ]]; then edition=community; fi
+        # A step killed at its deadline exports no cache, so the cargo-chef
+        # install gets its own phase: a new base image digest must not push
+        # it into the dependency cook's budget.
         case "$PHASE" in
-          builder-deps-warm|builder-deps-resume|builder-deps-resume2|builder-deps-resume3|builder-deps) previous=builder-deps ;;
+          chef) previous="chef" ;;
+          builder-deps-warm) previous="chef builder-deps" ;;
+          builder-deps-resume|builder-deps-resume[2-5]|builder-deps) previous=builder-deps ;;
           builder-*-lib) previous=builder-deps ;;
           builder-*-core) previous="builder-$edition-lib" ;;
           builder-*-migrate) previous="builder-$edition-core" ;;
           *) echo "Unsupported Core phase: $PHASE" >&2; exit 1 ;;
         esac
+        cache_from=()
+        for ref in $previous; do
+          cache_from+=(--cache-from "type=registry,ref=$CACHE-$ref")
+        done
+        # Pausable cook phases hand their progress to the next step through the
+        # job's local buildx cache. Exporting target/ to the registry costs
+        # ~90s, and a cook window shorter than the slowest single crate restarts
+        # that crate on every pass, so only finished phases export.
+        cache_to=(--cache-to "type=registry,ref=$CACHE-$PHASE,mode=max")
+        case "$PHASE" in
+          builder-deps-warm|builder-deps-resume|builder-deps-resume[2-5]) cache_to=() ;;
+        esac
         timeout -k 15 285 docker buildx build \
           --file apps/core/Dockerfile --target "$PHASE" \
           --build-arg "CORE_DEPS_IMAGE=$SEED" \
-          --cache-from "type=registry,ref=$CACHE-$previous" \
-          --cache-to "type=registry,ref=$CACHE-$PHASE,mode=max" .
+          "${cache_from[@]}" \
+          "${cache_to[@]}" .

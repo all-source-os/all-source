@@ -92,32 +92,46 @@ RUN mkdir -p crates/allsource-prime-models/src && \
 COPY --from=planner /app/recipe.json recipe.json
 # A dependency change that alters shared feature sets can recompile more than
 # one deadline allows. Exit 124 keeps the finished units for the next phase to
-# resume; any other failure stops the build. 200s leaves the 285s phase room
-# for seed import and cache export.
-RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+# resume; any other failure stops the build. A pause kills the crates in
+# flight, so the window must outlast the slowest single crate (datafusion-sql
+# took ~100s at codegen-units=1). Pausable phases skip the registry export,
+# so 230s fits the 285s phase with the ~35s seed import.
+RUN timeout -k 15 230 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
     exit "$status"
 
 FROM builder-deps-warm AS builder-deps-resume
-RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+RUN timeout -k 15 230 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
     exit "$status"
 
 FROM builder-deps-resume AS builder-deps-resume2
-RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+RUN timeout -k 15 230 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
     exit "$status"
 
 FROM builder-deps-resume2 AS builder-deps-resume3
-RUN timeout -k 15 200 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+RUN timeout -k 15 230 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
     status=$?; \
     if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
     exit "$status"
 
-FROM builder-deps-resume3 AS builder-deps
+FROM builder-deps-resume3 AS builder-deps-resume4
+RUN timeout -k 15 230 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps-resume4 AS builder-deps-resume5
+RUN timeout -k 15 230 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics; \
+    status=$?; \
+    if [ "$status" -eq 124 ]; then echo "dependency cook paused at its deadline"; exit 0; fi; \
+    exit "$status"
+
+FROM builder-deps-resume5 AS builder-deps
 RUN timeout -k 15 240 cargo chef cook --release --recipe-path recipe.json -p allsource-core --features analytics
 
 FROM builder-deps AS builder-base
@@ -162,11 +176,11 @@ RUN CARGO_BUILD_JOBS=4 RUSTC_LOG=rustc_codegen_ssa::back::link=info,rustc_codege
     timeout -k 15 255 cargo rustc --release -p allsource-core \
         --bin allsource-core --features community,analytics -- -C lto=thin -C codegen-units=16 -C llvm-args=-import-instr-limit=0
 FROM builder-community-core AS builder-community-migrate
-RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
-        --bin allsource-migrate-storage --features community,analytics
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo rustc --release -p allsource-core \
+        --bin allsource-migrate-storage --features community,analytics -- -C lto=thin -C codegen-units=16
 FROM builder-community-migrate AS builder-community
-RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
-        --bin allsource-repack-archive --features community,analytics && \
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo rustc --release -p allsource-core \
+        --bin allsource-repack-archive --features community,analytics -- -C lto=thin -C codegen-units=16 && \
     strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
@@ -182,11 +196,11 @@ RUN CARGO_BUILD_JOBS=4 RUSTC_LOG=rustc_codegen_ssa::back::link=info,rustc_codege
     timeout -k 15 255 cargo rustc --release -p allsource-core \
         --bin allsource-core --features enterprise,analytics -- -C lto=thin -C codegen-units=16 -C llvm-args=-import-instr-limit=0
 FROM builder-enterprise-core AS builder-enterprise-migrate
-RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
-        --bin allsource-migrate-storage --features enterprise,analytics
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo rustc --release -p allsource-core \
+        --bin allsource-migrate-storage --features enterprise,analytics -- -C lto=thin -C codegen-units=16
 FROM builder-enterprise-migrate AS builder-enterprise
-RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo build --release -p allsource-core \
-        --bin allsource-repack-archive --features enterprise,analytics && \
+RUN CARGO_BUILD_JOBS=4 timeout -k 15 240 cargo rustc --release -p allsource-core \
+        --bin allsource-repack-archive --features enterprise,analytics -- -C lto=thin -C codegen-units=16 && \
     strip /app/target/release/allsource-core /app/target/release/allsource-migrate-storage /app/target/release/allsource-repack-archive
 
 # =============================================================================
