@@ -11,6 +11,10 @@ pub mod cold_tier;
 #[cfg(feature = "cold-tier-s3")]
 pub mod cold_tier_s3;
 pub mod compaction;
+pub mod erasure;
+mod erasure_backup;
+mod erasure_inventory;
+pub mod erasure_maintenance;
 mod event_codec;
 pub mod feed_log;
 pub mod hydration_admission;
@@ -28,6 +32,7 @@ pub mod system_store;
 pub mod tenant_loader;
 pub mod version_manifest;
 pub mod wal;
+mod wal_sequence;
 
 // Re-exports for convenience
 pub use archive_budget::ArchiveReadLimits;

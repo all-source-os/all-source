@@ -12,6 +12,8 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 
 ## Quick Navigation
 
+- [Scoped local event erasure](./reports/2026-11-13-scoped-erasure.md): offline rewrite boundary, synthetic verification and remaining account-deletion coverage.
+
 - [Event sourcing AWS reference review (2026-11-11)](./seo/2026-11-11-aws-reference-review.md): corrected reference destination, search evidence and verification limits.
 
 - [Prime against HASH: gap status (2026-11-06)](./reports/2026-11-06-prime-hash-gap-status.md): the seven gaps with HASH re-verified on its source, what is deployed, the Prime image build fix, `warn` by default, server-stamped `recorded_by`, the extraction contract, and what is still open.

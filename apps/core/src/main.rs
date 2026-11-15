@@ -126,7 +126,13 @@ async fn main() -> Result<()> {
             config.wal_dir
         );
     }
-    let mut store = EventStore::with_config(config);
+    let mut store = match EventStore::try_with_config(config) {
+        Ok(store) => store,
+        Err(error) => {
+            tracing::error!("Core cannot open its local storage: {error}");
+            std::process::exit(1);
+        }
+    };
 
     // Initialize WAL replication if this is a leader with replication enabled
     #[cfg(feature = "replication")]

@@ -215,6 +215,11 @@ impl SystemMetadataStore {
             Some(checkpoint) => {
                 match wal.recover_for_append_after(checkpoint.covered_seq, &checkpoint.segments) {
                     Ok(tail) => Some(tail),
+                    Err(e) if !wal.erasure_floor_readable() => {
+                        return Err(AllSourceError::StorageError(format!(
+                            "System WAL recovery failed: {e}"
+                        )));
+                    }
                     Err(e) => {
                         tracing::error!(
                             "System WAL contradicts checkpoint {}, replaying the whole WAL: {e}",

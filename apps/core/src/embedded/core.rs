@@ -90,7 +90,7 @@ impl EmbeddedCore {
     #[allow(unknown_lints, clippy::unused_async_trait_impl)]
     pub async fn open(config: EmbeddedConfig) -> Result<Self> {
         let store_config = Self::build_store_config(&config);
-        let store = Arc::new(EventStore::with_config(store_config));
+        let store = Arc::new(EventStore::try_with_config(store_config)?);
 
         // DATA-LOSS GUARD. Embedded consumers' projections ARE the read surface:
         // there is no lazy query path to hydrate Parquet on demand the way the
