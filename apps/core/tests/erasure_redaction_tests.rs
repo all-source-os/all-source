@@ -219,6 +219,35 @@ fn stale_redaction_refuses_before_modifying_any_file() {
 }
 
 #[test]
+fn uppercase_content_hash_refuses_before_modifying_any_file() {
+    let mut f = Fixture::new();
+    let bytes = std::fs::read(&f.segment).unwrap();
+    let digest = &mut f.manifest.redactions[0].expected_content_sha256;
+    *digest = digest.to_ascii_uppercase();
+    assert!(
+        preview(&f.manifest, deadline())
+            .unwrap_err()
+            .to_string()
+            .contains("distinct content hashes")
+    );
+    assert_eq!(bytes, std::fs::read(&f.segment).unwrap());
+}
+
+#[test]
+fn manifest_must_state_metadata_explicitly() {
+    let mut redaction = json!({
+        "event_id": uuid::Uuid::new_v4(),
+        "entity_id": "shared",
+        "expected_content_sha256": "0".repeat(64),
+        "payload": {"note": null},
+    });
+    assert!(serde_json::from_value::<EventRedaction>(redaction.clone()).is_err());
+    redaction["metadata"] = serde_json::Value::Null;
+    let parsed: EventRedaction = serde_json::from_value(redaction).unwrap();
+    assert!(parsed.metadata.is_none());
+}
+
+#[test]
 fn missing_event_and_wrong_entity_cannot_claim_completion() {
     let mut f = Fixture::new();
     f.manifest.redactions[0].event_id = uuid::Uuid::new_v4();

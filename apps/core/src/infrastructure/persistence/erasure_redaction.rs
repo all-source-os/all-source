@@ -19,6 +19,8 @@ pub struct EventRedaction {
     pub entity_id: String,
     pub expected_content_sha256: String,
     pub payload: Value,
+    /// Required in the manifest: `null` clears metadata, so an omitted key must not.
+    #[serde(deserialize_with = "Option::deserialize")]
     pub metadata: Option<Value>,
 }
 
@@ -53,7 +55,7 @@ impl EventRedaction {
             || !self
                 .expected_content_sha256
                 .bytes()
-                .all(|b| b.is_ascii_hexdigit())
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
             || serde_json::to_vec(self)?.len() > 1024 * 1024
             || self.expected_content_sha256
                 == content_sha256(&self.payload, self.metadata.as_ref())?
