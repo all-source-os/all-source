@@ -2,7 +2,7 @@
 
 ## Authority and release status
 
-The FormLab owner approved targeted storage-erasure implementation and synthetic
+The tenant owner approved targeted storage-erasure implementation and synthetic
 verification. Production deletion is not authorized. This work does not establish
 complete account-data erasure or authorize a public compliance declaration.
 
@@ -148,9 +148,9 @@ Version-1 manifests retain their deletion-only behavior. Version 2 also accepts
 |---|---|
 | `event_id` | Exact UUID resolved through the store's query engine |
 | `entity_id` | Exact shared stream containing that event |
-| `expected_content_sha256` | Canonical digest of the approved original payload and metadata |
+| `expected_content_sha256` | Canonical digest of the approved original payload and metadata, lowercase hex |
 | `payload` | Complete replacement JSON payload |
-| `metadata` | Complete replacement metadata, or `null` to remove it |
+| `metadata` | Complete replacement metadata, or `null` to remove it; the key may not be omitted |
 
 Use `erasure_redaction::content_sha256` for the digest. It hashes the JSON pair
 `[payload, metadata]` after recursively sorting object keys. The replacement must
