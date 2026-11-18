@@ -143,7 +143,8 @@ pub struct MetricsRegistry {
     pub http_requests_in_flight: IntGauge,
     pub http_response_bytes_total: IntCounterVec,
 
-    // Read cost (labels are stream classes, never tenants or callers)
+    // Read cost. Labels are stream classes, never callers; a class can equal
+    // another tenant's all-letter id, never the requesting tenant's.
     pub read_pages_total: IntCounterVec,
     pub read_events_matched_total: IntCounterVec,
     pub read_truncated_total: IntCounterVec,

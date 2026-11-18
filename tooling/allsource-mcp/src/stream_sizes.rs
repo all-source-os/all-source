@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use allsource_core::{
-    domain::stream_class::{is_class, stream_class},
+    domain::stream_class::{is_class, stream_class_for_tenant},
     embedded::EmbeddedCore,
     store::{StreamSort, sort_streams},
 };
@@ -46,6 +46,7 @@ struct StreamRow {
 
 impl StreamRow {
     fn new(
+        tenant: Option<&str>,
         stream_id: String,
         events: u64,
         bytes: Option<u64>,
@@ -53,7 +54,7 @@ impl StreamRow {
         last_event_at: Option<String>,
     ) -> Self {
         Self {
-            stream_class: stream_class(Some(&stream_id), None, None),
+            stream_class: stream_class_for_tenant(tenant, Some(&stream_id), None, None),
             stream_id,
             events,
             bytes,
@@ -92,6 +93,9 @@ struct ClassTotals {
 /// Every stream size the source gave, and why it is partial when it is.
 struct Sizes {
     streams: Vec<StreamRow>,
+    /// The tenant's stream count, which exceeds `streams` when the gateway
+    /// listing was cut.
+    total: u64,
     incomplete: Option<&'static str>,
     /// Every stream carries its bytes and seven-day count, so they may be
     /// summed and ranked.
@@ -117,6 +121,16 @@ const RECORDING_OFF: &str = "recording_off";
 const TENANT_NOT_TRACKED: &str = "tenant_not_tracked";
 /// Core sent neither `enabled` nor `tenant_tracked`: it predates them.
 const RECORDING_STATE_UNKNOWN: &str = "recording_state_unknown";
+/// The embedded store's last refresh failed, so it serves what it held before.
+const REFRESH_FAILED: &str = "refresh_failed";
+/// A caller row inherited a replaced row's counts or a body of unknown length.
+const ROWS_APPROXIMATE: &str = "rows_approximate";
+/// Core's class table was full, so later classes count under `other`.
+const CLASSES_OVERFLOWED: &str = "classes_overflowed";
+/// The tenant's rows start after `since`: Core had pushed a tenant out of its
+/// table by the time this one entered, so earlier reads may be missing.
+const TENANT_REENTERED: &str = "tenant_reentered";
+const LIMIT_REACHED: &str = "limit_reached";
 
 pub async fn exec_cost_tool(
     stores: &StoreRegistry,
@@ -156,7 +170,13 @@ async fn read_sizes(
     match store {
         StoreRef::Embedded(store) => {
             let core = store.fresh_core().await;
-            embedded_sizes(core, policy.tenant_id()).await
+            let mut sizes = embedded_sizes(core, policy.tenant_id()).await?;
+            sizes.store = store.refresh_context().await;
+            sizes.store["kind"] = json!("embedded");
+            if sizes.store["lastRefreshError"] != json!(false) {
+                sizes.incomplete = Some(REFRESH_FAILED);
+            }
+            Ok(sizes)
         }
         StoreRef::Remote(remote) => {
             let tenant = policy.tenant_id();
@@ -167,7 +187,7 @@ async fn read_sizes(
                 &[],
             )?;
             let stats = gateway_reply(remote.tenant_stats(tenant).await?, &[])?;
-            let mut sizes = hosted_sizes(&streams.body, &stats.body)?;
+            let mut sizes = hosted_sizes(tenant, &streams.body, &stats.body)?;
             sizes.store = json!({ "kind": "remote", "url": remote.display_url() });
             Ok(sizes)
         }
@@ -177,8 +197,8 @@ async fn read_sizes(
 /// Scans on a blocking thread: the scan walks every event of the store.
 async fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Result<Sizes> {
     let store = core.inner();
-    let tenant = tenant.map(str::to_owned);
-    let sized = tokio::task::spawn_blocking(move || store.stream_sizes(tenant.as_deref()))
+    let owned_tenant = tenant.map(str::to_owned);
+    let sized = tokio::task::spawn_blocking(move || store.stream_sizes(owned_tenant.as_deref()))
         .await
         .map_err(|err| anyhow::anyhow!("stream size scan failed: {err}"))?
         .map_err(|err| anyhow::anyhow!("store unavailable: {err}"))?;
@@ -189,6 +209,7 @@ async fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Result<Siz
         .into_iter()
         .map(|info| {
             StreamRow::new(
+                tenant,
                 info.stream_id,
                 info.event_count as u64,
                 info.estimated_bytes,
@@ -204,6 +225,7 @@ async fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Result<Siz
             "totalEvents": total_events,
             "totalStreams": streams.len(),
         }),
+        total: streams.len() as u64,
         streams,
         incomplete: (!complete).then_some(SCAN_INTERRUPTED),
         bytes_known,
@@ -211,7 +233,7 @@ async fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Result<Siz
     })
 }
 
-fn hosted_sizes(streams: &Value, stats: &Value) -> Result<Sizes> {
+fn hosted_sizes(tenant: Option<&str>, streams: &Value, stats: &Value) -> Result<Sizes> {
     let listed = streams["streams"].as_array().ok_or_else(|| {
         anyhow::anyhow!("gateway answered /api/v1/streams without a streams array")
     })?;
@@ -225,6 +247,7 @@ fn hosted_sizes(streams: &Value, stats: &Value) -> Result<Sizes> {
                 anyhow::anyhow!("gateway answered /api/v1/streams with a row without event_count")
             })?;
             Ok(StreamRow::new(
+                tenant,
                 stream_id.to_string(),
                 events,
                 stream["estimated_bytes"].as_u64(),
@@ -246,6 +269,7 @@ fn hosted_sizes(streams: &Value, stats: &Value) -> Result<Sizes> {
         Some(true) => None,
     };
     Ok(Sizes {
+        total,
         incomplete,
         bytes_known,
         tenant: json!({
@@ -282,13 +306,14 @@ fn stream_key(sort: StreamSort, events: u64, bytes: u64) -> u64 {
     }
 }
 
-fn completeness(incomplete: Option<&str>, scanned: usize) -> Value {
+/// `scanned` is the streams the source sent; `total` the tenant's streams.
+fn completeness(incomplete: Option<&str>, scanned: usize, total: u64) -> Value {
     json!({
         "complete": incomplete.is_none(),
         "reason": incomplete,
         "scanned": scanned,
-        "matched": scanned,
-        "omitted": 0,
+        "matched": total,
+        "omitted": total.saturating_sub(scanned as u64),
         "unparsedTimestamps": 0,
         "sourcesRequested": 1,
         "sourcesRead": 1,
@@ -358,10 +383,10 @@ async fn exec_stream_sizes(
         "page": {
             "requestedLimit": limit,
             "returned": stream_rows.len(),
-            "totalCount": sizes.streams.len(),
+            "totalCount": sizes.total,
             "nextCursor": Value::Null,
         },
-        "completeness": completeness(sizes.incomplete, sizes.streams.len()),
+        "completeness": completeness(sizes.incomplete, sizes.streams.len(), sizes.total),
     }))
 }
 
@@ -479,7 +504,7 @@ async fn exec_cap_check(
         "over": over,
         "under": under,
         "unmeasured": unmeasured,
-        "completeness": completeness(sizes.incomplete, sizes.streams.len()),
+        "completeness": completeness(sizes.incomplete, sizes.streams.len(), sizes.total),
     }))
 }
 
@@ -494,6 +519,17 @@ fn class_field(rows: &[Value], field: &str) -> Result<Vec<u64>> {
             })
         })
         .collect()
+}
+
+/// Whether a tracked tenant's rows start after `since`; `None` when either
+/// timestamp is missing or unreadable.
+fn tenant_reentered(body: &Value) -> Option<bool> {
+    let at = |field: &str| {
+        body[field]
+            .as_str()
+            .and_then(|text| chrono::DateTime::parse_from_rfc3339(text).ok())
+    };
+    Some(at("tenant_since")? > at("since")?)
 }
 
 fn sum_field(rows: &[Value], field: &str) -> Result<u64> {
@@ -528,12 +564,30 @@ async fn exec_read_costs(
         anyhow::anyhow!("gateway answered /api/v1/read-costs without a classes array")
     })?;
     let at_limit = callers.len() >= limit || classes.len() >= limit;
+    let approximate = callers
+        .iter()
+        .map(|row| {
+            row["approximate"].as_bool().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "gateway answered /api/v1/read-costs with a caller row without approximate"
+                )
+            })
+        })
+        .collect::<Result<Vec<bool>>>()?
+        .contains(&true);
+    let overflowed = classes.iter().any(|row| row["stream_class"] == "other");
     let incomplete = match (
         reply.body["enabled"].as_bool(),
         reply.body["tenant_tracked"].as_bool(),
     ) {
-        (Some(true), Some(true)) if at_limit => Some("limit_reached"),
-        (Some(true), Some(true)) => None,
+        (Some(true), Some(true)) => match tenant_reentered(&reply.body) {
+            None => Some(RECORDING_STATE_UNKNOWN),
+            Some(_) if approximate => Some(ROWS_APPROXIMATE),
+            Some(_) if overflowed => Some(CLASSES_OVERFLOWED),
+            Some(true) => Some(TENANT_REENTERED),
+            Some(false) if at_limit => Some(LIMIT_REACHED),
+            Some(false) => None,
+        },
         (Some(false), _) => Some(RECORDING_OFF),
         (Some(true), Some(false)) => Some(TENANT_NOT_TRACKED),
         _ => Some(RECORDING_STATE_UNKNOWN),
@@ -559,6 +613,7 @@ async fn exec_read_costs(
         "totalsCover": if all_classes { "all_class_rows" } else { "returned_class_rows" },
         "recording": {
             "enabled": reply.body.get("enabled"),
+            "instanceId": reply.body.get("instance_id"),
             "since": reply.body.get("since"),
             "tenantTracked": reply.body.get("tenant_tracked"),
             "tenantSince": reply.body.get("tenant_since"),

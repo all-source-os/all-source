@@ -899,7 +899,7 @@ async fn read_costs_orders_by_the_requested_key_and_honours_limit() {
 #[test]
 fn read_cost_scope_without_filters_is_unscoped_whole() {
     let req = QueryEventsRequest::default();
-    let scope = ReadScope::of(&req, 0, false, 10_000);
+    let scope = ReadScope::of(&req, None, 0, false, 10_000);
     let facts = scope.facts("t".to_owned(), 0, 0, false);
     assert_eq!(facts.stream_class, "unscoped");
     assert_eq!(facts.counts.shape, Shape::Whole);
@@ -1111,6 +1111,75 @@ async fn read_costs_for_an_untracked_tenant_say_so_rather_than_only_empty_rows()
     assert!(body["since"].is_string());
 }
 
+#[tokio::test]
+async fn read_costs_name_the_core_instance_that_holds_the_rows() {
+    let rc = read_cost();
+
+    let (_, first) = get_read_costs(Arc::clone(&rc), "/api/v1/read-costs?tenant_id=a").await;
+    let (_, second) = get_read_costs(rc, "/api/v1/read-costs?tenant_id=b").await;
+
+    let id = first["instance_id"].as_str().expect("instance_id");
+    assert_eq!(id.len(), 32, "{id}");
+    assert_eq!(second["instance_id"], first["instance_id"]);
+}
+
+#[test]
+fn read_costs_tenant_since_equals_since_until_a_tenant_is_pushed_out() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+    let first = rc.read_costs("a", RowOrder::Bytes, 10);
+    assert_eq!(
+        first.tenant_since,
+        Some(first.since),
+        "a tenant first seen late had no reads before, so its rows cover since"
+    );
+
+    for n in 0..TENANTS {
+        rc.observe(
+            base(),
+            &page(&format!("tenant-{n}"), "walk", None, 3, 3, false),
+            Outcome::Complete,
+            9,
+        );
+    }
+    rc.observe(
+        base(),
+        &page("a", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+
+    let back = rc.read_costs("a", RowOrder::Bytes, 10);
+    assert!(back.tenant_tracked);
+    assert!(
+        back.tenant_since > Some(back.since),
+        "a tenant that may have been pushed out covers only its re-entry"
+    );
+}
+
+#[test]
+fn read_cost_scope_skips_the_requesting_tenant_as_a_class() {
+    let req = QueryEventsRequest {
+        entity_id: Some("longhand:u1:skill_run:x".to_owned()),
+        ..QueryEventsRequest::default()
+    };
+    let own = ReadScope::of(&req, Some("longhand"), 0, false, 100).facts(
+        "longhand".to_owned(),
+        1,
+        1,
+        false,
+    );
+    let other =
+        ReadScope::of(&req, Some("acme"), 0, false, 100).facts("acme".to_owned(), 1, 1, false);
+    assert_eq!(own.stream_class, "skill_run");
+    assert_eq!(other.stream_class, "longhand");
+}
+
 #[derive(Clone, Default)]
 struct Captured(Arc<Mutex<Vec<u8>>>);
 
@@ -1156,7 +1225,7 @@ fn read_cost_logs_carry_no_tenant_entity_or_header_value_and_rate_limit_threshol
             HeaderName::from_static(READ_ID_HEADER),
             HeaderValue::from_static("SECRETREADID"),
         );
-        let read = ReadScope::of(&req, 0, false, 100).facts(
+        let read = ReadScope::of(&req, Some("tenantsecret"), 0, false, 100).facts(
             "tenantsecret".to_owned(),
             THRESHOLD_MATCHED + 1,
             100,

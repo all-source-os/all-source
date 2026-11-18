@@ -22,6 +22,10 @@ async fn ingest(core: &EmbeddedCore, entity_id: &str, payload: Value) {
 
 /// Two `skill_run` streams of 4 and 1 events, one `auth_member` stream of 2.
 async fn fixture_store() -> StoreRegistry {
+    StoreRegistry::from_cores(vec![("default", fixture_core().await)])
+}
+
+async fn fixture_core() -> EmbeddedCore {
     let core = EmbeddedCore::open(
         Config::builder()
             .single_tenant(true)
@@ -42,7 +46,7 @@ async fn fixture_store() -> StoreRegistry {
     for n in 0..2 {
         ingest(&core, "auth-member:u7", json!({ "n": n })).await;
     }
-    StoreRegistry::from_cores(vec![("default", core)])
+    core
 }
 
 async fn registry_with_gateway(base: &str) -> StoreRegistry {
@@ -232,6 +236,43 @@ async fn stream_sizes_through_the_gateway_says_when_classes_miss_streams() {
 
     assert_eq!(result["completeness"]["complete"], false);
     assert_eq!(result["completeness"]["reason"], "stream_limit_reached");
+    assert_eq!(result["completeness"]["omitted"], 20000);
+    assert_eq!(result["page"]["totalCount"], 20001);
+}
+
+#[tokio::test]
+async fn stream_sizes_on_an_embedded_store_after_a_failed_refresh_is_incomplete() {
+    let stores = StoreRegistry::from_cores_refreshing_every(
+        vec![("default", fixture_core().await)],
+        std::time::Duration::from_secs(3600),
+    );
+    stores
+        .get(Some("default"))
+        .expect("default store")
+        .record_refresh_failure("injected refresh failure")
+        .await;
+
+    for tool in ["stream_sizes", "cap_check"] {
+        let args = if tool == "cap_check" {
+            json!({ "caps": [{ "stream_class": "skill_run", "cap_events": 5 }] })
+        } else {
+            json!({})
+        };
+        let result = execute_tool_inner(&stores, &local(), tool, &args)
+            .await
+            .expect(tool);
+
+        assert_eq!(
+            result["completeness"]["complete"], false,
+            "{tool}: {result}"
+        );
+        assert_eq!(result["completeness"]["reason"], "refresh_failed", "{tool}");
+        assert_eq!(
+            result["context"]["store"]["lastRefreshError"], true,
+            "{tool}"
+        );
+        assert_eq!(result["context"]["store"]["kind"], "embedded", "{tool}");
+    }
 }
 
 #[tokio::test]
@@ -637,6 +678,100 @@ async fn read_costs_for_an_untracked_tenant_is_incomplete() {
 
     assert_eq!(result["completeness"]["complete"], false);
     assert_eq!(result["completeness"]["reason"], "tenant_not_tracked");
+}
+
+const CLASS_ROW: &str = r#"{"stream_class":"skill","logical_reads":3,"pages":4,"whole_reads":0,"single_truncated":0,"walk_abandoned":0,"walk_evicted":0,"matched_sum":6,"matched_max":2,"max_pages_per_walk":2}"#;
+
+fn caller_row(approximate: bool) -> String {
+    format!(
+        r#"{{"caller":"lh.skill","stream_class":"skill","logical_reads":3,"pages":4,"whole_reads":0,"body_bytes":900,"single_truncated":0,"walk_abandoned":0,"approximate":{approximate},"first_seen":null,"last_seen":null}}"#
+    )
+}
+
+fn read_costs_body(callers: &str, classes: &str, tenant_since: &str) -> &'static str {
+    Box::leak(
+        format!(
+            r#"{{"callers":[{callers}],"classes":[{classes}],"enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":"{tenant_since}","instance_id":"0123456789abcdef0123456789abcdef"}}"#
+        )
+        .into_boxed_str(),
+    )
+}
+
+const SINCE: &str = "2026-11-17T00:00:00Z";
+
+#[tokio::test]
+async fn read_costs_with_whole_tables_is_complete_and_names_the_instance() {
+    let result = remote_read_costs(read_costs_body(&caller_row(false), CLASS_ROW, SINCE))
+        .await
+        .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], true, "{result}");
+    assert_eq!(
+        result["recording"]["instanceId"],
+        "0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(result["recording"]["since"], SINCE);
+}
+
+#[tokio::test]
+async fn read_costs_with_an_approximate_caller_row_is_incomplete() {
+    let result = remote_read_costs(read_costs_body(&caller_row(true), CLASS_ROW, SINCE))
+        .await
+        .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "rows_approximate");
+}
+
+#[tokio::test]
+async fn read_costs_with_an_overflowed_class_table_is_incomplete() {
+    let other = CLASS_ROW.replace(r#""stream_class":"skill""#, r#""stream_class":"other""#);
+    let result = remote_read_costs(read_costs_body(
+        &caller_row(false),
+        &format!("{CLASS_ROW},{other}"),
+        SINCE,
+    ))
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "classes_overflowed");
+}
+
+#[tokio::test]
+async fn read_costs_for_a_tenant_that_reentered_the_table_is_incomplete() {
+    let result = remote_read_costs(read_costs_body(
+        &caller_row(false),
+        CLASS_ROW,
+        "2026-11-17T06:00:00Z",
+    ))
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "tenant_reentered");
+}
+
+#[tokio::test]
+async fn read_costs_names_a_cut_table_before_the_limit() {
+    let (base, _heads) = serve_routes(vec![(
+        "/api/v1/read-costs",
+        "200 OK",
+        read_costs_body(&caller_row(true), CLASS_ROW, SINCE),
+    )])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "limit": 1 }),
+    )
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["reason"], "rows_approximate");
 }
 
 #[tokio::test]

@@ -52,8 +52,12 @@ The result is lowercased and cut to 64 characters; anything that then fails
 | event type `auth.member.updated` | `auth.member` |
 | entity `longhand:{user}:skill_run:{id}` | `longhand` |
 
-An entity id that starts with an all-letter tenant id yields that tenant id
-as its class.
+Core classifies a read with its tenant: an entity id whose first segment is
+exactly the requesting tenant's id skips that segment, so
+`longhand:{user}:skill_run:{id}` read by tenant `longhand` is `skill_run`.
+Only the first segment is compared, exactly as sent. An entity id that starts
+with another tenant's all-letter id still yields that id as its class, as
+does a read classified without a tenant, which the row above shows.
 
 ## Facts Core records per query page
 
@@ -120,18 +124,28 @@ cover:
 - `tenant_tracked`: the tenant has rows. `false` both for a tenant with no
   reads since `since` and for one pushed out of the 128-tenant table; Core
   cannot tell the two apart.
-- `tenant_since`: when the tenant's rows started; later than `since` when it
-  entered the table late or was pushed out and came back. Null when untracked.
+- `tenant_since`: when the tenant's rows started. Equal to `since` while no
+  tenant has been pushed out of the table since `since`: a tenant first seen
+  later had no earlier pages. Once any tenant has been pushed out, a tenant
+  entering the table gets its entry time, since it may be coming back. Null
+  when untracked.
+- `instance_id`: 32 hex characters, random per Core process. The tables live
+  in one process and are never shared or persisted, so the rows cover only
+  the pages this Core instance served since `since`. With several Core
+  machines, each answers for its own pages, and a restart starts a new id and
+  empty tables. Compare `instance_id` across replies before adding or
+  diffing rows.
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ReadCostsResponse",
   "type": "object",
-  "required": ["callers", "classes", "enabled", "since", "tenant_tracked", "tenant_since"],
+  "required": ["callers", "classes", "enabled", "since", "instance_id", "tenant_tracked", "tenant_since"],
   "properties": {
     "enabled": { "type": "boolean" },
     "since": { "type": "string", "format": "date-time" },
+    "instance_id": { "type": "string", "pattern": "^[0-9a-f]{32}$", "description": "Random per Core process; rows cover only this instance" },
     "tenant_tracked": { "type": "boolean" },
     "tenant_since": { "type": ["string", "null"], "format": "date-time" },
     "callers": {
@@ -203,8 +217,16 @@ Each pass hydrates the tenant first. A tenant that cannot be hydrated answers
 pass is complete only if the tenant was still resident, and not evicted, when
 it ended; the retry hydrates again, so a tenant evicted during the first pass
 is counted in full by the second, and one evicted during both answers
-`complete: false`. Without `with_bytes`, a tenant evicted between hydration
-and the listing answers `complete: false`, `reason: "tenant_evicted"`.
+`complete: false`. Core reads the tenant's eviction generation before it
+hydrates and compares it once the scan ends, so an eviction anywhere in
+between, even one followed by a reload, makes the pass incomplete. Without
+`with_bytes`, a tenant evicted between hydration and the end of the listing
+answers `complete: false`, `reason: "tenant_evicted"`.
+
+`GET /api/v1/stats?tenant_id=` and `GET /api/v1/event-types?tenant_id=`
+answer 503 `store_unavailable` when the tenant cannot be hydrated, never zero
+counts. They read the tenant the same way and retry once when it was evicted
+during the read; a second eviction is 503 too.
 
 ```json
 {
@@ -306,7 +328,11 @@ tool.
   events, bytes, events_last_7d, max_stream_events, max_stream_bytes}`. Class
   totals cover every stream read, not only the `limit` rows returned. On a
   remote store with more than 10,000 streams, completeness is `false` with
-  reason `stream_limit_reached`. When Core's scan answers `complete: false`
+  reason `stream_limit_reached`, `omitted` is Core's `total` less the rows
+  read, and `page.totalCount` is Core's `total`. An embedded store whose last
+  refresh failed serves what it held before: completeness is `false` with
+  reason `refresh_failed`, and `context.store` carries the refresh state
+  (`lastRefreshError`, `refreshedAt`). When Core's scan answers `complete: false`
   (or an embedded scan does), completeness is `false` with reason
   `scan_interrupted`, or `no_tenant` when Core named that reason.
 - A remote reply with no `complete`, or with a stream lacking
@@ -330,9 +356,14 @@ tool.
   `maxPagesPerWalk`, summed and maximised over the class rows returned, and
   `totalsCover`: `all_class_rows` when fewer class rows than `limit` came
   back, so the totals are the tenant's, else `returned_class_rows`.
-- `read_costs` adds `recording {enabled, since, tenantTracked, tenantSince}`
-  from Core. Completeness is `false` with reason `recording_off` when
-  `enabled` is `false`, `tenant_not_tracked` when the tenant has no rows,
-  `recording_state_unknown` when Core sent neither field, and `limit_reached`
-  when a list came back at `limit`. A reply without `callers` or `classes`, or
-  a class row missing a summed field, is an error.
+- `read_costs` adds `recording {enabled, instanceId, since, tenantTracked,
+  tenantSince}` from Core; the rows cover only the Core instance named by
+  `instanceId`, since `since`. Completeness is `false`, with the first reason
+  that applies: `recording_off` when `enabled` is `false`,
+  `tenant_not_tracked` when the tenant has no rows, `recording_state_unknown`
+  when Core sent neither field or a tracked tenant without readable `since`
+  and `tenant_since`, `rows_approximate` when a caller row is `approximate`,
+  `classes_overflowed` when a class row is `other`, `tenant_reentered` when
+  `tenant_since` is later than `since`, and `limit_reached` when a list came
+  back at `limit`. A reply without `callers` or `classes`, a caller row
+  without `approximate`, or a class row missing a summed field, is an error.

@@ -9,7 +9,7 @@ use crate::{
     application::dto::QueryEventsRequest,
     domain::{
         entities::egress::MAX_RESPONSE_BYTES,
-        stream_class::{is_class, stream_class},
+        stream_class::{is_class, stream_class_for_tenant},
     },
     infrastructure::{observability::metrics::MetricsRegistry, security::middleware::Admin},
 };
@@ -28,7 +28,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        Arc, Mutex, MutexGuard, PoisonError,
+        Arc, LazyLock, Mutex, MutexGuard, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
@@ -108,9 +108,16 @@ pub struct ReadScope {
 }
 
 impl ReadScope {
-    pub fn of(req: &QueryEventsRequest, offset: usize, descending: bool, max_page: usize) -> Self {
+    pub fn of(
+        req: &QueryEventsRequest,
+        tenant: Option<&str>,
+        offset: usize,
+        descending: bool,
+        max_page: usize,
+    ) -> Self {
         Self {
-            class: stream_class(
+            class: stream_class_for_tenant(
+                tenant,
                 req.entity_id.as_deref(),
                 req.event_type_prefix.as_deref(),
                 req.event_type.as_deref(),
@@ -283,7 +290,9 @@ struct Walk {
 #[derive(Debug, Default)]
 struct Tenant {
     last_active: u64,
-    /// When this tenant entered the table; rows cover only pages since then.
+    /// Rows cover only pages since then: `Tables::since` while no tenant has
+    /// been evicted, since a tenant first seen then had no earlier pages;
+    /// otherwise the time it entered, as it may have been evicted before.
     tracked_since: Option<DateTime<Utc>>,
     classes: HashMap<String, ClassRow>,
     callers: HashMap<(Option<String>, String), CallerRow>,
@@ -295,6 +304,8 @@ struct Tables {
     /// recording back on, which clears every table.
     since: DateTime<Utc>,
     tick: u64,
+    /// A tenant has been pushed out of `tenants` since `since`.
+    tenant_evicted: bool,
     tenants: HashMap<String, Tenant>,
     walks: HashMap<(String, String), Walk>,
     walks_per_tenant: HashMap<String, usize>,
@@ -380,16 +391,19 @@ impl ReadCost {
     pub fn read_costs(&self, tenant: &str, order: RowOrder, limit: usize) -> ReadCostsResponse {
         let tables = self.lock();
         let enabled = self.enabled();
+        let since = tables.since;
         let Some(state) = tables.tenants.get(tenant) else {
             return ReadCostsResponse {
                 callers: Vec::new(),
                 classes: Vec::new(),
                 enabled,
-                since: tables.since,
+                since,
+                instance_id: instance_id(),
                 tenant_tracked: false,
                 tenant_since: None,
             };
         };
+        let tenant_since = state.tracked_since;
         let mut callers: Vec<CallerCost> = state
             .callers
             .iter()
@@ -399,12 +413,6 @@ impl ReadCost {
                 counts: *counts,
             })
             .collect();
-        callers.sort_by(|a, b| {
-            caller_key(order, &b.counts)
-                .cmp(&caller_key(order, &a.counts))
-                .then_with(|| (&a.caller, &a.stream_class).cmp(&(&b.caller, &b.stream_class)))
-        });
-        callers.truncate(limit);
         let mut classes: Vec<ClassCost> = state
             .classes
             .iter()
@@ -413,6 +421,13 @@ impl ReadCost {
                 counts: *counts,
             })
             .collect();
+        drop(tables);
+        callers.sort_by(|a, b| {
+            caller_key(order, &b.counts)
+                .cmp(&caller_key(order, &a.counts))
+                .then_with(|| (&a.caller, &a.stream_class).cmp(&(&b.caller, &b.stream_class)))
+        });
+        callers.truncate(limit);
         classes.sort_by(|a, b| {
             class_key(order, &b.counts)
                 .cmp(&class_key(order, &a.counts))
@@ -423,9 +438,10 @@ impl ReadCost {
             callers,
             classes,
             enabled,
-            since: tables.since,
+            since,
+            instance_id: instance_id(),
             tenant_tracked: true,
-            tenant_since: state.tracked_since,
+            tenant_since,
         }
     }
 
@@ -710,10 +726,16 @@ fn tenant_mut<'a>(tables: &'a mut Tables, tenant: &str) -> &'a mut Tenant {
             .map(|(name, _)| name.clone())
     {
         tables.tenants.remove(&coldest);
+        tables.tenant_evicted = true;
     }
+    let first_seen = if tables.tenant_evicted {
+        Utc::now()
+    } else {
+        tables.since
+    };
     let state = tables.tenants.entry(tenant.to_owned()).or_default();
     state.last_active = tick;
-    state.tracked_since.get_or_insert_with(Utc::now);
+    state.tracked_since.get_or_insert(first_seen);
     state
 }
 
@@ -909,12 +931,22 @@ pub struct ReadCostsResponse {
     /// When the tables last started empty: process start or recording
     /// switched back on.
     pub since: DateTime<Utc>,
+    /// Random per Core process. Rows cover only the pages this process
+    /// served, so two machines, or one restarted, answer with different ids.
+    pub instance_id: &'static str,
     /// The tenant has rows. `false` for a tenant with no reads since `since`
     /// and for one pushed out of the 128-tenant table; the two look alike.
     pub tenant_tracked: bool,
-    /// When the tenant's rows started; later than `since` when it entered
-    /// the table late or was pushed out and came back.
+    /// When the tenant's rows started: `since`, unless a tenant had been
+    /// pushed out of the table when this one entered, in which case this one
+    /// may have been pushed out too and its rows start when it came back.
     pub tenant_since: Option<DateTime<Utc>>,
+}
+
+static INSTANCE_ID: LazyLock<String> = LazyLock::new(|| uuid::Uuid::new_v4().simple().to_string());
+
+fn instance_id() -> &'static str {
+    INSTANCE_ID.as_str()
 }
 
 const UNATTRIBUTED: &str = "unattributed";

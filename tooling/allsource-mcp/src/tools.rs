@@ -1817,7 +1817,9 @@ async fn exec_sample_events(
 async fn exec_quick_stats(core: &EmbeddedCore, policy: &DiagnosticPolicy) -> Result<Value> {
     let durability = core.durability_status();
     let (statistics, fresh_through) = if let Some(tenant_id) = policy.tenant_id() {
-        let stats = core.stats_for_tenant(tenant_id);
+        let stats = core
+            .stats_for_tenant(tenant_id)
+            .map_err(|err| anyhow::anyhow!("store unavailable: {err}"))?;
         let fresh_through = stats.newest_event.map(|timestamp| timestamp.to_rfc3339());
         (serde_json::to_value(stats)?, fresh_through)
     } else {

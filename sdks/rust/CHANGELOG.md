@@ -33,8 +33,10 @@ how many body bytes it carried, so reads can be counted by who made them.
   and `events_last_7d`. `complete` is `false` and `incomplete` names why:
   `scan_interrupted` when Core saw events removed during the scan and its
   retry, `bytes_unavailable` when `with_bytes` was asked and Core sent no
-  `complete` or a row without `estimated_bytes` (a Core older than 0.30
-  ignores `with_bytes`), or Core's own `reason` such as `no_tenant`.
+  `complete` or a row without `estimated_bytes` or `events_last_7d` (a Core
+  older than 0.30 ignores `with_bytes`), `completeness_unknown` for a plain
+  listing without `complete`, or Core's own `reason` such as `no_tenant` or
+  `tenant_evicted`.
   `ListStreamsResponse` is `#[non_exhaustive]` and is not `Deserialize`.
 - `CoreClient::tenant_stats`: `GET /api/v1/stats`, answering `TenantStats`
   (per-event-type counts and the oldest and newest event). A reply without

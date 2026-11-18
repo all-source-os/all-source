@@ -18,8 +18,20 @@ pub fn stream_class(
     event_type_prefix: Option<&str>,
     event_type: Option<&str>,
 ) -> String {
+    stream_class_for_tenant(None, entity_id, event_type_prefix, event_type)
+}
+
+/// [`stream_class`] for a read by `tenant`: an entity id whose first segment
+/// is exactly `tenant` skips that segment, so the requesting tenant's own id
+/// never becomes a class. Another tenant's all-letter id still can.
+pub fn stream_class_for_tenant(
+    tenant: Option<&str>,
+    entity_id: Option<&str>,
+    event_type_prefix: Option<&str>,
+    event_type: Option<&str>,
+) -> String {
     let raw = if let Some(id) = entity_id {
-        entity_segment(id).unwrap_or_else(|| ENTITY.to_owned())
+        entity_segment(id, tenant).unwrap_or_else(|| ENTITY.to_owned())
     } else if let Some(prefix) = non_empty(event_type_prefix) {
         prefix.strip_suffix('.').unwrap_or(prefix).to_owned()
     } else if let Some(event_type) = non_empty(event_type) {
@@ -50,14 +62,16 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
 /// The first segment that starts with a letter and holds no digit, with `-`
 /// read as `_`. Segments that hold a digit are skipped so an id never
 /// becomes a class.
-fn entity_segment(entity_id: &str) -> Option<String> {
+fn entity_segment(entity_id: &str, tenant: Option<&str>) -> Option<String> {
     entity_id
         .split(':')
-        .find(|segment| {
-            segment.starts_with(|c: char| c.is_ascii_alphabetic())
+        .enumerate()
+        .find(|&(position, segment)| {
+            !(position == 0 && tenant == Some(segment))
+                && segment.starts_with(|c: char| c.is_ascii_alphabetic())
                 && !segment.contains(|c: char| c.is_ascii_digit())
         })
-        .map(|segment| segment.replace('-', "_"))
+        .map(|(_, segment)| segment.replace('-', "_"))
 }
 
 fn finish(raw: &str) -> String {
@@ -145,6 +159,38 @@ mod tests {
     #[test]
     fn stream_class_system_workspace_id_is_longhand() {
         assert_eq!(class_of_entity("longhand:u1:skill_run:x"), "longhand");
+    }
+
+    fn class_in(tenant: &str, entity_id: &str) -> String {
+        stream_class_for_tenant(Some(tenant), Some(entity_id), None, None)
+    }
+
+    #[test]
+    fn stream_class_skips_a_first_segment_equal_to_the_requesting_tenant() {
+        assert_eq!(class_in("longhand", "longhand:u1:skill_run:x"), "skill_run");
+        assert_eq!(class_in("acme", "acme:auth-member:x1"), "auth_member");
+        assert_eq!(class_in("acme", "acme:01abc"), ENTITY);
+    }
+
+    #[test]
+    fn stream_class_keeps_a_tenant_like_segment_of_another_tenant_or_position() {
+        assert_eq!(class_in("acme", "longhand:u1:skill_run:x"), "longhand");
+        assert_eq!(class_in("acme", "u1:acme:skill_run"), "acme");
+        assert_eq!(class_in("tenant-1", "tenant:x"), "tenant");
+    }
+
+    #[test]
+    fn stream_class_skip_compares_the_raw_segment_not_the_class() {
+        assert_eq!(class_in("Acme", "acme:skill_run"), "acme");
+        assert_eq!(class_in("acme-corp", "acme-corp:skill_run:1"), "skill_run");
+    }
+
+    #[test]
+    fn stream_class_without_an_entity_ignores_the_tenant() {
+        assert_eq!(
+            stream_class_for_tenant(Some("auth"), None, Some("auth.member."), None),
+            "auth.member"
+        );
     }
 
     #[test]

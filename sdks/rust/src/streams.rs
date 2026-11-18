@@ -100,8 +100,10 @@ pub struct ListStreamsResponse {
     pub complete: bool,
     /// Why `complete` is `false`:
     /// - `bytes_unavailable`: `with_bytes` was asked and Core sent no
-    ///   `complete`, or a stream without `estimated_bytes`. A Core older than
-    ///   0.30 ignores `with_bytes` this way.
+    ///   `complete`, or a stream without `estimated_bytes` or
+    ///   `events_last_7d`. A Core older than 0.30 ignores `with_bytes` this way.
+    /// - `completeness_unknown`: a plain listing without `complete`, which a
+    ///   Core older than 0.30 sends; it cannot say whether it read the tenant.
     /// - `scan_interrupted`: Core saw events removed during its scan and retry.
     /// - any other value is Core's own `reason`, such as `no_tenant`.
     pub incomplete: Option<String>,
@@ -118,16 +120,22 @@ struct RawListStreams {
 
 const BYTES_UNAVAILABLE: &str = "bytes_unavailable";
 const SCAN_INTERRUPTED: &str = "scan_interrupted";
+const COMPLETENESS_UNKNOWN: &str = "completeness_unknown";
 
 impl RawListStreams {
     fn judge(self, with_bytes: bool) -> ListStreamsResponse {
-        let sized = self.streams.iter().all(|s| s.estimated_bytes.is_some());
+        let sized = self
+            .streams
+            .iter()
+            .all(|s| s.estimated_bytes.is_some() && s.events_last_7d.is_some());
         let incomplete = if with_bytes && (self.complete.is_none() || !sized) {
             Some(BYTES_UNAVAILABLE.to_owned())
-        } else if self.complete == Some(false) {
-            Some(self.reason.unwrap_or_else(|| SCAN_INTERRUPTED.to_owned()))
         } else {
-            None
+            match self.complete {
+                Some(true) => None,
+                Some(false) => Some(self.reason.unwrap_or_else(|| SCAN_INTERRUPTED.to_owned())),
+                None => Some(COMPLETENESS_UNKNOWN.to_owned()),
+            }
         };
         ListStreamsResponse {
             streams: self.streams,
@@ -308,8 +316,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn plain_listing_without_completeness_is_complete() {
+    async fn plain_listing_without_completeness_is_incomplete() {
         let server = serve_streams(serde_json::json!({ "streams": [], "total": 0 })).await;
+        let plain = CoreClient::new(&server.uri(), "test-key")
+            .unwrap()
+            .list_streams(StreamsParams::new())
+            .await
+            .unwrap();
+        assert!(!plain.complete);
+        assert_eq!(plain.incomplete.as_deref(), Some("completeness_unknown"));
+    }
+
+    #[tokio::test]
+    async fn plain_listing_that_core_calls_complete_is_complete() {
+        let server = serve_streams(serde_json::json!({
+            "streams": [], "total": 0, "complete": true
+        }))
+        .await;
         let plain = CoreClient::new(&server.uri(), "test-key")
             .unwrap()
             .list_streams(StreamsParams::new())
@@ -317,6 +340,20 @@ mod tests {
             .unwrap();
         assert!(plain.complete);
         assert_eq!(plain.incomplete, None);
+    }
+
+    #[tokio::test]
+    async fn list_streams_with_bytes_missing_a_seven_day_count_is_incomplete() {
+        let sized = sized_listing(serde_json::json!({
+            "streams": [
+                {"stream_id": "a", "event_count": 1, "last_event_at": null, "estimated_bytes": 10}
+            ],
+            "total": 1,
+            "complete": true
+        }))
+        .await;
+        assert!(!sized.complete);
+        assert_eq!(sized.incomplete.as_deref(), Some("bytes_unavailable"));
     }
 
     #[tokio::test]

@@ -133,8 +133,15 @@ id itself is never logged.
 - Single truncated also counts the first page of a walk from a client that
   sends no read id.
 - Core keeps 128 tenants, 128 classes and 256 caller rows per tenant; the
-  least recently active tenant is dropped first.
+  least recently active tenant is dropped first. `read_costs` says which
+  limit cut the rows: `rows_approximate`, `classes_overflowed` or
+  `tenant_reentered`.
+- The tables live in one Core process. With more than one Core machine, each
+  answers for the pages it served, and a restart empties them; `read_costs`
+  shows the answering instance as `recording.instanceId` beside
+  `recording.since`. Rows from two replies add up only when the ids match.
 - `stream_sizes` on a remote store reads at most 10,000 streams; past that,
   completeness says `stream_limit_reached` and class totals are partial.
   `scan_interrupted` means Core saw events removed during its scan and its
-  retry; run it again.
+  retry; run it again. On an embedded store, `refresh_failed` means the
+  store could not catch up with its writer and the sizes may be stale.
