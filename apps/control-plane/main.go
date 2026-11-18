@@ -656,6 +656,8 @@ func (cp *ControlPlane) setupRoutes() {
 	// lets the MCP connector's stats/state tools return exact numbers instead of
 	// deriving approximations from a full event scan (#229).
 	api.GET("/stats", RequirePermission(entities.PermissionRead), cp.ProxyStats)
+	api.GET("/read-costs", RequirePermission(entities.PermissionRead), cp.ProxyReadCosts)
+	api.GET("/streams", RequirePermission(entities.PermissionRead), cp.ProxyStreams)
 	api.GET("/entities/:entity_id/state", RequirePermission(entities.PermissionRead), cp.ProxyEntityState)
 	api.GET("/entities/:entity_id/snapshot", RequirePermission(entities.PermissionRead), cp.ProxyEntitySnapshot)
 

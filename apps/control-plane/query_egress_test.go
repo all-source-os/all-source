@@ -33,10 +33,10 @@ func TestLargeQuerySampleRedactsValuesAndLimitsFrequency(t *testing.T) {
 	var sampler queryEgressSampler
 	q := url.Values{"entity_id": {"team-queue:private-customer"}, "event_type_prefix": {"team_queue.work_item.private"}, "payload_filter": {"sensitive-payload"}}
 	now := time.Unix(100, 0)
-	if got := sampler.sample(q, 1024, now); got != "" {
+	if got := sampler.sample(q, 1024, now, "", ""); got != "" {
 		t.Fatalf("small response sampled: %s", got)
 	}
-	got := sampler.sample(q, 300000, now)
+	got := sampler.sample(q, 300000, now, "", "")
 	if !strings.Contains(got, "bytes=300000") || !strings.Contains(got, `entity_namespace="team-queue"`) {
 		t.Fatalf("missing attribution: %s", got)
 	}
@@ -45,7 +45,7 @@ func TestLargeQuerySampleRedactsValuesAndLimitsFrequency(t *testing.T) {
 			t.Fatalf("query value leaked: %s", got)
 		}
 	}
-	if sampler.sample(q, 300000, now.Add(9*time.Second)) != "" || sampler.sample(q, 300000, now.Add(10*time.Second)) == "" {
+	if sampler.sample(q, 300000, now.Add(9*time.Second), "", "") != "" || sampler.sample(q, 300000, now.Add(10*time.Second), "", "") == "" {
 		t.Fatal("sample deadline not enforced")
 	}
 	for _, value := range []string{"private@example.com", "bad\nnamespace:secret", strings.Repeat("x", 33) + ":secret"} {
@@ -61,7 +61,7 @@ func TestLargeQuerySampleConcurrentBudget(t *testing.T) {
 	var workers sync.WaitGroup
 	for range 64 {
 		workers.Go(func() {
-			if sampler.sample(nil, 300000, time.Unix(100, 0)) != "" {
+			if sampler.sample(nil, 300000, time.Unix(100, 0), "", "") != "" {
 				count.Add(1)
 			}
 		})
@@ -76,10 +76,10 @@ func TestQuerySampleIncludesSmallerRepeatedPagesWithoutSelectorValues(t *testing
 	var sampler queryEgressSampler
 	q := url.Values{"event_type_prefix": {"team_queue.work_item."}, "payload_filter": {"private-filter"}}
 	now := time.Unix(100, 0)
-	if got := sampler.sample(q, 16*1024-1, now); got != "" {
+	if got := sampler.sample(q, 16*1024-1, now, "", ""); got != "" {
 		t.Fatalf("below-floor response sampled: %s", got)
 	}
-	got := sampler.sample(q, 16*1024, now)
+	got := sampler.sample(q, 16*1024, now, "", "")
 	if !strings.Contains(got, "event_fingerprint=b3c08b101aed") {
 		t.Fatalf("missing selector fingerprint: %s", got)
 	}
