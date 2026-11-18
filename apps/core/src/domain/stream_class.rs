@@ -21,7 +21,7 @@ pub fn stream_class(
     let raw = if let Some(id) = entity_id {
         entity_segment(id).unwrap_or_else(|| ENTITY.to_owned())
     } else if let Some(prefix) = non_empty(event_type_prefix) {
-        prefix.trim_end_matches('.').to_owned()
+        prefix.strip_suffix('.').unwrap_or(prefix).to_owned()
     } else if let Some(event_type) = non_empty(event_type) {
         event_type
             .rsplit_once('.')
@@ -92,6 +92,27 @@ mod tests {
     #[test]
     fn stream_class_entity_maps_hyphens_to_underscores() {
         assert_eq!(class_of_entity("auth-member:abc123"), "auth_member");
+    }
+
+    #[test]
+    fn stream_class_design_vectors_hold() {
+        assert_eq!(
+            class_of_entity("3f2a9c1e-77b0-4c1d-9e1a-0b5d2c8f6a41:user_7f:skill_run:01hx9z"),
+            "skill_run"
+        );
+        assert_eq!(class_of_entity("auth-member:abc"), "auth_member");
+        assert_eq!(class_of_entity("01abc:02def"), ENTITY);
+        assert_eq!(class_of_entity("au$th:x"), UNCLASSIFIED);
+    }
+
+    #[test]
+    fn stream_class_digit_free_first_segment_is_the_class() {
+        assert_eq!(class_of_entity("acme-corp:4f2"), "acme_corp");
+    }
+
+    #[test]
+    fn stream_class_prefix_drops_only_one_trailing_dot() {
+        assert_eq!(stream_class(None, Some("auth.."), None), "auth.");
     }
 
     #[test]

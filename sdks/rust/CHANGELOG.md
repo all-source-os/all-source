@@ -19,14 +19,22 @@ how many body bytes it carried, so reads can be counted by who made them.
 - `QueryEventsParams::read_id` and `ReadId`: `x-allsource-read-id` on one
   request. `EventPaginator` creates one `ReadId` per walk and sends it on
   every page.
-- `ResponseMeta::body_bytes`: length of the decoded body, set on
-  `QueryEventsResponse::meta`.
+- `ResponseMeta::body_bytes`: length of the decoded body. Set on every
+  response read through `get_with_meta`, which serves `QueryEventsResponse::meta`
+  and the meta returned by the latest-state and view-row reads; `None` on a
+  `304`. The decoded length is reported, so under `gzip` it is not the wire
+  length.
 
 ### Changed
 
 - `handle_response` decodes from the buffered body, so `body_bytes` is known
-  before parsing. The decoded length is reported, so under `gzip` it is not
-  the wire length.
+  before parsing.
+- A 2xx body that fails to decode is now `Error::Json`, on every endpoint;
+  before it was `Error::Http`, from `reqwest::Response::json`. `Error::Json`
+  is not retryable and does not count against the circuit breaker, so a
+  malformed body now fails on the first attempt. `reqwest` offers no public way
+  to build its error from a `serde_json` error, so keeping `Error::Http` would
+  mean decoding through `Response::json` and losing the body length.
 - `es256-assertion` no longer enables `dep:uuid`: `uuid` is a required
   dependency now, used by `ReadId`.
 

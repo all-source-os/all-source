@@ -140,21 +140,46 @@ async fn attribution_travels_as_headers_never_as_query_parameters() {
         .mount(&server)
         .await;
     let client = QueryClient::new(&server.uri(), "test-key").expect("client");
+    let read_id = ReadId::new();
 
     client
         .query_events(
             QueryEventsParams::new()
                 .caller("svc.walker")
-                .read_id(ReadId::new()),
+                .read_id(read_id.clone()),
         )
         .await
         .expect("query");
 
     let requests = received(&server).await;
-    let query = requests[0].url.query().unwrap_or_default();
-    assert!(!query.contains("caller"), "{query}");
-    assert!(!query.contains("read_id"), "{query}");
-    assert!(header(&requests[0], READ_ID_HEADER).is_some());
+    assert_eq!(requests.len(), 1);
+    let keys: Vec<String> = requests[0]
+        .url
+        .query_pairs()
+        .map(|(key, _)| key.into_owned())
+        .collect();
+    for attribution in ["caller", "read_id", CALLER_HEADER, READ_ID_HEADER] {
+        assert!(!keys.iter().any(|key| key == attribution), "{keys:?}");
+    }
+    let values: Vec<String> = requests[0]
+        .url
+        .query_pairs()
+        .map(|(_, value)| value.into_owned())
+        .collect();
+    assert!(
+        !values
+            .iter()
+            .any(|value| value == "svc.walker" || value == read_id.as_str()),
+        "{values:?}"
+    );
+    assert_eq!(
+        header(&requests[0], CALLER_HEADER).as_deref(),
+        Some("svc.walker")
+    );
+    assert_eq!(
+        header(&requests[0], READ_ID_HEADER).as_deref(),
+        Some(read_id.as_str())
+    );
 }
 
 #[tokio::test]

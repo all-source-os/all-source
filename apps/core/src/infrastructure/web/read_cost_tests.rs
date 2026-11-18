@@ -240,19 +240,65 @@ fn read_cost_full_table_evicts_the_least_recently_seen_walk_as_evicted() {
 
     for i in 0..=IN_FLIGHT_CAP {
         let id = format!("{i:016x}");
+        let tenant = format!("t{}", i / WALKS_PER_TENANT);
         rc.observe(
-            at(t0, 0),
-            &page("t", "walk", Some(&id), 25, 10, true),
+            t0 + Duration::from_millis(u64::try_from(i).unwrap()),
+            &page(&tenant, "walk", Some(&id), 25, 10, true),
             Outcome::HasMore,
             0,
         );
     }
 
     assert_eq!(walk_count(&rc), IN_FLIGHT_CAP);
-    let row = class_row_of(&rc, "t", "walk");
+    assert!(
+        !rc.lock()
+            .walks
+            .contains_key(&("t0".to_owned(), format!("{:016x}", 0)))
+    );
+    let row = class_row_of(&rc, "t0", "walk");
     assert_eq!(row.walk_evicted, 1);
     assert_eq!(row.walk_abandoned, 0);
     assert_eq!(truncated_count(&rc, "walk", "walk_evicted"), 1);
+}
+
+#[test]
+fn read_cost_tenant_at_its_walk_cap_evicts_its_own_oldest_walk_not_another_tenants() {
+    let rc = read_cost();
+    let t0 = base();
+    let quiet_id = "ffffffffffffffff";
+    rc.observe(
+        at(t0, 0),
+        &page("quiet", "walk", Some(quiet_id), 25, 10, true),
+        Outcome::HasMore,
+        0,
+    );
+
+    for i in 0..=WALKS_PER_TENANT {
+        let id = format!("{i:016x}");
+        rc.observe(
+            t0 + Duration::from_millis(u64::try_from(i).unwrap() + 1),
+            &page("noisy", "walk", Some(&id), 25, 10, true),
+            Outcome::HasMore,
+            0,
+        );
+    }
+
+    let tables = rc.lock();
+    let noisy = tables.walks.keys().filter(|(t, _)| t == "noisy").count();
+    assert_eq!(noisy, WALKS_PER_TENANT);
+    assert!(
+        tables
+            .walks
+            .contains_key(&("quiet".to_owned(), quiet_id.to_owned()))
+    );
+    assert!(
+        !tables
+            .walks
+            .contains_key(&("noisy".to_owned(), format!("{:016x}", 0)))
+    );
+    drop(tables);
+    assert_eq!(class_row_of(&rc, "noisy", "walk").walk_evicted, 1);
+    assert_eq!(class_row_of(&rc, "quiet", "walk").walk_evicted, 0);
 }
 
 #[test]
@@ -717,4 +763,55 @@ fn read_cost_scope_without_filters_is_unscoped_whole() {
     let facts = scope.facts("t".to_owned(), 0, 0, false);
     assert_eq!(facts.stream_class, "unscoped");
     assert_eq!(facts.counts.shape, Shape::Whole);
+}
+
+#[tokio::test]
+async fn production_router_admin_switch_refuses_anonymous_and_non_admin() {
+    use crate::infrastructure::{
+        di::ContainerBuilder,
+        repositories::InMemoryTenantRepository,
+        security::{AuthManager, RateLimiter, rate_limit::RateLimitConfig},
+        web::api_v1::{NodeRole, build_v1_router},
+    };
+
+    let auth = Arc::new(AuthManager::default());
+    let (_, developer_key) = auth.create_api_key(
+        "read-cost-developer".into(),
+        "t".into(),
+        Role::Developer,
+        None,
+    );
+    let router = build_v1_router(
+        Arc::new(EventStore::new()),
+        Arc::clone(&auth),
+        Arc::new(InMemoryTenantRepository::new()),
+        Arc::new(RateLimiter::new(RateLimitConfig::dev_mode())),
+        ContainerBuilder::new()
+            .with_in_memory_repositories()
+            .build(),
+        NodeRole::Leader,
+        None,
+        None,
+        3910,
+        None,
+        None,
+    )
+    .await;
+    let put_switch = |key: Option<&str>| {
+        let mut request = Request::builder()
+            .method("PUT")
+            .uri("/api/v1/admin/read-cost")
+            .header("content-type", "application/json");
+        if let Some(key) = key {
+            request = request.header("authorization", format!("Bearer {key}"));
+        }
+        router
+            .clone()
+            .oneshot(request.body(Body::from(r#"{"enabled":false}"#)).unwrap())
+    };
+
+    let anonymous = put_switch(None).await.unwrap();
+    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+    let developer = put_switch(Some(&developer_key)).await.unwrap();
+    assert_eq!(developer.status(), StatusCode::FORBIDDEN);
 }

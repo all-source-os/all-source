@@ -36,6 +36,7 @@ const INVALID: &str = "invalid";
 const OTHER: &str = "other";
 
 const IN_FLIGHT_CAP: usize = 4_096;
+const WALKS_PER_TENANT: usize = 256;
 const WALK_IDLE: Duration = Duration::from_secs(30);
 const SWEEP_EVERY: Duration = Duration::from_secs(10);
 const CLASSES_PER_TENANT: usize = 128;
@@ -403,7 +404,7 @@ impl ReadCost {
                     tables.walks.insert(key, walk);
                 }
             } else if counts.has_more {
-                self.make_room(&mut tables);
+                self.make_room(&mut tables, tenant);
                 tables.walks.insert(
                     key,
                     Walk {
@@ -521,17 +522,28 @@ impl ReadCost {
         threshold(tables, now, who, "walk_abandoned", walk.pages, 0);
     }
 
-    /// Evicts the least recently seen walk when the table is full. An evicted
-    /// walk is `walk_evicted`, never `walk_abandoned`.
-    fn make_room(&self, tables: &mut Tables) {
-        if tables.walks.len() < IN_FLIGHT_CAP {
-            return;
-        }
-        let oldest = tables
-            .walks
-            .iter()
-            .min_by_key(|(_, walk)| walk.last_seen)
-            .map(|(key, _)| key.clone());
+    /// Evicts `tenant`'s least recently seen walk when it holds
+    /// [`WALKS_PER_TENANT`], else the table's least recently seen walk when
+    /// the table is full, so one tenant cannot push out another's walks. An
+    /// evicted walk is `walk_evicted`, never `walk_abandoned`.
+    fn make_room(&self, tables: &mut Tables, tenant: &str) {
+        let own = tables.walks.keys().filter(|(t, _)| t == tenant).count();
+        let oldest = if own >= WALKS_PER_TENANT {
+            tables
+                .walks
+                .iter()
+                .filter(|((t, _), _)| t == tenant)
+                .min_by_key(|(_, walk)| walk.last_seen)
+                .map(|(key, _)| key.clone())
+        } else if tables.walks.len() >= IN_FLIGHT_CAP {
+            tables
+                .walks
+                .iter()
+                .min_by_key(|(_, walk)| walk.last_seen)
+                .map(|(key, _)| key.clone())
+        } else {
+            None
+        };
         let Some(key) = oldest else { return };
         if let Some(walk) = tables.walks.remove(&key) {
             let label = self.admit_label(tables, &walk.class);

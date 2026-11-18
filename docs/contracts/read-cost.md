@@ -70,7 +70,7 @@ counted. Embedded Core never runs the layer.
 | whole read | A page with no `since` and no entity id that is not a `limit=1` descending read and not a `limit=0` count probe |
 | single truncated | No read id, no `since`, no entity id, offset 0, served limit at least 2, a full page and `has_more` |
 | walk abandoned | A walk whose last page had `has_more` and got no next page for 30 s |
-| walk evicted | A walk dropped because 4,096 walks were in flight; never counted as abandoned |
+| walk evicted | A walk dropped because its tenant had 256 walks in flight (its own oldest goes) or 4,096 were in flight in all (the oldest goes); never counted as abandoned |
 | body bytes | Length of the uncompressed JSON body; 0 on a 304 |
 
 The first page of a walk whose client sends no read id also matches single
