@@ -20,7 +20,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     middleware,
     response::IntoResponse,
     routing::{delete, get, post, put},
@@ -196,6 +196,7 @@ pub async fn build_v1_router(
     geo_replication: Option<Arc<GeoReplicationManager>>,
 ) -> Router {
     let http_metrics = store.metrics();
+    let read_cost = super::read_cost::ReadCost::from_env(http_metrics.clone());
     let app_state = AppState {
         store,
         auth_manager: auth_manager.clone(),
@@ -530,6 +531,10 @@ pub async fn build_v1_router(
             get(super::api::schema_evolution_stats),
         )
         // v1.9: Geo-replication API
+        .route(
+            "/api/v1/admin/read-cost",
+            put(super::read_cost::set_read_cost),
+        )
         .route("/api/v1/geo/status", get(geo_status_handler))
         .route("/api/v1/geo/sync", post(geo_sync_handler))
         .route("/api/v1/geo/peers", get(geo_peers_handler))
@@ -593,11 +598,16 @@ pub async fn build_v1_router(
         }
     };
 
-    app.layer(middleware::from_fn(super::response_limit::bounded))
-        .layer(middleware::from_fn_with_state(
-            http_metrics,
-            super::http_metrics::record,
-        ))
+    app.layer(middleware::from_fn_with_state(
+        Arc::clone(&read_cost),
+        super::read_cost::record,
+    ))
+    .layer(Extension(read_cost))
+    .layer(middleware::from_fn(super::response_limit::bounded))
+    .layer(middleware::from_fn_with_state(
+        http_metrics,
+        super::http_metrics::record,
+    ))
         .layer(super::response_limit::compression())
 }
 

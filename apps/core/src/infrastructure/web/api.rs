@@ -1,3 +1,4 @@
+use super::read_cost::{ReadCostFacts, ReadFacts, ReadScope};
 #[cfg(feature = "replication")]
 use crate::infrastructure::replication::ReplicationMode;
 use crate::{
@@ -531,6 +532,13 @@ pub struct EventIntegrityParam {
 
 /// `GET /api/v1/events/query`, conditional per the latest-state contract.
 /// The body carries no request-time field, so equal results share a tag.
+/// A query answer, and the read facts for [`query_events`] to record. `read`
+/// is `None` when the request was refused before any read ran.
+pub struct CountedQuery {
+    pub body: Json<QueryEventsResponse>,
+    pub read: Option<ReadFacts>,
+}
+
 pub async fn query_events(
     auth: OptionalAuth,
     req: Query<QueryEventsRequest>,
@@ -540,9 +548,15 @@ pub async fn query_events(
     store: State<SharedStore>,
     headers: HeaderMap,
 ) -> Result<Response> {
-    let Json(body) =
-        query_events_json(auth, req, order_param, offset_param, integrity_param, store).await?;
-    conditional_json(&headers, &body)
+    let counted =
+        query_events_counted(auth, req, order_param, offset_param, integrity_param, store).await?;
+    let mut response = conditional_json(&headers, &counted.body.0)?;
+    if let Some(read) = counted.read {
+        response
+            .extensions_mut()
+            .insert(ReadCostFacts::from_headers(read, &headers));
+    }
+    Ok(response)
 }
 
 pub async fn query_events_json(
@@ -553,6 +567,26 @@ pub async fn query_events_json(
     Query(integrity_param): Query<EventIntegrityParam>,
     State(store): State<SharedStore>,
 ) -> Result<Json<QueryEventsResponse>> {
+    query_events_counted(
+        OptionalAuth(auth),
+        Query(req),
+        Query(order_param),
+        Query(offset_param),
+        Query(integrity_param),
+        State(store),
+    )
+    .await
+    .map(|counted| counted.body)
+}
+
+pub async fn query_events_counted(
+    OptionalAuth(auth): OptionalAuth,
+    Query(req): Query<QueryEventsRequest>,
+    Query(order_param): Query<EventOrderParam>,
+    Query(offset_param): Query<EventOffsetParam>,
+    Query(integrity_param): Query<EventIntegrityParam>,
+    State(store): State<SharedStore>,
+) -> Result<CountedQuery> {
     let offset = offset_param.offset.unwrap_or(0);
     let queried_entity_id = req.entity_id.clone();
 
@@ -583,6 +617,7 @@ pub async fn query_events_json(
         .clone()
         .or_else(|| auth.as_ref().map(|a| a.tenant_id().to_string()));
 
+    let scope = ReadScope::of(&req, offset, descending, MAX_QUERY_PAGE);
     let retained_prefix = integrity_param.integrity.as_deref() == Some("retained-prefix-v1");
     if retained_prefix
         && (enforced_tenant.as_deref().is_none_or(str::is_empty)
@@ -594,7 +629,8 @@ pub async fn query_events_json(
         ));
     }
     if let Some(protocol) = integrity_param.integrity.filter(|_| !retained_prefix) {
-        return super::retained_query::query(
+        let tenant = enforced_tenant.clone().unwrap_or_default();
+        let body = super::retained_query::query(
             store,
             QueryEventsRequest {
                 as_of_valid: None,
@@ -607,8 +643,13 @@ pub async fn query_events_json(
             descending,
             &protocol,
         )
-        .await
-        .map(Json);
+        .await?;
+        let read = (!tenant.is_empty())
+            .then(|| scope.facts(tenant, body.total_count, body.count, body.has_more));
+        return Ok(CountedQuery {
+            body: Json(body),
+            read,
+        });
     }
 
     // FAIL CLOSED (tenant isolation): the public events query must NEVER return
@@ -618,15 +659,19 @@ pub async fn query_events_json(
     // across tenants. A genuine cross-tenant/admin scan is a separate, explicit
     // internal path — it does not ride this endpoint.
     if enforced_tenant.as_deref().unwrap_or("").is_empty() {
-        return Ok(Json(QueryEventsResponse {
-            events: Vec::new(),
-            count: 0,
-            total_count: 0,
-            has_more: false,
-            entity_version: None,
-            archive_integrity: None,
-        }));
+        return Ok(CountedQuery {
+            body: Json(QueryEventsResponse {
+                events: Vec::new(),
+                count: 0,
+                total_count: 0,
+                has_more: false,
+                entity_version: None,
+                archive_integrity: None,
+            }),
+            read: None,
+        });
     }
+    let tenant = enforced_tenant.clone().unwrap_or_default();
 
     // One windowed pass: the store sorts borrowed matches, applies `offset` and
     // `limit`, and clones only the page — while still reporting the pre-window
@@ -677,14 +722,17 @@ pub async fn query_events_json(
 
     tracing::debug!("Query returned {} events (total: {})", count, total_count);
 
-    Ok(Json(QueryEventsResponse {
-        events,
-        count,
-        total_count,
-        has_more,
-        entity_version,
-        archive_integrity: None,
-    }))
+    Ok(CountedQuery {
+        body: Json(QueryEventsResponse {
+            events,
+            count,
+            total_count,
+            has_more,
+            entity_version,
+            archive_integrity: None,
+        }),
+        read: Some(scope.facts(tenant, total_count, count, has_more)),
+    })
 }
 
 pub async fn list_entities(

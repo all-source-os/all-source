@@ -143,6 +143,13 @@ pub struct MetricsRegistry {
     pub http_requests_in_flight: IntGauge,
     pub http_response_bytes_total: IntCounterVec,
 
+    // Read cost (labels are stream classes, never tenants or callers)
+    pub read_pages_total: IntCounterVec,
+    pub read_events_matched_total: IntCounterVec,
+    pub read_truncated_total: IntCounterVec,
+    pub read_whole_reads_total: IntCounterVec,
+    pub read_label_overflow_total: IntCounterVec,
+
     // Replication metrics (leader)
     pub replication_followers_connected: IntGauge,
     pub replication_wal_shipped_total: IntCounter,
@@ -592,6 +599,51 @@ impl MetricsRegistry {
         )
         .unwrap();
 
+        let read_pages_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_read_pages_total",
+                "Event query pages by stream class and outcome",
+            ),
+            &["stream_class", "outcome"],
+        )
+        .unwrap();
+
+        let read_events_matched_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_read_events_matched_total",
+                "Events matched by event query pages, before the page window",
+            ),
+            &["stream_class"],
+        )
+        .unwrap();
+
+        let read_truncated_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_read_truncated_total",
+                "Event reads cut short: single truncated, walk abandoned or walk evicted",
+            ),
+            &["stream_class", "kind"],
+        )
+        .unwrap();
+
+        let read_whole_reads_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_read_whole_reads_total",
+                "Event reads with no since, entity or limit filter",
+            ),
+            &["stream_class"],
+        )
+        .unwrap();
+
+        let read_label_overflow_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_read_label_overflow_total",
+                "Stream classes folded into other because the label set is full",
+            ),
+            &["label"],
+        )
+        .unwrap();
+
         // Replication metrics (leader)
         let replication_followers_connected = IntGauge::with_opts(Opts::new(
             "allsource_replication_followers_connected",
@@ -849,6 +901,22 @@ impl MetricsRegistry {
             .unwrap();
 
         registry
+            .register(Box::new(read_pages_total.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(read_events_matched_total.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(read_truncated_total.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(read_whole_reads_total.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(read_label_overflow_total.clone()))
+            .unwrap();
+
+        registry
             .register(Box::new(replication_followers_connected.clone()))
             .unwrap();
         registry
@@ -930,6 +998,11 @@ impl MetricsRegistry {
             http_request_duration_seconds,
             http_requests_in_flight,
             http_response_bytes_total,
+            read_pages_total,
+            read_events_matched_total,
+            read_truncated_total,
+            read_whole_reads_total,
+            read_label_overflow_total,
             replication_followers_connected,
             replication_wal_shipped_total,
             replication_wal_shipped_bytes_total,
