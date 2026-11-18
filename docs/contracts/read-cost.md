@@ -66,6 +66,7 @@ counted. Embedded Core never runs the layer.
 |---|---|
 | page | One `events/query` response |
 | logical read | A page with no read id, or the first page of a walk |
+| whole reads (count) | Counted once per logical read: a walk's later pages add pages, not whole reads |
 | walk | Pages sharing one read id; a page with `has_more` opens or extends it, a page without ends it |
 | whole read | A page with no `since` and no entity id that is not a `limit=1` descending read and not a `limit=0` count probe |
 | single truncated | No read id, no `since`, no entity id, offset 0, served limit at least 2, a full page and `has_more` |
@@ -76,8 +77,12 @@ counted. Embedded Core never runs the layer.
 The first page of a walk whose client sends no read id also matches single
 truncated, so the count is exact only for clients that send read ids.
 
-Idle walks are swept when a query page arrives, at most every 10 s. A walk
-abandoned while no query reaches Core is counted on the next query.
+A timer sweeps idle walks every 10 s, so a walk is counted abandoned between
+30 and 40 s after its last page, whether or not another query arrives.
+
+Each tenant holds at most 256 walks in flight. A tenant opening a 257th walk
+evicts its own least recently seen walk, never another tenant's; the table
+holds 4,096 walks in all.
 
 ## Routes
 
@@ -88,6 +93,12 @@ abandoned while no query reaches Core is counted on the next query.
 | `tenant_id` | required at Core; the gateway always overwrites it with the authenticated tenant | — |
 | `order` | `bytes`, `pages`, `matched`, `whole`, `truncated` | `bytes` |
 | `limit` | at most 256 | 50 |
+
+Core skips its own auth on this route, like `/api/v1/stats` and
+`/api/v1/streams`, and answers for whatever `tenant_id` it is given. Tenant
+isolation holds only through the gateway, which overwrites `tenant_id` with
+the authenticated tenant. Core must stay private: anyone who reaches it
+directly can read any tenant's rows.
 
 Missing or empty `tenant_id` answers 400. Caller rows carry no matched count,
 so `matched` orders them by pages; class rows carry no bytes, so `bytes`
@@ -110,7 +121,7 @@ evicted first.
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["caller", "stream_class", "logical_reads", "pages", "whole_reads", "body_bytes", "single_truncated", "walk_abandoned", "approximate"],
+        "required": ["caller", "stream_class", "logical_reads", "pages", "whole_reads", "body_bytes", "single_truncated", "walk_abandoned", "approximate", "first_seen", "last_seen"],
         "properties": {
           "caller": { "type": "string", "description": "A caller name, invalid, other or unattributed" },
           "stream_class": { "type": "string" },
@@ -120,7 +131,9 @@ evicted first.
           "body_bytes": { "type": "integer", "minimum": 0 },
           "single_truncated": { "type": "integer", "minimum": 0 },
           "walk_abandoned": { "type": "integer", "minimum": 0 },
-          "approximate": { "type": "boolean" }
+          "approximate": { "type": "boolean" },
+          "first_seen": { "type": ["string", "null"], "format": "date-time", "description": "First page counted for this row; a replaced row keeps its predecessor's. Null for a row created only by an abandoned walk" },
+          "last_seen": { "type": ["string", "null"], "format": "date-time", "description": "Latest page counted for this row" }
         }
       }
     },
@@ -128,7 +141,7 @@ evicted first.
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["stream_class", "logical_reads", "pages", "whole_reads", "single_truncated", "walk_abandoned", "walk_evicted", "matched_sum", "matched_max", "max_pages"],
+        "required": ["stream_class", "logical_reads", "pages", "whole_reads", "single_truncated", "walk_abandoned", "walk_evicted", "matched_sum", "matched_max", "max_pages_per_walk"],
         "properties": {
           "stream_class": { "type": "string" },
           "logical_reads": { "type": "integer", "minimum": 0 },
@@ -139,7 +152,7 @@ evicted first.
           "walk_evicted": { "type": "integer", "minimum": 0 },
           "matched_sum": { "type": "integer", "minimum": 0 },
           "matched_max": { "type": "integer", "minimum": 0 },
-          "max_pages": { "type": "integer", "minimum": 0, "description": "Most pages seen in one walk" }
+          "max_pages_per_walk": { "type": "integer", "minimum": 0, "description": "Most pages seen in one walk" }
         }
       }
     }
@@ -159,19 +172,24 @@ The existing stream listing, with sizes when `with_bytes=true`.
 | `offset`, `limit` | paging over the sorted list | 0, 100 with `with_bytes` |
 
 `estimated_bytes` is the heap Core holds for the stream's events: the fixed
-event header plus payload and metadata. It is an estimate: Core sizes events
-in chunks of 4,096 and a retention pass between chunks can skip or count an
-event twice. Concurrent `with_bytes` requests for one tenant share one scan.
-`total` counts the tenant's streams before paging.
+event header plus payload and metadata. Core sizes events in place, holding
+the events lock for one chunk of 4,096 at a time. Removing events between
+chunks shifts their positions, so Core restarts the scan once; if events are
+removed again, it answers what it counted with `complete: false`, and an
+event may then be skipped or counted twice. Concurrent `with_bytes` requests
+for one tenant share one scan. A scan that fails answers 503
+`{"error": "store_unavailable"}` and is not shared with waiting requests,
+which run their own. `total` counts the tenant's streams before paging.
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ListStreamsResponse",
   "type": "object",
-  "required": ["streams", "total"],
+  "required": ["streams", "total", "complete"],
   "properties": {
     "total": { "type": "integer", "minimum": 0 },
+    "complete": { "type": "boolean", "description": "False when a with_bytes scan saw events removed during it and its retry; always true without with_bytes" },
     "streams": {
       "type": "array",
       "items": {
@@ -260,7 +278,9 @@ tool.
   events, bytes, events_last_7d, max_stream_events, max_stream_bytes}`. Class
   totals cover every stream read, not only the `limit` rows returned. On a
   remote store with more than 10,000 streams, completeness is `false` with
-  reason `stream_limit_reached`.
+  reason `stream_limit_reached`. When Core's scan answers `complete: false`
+  (or an embedded scan does), completeness is `false` with reason
+  `scan_interrupted`.
 - `stream_sizes` classes come from stream ids, so they are entity classes. A
   prefix or event-type class such as `auth.member` never appears in them.
 - `cap_check` compares each cap with the class's largest stream
@@ -269,4 +289,6 @@ tool.
   is in `over`, others in `under`, and a class with no stream in the store in
   `unmeasured`, never in `under`.
 - `read_costs` adds `truncated {single, walk_abandoned, walk_evicted}` and
-  `maxPagesPerWalk`, summed and maximised over the class rows returned.
+  `maxPagesPerWalk`, summed and maximised over the class rows returned, and
+  `totalsCover`: `all_class_rows` when fewer class rows than `limit` came
+  back, so the totals are the tenant's, else `returned_class_rows`.

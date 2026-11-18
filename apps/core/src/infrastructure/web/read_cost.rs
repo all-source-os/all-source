@@ -5,11 +5,14 @@
 //! sits inside [`super::response_limit::bounded`], so it measures a body over
 //! the 16 MiB bound before the bound replaces it. Nothing is persisted.
 
-use crate::application::dto::QueryEventsRequest;
-use crate::domain::entities::egress::MAX_RESPONSE_BYTES;
-use crate::domain::stream_class::{is_class, stream_class};
-use crate::infrastructure::observability::metrics::MetricsRegistry;
-use crate::infrastructure::security::middleware::Admin;
+use crate::{
+    application::dto::QueryEventsRequest,
+    domain::{
+        entities::egress::MAX_RESPONSE_BYTES,
+        stream_class::{is_class, stream_class},
+    },
+    infrastructure::{observability::metrics::MetricsRegistry, security::middleware::Admin},
+};
 use axum::{
     Json,
     body::HttpBody,
@@ -18,6 +21,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -44,6 +48,7 @@ const CALLERS_PER_TENANT: usize = 256;
 const TENANTS: usize = 128;
 const LABEL_CAP: usize = 256;
 const THRESHOLD_EVERY: Duration = Duration::from_mins(1);
+const THRESHOLD_KEYS: usize = 4_096;
 const THRESHOLD_PAGES: u64 = 20;
 const THRESHOLD_MATCHED: usize = 50_000;
 
@@ -248,7 +253,7 @@ pub struct ClassRow {
     pub walk_evicted: u64,
     pub matched_sum: u64,
     pub matched_max: u64,
-    pub max_pages: u64,
+    pub max_pages_per_walk: u64,
 }
 
 /// Counts for one caller and stream class within one tenant. A row created by
@@ -262,6 +267,8 @@ pub struct CallerRow {
     pub single_truncated: u64,
     pub walk_abandoned: u64,
     pub approximate: bool,
+    pub first_seen: Option<DateTime<Utc>>,
+    pub last_seen: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug)]
@@ -284,11 +291,31 @@ struct Tables {
     tick: u64,
     tenants: HashMap<String, Tenant>,
     walks: HashMap<(String, String), Walk>,
+    walks_per_tenant: HashMap<String, usize>,
     labels: HashSet<String>,
     label_overflow_logged: bool,
     last_sweep: Option<Instant>,
     threshold_logged: HashMap<(String, String, String), Instant>,
     header_logged: HashMap<&'static str, Instant>,
+}
+
+impl Tables {
+    fn insert_walk(&mut self, key: (String, String), walk: Walk) {
+        if self.walks.insert(key.clone(), walk).is_none() {
+            *self.walks_per_tenant.entry(key.0).or_default() += 1;
+        }
+    }
+
+    fn remove_walk(&mut self, key: &(String, String)) -> Option<Walk> {
+        let walk = self.walks.remove(key)?;
+        if let Some(count) = self.walks_per_tenant.get_mut(&key.0) {
+            *count -= 1;
+            if *count == 0 {
+                self.walks_per_tenant.remove(&key.0);
+            }
+        }
+        Some(walk)
+    }
 }
 
 /// Process-wide read-cost state, shared by the query handler's layer and the
@@ -367,6 +394,7 @@ impl ReadCost {
 
     /// Folds one page into the walks, aggregates, series and logs.
     pub fn observe(&self, now: Instant, facts: &ReadCostFacts, outcome: Outcome, body_bytes: u64) {
+        let wall = Utc::now();
         let mut tables = self.lock();
         self.sweep_if_due(&mut tables, now);
         log_rejected(&mut tables, now, &facts.rejected);
@@ -392,20 +420,20 @@ impl ReadCost {
                 .walks
                 .get(&key)
                 .is_some_and(|walk| now.saturating_duration_since(walk.last_seen) >= WALK_IDLE);
-            if idle && let Some(walk) = tables.walks.remove(&key) {
+            if idle && let Some(walk) = tables.remove_walk(&key) {
                 self.abandon(&mut tables, now, tenant, &walk);
             }
-            if let Some(mut walk) = tables.walks.remove(&key) {
+            if let Some(mut walk) = tables.remove_walk(&key) {
                 logical = false;
                 pages = walk.pages + 1;
                 if counts.has_more {
                     walk.pages = pages;
                     walk.last_seen = now;
-                    tables.walks.insert(key, walk);
+                    tables.insert_walk(key, walk);
                 }
             } else if counts.has_more {
                 self.make_room(&mut tables, tenant);
-                tables.walks.insert(
+                tables.insert_walk(
                     key,
                     Walk {
                         class: class.to_owned(),
@@ -417,6 +445,7 @@ impl ReadCost {
             }
         }
 
+        let whole = whole && logical;
         let label = self.admit_label(&mut tables, class);
         let state = tenant_mut(&mut tables, tenant);
         let row = class_row(state, class);
@@ -426,13 +455,15 @@ impl ReadCost {
         row.single_truncated += u64::from(single);
         row.matched_sum += wide(counts.matched);
         row.matched_max = row.matched_max.max(wide(counts.matched));
-        row.max_pages = row.max_pages.max(pages);
+        row.max_pages_per_walk = row.max_pages_per_walk.max(pages);
         let row = caller_row(state, caller.map(str::to_owned), class);
         row.pages += 1;
         row.logical_reads += u64::from(logical);
         row.whole_reads += u64::from(whole);
         row.single_truncated += u64::from(single);
         row.body_bytes += body_bytes;
+        row.first_seen.get_or_insert(wall);
+        row.last_seen = Some(wall);
 
         self.metrics
             .read_pages_total
@@ -502,7 +533,7 @@ impl ReadCost {
             .map(|(key, _)| key.clone())
             .collect();
         for key in idle {
-            if let Some(walk) = tables.walks.remove(&key) {
+            if let Some(walk) = tables.remove_walk(&key) {
                 self.abandon(tables, now, &key.0, &walk);
             }
         }
@@ -510,9 +541,10 @@ impl ReadCost {
 
     fn abandon(&self, tables: &mut Tables, now: Instant, tenant: &str, walk: &Walk) {
         let label = self.admit_label(tables, &walk.class);
-        let state = tenant_mut(tables, tenant);
-        class_row(state, &walk.class).walk_abandoned += 1;
-        caller_row(state, walk.caller.clone(), &walk.class).walk_abandoned += 1;
+        if let Some(state) = tables.tenants.get_mut(tenant) {
+            class_row(state, &walk.class).walk_abandoned += 1;
+            caller_row(state, walk.caller.clone(), &walk.class).walk_abandoned += 1;
+        }
         self.truncated(&label, "walk_abandoned");
         let who = Who {
             tenant,
@@ -525,9 +557,10 @@ impl ReadCost {
     /// Evicts `tenant`'s least recently seen walk when it holds
     /// [`WALKS_PER_TENANT`], else the table's least recently seen walk when
     /// the table is full, so one tenant cannot push out another's walks. An
-    /// evicted walk is `walk_evicted`, never `walk_abandoned`.
+    /// evicted walk is `walk_evicted`, never `walk_abandoned`. Neither an
+    /// eviction nor an abandon marks a tenant active.
     fn make_room(&self, tables: &mut Tables, tenant: &str) {
-        let own = tables.walks.keys().filter(|(t, _)| t == tenant).count();
+        let own = tables.walks_per_tenant.get(tenant).copied().unwrap_or(0);
         let oldest = if own >= WALKS_PER_TENANT {
             tables
                 .walks
@@ -545,9 +578,11 @@ impl ReadCost {
             None
         };
         let Some(key) = oldest else { return };
-        if let Some(walk) = tables.walks.remove(&key) {
+        if let Some(walk) = tables.remove_walk(&key) {
             let label = self.admit_label(tables, &walk.class);
-            class_row(tenant_mut(tables, &key.0), &walk.class).walk_evicted += 1;
+            if let Some(state) = tables.tenants.get_mut(&key.0) {
+                class_row(state, &walk.class).walk_evicted += 1;
+            }
             self.truncated(&label, "walk_evicted");
         }
     }
@@ -671,10 +706,15 @@ fn threshold(
     {
         return;
     }
-    if tables.threshold_logged.len() >= 4_096 {
+    if !tables.threshold_logged.contains_key(&key)
+        && tables.threshold_logged.len() >= THRESHOLD_KEYS
+    {
         tables
             .threshold_logged
             .retain(|_, last| now.saturating_duration_since(*last) < THRESHOLD_EVERY);
+        if tables.threshold_logged.len() >= THRESHOLD_KEYS {
+            return;
+        }
     }
     tables.threshold_logged.insert(key.clone(), now);
     tracing::warn!(
@@ -715,6 +755,28 @@ fn wide(value: usize) -> u64 {
     u64::try_from(value).unwrap_or(u64::MAX)
 }
 
+/// Pages and the sweeper both read the tokio clock, so a paused test clock
+/// drives both.
+fn clock() -> Instant {
+    tokio::time::Instant::now().into_std()
+}
+
+/// Sweeps every [`SWEEP_EVERY`] until the last `Arc<ReadCost>` drops.
+pub fn spawn_sweeper(read_cost: &Arc<ReadCost>) -> tokio::task::JoinHandle<()> {
+    let read_cost = Arc::downgrade(read_cost);
+    tokio::spawn(async move {
+        let mut ticks = tokio::time::interval(SWEEP_EVERY);
+        ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticks.tick().await;
+            let Some(read_cost) = read_cost.upgrade() else {
+                return;
+            };
+            read_cost.sweep(clock());
+        }
+    })
+}
+
 /// Layer inside [`super::response_limit::bounded`]: reads the facts a query
 /// handler attached and records them. Responses without facts pass untouched.
 pub async fn record(
@@ -729,7 +791,7 @@ pub async fn record(
     if read_cost.enabled() {
         let body_bytes = response.body().size_hint().exact().unwrap_or(0);
         let outcome = Outcome::of(response.status(), body_bytes, facts.read.counts.has_more);
-        read_cost.observe(Instant::now(), &facts, outcome, body_bytes);
+        read_cost.observe(clock(), &facts, outcome, body_bytes);
     }
     response
 }

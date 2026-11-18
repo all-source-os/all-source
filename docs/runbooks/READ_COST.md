@@ -71,9 +71,10 @@ curl -s localhost:3900/metrics | grep '^allsource_read_'
 curl -s "localhost:3900/api/v1/read-costs?tenant_id=<tenant>&order=pages&limit=20"
 ```
 
-`/api/v1/read-costs` skips Core's auth like `/api/v1/stats`: Core relies on
-being private and on the gateway forcing the tenant. Never expose it on a
-public service.
+`/api/v1/read-costs` skips Core's auth like `/api/v1/stats`, so Core answers
+for any `tenant_id` it is given. Tenant isolation holds only through the
+gateway, which forces the authenticated tenant; anyone who reaches Core
+directly can read every tenant's rows. Never expose it on a public service.
 
 ## Turning recording off and on
 
@@ -124,11 +125,16 @@ id itself is never logged.
 
 ## Limits
 
-- An abandoned walk is counted when the next query page reaches Core, at
-  most every 10 s, not on a timer. A quiet Core counts it late.
+- A timer sweeps every 10 s, so an abandoned walk is counted 30 to 40 s after
+  its last page.
+- Each tenant holds at most 256 walks in flight; a 257th evicts that
+  tenant's own least recently seen walk as `walk_evicted`. The table holds
+  4,096 walks in all.
 - Single truncated also counts the first page of a walk from a client that
   sends no read id.
 - Core keeps 128 tenants, 128 classes and 256 caller rows per tenant; the
   least recently active tenant is dropped first.
 - `stream_sizes` on a remote store reads at most 10,000 streams; past that,
   completeness says `stream_limit_reached` and class totals are partial.
+  `scan_interrupted` means Core saw events removed during its scan and its
+  retry; run it again.

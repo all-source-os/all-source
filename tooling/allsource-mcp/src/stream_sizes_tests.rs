@@ -235,6 +235,58 @@ async fn stream_sizes_through_the_gateway_says_when_classes_miss_streams() {
 }
 
 #[tokio::test]
+async fn stream_sizes_through_the_gateway_reports_an_interrupted_core_scan() {
+    let (base, heads) = serve_routes(vec![
+        (
+            "/api/v1/streams",
+            "200 OK",
+            r#"{"streams":[{"stream_id":"auth-member:u7","event_count":5,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0}],"total":1,"complete":false}"#,
+        ),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "stream_sizes",
+        &json!({ "store": "remote" }),
+    )
+    .await
+    .expect("sizes");
+    heads.await.expect("fake gateway");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "scan_interrupted");
+}
+
+#[tokio::test]
+async fn read_costs_says_its_totals_cover_only_returned_rows_at_the_limit() {
+    let (base, heads) = serve_routes(vec![(
+        "/api/v1/read-costs",
+        "200 OK",
+        r#"{"callers":[],
+            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}]}"#,
+    )])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "limit": 1 }),
+    )
+    .await
+    .expect("costs");
+    heads.await.expect("fake gateway");
+
+    assert_eq!(result["totalsCover"], "returned_class_rows");
+    assert_eq!(result["completeness"]["complete"], false);
+}
+
+#[tokio::test]
 async fn read_costs_on_an_embedded_store_is_unsupported_and_names_the_tool() {
     let stores = fixture_store().await;
 
@@ -256,7 +308,7 @@ async fn read_costs_through_the_gateway_returns_caller_and_class_rows() {
         "/api/v1/read-costs",
         "200 OK",
         r#"{"callers":[{"caller":"lh.skill_catalog","stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"body_bytes":9000000,"single_truncated":1,"walk_abandoned":0,"approximate":false}],
-            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages":20}]}"#,
+            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}]}"#,
     )])
     .await;
     let stores = registry_with_gateway(&base).await;
@@ -280,7 +332,9 @@ async fn read_costs_through_the_gateway_returns_caller_and_class_rows() {
     assert!(heads[0].contains("limit=10"), "{}", heads[0]);
     assert_eq!(result["callers"][0]["caller"], "lh.skill_catalog");
     assert_eq!(result["callers"][0]["body_bytes"], 9_000_000);
-    assert_eq!(result["classes"][0]["max_pages"], 20);
+    assert_eq!(result["classes"][0]["max_pages_per_walk"], 20);
+    assert_eq!(result["maxPagesPerWalk"], 20);
+    assert_eq!(result["totalsCover"], "all_class_rows");
     assert_eq!(result["truncated"]["single"], 1);
     assert_eq!(result["truncated"]["walk_abandoned"], 2);
     assert_eq!(result["truncated"]["walk_evicted"], 1);

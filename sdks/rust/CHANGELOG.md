@@ -24,17 +24,21 @@ how many body bytes it carried, so reads can be counted by who made them.
   and the meta returned by the latest-state and view-row reads; `None` on a
   `304`. The decoded length is reported, so under `gzip` it is not the wire
   length.
+- `ReadId::parse`, with `FromStr` and `TryFrom<&str>`: accepts exactly 16
+  lowercase hex characters, the pattern Core and the gateway accept. A failure
+  is `InvalidReadId`.
+- `CoreClient::list_streams` with `StreamsParams` (`with_bytes`, `sort`,
+  `limit`, `offset`): `GET /api/v1/streams`, answering `ListStreamsResponse`
+  of `StreamInfo` rows. With `with_bytes`, each row carries `estimated_bytes`
+  and `events_last_7d`, and `complete` is `false` when Core saw events removed
+  during the scan and its retry.
+- `CoreClient::tenant_stats`: `GET /api/v1/stats`, answering `TenantStats`
+  (per-event-type counts and the oldest and newest event).
 
 ### Changed
 
 - `handle_response` decodes from the buffered body, so `body_bytes` is known
   before parsing.
-- A 2xx body that fails to decode is now `Error::Json`, on every endpoint;
-  before it was `Error::Http`, from `reqwest::Response::json`. `Error::Json`
-  is not retryable and does not count against the circuit breaker, so a
-  malformed body now fails on the first attempt. `reqwest` offers no public way
-  to build its error from a `serde_json` error, so keeping `Error::Http` would
-  mean decoding through `Response::json` and losing the body length.
 - `es256-assertion` no longer enables `dep:uuid`: `uuid` is a required
   dependency now, used by `ReadId`.
 
@@ -45,6 +49,14 @@ how many body bytes it carried, so reads can be counted by who made them.
   `ClientConfig::new` and assign its fields, and read `ResponseMeta` by field.
 - `QueryEventsParams` gained the public fields `caller` and `read_id`, so
   struct literals that name every field no longer compile. Use the builders.
+- A 2xx body that fails to decode is now `Error::Json`, on every endpoint;
+  before it was `Error::Http`, from `reqwest::Response::json`. `Error::Json`
+  is not retryable and does not count against the circuit breaker, so a
+  malformed body now fails on the first attempt instead of being retried, and
+  code matching `Error::Http` for decode failures no longer sees them.
+  `reqwest` offers no public way to build its error from a `serde_json` error,
+  so keeping `Error::Http` would mean decoding through `Response::json` and
+  losing the body length.
 
 ## [0.29.0] — 2026-11-07
 

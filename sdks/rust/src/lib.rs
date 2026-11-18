@@ -144,7 +144,7 @@ pub use latest::{
 };
 pub use normalize::normalize_event_type;
 pub use paginate::{EntityPaginator, EventPaginator, DEFAULT_PAGE_SIZE};
-pub use read_id::ReadId;
+pub use read_id::{InvalidReadId, ReadId};
 pub use response_meta::{EventsQuery, ResponseMeta};
 pub use streams::{ListStreamsResponse, StreamInfo, StreamSort, StreamsParams, TenantStats};
 pub use types::*;

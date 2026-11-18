@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -219,6 +222,74 @@ func TestReadCostsAndStreamsAreManagedReadScope(t *testing.T) {
 		c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, http.NoBody)
 		if got := managedScope(c); got != managedScopeRead {
 			t.Errorf("%s scope: got %q, want %q", path, got, managedScopeRead)
+		}
+	}
+}
+
+func TestEventsQueryStripsHeadersOutsideTheForwardList(t *testing.T) {
+	core, srv := newFakeBackend(okJSON(callerTestBody))
+	defer srv.Close()
+	cp := newTestCP(t, srv.URL, srv.URL)
+
+	code, _ := eventsQueryWithHeaders(cp, "tenant-attr-strip", map[string]string{
+		"Authorization":   "Bearer ask_inbound_secret",
+		"Cookie":          "session=inbound-cookie",
+		"X-Forwarded-For": "203.0.113.9",
+		"X-Custom-Secret": "inbound-custom",
+		"If-None-Match":   `"etag-1"`,
+		callerHeader:      "lh.skill_catalog",
+	})
+	if code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", code)
+	}
+	for _, name := range []string{"Cookie", "X-Forwarded-For", "X-Custom-Secret"} {
+		if got := core.header.Get(name); got != "" {
+			t.Errorf("upstream %s: got %q, want it stripped", name, got)
+		}
+	}
+	if strings.Contains(core.auth, "ask_inbound_secret") {
+		t.Errorf("upstream Authorization carries the inbound key: %q", core.auth)
+	}
+	if got := core.header.Get("If-None-Match"); got != `"etag-1"` {
+		t.Errorf("upstream If-None-Match: got %q, want it forwarded", got)
+	}
+	if got := core.header.Get(callerHeader); got != "lh.skill_catalog" {
+		t.Errorf("upstream %s: got %q, want lh.skill_catalog", callerHeader, got)
+	}
+}
+
+func TestReadHeaderInvalidLogCarriesLengthOnly(t *testing.T) {
+	_, srv := newFakeBackend(okJSON(callerTestBody))
+	defer srv.Close()
+	cp := newTestCP(t, srv.URL, srv.URL)
+	readHeaderLogGates[callerHeader].next.Store(0)
+	readHeaderLogGates[readIDHeader].next.Store(0)
+
+	var logged bytes.Buffer
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
+
+	const badCaller = "SECRET-CALLER-VALUE"
+	const badReadID = "SECRETREADIDVALUE"
+	if code, _ := eventsQueryWithHeaders(cp, "tenant-attr-log", map[string]string{
+		callerHeader: badCaller,
+		readIDHeader: badReadID,
+	}); code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200", code)
+	}
+
+	out := logged.String()
+	for _, want := range []string{
+		fmt.Sprintf("read_header_invalid header=%s length=%d", callerHeader, len(badCaller)),
+		fmt.Sprintf("read_header_invalid header=%s length=%d", readIDHeader, len(badReadID)),
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q: %s", want, out)
+		}
+	}
+	for _, secret := range []string{badCaller, badReadID, "tenant-attr-log"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("log carries %q: %s", secret, out)
 		}
 	}
 }

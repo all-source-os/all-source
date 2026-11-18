@@ -84,13 +84,18 @@ struct ClassTotals {
     max_stream_bytes: u64,
 }
 
-/// Every stream size the source gave, with whether it gave all of them.
+/// Every stream size the source gave, and why it is partial when it is.
 struct Sizes {
     streams: Vec<StreamRow>,
-    complete: bool,
+    incomplete: Option<&'static str>,
     tenant: Value,
     store: Value,
 }
+
+/// Core saw events removed during its scan and its retry.
+const SCAN_INTERRUPTED: &str = "scan_interrupted";
+/// The tenant has more streams than the gateway was asked for.
+const STREAM_LIMIT_REACHED: &str = "stream_limit_reached";
 
 pub async fn exec_cost_tool(
     stores: &StoreRegistry,
@@ -149,7 +154,9 @@ async fn read_sizes(
 }
 
 fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Sizes {
-    let mut infos = core.inner().stream_sizes(tenant);
+    let sized = core.inner().stream_sizes(tenant);
+    let complete = sized.complete;
+    let mut infos = sized.streams;
     sort_streams(&mut infos, StreamSort::Events);
     let streams: Vec<StreamRow> = infos
         .into_iter()
@@ -170,7 +177,7 @@ fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Sizes {
             "totalStreams": streams.len(),
         }),
         streams,
-        complete: true,
+        incomplete: (!complete).then_some(SCAN_INTERRUPTED),
         store: json!({ "kind": "embedded" }),
     }
 }
@@ -192,8 +199,15 @@ fn hosted_sizes(streams: &Value, stats: &Value) -> Result<Sizes> {
         })
         .collect();
     let total = streams["total"].as_u64().unwrap_or(rows.len() as u64);
+    let incomplete = if streams["complete"].as_bool() == Some(false) {
+        Some(SCAN_INTERRUPTED)
+    } else if total > rows.len() as u64 {
+        Some(STREAM_LIMIT_REACHED)
+    } else {
+        None
+    };
     Ok(Sizes {
-        complete: total <= rows.len() as u64,
+        incomplete,
         tenant: json!({
             "totalEvents": stats.get("total_events"),
             "totalStreams": total,
@@ -226,10 +240,10 @@ fn stream_key(sort: StreamSort, events: u64, bytes: u64) -> u64 {
     }
 }
 
-fn completeness(complete: bool, scanned: usize) -> Value {
+fn completeness(incomplete: Option<&str>, scanned: usize) -> Value {
     json!({
-        "complete": complete,
-        "reason": if complete { Value::Null } else { json!("stream_limit_reached") },
+        "complete": incomplete.is_none(),
+        "reason": incomplete,
         "scanned": scanned,
         "matched": scanned,
         "omitted": 0,
@@ -293,7 +307,7 @@ async fn exec_stream_sizes(
             "totalCount": sizes.streams.len(),
             "nextCursor": Value::Null,
         },
-        "completeness": completeness(sizes.complete, sizes.streams.len()),
+        "completeness": completeness(sizes.incomplete, sizes.streams.len()),
     }))
 }
 
@@ -411,7 +425,7 @@ async fn exec_cap_check(
         "over": over,
         "under": under,
         "unmeasured": unmeasured,
-        "completeness": completeness(sizes.complete, sizes.streams.len()),
+        "completeness": completeness(sizes.incomplete, sizes.streams.len()),
     }))
 }
 
@@ -450,9 +464,10 @@ async fn exec_read_costs(
         .unwrap_or_default();
     let max_pages = classes
         .iter()
-        .filter_map(|row| row["max_pages"].as_u64())
+        .filter_map(|row| row["max_pages_per_walk"].as_u64())
         .max()
         .unwrap_or(0);
+    let all_classes = classes.len() < limit;
 
     let mut context = policy.context(None);
     context["store"] = json!({ "kind": "remote", "url": remote.display_url() });
@@ -465,6 +480,7 @@ async fn exec_read_costs(
             "walk_evicted": sum_field(&classes, "walk_evicted"),
         },
         "maxPagesPerWalk": max_pages,
+        "totalsCover": if all_classes { "all_class_rows" } else { "returned_class_rows" },
         "callers": callers,
         "classes": classes,
         "page": {

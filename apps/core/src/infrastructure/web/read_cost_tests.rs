@@ -1,12 +1,16 @@
 use super::*;
-use crate::application::dto::QueryEventsRequest;
-use crate::domain::entities::Event;
-use crate::infrastructure::security::{
-    auth::{Claims, Role},
-    middleware::AuthContext,
+use crate::{
+    application::dto::QueryEventsRequest,
+    domain::entities::Event,
+    infrastructure::{
+        security::{
+            auth::{Claims, Role},
+            middleware::AuthContext,
+        },
+        web::api,
+    },
+    store::EventStore,
 };
-use crate::infrastructure::web::api;
-use crate::store::EventStore;
 use axum::{
     Router,
     body::Body,
@@ -159,7 +163,7 @@ fn read_cost_walk_of_25_events_at_page_size_10_is_three_pages_and_no_abandon() {
     let row = class_row_of(&rc, "t", "walk");
     assert_eq!(row.pages, 3);
     assert_eq!(row.logical_reads, 1);
-    assert_eq!(row.max_pages, 3);
+    assert_eq!(row.max_pages_per_walk, 3);
     assert_eq!(row.walk_abandoned, 0);
     assert_eq!(walk_count(&rc), 0);
 }
@@ -814,4 +818,270 @@ async fn production_router_admin_switch_refuses_anonymous_and_non_admin() {
     assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
     let developer = put_switch(Some(&developer_key)).await.unwrap();
     assert_eq!(developer.status(), StatusCode::FORBIDDEN);
+}
+
+#[test]
+fn read_cost_whole_reads_count_once_per_walk_not_per_page() {
+    let rc = read_cost();
+    let t0 = base();
+    let id = Some("0123456789abcdef");
+    for (second, has_more) in [(0, true), (1, true), (2, false)] {
+        let mut facts = page("t", "whole", id, 25, 10, has_more);
+        facts.read.counts.shape = Shape::Whole;
+        rc.observe(at(t0, second), &facts, Outcome::Complete, 0);
+    }
+
+    assert_eq!(class_row_of(&rc, "t", "whole").whole_reads, 1);
+    assert_eq!(caller_row_of(&rc, "t", None, "whole").whole_reads, 1);
+    assert_eq!(
+        rc.metrics
+            .read_whole_reads_total
+            .with_label_values(&["whole"])
+            .get(),
+        1
+    );
+}
+
+#[test]
+fn read_cost_threshold_keys_stop_growing_at_the_cap() {
+    let rc = read_cost();
+    let t0 = base();
+    {
+        let mut tables = rc.lock();
+        for i in 0..THRESHOLD_KEYS {
+            tables
+                .threshold_logged
+                .insert((format!("f{i}"), "none".to_owned(), "walk".to_owned()), t0);
+        }
+    }
+
+    let mut facts = page("newcomer", "walk", None, THRESHOLD_MATCHED + 1, 10, false);
+    facts.caller = Some("lh.fresh".to_owned());
+    rc.observe(at(t0, 1), &facts, Outcome::Complete, 0);
+
+    assert_eq!(rc.lock().threshold_logged.len(), THRESHOLD_KEYS);
+}
+
+#[test]
+fn read_cost_abandon_and_evict_leave_the_tenant_cold() {
+    let rc = read_cost();
+    let t0 = base();
+    rc.observe(
+        t0,
+        &page("walker", "walk", Some("0123456789abcdef"), 25, 10, true),
+        Outcome::HasMore,
+        0,
+    );
+    let before = rc.lock().tenants.get("walker").unwrap().last_active;
+
+    rc.sweep(at(t0, 31));
+
+    let tables = rc.lock();
+    assert_eq!(tables.tenants.get("walker").unwrap().last_active, before);
+    assert_eq!(
+        tables.tenants.get("walker").unwrap().classes["walk"].walk_abandoned,
+        1
+    );
+}
+
+#[test]
+fn read_cost_walks_per_tenant_tracks_inserts_and_removals() {
+    let rc = read_cost();
+    let t0 = base();
+    for id in ["aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb"] {
+        rc.observe(
+            t0,
+            &page("t", "walk", Some(id), 25, 10, true),
+            Outcome::HasMore,
+            0,
+        );
+    }
+    rc.observe(
+        at(t0, 1),
+        &page("t", "walk", Some("aaaaaaaaaaaaaaaa"), 25, 10, true),
+        Outcome::HasMore,
+        0,
+    );
+    assert_eq!(rc.lock().walks_per_tenant.get("t").copied(), Some(2));
+
+    rc.observe(
+        at(t0, 2),
+        &page("t", "walk", Some("aaaaaaaaaaaaaaaa"), 25, 5, false),
+        Outcome::Complete,
+        0,
+    );
+    assert_eq!(rc.lock().walks_per_tenant.get("t").copied(), Some(1));
+
+    rc.sweep(at(t0, 60));
+    assert!(rc.lock().walks_per_tenant.is_empty());
+}
+
+#[test]
+fn read_cost_caller_row_records_first_and_last_seen() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("t", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        1,
+    );
+    let first = caller_row_of(&rc, "t", None, "walk");
+    rc.observe(
+        base(),
+        &page("t", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        1,
+    );
+    let second = caller_row_of(&rc, "t", None, "walk");
+
+    assert!(first.first_seen.is_some());
+    assert_eq!(second.first_seen, first.first_seen);
+    assert!(second.last_seen >= first.last_seen);
+}
+
+#[tokio::test]
+async fn read_costs_rows_carry_the_design_field_names() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+
+    let (_, body) = get_read_costs(rc, "/api/v1/read-costs?tenant_id=a").await;
+
+    assert!(body["classes"][0].get("max_pages_per_walk").is_some());
+    assert!(body["classes"][0].get("max_pages").is_none());
+    assert!(body["callers"][0]["first_seen"].is_string());
+    assert!(body["callers"][0]["last_seen"].is_string());
+}
+
+#[derive(Clone, Default)]
+struct Captured(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Captured {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+    }
+}
+
+#[test]
+fn read_cost_logs_carry_no_tenant_entity_or_header_value_and_rate_limit_thresholds() {
+    let captured = Captured::default();
+    let writer = captured.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(move || writer.clone())
+        .with_ansi(false)
+        .finish();
+
+    tracing::subscriber::with_default(subscriber, || {
+        let rc = read_cost();
+        let t0 = base();
+        let req = QueryEventsRequest {
+            entity_id: Some("u-1:skill_run:ENT1SECRET".to_owned()),
+            ..QueryEventsRequest::default()
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static(CALLER_HEADER),
+            HeaderValue::from_static("SECRETHDR"),
+        );
+        headers.insert(
+            HeaderName::from_static(READ_ID_HEADER),
+            HeaderValue::from_static("SECRETREADID"),
+        );
+        let read = ReadScope::of(&req, 0, false, 100).facts(
+            "tenantsecret".to_owned(),
+            THRESHOLD_MATCHED + 1,
+            100,
+            false,
+        );
+        let facts = ReadCostFacts::from_headers(read, &headers);
+
+        rc.observe(t0, &facts, Outcome::Complete, 0);
+        rc.observe(at(t0, 30), &facts, Outcome::Complete, 0);
+        let inside_a_minute = captured.text().matches("read_cost_threshold").count();
+        rc.observe(at(t0, 61), &facts, Outcome::Complete, 0);
+        let after_a_minute = captured.text().matches("read_cost_threshold").count();
+
+        assert_eq!(inside_a_minute, 1);
+        assert_eq!(after_a_minute, 2);
+    });
+
+    let text = captured.text();
+    assert!(text.contains("read_header_invalid"), "{text}");
+    assert!(text.contains(&fingerprint("tenantsecret")), "{text}");
+    for secret in ["tenantsecret", "ENT1SECRET", "SECRETHDR", "SECRETREADID"] {
+        assert!(!text.contains(secret), "{secret} logged: {text}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn production_router_sweeps_an_abandoned_walk_on_a_timer() {
+    use crate::infrastructure::{
+        di::ContainerBuilder,
+        repositories::InMemoryTenantRepository,
+        security::{AuthManager, RateLimiter, rate_limit::RateLimitConfig},
+        web::api_v1::{NodeRole, build_v1_router},
+    };
+
+    let store = bulk_store(25, "walk.item");
+    let metrics = store.metrics();
+    let auth = Arc::new(AuthManager::default());
+    let (_, key) =
+        auth.create_api_key("read-cost-walker".into(), "t".into(), Role::Developer, None);
+    let router = build_v1_router(
+        store,
+        Arc::clone(&auth),
+        Arc::new(InMemoryTenantRepository::new()),
+        Arc::new(RateLimiter::new(RateLimitConfig::dev_mode())),
+        ContainerBuilder::new()
+            .with_in_memory_repositories()
+            .build(),
+        NodeRole::Leader,
+        None,
+        None,
+        3910,
+        None,
+        None,
+    )
+    .await;
+
+    let first_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/events/query?tenant_id=t&event_type=walk.item&limit=10")
+                .header("authorization", format!("Bearer {key}"))
+                .header(READ_ID_HEADER, "0123456789abcdef")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_page.status(), StatusCode::OK);
+    let abandoned = || {
+        metrics
+            .read_truncated_total
+            .with_label_values(&["walk", "walk_abandoned"])
+            .get()
+    };
+
+    tokio::time::sleep(Duration::from_secs(29)).await;
+    assert_eq!(abandoned(), 0);
+
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(abandoned(), 1);
 }

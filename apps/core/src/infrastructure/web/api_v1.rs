@@ -197,6 +197,7 @@ pub async fn build_v1_router(
 ) -> Router {
     let http_metrics = store.metrics();
     let read_cost = super::read_cost::ReadCost::from_env(http_metrics.clone());
+    super::read_cost::spawn_sweeper(&read_cost);
     let app_state = AppState {
         store,
         auth_manager: auth_manager.clone(),

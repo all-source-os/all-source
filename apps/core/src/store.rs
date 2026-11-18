@@ -246,6 +246,8 @@ pub struct EventStore {
     cache_residency_gate: RwLock<()>,
     cache_generations: FastDashMap<String, u64>,
     cache_generations_charge: MapCharge,
+    /// Bumped under the events write lock whenever events leave the Vec.
+    events_removed: std::sync::atomic::AtomicU64,
 
     /// Cadence of the runtime checkpoint loop (Step 6). `None` means
     /// the loop is disabled — WAL grows until boot. Production reads
@@ -446,6 +448,7 @@ impl EventStore {
             strict_archive_limits: config.strict_archive_limits,
             cache_residency_gate: RwLock::new(()),
             cache_generations: fast_dashmap(),
+            events_removed: std::sync::atomic::AtomicU64::new(0),
             cache_generations_charge: MapCharge::new(
                 Owner::CacheGenerations,
                 size_of::<(String, u64)>(),
@@ -1572,7 +1575,7 @@ impl EventStore {
         self.events_resident.release_matching(&events, |e| {
             e.entity_id_str() == entity_id && e.event_type_str() == token_event_type
         });
-        events.retain(|e| {
+        self.retain_events(&mut events, |e| {
             !(e.entity_id_str() == entity_id && e.event_type_str() == token_event_type)
         });
 
@@ -2318,7 +2321,7 @@ impl EventStore {
 
         self.events_resident
             .release_matching(&events, |e| e.tenant_id_str() == tenant_id);
-        events.retain(|e| e.tenant_id_str() != tenant_id);
+        self.retain_events(&mut events, |e| e.tenant_id_str() != tenant_id);
         self.feed_indexes_charge
             .forget(&self.feed_indexes, tenant_id, tenant_id.len() as u64);
         self.feed_indexes.remove(tenant_id);
@@ -3201,19 +3204,62 @@ impl EventStore {
             .collect()
     }
 
+    /// Every removal from `events` goes through here, so a chunked reader can
+    /// tell that positions shifted under its cursor.
+    fn retain_events(&self, events: &mut Vec<Event>, keep: impl FnMut(&Event) -> bool) {
+        let before = events.len();
+        events.retain(keep);
+        if events.len() != before {
+            self.events_removed
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     /// Every stream of ONE tenant, or of every tenant when `None`, with its heap
     /// bytes and last-seven-days count. Unordered.
     ///
-    /// The events lock is held per chunk of `STREAM_SIZE_CHUNK` events, only to
-    /// count them and copy out their payload and metadata; `value_heap_bytes` runs
-    /// on the copies after the guard drops. A copy can carry less spare capacity
-    /// than its original, and a `retain` between chunks shifts positions, so an
-    /// event can be skipped or counted twice mid-scan: the bytes are an estimate.
-    pub fn stream_sizes(&self, tenant: Option<&str>) -> Vec<StreamInfo> {
+    /// The events lock is held per chunk of `STREAM_SIZE_CHUNK` events, which
+    /// are sized in place, and released between chunks. Removing events shifts
+    /// positions under the cursor, so a removal mid-scan restarts the scan once;
+    /// a second one returns what was counted with `complete: false`.
+    pub fn stream_sizes(&self, tenant: Option<&str>) -> StreamSizes {
+        self.stream_sizes_between(tenant, || {})
+    }
+
+    fn stream_sizes_between(
+        &self,
+        tenant: Option<&str>,
+        mut between_chunks: impl FnMut(),
+    ) -> StreamSizes {
         if let Some(tenant_id) = tenant {
             let _ = self.ensure_tenant_loaded(tenant_id);
         }
         let last_week = chrono::Utc::now() - chrono::Duration::days(7);
+        let (streams, stable) =
+            self.scan_stream_sizes(tenant, last_week, &mut between_chunks, false);
+        if stable {
+            return StreamSizes {
+                streams,
+                complete: true,
+            };
+        }
+        let (streams, stable) =
+            self.scan_stream_sizes(tenant, last_week, &mut between_chunks, true);
+        StreamSizes {
+            streams,
+            complete: stable,
+        }
+    }
+
+    /// One pass of `stream_sizes`. Returns early with `false` when events were
+    /// removed mid-scan, unless `finish_when_moved`.
+    fn scan_stream_sizes(
+        &self,
+        tenant: Option<&str>,
+        last_week: chrono::DateTime<chrono::Utc>,
+        between_chunks: &mut impl FnMut(),
+        finish_when_moved: bool,
+    ) -> (Vec<StreamInfo>, bool) {
         #[derive(Default)]
         struct Totals {
             events: usize,
@@ -3223,11 +3269,21 @@ impl EventStore {
         }
         let mut slots: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut totals: Vec<(String, Totals)> = Vec::new();
-        let mut copies: Vec<(usize, serde_json::Value, Option<serde_json::Value>)> =
-            Vec::with_capacity(STREAM_SIZE_CHUNK);
+        let mut removals = None;
+        let mut stable = true;
         let mut cursor = 0;
         loop {
             let events = self.events.read();
+            let removed = self
+                .events_removed
+                .load(std::sync::atomic::Ordering::Relaxed);
+            if *removals.get_or_insert(removed) != removed || events.len() < cursor {
+                stable = false;
+                if !finish_when_moved {
+                    return (Vec::new(), false);
+                }
+                removals = Some(removed);
+            }
             let end = (cursor + STREAM_SIZE_CHUNK).min(events.len());
             for ev in &events[cursor.min(end)..end] {
                 if tenant.is_some_and(|t| ev.tenant_id_str() != t) {
@@ -3243,28 +3299,26 @@ impl EventStore {
                 };
                 let stream = &mut totals[slot].1;
                 stream.events += 1;
-                stream.bytes += ev.resident_header_bytes();
+                stream.bytes += ev.resident_header_bytes()
+                    + (value_heap_bytes(&ev.payload)
+                        + ev.metadata.as_ref().map_or(0, value_heap_bytes))
+                        as u64;
                 if ev.timestamp >= last_week {
                     stream.last_7d += 1;
                 }
                 if stream.last_event_at.is_none_or(|last| ev.timestamp > last) {
                     stream.last_event_at = Some(ev.timestamp);
                 }
-                copies.push((slot, ev.payload.clone(), ev.metadata.clone()));
             }
             let done = end >= events.len();
             drop(events);
             cursor = end;
-            for (slot, payload, metadata) in copies.drain(..) {
-                totals[slot].1.bytes += (value_heap_bytes(&payload)
-                    + metadata.as_ref().map_or(0, value_heap_bytes))
-                    as u64;
-            }
             if done {
                 break;
             }
+            between_chunks();
         }
-        totals
+        let streams = totals
             .into_iter()
             .map(|(stream_id, totals)| StreamInfo {
                 stream_id,
@@ -3273,7 +3327,8 @@ impl EventStore {
                 estimated_bytes: Some(totals.bytes),
                 events_last_7d: Some(totals.last_7d),
             })
-            .collect()
+            .collect();
+        (streams, stable)
     }
 
     /// `stream_sizes` ordered by `sort` and cut to `limit`.
@@ -3283,7 +3338,7 @@ impl EventStore {
         sort: StreamSort,
         limit: usize,
     ) -> Vec<StreamInfo> {
-        let mut streams = self.stream_sizes(tenant);
+        let mut streams = self.stream_sizes(tenant).streams;
         sort_streams(&mut streams, sort);
         streams.truncate(limit);
         streams
@@ -3738,8 +3793,17 @@ pub enum StreamSort {
     Bytes,
 }
 
-/// Events copied out per events-lock hold in `EventStore::stream_sizes`.
+/// Events sized per events-lock hold in `EventStore::stream_sizes`.
 const STREAM_SIZE_CHUNK: usize = 4096;
+
+/// What `EventStore::stream_sizes` counted.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct StreamSizes {
+    pub streams: Vec<StreamInfo>,
+    /// `false` when events were removed during the scan and its retry, so an
+    /// event can be skipped or counted twice.
+    pub complete: bool,
+}
 
 /// Orders streams by `sort`, largest first; ties break on `stream_id`.
 pub fn sort_streams(streams: &mut [StreamInfo], sort: StreamSort) {
@@ -3797,6 +3861,10 @@ mod version_index_reuse_tests;
 #[cfg(test)]
 #[path = "store_tie_break_tests.rs"]
 mod tie_break_tests;
+
+#[cfg(test)]
+#[path = "store_stream_sizes_tests.rs"]
+mod stream_sizes_tests;
 
 #[cfg(test)]
 mod tests {

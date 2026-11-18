@@ -96,6 +96,15 @@ pub struct StreamInfo {
 pub struct ListStreamsResponse {
     pub streams: Vec<StreamInfo>,
     pub total: u64,
+    /// `false` when Core saw events removed during a `with_bytes` scan and its
+    /// retry, so counts and bytes can skip or repeat events. A Core that does
+    /// not send the field is read as `true`.
+    #[serde(default = "complete_by_default")]
+    pub complete: bool,
+}
+
+fn complete_by_default() -> bool {
+    true
 }
 
 /// The calling tenant's event census from [`CoreClient::tenant_stats`].
@@ -187,6 +196,38 @@ mod tests {
         assert_eq!(listed.streams[0].stream_id, "order-1");
         assert_eq!(listed.streams[0].estimated_bytes, Some(4096));
         assert_eq!(listed.streams[0].events_last_7d, Some(2));
+    }
+
+    #[tokio::test]
+    async fn list_streams_reads_completeness_and_defaults_it_to_true() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/streams"))
+            .and(query_param("with_bytes", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "streams": [],
+                "total": 0,
+                "complete": false
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/streams"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "streams": [],
+                "total": 0
+            })))
+            .mount(&server)
+            .await;
+
+        let client = CoreClient::new(&server.uri(), "test-key").unwrap();
+        let sized = client
+            .list_streams(StreamsParams::new().with_bytes())
+            .await
+            .unwrap();
+        let plain = client.list_streams(StreamsParams::new()).await.unwrap();
+        assert!(!sized.complete);
+        assert!(plain.complete);
     }
 
     #[tokio::test]
