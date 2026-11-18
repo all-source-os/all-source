@@ -70,15 +70,16 @@ counted. Embedded Core never runs the layer.
 | walk | Pages sharing one read id; a page with `has_more` opens or extends it, a page without ends it |
 | whole read | A page with no `since` and no entity id that is not a `limit=1` descending read and not a `limit=0` count probe |
 | single truncated | No read id, no `since`, no entity id, offset 0, served limit at least 2, a full page and `has_more` |
-| walk abandoned | A walk whose last page had `has_more` and got no next page for 30 s |
+| walk abandoned | A walk whose last page had `has_more` and got no next page for more than 30 s |
 | walk evicted | A walk dropped because its tenant had 256 walks in flight (its own oldest goes) or 4,096 were in flight in all (the oldest goes); never counted as abandoned |
-| body bytes | Length of the uncompressed JSON body; 0 on a 304 |
+| body bytes | Length of the uncompressed JSON body; 0 on a 304. A body whose length is not known exactly counts its lower bound and marks the caller row `approximate` |
 
 The first page of a walk whose client sends no read id also matches single
 truncated, so the count is exact only for clients that send read ids.
 
-A timer sweeps idle walks every 10 s, so a walk is counted abandoned between
-30 and 40 s after its last page, whether or not another query arrives.
+A timer sweeps idle walks every 10 s, so a walk is counted abandoned more than
+30 and at most 40 s after its last page, whether or not another query arrives.
+A page exactly 30 s after the previous one continues the walk.
 
 Each tenant holds at most 256 walks in flight. A tenant opening a 257th walk
 evicts its own least recently seen walk, never another tenant's; the table
@@ -110,13 +111,29 @@ body bytes is replaced: the new key inherits its counts and is marked
 `approximate`. At most 128 tenants are kept, the least recently active
 evicted first.
 
+Empty rows alone do not mean "no reads". The response says what the rows
+cover:
+
+- `enabled`: recording is on now. When `false`, pages are not being counted.
+- `since`: when the tables last started empty: process start, or the switch
+  turning recording back on, which clears every table so no row spans a gap.
+- `tenant_tracked`: the tenant has rows. `false` both for a tenant with no
+  reads since `since` and for one pushed out of the 128-tenant table; Core
+  cannot tell the two apart.
+- `tenant_since`: when the tenant's rows started; later than `since` when it
+  entered the table late or was pushed out and came back. Null when untracked.
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ReadCostsResponse",
   "type": "object",
-  "required": ["callers", "classes"],
+  "required": ["callers", "classes", "enabled", "since", "tenant_tracked", "tenant_since"],
   "properties": {
+    "enabled": { "type": "boolean" },
+    "since": { "type": "string", "format": "date-time" },
+    "tenant_tracked": { "type": "boolean" },
+    "tenant_since": { "type": ["string", "null"], "format": "date-time" },
     "callers": {
       "type": "array",
       "items": {
@@ -166,7 +183,7 @@ The existing stream listing, with sizes when `with_bytes=true`.
 
 | Parameter | Values | Default |
 |---|---|---|
-| `tenant_id` | the gateway overwrites it with the authenticated tenant; no tenant answers an empty list | — |
+| `tenant_id` | the gateway overwrites it with the authenticated tenant; no tenant answers an empty list with `complete: false`, `reason: "no_tenant"` | — |
 | `with_bytes` | `true` adds `estimated_bytes` and `events_last_7d` | `false` |
 | `sort` | `events`, `bytes`, largest first, ties by `stream_id` | `events` |
 | `offset`, `limit` | paging over the sorted list | 0, 100 with `with_bytes` |
@@ -181,6 +198,14 @@ for one tenant share one scan. A scan that fails answers 503
 `{"error": "store_unavailable"}` and is not shared with waiting requests,
 which run their own. `total` counts the tenant's streams before paging.
 
+Each pass hydrates the tenant first. A tenant that cannot be hydrated answers
+503 `store_unavailable`, with or without `with_bytes`, never zero streams. A
+pass is complete only if the tenant was still resident, and not evicted, when
+it ended; the retry hydrates again, so a tenant evicted during the first pass
+is counted in full by the second, and one evicted during both answers
+`complete: false`. Without `with_bytes`, a tenant evicted between hydration
+and the listing answers `complete: false`, `reason: "tenant_evicted"`.
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -189,7 +214,8 @@ which run their own. `total` counts the tenant's streams before paging.
   "required": ["streams", "total", "complete"],
   "properties": {
     "total": { "type": "integer", "minimum": 0 },
-    "complete": { "type": "boolean", "description": "False when a with_bytes scan saw events removed during it and its retry; always true without with_bytes" },
+    "complete": { "type": "boolean", "description": "False when a with_bytes scan saw events removed or the tenant evicted during it and its retry, when no tenant was named, or when the tenant was evicted under a listing without with_bytes" },
+    "reason": { "type": "string", "enum": ["no_tenant", "tenant_evicted"], "description": "Present only with those two causes of complete: false" },
     "streams": {
       "type": "array",
       "items": {
@@ -213,7 +239,9 @@ which run their own. `total` counts the tenant's streams before paging.
 `{"enabled": bool}` turns recording on or off without a restart. Admin
 permission: 401 without auth, 403 without the permission. Core boots enabled
 unless `ALLSOURCE_READ_COST=off`; the switch is not persisted, so a restart
-returns to the boot value.
+returns to the boot value. Turning recording off drops every walk in flight
+without counting it, and the sweep does nothing while off. Turning it back on
+clears every table and restarts `since`.
 
 ### Gateway
 
@@ -280,7 +308,17 @@ tool.
   remote store with more than 10,000 streams, completeness is `false` with
   reason `stream_limit_reached`. When Core's scan answers `complete: false`
   (or an embedded scan does), completeness is `false` with reason
-  `scan_interrupted`.
+  `scan_interrupted`, or `no_tenant` when Core named that reason.
+- A remote reply with no `complete`, or with a stream lacking
+  `estimated_bytes` or `events_last_7d` (a Core older than 0.30 ignores
+  `with_bytes`), has completeness `false` with reason `bytes_unavailable`.
+  Class `bytes`, `max_stream_bytes` and `events_last_7d` are then `null`, never
+  summed from absent values, and `sort: "bytes"` is refused as `unsupported:`.
+  A row without `stream_id` or `event_count`, or a reply without `total`, is an
+  error.
+- An embedded tenant that cannot be hydrated is an error
+  (`store unavailable: …`), never zero streams. The embedded scan runs on a
+  blocking thread.
 - `stream_sizes` classes come from stream ids, so they are entity classes. A
   prefix or event-type class such as `auth.member` never appears in them.
 - `cap_check` compares each cap with the class's largest stream
@@ -292,3 +330,9 @@ tool.
   `maxPagesPerWalk`, summed and maximised over the class rows returned, and
   `totalsCover`: `all_class_rows` when fewer class rows than `limit` came
   back, so the totals are the tenant's, else `returned_class_rows`.
+- `read_costs` adds `recording {enabled, since, tenantTracked, tenantSince}`
+  from Core. Completeness is `false` with reason `recording_off` when
+  `enabled` is `false`, `tenant_not_tracked` when the tenant has no rows,
+  `recording_state_unknown` when Core sent neither field, and `limit_reached`
+  when a list came back at `limit`. A reply without `callers` or `classes`, or
+  a class row missing a summed field, is an error.

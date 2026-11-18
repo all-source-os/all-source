@@ -114,7 +114,7 @@ fly logs -a allsource-control-plane | grep read_header_invalid
 |---|---|---|
 | `read_cost_threshold reason=walk_pages` | One walk passed 20 pages | `read_costs` ordered by `pages` for that caller and class |
 | `read_cost_threshold reason=matched_pages` | One page matched more than 50,000 events | The caller's filter: a whole-class read where a `since` or entity id would do |
-| `read_cost_threshold reason=walk_abandoned` | A walk stopped with pages left for 30 s | The caller's budget or timeout cut the walk |
+| `read_cost_threshold reason=walk_abandoned` | A walk stopped with pages left for more than 30 s | The caller's budget or timeout cut the walk |
 | `read_cost_threshold reason=single_truncated` | A one-page read hit its limit with more behind it | The caller treats a first page as the whole answer |
 | `read_label_overflow` | The process has 256 stream-class labels; later classes count as `other` | A client sending ids where classes belong |
 | `read_header_invalid` | A header failed its pattern and was rewritten to `invalid` | The client's caller name or read id generator |

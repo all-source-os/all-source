@@ -30,10 +30,15 @@ how many body bytes it carried, so reads can be counted by who made them.
 - `CoreClient::list_streams` with `StreamsParams` (`with_bytes`, `sort`,
   `limit`, `offset`): `GET /api/v1/streams`, answering `ListStreamsResponse`
   of `StreamInfo` rows. With `with_bytes`, each row carries `estimated_bytes`
-  and `events_last_7d`, and `complete` is `false` when Core saw events removed
-  during the scan and its retry.
+  and `events_last_7d`. `complete` is `false` and `incomplete` names why:
+  `scan_interrupted` when Core saw events removed during the scan and its
+  retry, `bytes_unavailable` when `with_bytes` was asked and Core sent no
+  `complete` or a row without `estimated_bytes` (a Core older than 0.30
+  ignores `with_bytes`), or Core's own `reason` such as `no_tenant`.
+  `ListStreamsResponse` is `#[non_exhaustive]` and is not `Deserialize`.
 - `CoreClient::tenant_stats`: `GET /api/v1/stats`, answering `TenantStats`
-  (per-event-type counts and the oldest and newest event).
+  (per-event-type counts and the oldest and newest event). A reply without
+  `event_types` is `Error::Json`, never an empty census.
 
 ### Changed
 

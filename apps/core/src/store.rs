@@ -3222,7 +3222,11 @@ impl EventStore {
     /// are sized in place, and released between chunks. Removing events shifts
     /// positions under the cursor, so a removal mid-scan restarts the scan once;
     /// a second one returns what was counted with `complete: false`.
-    pub fn stream_sizes(&self, tenant: Option<&str>) -> StreamSizes {
+    ///
+    /// A tenant that cannot be hydrated is `Err`, never zero streams. Each
+    /// pass hydrates the tenant first and is complete only if the tenant was
+    /// still resident, and not evicted, when the pass ended.
+    pub fn stream_sizes(&self, tenant: Option<&str>) -> Result<StreamSizes> {
         self.stream_sizes_between(tenant, || {})
     }
 
@@ -3230,25 +3234,48 @@ impl EventStore {
         &self,
         tenant: Option<&str>,
         mut between_chunks: impl FnMut(),
-    ) -> StreamSizes {
-        if let Some(tenant_id) = tenant {
-            let _ = self.ensure_tenant_loaded(tenant_id);
-        }
+    ) -> Result<StreamSizes> {
         let last_week = chrono::Utc::now() - chrono::Duration::days(7);
         let (streams, stable) =
-            self.scan_stream_sizes(tenant, last_week, &mut between_chunks, false);
+            self.stream_sizes_pass(tenant, last_week, &mut between_chunks, false)?;
         if stable {
-            return StreamSizes {
+            return Ok(StreamSizes {
                 streams,
                 complete: true,
-            };
+            });
         }
         let (streams, stable) =
-            self.scan_stream_sizes(tenant, last_week, &mut between_chunks, true);
-        StreamSizes {
+            self.stream_sizes_pass(tenant, last_week, &mut between_chunks, true)?;
+        Ok(StreamSizes {
             streams,
             complete: stable,
-        }
+        })
+    }
+
+    fn stream_sizes_pass(
+        &self,
+        tenant: Option<&str>,
+        last_week: chrono::DateTime<chrono::Utc>,
+        between_chunks: &mut impl FnMut(),
+        finish_when_moved: bool,
+    ) -> Result<(Vec<StreamInfo>, bool)> {
+        let Some(tenant_id) = tenant else {
+            return Ok(self.scan_stream_sizes(None, last_week, between_chunks, finish_when_moved));
+        };
+        self.ensure_tenant_loaded(tenant_id)?;
+        let generation = self.cache_generation(tenant_id);
+        let (streams, stable) =
+            self.scan_stream_sizes(tenant, last_week, between_chunks, finish_when_moved);
+        let resident =
+            self.is_tenant_loaded(tenant_id) && self.cache_generation(tenant_id) == generation;
+        Ok((streams, stable && resident))
+    }
+
+    /// Bumped by every eviction of `tenant_id`.
+    fn cache_generation(&self, tenant_id: &str) -> u64 {
+        self.cache_generations
+            .get(tenant_id)
+            .map_or(0, |value| *value)
     }
 
     /// One pass of `stream_sizes`. Returns early with `false` when events were
@@ -3260,7 +3287,7 @@ impl EventStore {
         between_chunks: &mut impl FnMut(),
         finish_when_moved: bool,
     ) -> (Vec<StreamInfo>, bool) {
-        #[derive(Default)]
+        #[derive(Default, Clone, Copy)]
         struct Totals {
             events: usize,
             bytes: u64,
@@ -3268,11 +3295,15 @@ impl EventStore {
             last_event_at: Option<chrono::DateTime<chrono::Utc>>,
         }
         let mut slots: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        let mut totals: Vec<(String, Totals)> = Vec::new();
+        let mut totals: Vec<Totals> = Vec::new();
         let mut removals = None;
         let mut stable = true;
         let mut cursor = 0;
         loop {
+            // A chunk adds at most STREAM_SIZE_CHUNK streams, so nothing
+            // reallocates while the events lock is held.
+            slots.reserve(STREAM_SIZE_CHUNK);
+            totals.reserve(STREAM_SIZE_CHUNK);
             let events = self.events.read();
             let removed = self
                 .events_removed
@@ -3294,10 +3325,10 @@ impl EventStore {
                 } else {
                     let slot = totals.len();
                     slots.insert(ev.entity_id_str().to_owned(), slot);
-                    totals.push((ev.entity_id_str().to_owned(), Totals::default()));
+                    totals.push(Totals::default());
                     slot
                 };
-                let stream = &mut totals[slot].1;
+                let stream = &mut totals[slot];
                 stream.events += 1;
                 stream.bytes += ev.resident_header_bytes()
                     + (value_heap_bytes(&ev.payload)
@@ -3318,8 +3349,9 @@ impl EventStore {
             }
             between_chunks();
         }
-        let streams = totals
+        let streams = slots
             .into_iter()
+            .map(|(stream_id, slot)| (stream_id, totals[slot]))
             .map(|(stream_id, totals)| StreamInfo {
                 stream_id,
                 event_count: totals.events,
@@ -3337,11 +3369,11 @@ impl EventStore {
         tenant: Option<&str>,
         sort: StreamSort,
         limit: usize,
-    ) -> Vec<StreamInfo> {
-        let mut streams = self.stream_sizes(tenant).streams;
-        sort_streams(&mut streams, sort);
-        streams.truncate(limit);
-        streams
+    ) -> Result<StreamSizes> {
+        let mut sizes = self.stream_sizes(tenant)?;
+        sort_streams(&mut sizes.streams, sort);
+        sizes.streams.truncate(limit);
+        Ok(sizes)
     }
 
     /// Distinct event types (+ per-type event count) for ONE tenant.

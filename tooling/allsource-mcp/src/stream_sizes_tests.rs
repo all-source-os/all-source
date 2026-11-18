@@ -69,7 +69,7 @@ const STREAMS_BODY: &str = r#"{"streams":[
     {"stream_id":"t1:u1:skill_run:a1","event_count":900,"last_event_at":"2026-11-17T10:00:00Z","estimated_bytes":90000,"events_last_7d":40},
     {"stream_id":"t1:u1:skill_run:b2","event_count":100,"last_event_at":"2026-11-16T10:00:00Z","estimated_bytes":5000,"events_last_7d":0},
     {"stream_id":"auth-member:u7","event_count":50,"last_event_at":null,"estimated_bytes":2500,"events_last_7d":3}
-],"total":3}"#;
+],"total":3,"complete":true}"#;
 
 const STATS_BODY: &str = r#"{"total_events":1050,"total_entities":3,"total_event_types":2,"total_ingested":1050,"event_types":{"fixture.written":1050},"oldest_event":"2026-01-01T00:00:00Z","newest_event":"2026-11-17T10:00:00Z"}"#;
 
@@ -213,7 +213,7 @@ async fn stream_sizes_through_the_gateway_says_when_classes_miss_streams() {
         (
             "/api/v1/streams",
             "200 OK",
-            r#"{"streams":[{"stream_id":"auth-member:u7","event_count":5,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0}],"total":20001}"#,
+            r#"{"streams":[{"stream_id":"auth-member:u7","event_count":5,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0}],"total":20001,"complete":true}"#,
         ),
         ("/api/v1/stats", "200 OK", STATS_BODY),
     ])
@@ -267,7 +267,8 @@ async fn read_costs_says_its_totals_cover_only_returned_rows_at_the_limit() {
         "/api/v1/read-costs",
         "200 OK",
         r#"{"callers":[],
-            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}]}"#,
+            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}],
+            "enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":"2026-11-17T00:00:00Z"}"#,
     )])
     .await;
     let stores = registry_with_gateway(&base).await;
@@ -308,7 +309,8 @@ async fn read_costs_through_the_gateway_returns_caller_and_class_rows() {
         "/api/v1/read-costs",
         "200 OK",
         r#"{"callers":[{"caller":"lh.skill_catalog","stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"body_bytes":9000000,"single_truncated":1,"walk_abandoned":0,"approximate":false}],
-            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}]}"#,
+            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}],
+            "enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":"2026-11-17T00:00:00Z"}"#,
     )])
     .await;
     let stores = registry_with_gateway(&base).await;
@@ -506,4 +508,143 @@ async fn a_view_tool_on_an_embedded_store_names_the_tool_it_refused() {
         error.to_string().starts_with("unsupported: list_latest"),
         "{error}"
     );
+}
+
+async fn remote_sizes(streams_body: &'static str, args: Value) -> anyhow::Result<Value> {
+    let (base, _heads) = serve_routes(vec![
+        ("/api/v1/streams", "200 OK", streams_body),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+    execute_tool_inner(&stores, &local(), "stream_sizes", &args).await
+}
+
+/// What a Core older than 0.30 answers: it ignores `with_bytes`.
+const UNSIZED_STREAMS_BODY: &str = r#"{"streams":[
+    {"stream_id":"t1:u1:skill_run:a1","event_count":900,"last_event_at":null},
+    {"stream_id":"auth-member:u7","event_count":50,"last_event_at":null}
+],"total":2}"#;
+
+#[tokio::test]
+async fn stream_sizes_from_a_core_that_ignores_with_bytes_is_incomplete_and_sums_no_bytes() {
+    let result = remote_sizes(UNSIZED_STREAMS_BODY, json!({ "store": "remote" }))
+        .await
+        .expect("sizes by events");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "bytes_unavailable");
+    assert!(class(&result, "skill_run")["bytes"].is_null(), "{result}");
+    assert!(class(&result, "skill_run")["max_stream_bytes"].is_null());
+    assert_eq!(class(&result, "skill_run")["events"], 900);
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_to_rank_by_bytes_core_did_not_send() {
+    let error = remote_sizes(
+        UNSIZED_STREAMS_BODY,
+        json!({ "store": "remote", "sort": "bytes" }),
+    )
+    .await
+    .expect_err("no bytes to rank by");
+
+    assert!(error.to_string().starts_with("unsupported:"), "{error}");
+}
+
+#[tokio::test]
+async fn stream_sizes_with_one_unsized_stream_is_incomplete_even_when_core_says_complete() {
+    let result = remote_sizes(
+        r#"{"streams":[
+            {"stream_id":"a:1","event_count":3,"last_event_at":null,"estimated_bytes":30,"events_last_7d":1},
+            {"stream_id":"b:1","event_count":2,"last_event_at":null}
+        ],"total":2,"complete":true}"#,
+        json!({ "store": "remote" }),
+    )
+    .await
+    .expect("sizes");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "bytes_unavailable");
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_a_stream_row_without_a_count() {
+    let error = remote_sizes(
+        r#"{"streams":[{"stream_id":"a:1","last_event_at":null,"estimated_bytes":30,"events_last_7d":1}],"total":1,"complete":true}"#,
+        json!({ "store": "remote" }),
+    )
+    .await
+    .expect_err("a row without event_count is not a zero-event stream");
+
+    assert!(error.to_string().contains("event_count"), "{error}");
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_a_listing_without_a_total() {
+    let error = remote_sizes(
+        r#"{"streams":[],"complete":true}"#,
+        json!({ "store": "remote" }),
+    )
+    .await
+    .expect_err("no total means the stream count is unknown");
+
+    assert!(error.to_string().contains("total"), "{error}");
+}
+
+async fn remote_read_costs(body: &'static str) -> anyhow::Result<Value> {
+    let (base, _heads) = serve_routes(vec![("/api/v1/read-costs", "200 OK", body)]).await;
+    let stores = registry_with_gateway(&base).await;
+    execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "limit": 10 }),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn read_costs_refuses_a_reply_without_rows() {
+    let error = remote_read_costs(
+        r#"{"enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":null}"#,
+    )
+    .await
+    .expect_err("missing rows are not empty rows");
+
+    assert!(error.to_string().contains("callers"), "{error}");
+}
+
+#[tokio::test]
+async fn read_costs_with_recording_off_is_incomplete() {
+    let result = remote_read_costs(
+        r#"{"callers":[],"classes":[],"enabled":false,"since":"2026-11-17T00:00:00Z","tenant_tracked":false,"tenant_since":null}"#,
+    )
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "recording_off");
+    assert_eq!(result["recording"]["since"], "2026-11-17T00:00:00Z");
+}
+
+#[tokio::test]
+async fn read_costs_for_an_untracked_tenant_is_incomplete() {
+    let result = remote_read_costs(
+        r#"{"callers":[],"classes":[],"enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":false,"tenant_since":null}"#,
+    )
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "tenant_not_tracked");
+}
+
+#[tokio::test]
+async fn read_costs_from_a_core_that_sends_no_recording_state_is_incomplete() {
+    let result = remote_read_costs(r#"{"callers":[],"classes":[]}"#)
+        .await
+        .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "recording_state_unknown");
 }

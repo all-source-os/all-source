@@ -257,7 +257,8 @@ pub struct ClassRow {
 }
 
 /// Counts for one caller and stream class within one tenant. A row created by
-/// replacing another inherits that row's counts and is `approximate`.
+/// replacing another inherits that row's counts and is `approximate`; so is a
+/// row that counted a body whose length was not known exactly.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct CallerRow {
     pub logical_reads: u64,
@@ -282,12 +283,17 @@ struct Walk {
 #[derive(Debug, Default)]
 struct Tenant {
     last_active: u64,
+    /// When this tenant entered the table; rows cover only pages since then.
+    tracked_since: Option<DateTime<Utc>>,
     classes: HashMap<String, ClassRow>,
     callers: HashMap<(Option<String>, String), CallerRow>,
 }
 
 #[derive(Debug, Default)]
 struct Tables {
+    /// When recording last started: the process start, or the switch turning
+    /// recording back on, which clears every table.
+    since: DateTime<Utc>,
     tick: u64,
     tenants: HashMap<String, Tenant>,
     walks: HashMap<(String, String), Walk>,
@@ -331,7 +337,10 @@ impl ReadCost {
         Arc::new(Self {
             enabled: AtomicBool::new(enabled),
             metrics,
-            tables: Mutex::new(Tables::default()),
+            tables: Mutex::new(Tables {
+                since: Utc::now(),
+                ..Tables::default()
+            }),
         })
     }
 
@@ -346,15 +355,40 @@ impl ReadCost {
         self.enabled.load(Ordering::Relaxed)
     }
 
+    /// Turning recording off drops every live walk, since pages it skips can
+    /// neither continue nor abandon one. Turning it back on clears every table
+    /// and restarts `since`, so no row spans the gap.
     pub fn set_enabled(&self, enabled: bool) {
-        self.enabled.store(enabled, Ordering::Relaxed);
+        let mut tables = self.lock();
+        let was = self.enabled.swap(enabled, Ordering::Relaxed);
+        if !enabled {
+            tables.walks.clear();
+            tables.walks_per_tenant.clear();
+        } else if !was {
+            *tables = Tables {
+                since: Utc::now(),
+                // Prometheus series outlive the tables, and the label cap counts them.
+                labels: std::mem::take(&mut tables.labels),
+                label_overflow_logged: tables.label_overflow_logged,
+                ..Tables::default()
+            };
+        }
     }
 
-    /// Caller and class rows for one tenant, ordered by `order` and cut to `limit`.
+    /// Caller and class rows for one tenant, ordered by `order` and cut to
+    /// `limit`, with whether recording is on and the tenant is in the table.
     pub fn read_costs(&self, tenant: &str, order: RowOrder, limit: usize) -> ReadCostsResponse {
         let tables = self.lock();
+        let enabled = self.enabled();
         let Some(state) = tables.tenants.get(tenant) else {
-            return ReadCostsResponse::default();
+            return ReadCostsResponse {
+                callers: Vec::new(),
+                classes: Vec::new(),
+                enabled,
+                since: tables.since,
+                tenant_tracked: false,
+                tenant_since: None,
+            };
         };
         let mut callers: Vec<CallerCost> = state
             .callers
@@ -385,7 +419,14 @@ impl ReadCost {
                 .then_with(|| a.stream_class.cmp(&b.stream_class))
         });
         classes.truncate(limit);
-        ReadCostsResponse { callers, classes }
+        ReadCostsResponse {
+            callers,
+            classes,
+            enabled,
+            since: tables.since,
+            tenant_tracked: true,
+            tenant_since: state.tracked_since,
+        }
     }
 
     fn lock(&self) -> MutexGuard<'_, Tables> {
@@ -394,8 +435,23 @@ impl ReadCost {
 
     /// Folds one page into the walks, aggregates, series and logs.
     pub fn observe(&self, now: Instant, facts: &ReadCostFacts, outcome: Outcome, body_bytes: u64) {
+        self.observe_sized(now, facts, outcome, body_bytes, true);
+    }
+
+    /// [`Self::observe`] for a body whose length may be only a lower bound.
+    fn observe_sized(
+        &self,
+        now: Instant,
+        facts: &ReadCostFacts,
+        outcome: Outcome,
+        body_bytes: u64,
+        bytes_exact: bool,
+    ) {
         let wall = Utc::now();
         let mut tables = self.lock();
+        if !self.enabled() {
+            return;
+        }
         self.sweep_if_due(&mut tables, now);
         log_rejected(&mut tables, now, &facts.rejected);
 
@@ -419,7 +475,7 @@ impl ReadCost {
             let idle = tables
                 .walks
                 .get(&key)
-                .is_some_and(|walk| now.saturating_duration_since(walk.last_seen) >= WALK_IDLE);
+                .is_some_and(|walk| now.saturating_duration_since(walk.last_seen) > WALK_IDLE);
             if idle && let Some(walk) = tables.remove_walk(&key) {
                 self.abandon(&mut tables, now, tenant, &walk);
             }
@@ -462,6 +518,7 @@ impl ReadCost {
         row.whole_reads += u64::from(whole);
         row.single_truncated += u64::from(single);
         row.body_bytes += body_bytes;
+        row.approximate |= !bytes_exact;
         row.first_seen.get_or_insert(wall);
         row.last_seen = Some(wall);
 
@@ -508,9 +565,13 @@ impl ReadCost {
         }
     }
 
-    /// Ends every walk idle for [`WALK_IDLE`] as abandoned.
+    /// Ends every walk idle for more than [`WALK_IDLE`] as abandoned. Does
+    /// nothing while recording is off.
     pub fn sweep(&self, now: Instant) {
         let mut tables = self.lock();
+        if !self.enabled() {
+            return;
+        }
         self.sweep_locked(&mut tables, now);
     }
 
@@ -529,7 +590,7 @@ impl ReadCost {
         let idle: Vec<(String, String)> = tables
             .walks
             .iter()
-            .filter(|(_, walk)| now.saturating_duration_since(walk.last_seen) >= WALK_IDLE)
+            .filter(|(_, walk)| now.saturating_duration_since(walk.last_seen) > WALK_IDLE)
             .map(|(key, _)| key.clone())
             .collect();
         for key in idle {
@@ -652,6 +713,7 @@ fn tenant_mut<'a>(tables: &'a mut Tables, tenant: &str) -> &'a mut Tenant {
     }
     let state = tables.tenants.entry(tenant.to_owned()).or_default();
     state.last_active = tick;
+    state.tracked_since.get_or_insert_with(Utc::now);
     state
 }
 
@@ -789,9 +851,10 @@ pub async fn record(
         return response;
     };
     if read_cost.enabled() {
-        let body_bytes = response.body().size_hint().exact().unwrap_or(0);
+        let hint = response.body().size_hint();
+        let body_bytes = hint.exact().unwrap_or_else(|| hint.lower());
         let outcome = Outcome::of(response.status(), body_bytes, facts.read.counts.has_more);
-        read_cost.observe(clock(), &facts, outcome, body_bytes);
+        read_cost.observe_sized(clock(), &facts, outcome, body_bytes, hint.exact().is_some());
     }
     response
 }
@@ -835,10 +898,23 @@ pub struct ClassCost {
     pub counts: ClassRow,
 }
 
-#[derive(Debug, Default, Serialize)]
+/// Rows plus what they cover: empty rows mean "no reads" only when recording
+/// is on and the tenant is tracked.
+#[derive(Debug, Serialize)]
 pub struct ReadCostsResponse {
     pub callers: Vec<CallerCost>,
     pub classes: Vec<ClassCost>,
+    /// Recording is on now.
+    pub enabled: bool,
+    /// When the tables last started empty: process start or recording
+    /// switched back on.
+    pub since: DateTime<Utc>,
+    /// The tenant has rows. `false` for a tenant with no reads since `since`
+    /// and for one pushed out of the 128-tenant table; the two look alike.
+    pub tenant_tracked: bool,
+    /// When the tenant's rows started; later than `since` when it entered
+    /// the table late or was pushed out and came back.
+    pub tenant_since: Option<DateTime<Utc>>,
 }
 
 const UNATTRIBUTED: &str = "unattributed";

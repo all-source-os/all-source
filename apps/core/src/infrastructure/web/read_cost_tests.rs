@@ -206,10 +206,146 @@ fn read_cost_sweep_ends_only_walks_idle_for_thirty_seconds() {
         Outcome::HasMore,
         0,
     );
-    rc.sweep(at(t0, 30));
+    rc.sweep(at(t0, 31));
 
     assert_eq!(walk_count(&rc), 1);
     assert_eq!(class_row_of(&rc, "t", "walk").walk_abandoned, 1);
+}
+
+#[test]
+fn read_cost_walk_idle_exactly_thirty_seconds_is_not_abandoned() {
+    let rc = read_cost();
+    let t0 = base();
+    let id = Some("0123456789abcdef");
+
+    rc.observe(
+        t0,
+        &page("t", "walk", id, 25, 10, true),
+        Outcome::HasMore,
+        0,
+    );
+    rc.sweep(at(t0, 30));
+    assert_eq!(walk_count(&rc), 1);
+
+    rc.observe(
+        at(t0, 30),
+        &page("t", "walk", id, 25, 10, true),
+        Outcome::HasMore,
+        0,
+    );
+    let row = class_row_of(&rc, "t", "walk");
+    assert_eq!(row.walk_abandoned, 0);
+    assert_eq!(row.logical_reads, 1);
+}
+
+#[test]
+fn read_cost_body_of_unknown_length_marks_the_caller_row_approximate() {
+    let rc = read_cost();
+
+    rc.observe(
+        base(),
+        &page("t", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+    assert!(!caller_row_of(&rc, "t", None, "walk").approximate);
+
+    rc.observe_sized(
+        base(),
+        &page("t", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        4,
+        false,
+    );
+    let row = caller_row_of(&rc, "t", None, "walk");
+    assert!(row.approximate);
+    assert_eq!(row.body_bytes, 13);
+}
+
+#[test]
+fn read_cost_switching_off_drops_live_walks_and_the_sweep_counts_nothing() {
+    let rc = read_cost();
+    let t0 = base();
+
+    rc.observe(
+        t0,
+        &page("t", "walk", Some("0123456789abcdef"), 25, 10, true),
+        Outcome::HasMore,
+        0,
+    );
+    rc.set_enabled(false);
+    assert_eq!(walk_count(&rc), 0);
+    assert!(rc.lock().walks_per_tenant.is_empty());
+
+    rc.sweep(at(t0, 120));
+    assert_eq!(class_row_of(&rc, "t", "walk").walk_abandoned, 0);
+    assert_eq!(truncated_count(&rc, "walk", "walk_abandoned"), 0);
+}
+
+#[test]
+fn read_cost_switching_back_on_resets_the_tables_and_their_since() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+    let before = rc.read_costs("a", RowOrder::Bytes, 10).since;
+
+    rc.set_enabled(false);
+    rc.set_enabled(true);
+
+    let after = rc.read_costs("a", RowOrder::Bytes, 10);
+    assert!(after.since >= before);
+    assert!(!after.tenant_tracked, "rows from before the gap are gone");
+    assert!(after.classes.is_empty());
+}
+
+#[test]
+fn read_costs_say_whether_recording_is_on_and_the_tenant_is_tracked() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+
+    let tracked = rc.read_costs("a", RowOrder::Bytes, 10);
+    assert!(tracked.enabled);
+    assert!(tracked.tenant_tracked);
+    assert!(tracked.tenant_since.is_some_and(|at| at >= tracked.since));
+
+    let untracked = rc.read_costs("b", RowOrder::Bytes, 10);
+    assert!(untracked.enabled);
+    assert!(!untracked.tenant_tracked);
+    assert_eq!(untracked.tenant_since, None);
+
+    rc.set_enabled(false);
+    assert!(!rc.read_costs("a", RowOrder::Bytes, 10).enabled);
+}
+
+#[test]
+fn read_costs_untrack_a_tenant_pushed_out_of_the_tenant_table() {
+    let rc = read_cost();
+    for n in 0..=TENANTS {
+        rc.observe(
+            base(),
+            &page(&format!("tenant-{n}"), "walk", None, 3, 3, false),
+            Outcome::Complete,
+            9,
+        );
+    }
+
+    assert!(
+        !rc.read_costs("tenant-0", RowOrder::Bytes, 10)
+            .tenant_tracked
+    );
+    assert!(
+        rc.read_costs(&format!("tenant-{TENANTS}"), RowOrder::Bytes, 10)
+            .tenant_tracked
+    );
 }
 
 #[test]
@@ -955,6 +1091,24 @@ async fn read_costs_rows_carry_the_design_field_names() {
     assert!(body["classes"][0].get("max_pages").is_none());
     assert!(body["callers"][0]["first_seen"].is_string());
     assert!(body["callers"][0]["last_seen"].is_string());
+    assert_eq!(body["enabled"], true);
+    assert_eq!(body["tenant_tracked"], true);
+    assert!(body["since"].is_string());
+    assert!(body["tenant_since"].is_string());
+}
+
+#[tokio::test]
+async fn read_costs_for_an_untracked_tenant_say_so_rather_than_only_empty_rows() {
+    let rc = read_cost();
+    rc.set_enabled(false);
+
+    let (status, body) = get_read_costs(rc, "/api/v1/read-costs?tenant_id=nobody").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["enabled"], false);
+    assert_eq!(body["tenant_tracked"], false);
+    assert!(body["tenant_since"].is_null());
+    assert!(body["since"].is_string());
 }
 
 #[derive(Clone, Default)]
@@ -1082,6 +1236,6 @@ async fn production_router_sweeps_an_abandoned_walk_on_a_timer() {
     tokio::time::sleep(Duration::from_secs(29)).await;
     assert_eq!(abandoned(), 0);
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(12)).await;
     assert_eq!(abandoned(), 1);
 }

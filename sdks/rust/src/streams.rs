@@ -84,33 +84,64 @@ pub struct StreamInfo {
     pub event_count: u64,
     /// RFC 3339.
     pub last_event_at: Option<String>,
-    #[serde(default)]
     pub estimated_bytes: Option<u64>,
-    #[serde(default)]
     pub events_last_7d: Option<u64>,
 }
 
 /// Response from [`CoreClient::list_streams`]. `total` counts the tenant's streams
 /// before `offset` and `limit`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ListStreamsResponse {
     pub streams: Vec<StreamInfo>,
     pub total: u64,
-    /// `false` when Core saw events removed during a `with_bytes` scan and its
-    /// retry, so counts and bytes can skip or repeat events. A Core that does
-    /// not send the field is read as `true`.
-    #[serde(default = "complete_by_default")]
+    /// `false` when the listing may skip or repeat events; [`Self::incomplete`]
+    /// says why.
     pub complete: bool,
+    /// Why `complete` is `false`:
+    /// - `bytes_unavailable`: `with_bytes` was asked and Core sent no
+    ///   `complete`, or a stream without `estimated_bytes`. A Core older than
+    ///   0.30 ignores `with_bytes` this way.
+    /// - `scan_interrupted`: Core saw events removed during its scan and retry.
+    /// - any other value is Core's own `reason`, such as `no_tenant`.
+    pub incomplete: Option<String>,
 }
 
-fn complete_by_default() -> bool {
-    true
+/// The listing as Core sends it, before completeness is judged.
+#[derive(Deserialize)]
+struct RawListStreams {
+    streams: Vec<StreamInfo>,
+    total: u64,
+    complete: Option<bool>,
+    reason: Option<String>,
+}
+
+const BYTES_UNAVAILABLE: &str = "bytes_unavailable";
+const SCAN_INTERRUPTED: &str = "scan_interrupted";
+
+impl RawListStreams {
+    fn judge(self, with_bytes: bool) -> ListStreamsResponse {
+        let sized = self.streams.iter().all(|s| s.estimated_bytes.is_some());
+        let incomplete = if with_bytes && (self.complete.is_none() || !sized) {
+            Some(BYTES_UNAVAILABLE.to_owned())
+        } else if self.complete == Some(false) {
+            Some(self.reason.unwrap_or_else(|| SCAN_INTERRUPTED.to_owned()))
+        } else {
+            None
+        };
+        ListStreamsResponse {
+            streams: self.streams,
+            total: self.total,
+            complete: incomplete.is_none(),
+            incomplete,
+        }
+    }
 }
 
 /// The calling tenant's event census from [`CoreClient::tenant_stats`].
 #[derive(Debug, Clone, Deserialize)]
 pub struct TenantStats {
-    #[serde(default)]
+    /// Required: a reply without the census is an error, never an empty one.
     pub event_types: BTreeMap<String, u64>,
     /// RFC 3339.
     #[serde(rename = "oldest_event")]
@@ -124,9 +155,11 @@ impl CoreClient {
     /// List the calling tenant's streams. The gateway scopes the listing to the tenant.
     pub async fn list_streams(&self, params: StreamsParams) -> Result<ListStreamsResponse, Error> {
         let pairs = params.to_query_pairs();
-        self.transport()
+        let raw: RawListStreams = self
+            .transport()
             .get_with_query("/api/v1/streams", &pairs)
-            .await
+            .await?;
+        Ok(raw.judge(params.with_bytes))
     }
 
     /// Per-event-type counts and the time range of the calling tenant's events.
@@ -182,7 +215,8 @@ mod tests {
                     "estimated_bytes": 4096,
                     "events_last_7d": 2
                 }],
-                "total": 9
+                "total": 9,
+                "complete": true
             })))
             .mount(&server)
             .await;
@@ -198,36 +232,91 @@ mod tests {
         assert_eq!(listed.streams[0].events_last_7d, Some(2));
     }
 
-    #[tokio::test]
-    async fn list_streams_reads_completeness_and_defaults_it_to_true() {
+    async fn serve_streams(body: serde_json::Value) -> MockServer {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/api/v1/streams"))
-            .and(query_param("with_bytes", "true"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "streams": [],
-                "total": 0,
-                "complete": false
-            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
             .mount(&server)
             .await;
-        Mock::given(method("GET"))
-            .and(path("/api/v1/streams"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "streams": [],
-                "total": 0
-            })))
-            .mount(&server)
-            .await;
+        server
+    }
 
-        let client = CoreClient::new(&server.uri(), "test-key").unwrap();
-        let sized = client
+    async fn sized_listing(body: serde_json::Value) -> ListStreamsResponse {
+        let server = serve_streams(body).await;
+        CoreClient::new(&server.uri(), "test-key")
+            .unwrap()
             .list_streams(StreamsParams::new().with_bytes())
             .await
-            .unwrap();
-        let plain = client.list_streams(StreamsParams::new()).await.unwrap();
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn list_streams_reads_an_interrupted_scan_as_incomplete() {
+        let sized = sized_listing(serde_json::json!({
+            "streams": [],
+            "total": 0,
+            "complete": false
+        }))
+        .await;
         assert!(!sized.complete);
+        assert_eq!(sized.incomplete.as_deref(), Some("scan_interrupted"));
+    }
+
+    #[tokio::test]
+    async fn list_streams_with_bytes_from_a_core_that_sends_no_completeness_is_incomplete() {
+        let sized = sized_listing(serde_json::json!({
+            "streams": [{"stream_id": "a", "event_count": 1, "last_event_at": null}],
+            "total": 1
+        }))
+        .await;
+        assert!(!sized.complete);
+        assert_eq!(sized.incomplete.as_deref(), Some("bytes_unavailable"));
+    }
+
+    #[tokio::test]
+    async fn list_streams_with_bytes_missing_a_stream_size_is_incomplete() {
+        let sized = sized_listing(serde_json::json!({
+            "streams": [
+                {"stream_id": "a", "event_count": 1, "last_event_at": null, "estimated_bytes": 10, "events_last_7d": 1},
+                {"stream_id": "b", "event_count": 1, "last_event_at": null}
+            ],
+            "total": 2,
+            "complete": true
+        }))
+        .await;
+        assert!(!sized.complete);
+        assert_eq!(sized.incomplete.as_deref(), Some("bytes_unavailable"));
+    }
+
+    #[tokio::test]
+    async fn list_streams_carries_cores_reason() {
+        let server = serve_streams(serde_json::json!({
+            "streams": [],
+            "total": 0,
+            "complete": false,
+            "reason": "no_tenant"
+        }))
+        .await;
+        let plain = CoreClient::new(&server.uri(), "test-key")
+            .unwrap()
+            .list_streams(StreamsParams::new())
+            .await
+            .unwrap();
+        assert!(!plain.complete);
+        assert_eq!(plain.incomplete.as_deref(), Some("no_tenant"));
+    }
+
+    #[tokio::test]
+    async fn plain_listing_without_completeness_is_complete() {
+        let server = serve_streams(serde_json::json!({ "streams": [], "total": 0 })).await;
+        let plain = CoreClient::new(&server.uri(), "test-key")
+            .unwrap()
+            .list_streams(StreamsParams::new())
+            .await
+            .unwrap();
         assert!(plain.complete);
+        assert_eq!(plain.incomplete, None);
     }
 
     #[tokio::test]
@@ -246,6 +335,23 @@ mod tests {
         let listed = client.list_streams(StreamsParams::new()).await.unwrap();
         assert_eq!(listed.streams[0].estimated_bytes, None);
         assert_eq!(listed.streams[0].events_last_7d, None);
+    }
+
+    #[tokio::test]
+    async fn tenant_stats_without_a_census_is_an_error_not_an_empty_census() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v1/stats"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "total_events": 5,
+                "oldest_event": null,
+                "newest_event": null
+            })))
+            .mount(&server)
+            .await;
+
+        let client = CoreClient::new(&server.uri(), "test-key").unwrap();
+        assert!(matches!(client.tenant_stats().await, Err(Error::Json(_))));
     }
 
     #[tokio::test]

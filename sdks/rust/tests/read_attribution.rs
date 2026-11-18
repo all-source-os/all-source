@@ -218,7 +218,12 @@ async fn event_paginator_sends_one_read_id_on_every_page() {
     let second = header(&requests[1], READ_ID_HEADER).expect("read id on page 2");
     assert_eq!(first, second);
     assert_eq!(first.len(), 16);
-    assert!(first.bytes().all(|b| b.is_ascii_hexdigit()), "{first}");
+    assert!(
+        first
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')),
+        "{first}"
+    );
 }
 
 #[tokio::test]

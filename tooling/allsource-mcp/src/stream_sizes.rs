@@ -62,6 +62,11 @@ impl StreamRow {
         }
     }
 
+    /// Carries both fields only `with_bytes` produces.
+    fn sized(&self) -> bool {
+        self.bytes.is_some() && self.events_last_7d.is_some()
+    }
+
     fn json(&self) -> Value {
         json!({
             "stream_id": self.stream_id,
@@ -88,14 +93,30 @@ struct ClassTotals {
 struct Sizes {
     streams: Vec<StreamRow>,
     incomplete: Option<&'static str>,
+    /// Every stream carries its bytes and seven-day count, so they may be
+    /// summed and ranked.
+    bytes_known: bool,
     tenant: Value,
     store: Value,
 }
 
-/// Core saw events removed during its scan and its retry.
+/// Core saw events removed during its scan and its retry, or the tenant left
+/// its cache during the scan.
 const SCAN_INTERRUPTED: &str = "scan_interrupted";
 /// The tenant has more streams than the gateway was asked for.
 const STREAM_LIMIT_REACHED: &str = "stream_limit_reached";
+/// Core sent no `complete`, or a stream without `estimated_bytes`: a Core
+/// older than 0.30 ignores `with_bytes`.
+const BYTES_UNAVAILABLE: &str = "bytes_unavailable";
+/// Core listed nothing because the request named no tenant.
+const NO_TENANT: &str = "no_tenant";
+/// Read-cost recording is off in Core.
+const RECORDING_OFF: &str = "recording_off";
+/// Core holds no rows for the tenant: no reads since `since`, or pushed out
+/// of its 128-tenant table.
+const TENANT_NOT_TRACKED: &str = "tenant_not_tracked";
+/// Core sent neither `enabled` nor `tenant_tracked`: it predates them.
+const RECORDING_STATE_UNKNOWN: &str = "recording_state_unknown";
 
 pub async fn exec_cost_tool(
     stores: &StoreRegistry,
@@ -135,7 +156,7 @@ async fn read_sizes(
     match store {
         StoreRef::Embedded(store) => {
             let core = store.fresh_core().await;
-            Ok(embedded_sizes(core, policy.tenant_id()))
+            embedded_sizes(core, policy.tenant_id()).await
         }
         StoreRef::Remote(remote) => {
             let tenant = policy.tenant_id();
@@ -153,8 +174,14 @@ async fn read_sizes(
     }
 }
 
-fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Sizes {
-    let sized = core.inner().stream_sizes(tenant);
+/// Scans on a blocking thread: the scan walks every event of the store.
+async fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Result<Sizes> {
+    let store = core.inner();
+    let tenant = tenant.map(str::to_owned);
+    let sized = tokio::task::spawn_blocking(move || store.stream_sizes(tenant.as_deref()))
+        .await
+        .map_err(|err| anyhow::anyhow!("stream size scan failed: {err}"))?
+        .map_err(|err| anyhow::anyhow!("store unavailable: {err}"))?;
     let complete = sized.complete;
     let mut infos = sized.streams;
     sort_streams(&mut infos, StreamSort::Events);
@@ -171,43 +198,56 @@ fn embedded_sizes(core: &EmbeddedCore, tenant: Option<&str>) -> Sizes {
         })
         .collect();
     let total_events: u64 = streams.iter().map(|row| row.events).sum();
-    Sizes {
+    let bytes_known = streams.iter().all(StreamRow::sized);
+    Ok(Sizes {
         tenant: json!({
             "totalEvents": total_events,
             "totalStreams": streams.len(),
         }),
         streams,
         incomplete: (!complete).then_some(SCAN_INTERRUPTED),
+        bytes_known,
         store: json!({ "kind": "embedded" }),
-    }
+    })
 }
 
 fn hosted_sizes(streams: &Value, stats: &Value) -> Result<Sizes> {
     let listed = streams["streams"].as_array().ok_or_else(|| {
         anyhow::anyhow!("gateway answered /api/v1/streams without a streams array")
     })?;
-    let rows: Vec<StreamRow> = listed
+    let rows = listed
         .iter()
-        .filter_map(|stream| {
-            Some(StreamRow::new(
-                stream["stream_id"].as_str()?.to_string(),
-                stream["event_count"].as_u64().unwrap_or(0),
+        .map(|stream| {
+            let stream_id = stream["stream_id"].as_str().ok_or_else(|| {
+                anyhow::anyhow!("gateway answered /api/v1/streams with a row without stream_id")
+            })?;
+            let events = stream["event_count"].as_u64().ok_or_else(|| {
+                anyhow::anyhow!("gateway answered /api/v1/streams with a row without event_count")
+            })?;
+            Ok(StreamRow::new(
+                stream_id.to_string(),
+                events,
                 stream["estimated_bytes"].as_u64(),
                 stream["events_last_7d"].as_u64(),
                 stream["last_event_at"].as_str().map(str::to_string),
             ))
         })
-        .collect();
-    let total = streams["total"].as_u64().unwrap_or(rows.len() as u64);
-    let incomplete = if streams["complete"].as_bool() == Some(false) {
-        Some(SCAN_INTERRUPTED)
-    } else if total > rows.len() as u64 {
-        Some(STREAM_LIMIT_REACHED)
-    } else {
-        None
+        .collect::<Result<Vec<StreamRow>>>()?;
+    let total = streams["total"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("gateway answered /api/v1/streams without a total"))?;
+    let bytes_known = rows.iter().all(StreamRow::sized);
+    let incomplete = match streams["complete"].as_bool() {
+        None => Some(BYTES_UNAVAILABLE),
+        Some(_) if !bytes_known => Some(BYTES_UNAVAILABLE),
+        Some(false) if streams["reason"] == NO_TENANT => Some(NO_TENANT),
+        Some(false) => Some(SCAN_INTERRUPTED),
+        Some(true) if total > rows.len() as u64 => Some(STREAM_LIMIT_REACHED),
+        Some(true) => None,
     };
     Ok(Sizes {
         incomplete,
+        bytes_known,
         tenant: json!({
             "totalEvents": stats.get("total_events"),
             "totalStreams": total,
@@ -219,6 +259,8 @@ fn hosted_sizes(streams: &Value, stats: &Value) -> Result<Sizes> {
     })
 }
 
+/// The byte and seven-day sums are meaningful only when `Sizes::bytes_known`;
+/// `exec_stream_sizes` reports them as null otherwise.
 fn class_totals(streams: &[StreamRow]) -> BTreeMap<String, ClassTotals> {
     let mut classes: BTreeMap<String, ClassTotals> = BTreeMap::new();
     for row in streams {
@@ -262,6 +304,18 @@ async fn exec_stream_sizes(
     let sort = sort_arg(args)?;
     let limit = limit_arg(args, "limit", DEFAULT_STREAM_LIMIT, MAX_STREAM_LIMIT)?;
     let sizes = read_sizes(store, policy, sort).await?;
+    if sort == StreamSort::Bytes && !sizes.bytes_known {
+        anyhow::bail!(
+            "unsupported: stream_sizes cannot rank by bytes: Core sent a stream without estimated_bytes (a Core older than 0.30 ignores with_bytes); sort by events instead"
+        );
+    }
+    let bytes = |value: u64| {
+        if sizes.bytes_known {
+            json!(value)
+        } else {
+            Value::Null
+        }
+    };
 
     let mut streams = sizes.streams.clone();
     streams.sort_by(|a, b| {
@@ -284,10 +338,10 @@ async fn exec_stream_sizes(
                 "stream_class": name,
                 "streams": totals.streams,
                 "events": totals.events,
-                "bytes": totals.bytes,
-                "events_last_7d": totals.events_last_7d,
+                "bytes": bytes(totals.bytes),
+                "events_last_7d": bytes(totals.events_last_7d),
                 "max_stream_events": totals.max_stream_events,
-                "max_stream_bytes": totals.max_stream_bytes,
+                "max_stream_bytes": bytes(totals.max_stream_bytes),
             })
         })
         .collect();
@@ -429,8 +483,21 @@ async fn exec_cap_check(
     }))
 }
 
-fn sum_field(rows: &[Value], field: &str) -> u64 {
-    rows.iter().filter_map(|row| row[field].as_u64()).sum()
+/// Every class row's `field`; a row without it is an error, never a zero.
+fn class_field(rows: &[Value], field: &str) -> Result<Vec<u64>> {
+    rows.iter()
+        .map(|row| {
+            row[field].as_u64().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "gateway answered /api/v1/read-costs with a class row without {field}"
+                )
+            })
+        })
+        .collect()
+}
+
+fn sum_field(rows: &[Value], field: &str) -> Result<u64> {
+    Ok(class_field(rows, field)?.into_iter().sum())
 }
 
 async fn exec_read_costs(
@@ -454,19 +521,32 @@ async fn exec_read_costs(
         remote.read_costs(policy.tenant_id(), order, limit).await?,
         &[],
     )?;
-    let callers = reply.body["callers"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    let classes = reply.body["classes"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    let max_pages = classes
-        .iter()
-        .filter_map(|row| row["max_pages_per_walk"].as_u64())
+    let callers = reply.body["callers"].as_array().cloned().ok_or_else(|| {
+        anyhow::anyhow!("gateway answered /api/v1/read-costs without a callers array")
+    })?;
+    let classes = reply.body["classes"].as_array().cloned().ok_or_else(|| {
+        anyhow::anyhow!("gateway answered /api/v1/read-costs without a classes array")
+    })?;
+    let at_limit = callers.len() >= limit || classes.len() >= limit;
+    let incomplete = match (
+        reply.body["enabled"].as_bool(),
+        reply.body["tenant_tracked"].as_bool(),
+    ) {
+        (Some(true), Some(true)) if at_limit => Some("limit_reached"),
+        (Some(true), Some(true)) => None,
+        (Some(false), _) => Some(RECORDING_OFF),
+        (Some(true), Some(false)) => Some(TENANT_NOT_TRACKED),
+        _ => Some(RECORDING_STATE_UNKNOWN),
+    };
+    let max_pages = class_field(&classes, "max_pages_per_walk")?
+        .into_iter()
         .max()
         .unwrap_or(0);
+    let truncated = json!({
+        "single": sum_field(&classes, "single_truncated")?,
+        "walk_abandoned": sum_field(&classes, "walk_abandoned")?,
+        "walk_evicted": sum_field(&classes, "walk_evicted")?,
+    });
     let all_classes = classes.len() < limit;
 
     let mut context = policy.context(None);
@@ -474,13 +554,15 @@ async fn exec_read_costs(
     Ok(json!({
         "context": context,
         "order": order,
-        "truncated": {
-            "single": sum_field(&classes, "single_truncated"),
-            "walk_abandoned": sum_field(&classes, "walk_abandoned"),
-            "walk_evicted": sum_field(&classes, "walk_evicted"),
-        },
+        "truncated": truncated,
         "maxPagesPerWalk": max_pages,
         "totalsCover": if all_classes { "all_class_rows" } else { "returned_class_rows" },
+        "recording": {
+            "enabled": reply.body.get("enabled"),
+            "since": reply.body.get("since"),
+            "tenantTracked": reply.body.get("tenant_tracked"),
+            "tenantSince": reply.body.get("tenant_since"),
+        },
         "callers": callers,
         "classes": classes,
         "page": {
@@ -490,8 +572,8 @@ async fn exec_read_costs(
             "nextCursor": Value::Null,
         },
         "completeness": {
-            "complete": callers.len() < limit && classes.len() < limit,
-            "reason": if callers.len() < limit && classes.len() < limit { Value::Null } else { json!("limit_reached") },
+            "complete": incomplete.is_none(),
+            "reason": incomplete,
             "scanned": callers.len() + classes.len(),
             "matched": callers.len() + classes.len(),
             "omitted": 0,
