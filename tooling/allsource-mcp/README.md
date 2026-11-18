@@ -88,12 +88,15 @@ Or use the environment variable instead of `--data-dir`:
 | `get_latest_state` | One view row from the gateway; `if_none_match` returns `notModified` without the state (needs `--remote`) |
 | `list_latest` | A page of view rows in key order, with the `revision` to start `list_changes` from (needs `--remote`) |
 | `list_changes` | View rows written after a revision, deletions included, long-polling up to 20 s (needs `--remote`) |
+| `stream_sizes` | Largest streams and stream classes by events and estimated bytes, with events in the last 7 days; scans an embedded store, reads `/api/v1/streams?with_bytes=true` and `/api/v1/stats` from a remote one |
+| `read_costs` | Costliest callers and stream classes of event queries: pages, whole reads, body bytes, truncated reads by kind, pages per walk (needs `--remote`) |
+| `cap_check` | Stream classes at or above `threshold_pct` (default 80) of the caps passed in; a class with no stream is listed as `unmeasured` |
 
 Every successful result includes JSON `structuredContent`, tenant/source provenance, freshness, and completeness. Existing pretty-JSON text content remains for older clients.
 
 ## Remote gateway
 
-`--remote <url>` binds a gateway store read over HTTP, with `ALLSOURCE_API_KEY` (or `--api-key`) sent as a bearer token. It is the `default` store when there is no `--data-dir`, otherwise it is named `remote`. Views are folded by the Query Service and stored in Core, so only a remote store answers the view tools; an embedded store answers them with `UNSUPPORTED`, and a remote store answers the event tools the same way. The routes are in [the latest-state contract](../../docs/contracts/latest-state/README.md). Row state goes through `payload_mode` like every event payload. `list_changes` returns `reset: true` when `after` predates the view's last rebuild: re-read `list_latest` from the start and resume from its `revision`.
+`--remote <url>` binds a gateway store read over HTTP, with `ALLSOURCE_API_KEY` (or `--api-key`) sent as a bearer token. It is the `default` store when there is no `--data-dir`, otherwise it is named `remote`. Views are folded by the Query Service and stored in Core, so only a remote store answers the view tools; an embedded store answers them with `UNSUPPORTED`, and a remote store answers the event tools the same way. The routes are in [the latest-state contract](../../docs/contracts/latest-state/README.md); the cost routes behind `stream_sizes`, `read_costs` and `cap_check` are in [the read-cost contract](../../docs/contracts/read-cost.md). Row state goes through `payload_mode` like every event payload. `list_changes` returns `reset: true` when `after` predates the view's last rebuild: re-read `list_latest` from the start and resume from its `revision`.
 
 A tenant with a registered client key can drop the long-lived bearer: set `ALLSOURCE_CLIENT_SIGNING_KEY` (a P-256 PKCS#8 PEM, or a path to one), `ALLSOURCE_CLIENT_ID`, `ALLSOURCE_TENANT_ID` and `ALLSOURCE_CLIENT_KID`, and optionally `ALLSOURCE_ASSERTION_AUDIENCE` (default `https://api.all-source.xyz`). Every gateway request then carries a fresh 60-second ES256 assertion minted by the `allsource` SDK's `Es256AssertionProvider`, and `ALLSOURCE_API_KEY` is ignored. Registration and rotation: [`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md).
 

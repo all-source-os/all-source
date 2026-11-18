@@ -247,10 +247,10 @@ pub fn assertion_provider(settings: &AssertionSettings<'_>) -> Result<Es256Asser
         .map_err(|error| anyhow::anyhow!("{error}"))
 }
 
-/// The refusal an embedded store gives every view read.
-fn needs_remote() -> anyhow::Error {
+/// The refusal an embedded store gives a tool only a gateway can answer.
+pub fn needs_remote(tool: &str) -> anyhow::Error {
     anyhow::anyhow!(
-        "unsupported: views are read from the gateway; start the server with --remote <url> and select that store"
+        "unsupported: {tool} reads from the gateway; start the server with --remote <url> and select that store"
     )
 }
 
@@ -261,7 +261,7 @@ impl ViewReader for Store {
         _key: &str,
         _if_none_match: Option<&str>,
     ) -> impl Future<Output = Result<HttpReply>> {
-        std::future::ready(Err(needs_remote()))
+        std::future::ready(Err(needs_remote("get_latest_state")))
     }
 
     fn latest_page(
@@ -271,7 +271,7 @@ impl ViewReader for Store {
         _after: Option<&str>,
         _limit: usize,
     ) -> impl Future<Output = Result<HttpReply>> {
-        std::future::ready(Err(needs_remote()))
+        std::future::ready(Err(needs_remote("list_latest")))
     }
 
     fn changes(
@@ -281,7 +281,80 @@ impl ViewReader for Store {
         _limit: usize,
         _wait_seconds: u64,
     ) -> impl Future<Output = Result<HttpReply>> {
-        std::future::ready(Err(needs_remote()))
+        std::future::ready(Err(needs_remote("list_changes")))
+    }
+}
+
+/// Reads of Core's cost routes. The gateway overwrites `tenant_id` with the
+/// authenticated tenant; it is sent so a direct Core URL answers too.
+pub trait CostReader {
+    /// `GET /api/v1/streams?with_bytes=true&sort&limit`.
+    fn streams_with_bytes(
+        &self,
+        tenant: Option<&str>,
+        sort: &str,
+        limit: usize,
+    ) -> impl Future<Output = Result<HttpReply>>;
+
+    /// `GET /api/v1/stats`.
+    fn tenant_stats(&self, tenant: Option<&str>) -> impl Future<Output = Result<HttpReply>>;
+
+    /// `GET /api/v1/read-costs?order&limit`.
+    fn read_costs(
+        &self,
+        tenant: Option<&str>,
+        order: &str,
+        limit: usize,
+    ) -> impl Future<Output = Result<HttpReply>>;
+}
+
+fn with_tenant(
+    mut query: Vec<(&'static str, String)>,
+    tenant: Option<&str>,
+) -> Vec<(&'static str, String)> {
+    if let Some(tenant) = tenant {
+        query.push(("tenant_id", tenant.to_string()));
+    }
+    query
+}
+
+impl CostReader for RemoteStore {
+    async fn streams_with_bytes(
+        &self,
+        tenant: Option<&str>,
+        sort: &str,
+        limit: usize,
+    ) -> Result<HttpReply> {
+        let query = with_tenant(
+            vec![
+                ("with_bytes", "true".to_string()),
+                ("sort", sort.to_string()),
+                ("limit", limit.to_string()),
+            ],
+            tenant,
+        );
+        self.get(&["api", "v1", "streams"], &query, None, REQUEST_TIMEOUT)
+            .await
+    }
+
+    async fn tenant_stats(&self, tenant: Option<&str>) -> Result<HttpReply> {
+        let query = with_tenant(Vec::new(), tenant);
+        self.get(&["api", "v1", "stats"], &query, None, REQUEST_TIMEOUT)
+            .await
+    }
+
+    async fn read_costs(
+        &self,
+        tenant: Option<&str>,
+        order: &str,
+        limit: usize,
+    ) -> Result<HttpReply> {
+        let query = with_tenant(
+            vec![("order", order.to_string()), ("limit", limit.to_string())],
+            tenant,
+        );
+        self.get(&["api", "v1", "read-costs"], &query, None, REQUEST_TIMEOUT)
+            .await
     }
 }
 
@@ -347,6 +420,57 @@ pub mod mock {
                 .expect("write response");
             socket.shutdown().await.ok();
             String::from_utf8_lossy(&request).to_string()
+        });
+        (base, handle)
+    }
+
+    /// A fake gateway answering one request per route, in any order. Each
+    /// route is `(path, status, body)` and matches a request whose path
+    /// starts with `path`; an unmatched request gets a 404. The handle yields
+    /// every request head in arrival order.
+    pub async fn serve_routes(
+        routes: Vec<(&'static str, &'static str, &'static str)>,
+    ) -> (String, tokio::task::JoinHandle<Vec<String>>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake gateway");
+        let base = format!("http://{}", listener.local_addr().expect("fake address"));
+        let handle = tokio::spawn(async move {
+            let mut heads = Vec::new();
+            for _ in 0..routes.len() {
+                let (mut socket, _) = listener.accept().await.expect("accept");
+                let mut request = Vec::new();
+                let mut buf = [0u8; 1024];
+                loop {
+                    let read = socket.read(&mut buf).await.expect("read request");
+                    if read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buf[..read]);
+                    if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let head = String::from_utf8_lossy(&request).to_string();
+                let path = head.split_whitespace().nth(1).unwrap_or_default();
+                let (status, body) = routes
+                    .iter()
+                    .find(|(prefix, _, _)| path.starts_with(prefix))
+                    .map_or(("404 Not Found", "{}"), |(_, status, body)| {
+                        (*status, *body)
+                    });
+                let response = format!(
+                    "HTTP/1.1 {status}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("write response");
+                socket.shutdown().await.ok();
+                heads.push(head);
+            }
+            heads
         });
         (base, handle)
     }

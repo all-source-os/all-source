@@ -21,7 +21,7 @@ version = "0.1.0"
 # binary saving for a dead-code warning in the SDK's own build.
 # es256-assertion: gateway requests carry an assertion signed with a registered
 # client key (ALLSOURCE_CLIENT_SIGNING_KEY).
-allsource = { path = "../../sdks/rust", features = ["es256-assertion"] }
+allsource = { version = "0.30.0", path = "../../sdks/rust", features = ["es256-assertion"] }
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 # `.env` support for the provider keys and the gateway credential. Chosen for
