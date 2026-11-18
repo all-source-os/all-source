@@ -6,6 +6,38 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.30.0] — unreleased
+
+Read attribution. A caller names itself on each read, and each response reports
+how many body bytes it carried, so reads can be counted by who made them.
+
+### Added
+
+- `ClientConfig::with_caller`: sends `x-allsource-caller` on every request,
+  including `get_optional` lookups.
+- `QueryEventsParams::caller`: overrides the default caller for one query.
+- `QueryEventsParams::read_id` and `ReadId`: `x-allsource-read-id` on one
+  request. `EventPaginator` creates one `ReadId` per walk and sends it on
+  every page.
+- `ResponseMeta::body_bytes`: length of the decoded body, set on
+  `QueryEventsResponse::meta`.
+
+### Changed
+
+- `handle_response` decodes from the buffered body, so `body_bytes` is known
+  before parsing. The decoded length is reported, so under `gzip` it is not
+  the wire length.
+- `es256-assertion` no longer enables `dep:uuid`: `uuid` is a required
+  dependency now, used by `ReadId`.
+
+### Breaking
+
+- `ClientConfig` and `ResponseMeta` are `#[non_exhaustive]`: struct literals
+  no longer compile outside this crate. Build a `ClientConfig` with
+  `ClientConfig::new` and assign its fields, and read `ResponseMeta` by field.
+- `QueryEventsParams` gained the public fields `caller` and `read_id`, so
+  struct literals that name every field no longer compile. Use the builders.
+
 ## [0.29.0] — 2026-11-07
 
 Registered client keys. A tenant client can authenticate with a short-lived

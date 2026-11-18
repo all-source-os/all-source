@@ -714,6 +714,10 @@ jobs:
         working-directory: sdks/rust
         run: cargo test --locked -p allsource --features es256-assertion
 
+      - name: Rust SDK tests (gzip)
+        working-directory: sdks/rust
+        run: cargo test --locked -p allsource --features gzip
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: sdks/go/go.mod

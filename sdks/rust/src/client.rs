@@ -60,6 +60,7 @@ fn rides_through_restart(err: &Error, idempotent: bool) -> bool {
 
 /// Full configuration for building a client.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ClientConfig {
     /// Base URL of the service.
     pub base_url: String,
@@ -74,6 +75,8 @@ pub struct ClientConfig {
     pub circuit_breaker_threshold: u32,
     /// Circuit breaker recovery timeout. Default: 30s.
     pub circuit_breaker_recovery: Duration,
+    /// Default `x-allsource-caller` on every request. Default: none.
+    pub caller: Option<&'static str>,
 }
 
 impl ClientConfig {
@@ -85,7 +88,16 @@ impl ClientConfig {
             retry: RetryConfig::default(),
             circuit_breaker_threshold: 5,
             circuit_breaker_recovery: Duration::from_secs(30),
+            caller: None,
         }
+    }
+
+    /// Send `x-allsource-caller: <caller>` on every request. A query can
+    /// override it with [`QueryEventsParams::caller`](crate::QueryEventsParams::caller).
+    #[must_use]
+    pub fn with_caller(mut self, caller: &'static str) -> Self {
+        self.caller = Some(caller);
+        self
     }
 }
 
@@ -129,6 +141,11 @@ impl HttpTransport {
             headers.insert(AUTHORIZATION, bearer_header(key)?);
         }
         headers.insert("Accept", HeaderValue::from_static("application/json"));
+        if let Some(caller) = config.caller {
+            let value = HeaderValue::from_str(caller)
+                .map_err(|e| Error::Config(format!("invalid caller: {e}")))?;
+            headers.insert(CALLER_HEADER, value);
+        }
 
         let http = reqwest::Client::builder()
             .default_headers(headers)
@@ -200,20 +217,25 @@ impl HttpTransport {
         &self,
         path: &str,
         query: &[(&str, String)],
+        headers: &[(&'static str, String)],
         if_none_match: Option<&str>,
     ) -> Result<(Option<T>, ResponseMeta), Error> {
         self.with_retry(true, || async {
             let url = format!("{}{}", self.base_url, path);
             let mut req = self.authorize(self.http.get(&url).query(query))?;
+            for (name, value) in headers {
+                req = req.header(*name, value);
+            }
             if let Some(etag) = if_none_match {
                 req = req.header(reqwest::header::IF_NONE_MATCH, etag);
             }
             let resp = req.send().await?;
-            let meta = ResponseMeta::from_headers(resp.headers());
+            let mut meta = ResponseMeta::from_headers(resp.headers());
             if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
                 return Ok((None, meta));
             }
-            let value: T = self.handle_response(resp).await?;
+            let (value, body_bytes): (T, u64) = self.handle_response_sized(resp).await?;
+            meta.body_bytes = Some(body_bytes);
             Ok((Some(value), meta))
         })
         .await
@@ -380,6 +402,15 @@ impl HttpTransport {
         &self,
         resp: reqwest::Response,
     ) -> Result<T, Error> {
+        self.handle_response_sized(resp)
+            .await
+            .map(|(value, _)| value)
+    }
+
+    async fn handle_response_sized<T: for<'de> Deserialize<'de>>(
+        &self,
+        resp: reqwest::Response,
+    ) -> Result<(T, u64), Error> {
         let status = resp.status().as_u16();
         if !(200..300).contains(&status) {
             let retry_after = parse_retry_after(resp.headers());
@@ -425,7 +456,8 @@ impl HttpTransport {
                 body,
             });
         }
-        Ok(resp.json().await?)
+        let bytes = resp.bytes().await?;
+        Ok((serde_json::from_slice(&bytes)?, bytes.len() as u64))
     }
 }
 
@@ -525,11 +557,13 @@ impl QueryClient {
         params: QueryEventsParams,
     ) -> Result<EventsQuery, Error> {
         let pairs = params.to_query_pairs();
+        let headers = params.attribution_headers();
         let (body, meta) = self
             .transport
             .get_with_meta::<QueryEventsResponse>(
                 "/api/v1/events/query",
                 &pairs,
+                &headers,
                 params.if_none_match.as_deref(),
             )
             .await?;
