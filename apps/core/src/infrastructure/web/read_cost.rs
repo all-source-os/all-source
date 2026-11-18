@@ -13,12 +13,12 @@ use crate::infrastructure::security::middleware::Admin;
 use axum::{
     Json,
     body::HttpBody,
-    extract::{Extension, Request, State},
+    extract::{Extension, Query, Request, State},
     http::{HeaderMap, StatusCode},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
@@ -237,7 +237,7 @@ impl Outcome {
 }
 
 /// Exact counts for one stream class within one tenant.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct ClassRow {
     pub logical_reads: u64,
     pub pages: u64,
@@ -252,7 +252,7 @@ pub struct ClassRow {
 
 /// Counts for one caller and stream class within one tenant. A row created by
 /// replacing another inherits that row's counts and is `approximate`.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct CallerRow {
     pub logical_reads: u64,
     pub pages: u64,
@@ -320,6 +320,44 @@ impl ReadCost {
 
     pub fn set_enabled(&self, enabled: bool) {
         self.enabled.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Caller and class rows for one tenant, ordered by `order` and cut to `limit`.
+    pub fn read_costs(&self, tenant: &str, order: RowOrder, limit: usize) -> ReadCostsResponse {
+        let tables = self.lock();
+        let Some(state) = tables.tenants.get(tenant) else {
+            return ReadCostsResponse::default();
+        };
+        let mut callers: Vec<CallerCost> = state
+            .callers
+            .iter()
+            .map(|((caller, class), counts)| CallerCost {
+                caller: caller.clone().unwrap_or_else(|| UNATTRIBUTED.to_owned()),
+                stream_class: class.clone(),
+                counts: *counts,
+            })
+            .collect();
+        callers.sort_by(|a, b| {
+            caller_key(order, &b.counts)
+                .cmp(&caller_key(order, &a.counts))
+                .then_with(|| (&a.caller, &a.stream_class).cmp(&(&b.caller, &b.stream_class)))
+        });
+        callers.truncate(limit);
+        let mut classes: Vec<ClassCost> = state
+            .classes
+            .iter()
+            .map(|(class, counts)| ClassCost {
+                stream_class: class.clone(),
+                counts: *counts,
+            })
+            .collect();
+        classes.sort_by(|a, b| {
+            class_key(order, &b.counts)
+                .cmp(&class_key(order, &a.counts))
+                .then_with(|| a.stream_class.cmp(&b.stream_class))
+        });
+        classes.truncate(limit);
+        ReadCostsResponse { callers, classes }
     }
 
     fn lock(&self) -> MutexGuard<'_, Tables> {
@@ -687,6 +725,90 @@ pub async fn record(
 #[derive(Debug, Deserialize)]
 pub struct ReadCostSwitch {
     pub enabled: bool,
+}
+
+/// Sort order for `GET /api/v1/read-costs`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RowOrder {
+    #[default]
+    Bytes,
+    Pages,
+    Matched,
+    Whole,
+    Truncated,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReadCostsParams {
+    pub tenant_id: Option<String>,
+    pub limit: Option<usize>,
+    pub order: Option<RowOrder>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CallerCost {
+    pub caller: String,
+    pub stream_class: String,
+    #[serde(flatten)]
+    pub counts: CallerRow,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClassCost {
+    pub stream_class: String,
+    #[serde(flatten)]
+    pub counts: ClassRow,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct ReadCostsResponse {
+    pub callers: Vec<CallerCost>,
+    pub classes: Vec<ClassCost>,
+}
+
+const UNATTRIBUTED: &str = "unattributed";
+const READ_COSTS_DEFAULT_LIMIT: usize = 50;
+const READ_COSTS_MAX_LIMIT: usize = 256;
+
+/// Caller rows carry no matched count, so `matched` orders them by pages.
+fn caller_key(order: RowOrder, counts: &CallerRow) -> u64 {
+    match order {
+        RowOrder::Bytes => counts.body_bytes,
+        RowOrder::Pages | RowOrder::Matched => counts.pages,
+        RowOrder::Whole => counts.whole_reads,
+        RowOrder::Truncated => counts.single_truncated,
+    }
+}
+
+/// Class rows carry no byte count, so `bytes` orders them by pages.
+fn class_key(order: RowOrder, counts: &ClassRow) -> u64 {
+    match order {
+        RowOrder::Bytes | RowOrder::Pages => counts.pages,
+        RowOrder::Matched => counts.matched_sum,
+        RowOrder::Whole => counts.whole_reads,
+        RowOrder::Truncated => counts.single_truncated,
+    }
+}
+
+/// `GET /api/v1/read-costs`: the tenant named by the gateway, never another.
+pub async fn serve_read_costs(
+    Extension(read_cost): Extension<Arc<ReadCost>>,
+    Query(params): Query<ReadCostsParams>,
+) -> Response {
+    let Some(tenant) = params.tenant_id.filter(|tenant| !tenant.is_empty()) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "tenant_id is required" })),
+        )
+            .into_response();
+    };
+    let limit = params
+        .limit
+        .unwrap_or(READ_COSTS_DEFAULT_LIMIT)
+        .min(READ_COSTS_MAX_LIMIT);
+    let rows = read_cost.read_costs(&tenant, params.order.unwrap_or_default(), limit);
+    Json(rows).into_response()
 }
 
 /// `PUT /api/v1/admin/read-cost {"enabled": bool}`. Admin only.

@@ -535,6 +535,10 @@ pub async fn build_v1_router(
             "/api/v1/admin/read-cost",
             put(super::read_cost::set_read_cost),
         )
+        .route(
+            "/api/v1/read-costs",
+            get(super::read_cost::serve_read_costs),
+        )
         .route("/api/v1/geo/status", get(geo_status_handler))
         .route("/api/v1/geo/sync", post(geo_sync_handler))
         .route("/api/v1/geo/peers", get(geo_peers_handler))
@@ -608,7 +612,7 @@ pub async fn build_v1_router(
         http_metrics,
         super::http_metrics::record,
     ))
-        .layer(super::response_limit::compression())
+    .layer(super::response_limit::compression())
 }
 
 /// Write paths that should be rejected when running as a follower.

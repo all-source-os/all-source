@@ -39,7 +39,7 @@ use crate::{
         security::middleware::{Authenticated, OptionalAuth},
         web::{api_v1::AppState, conditional::conditional_json},
     },
-    store::{EventStore, EventTypeInfo, StreamInfo},
+    store::{EventStore, EventTypeInfo, StreamInfo, StreamSort, sort_streams},
 };
 use axum::{
     Json, Router,
@@ -49,7 +49,7 @@ use axum::{
     routing::{get, post, put},
 };
 use serde::Deserialize;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -1010,6 +1010,40 @@ pub struct ListStreamsParams {
     pub limit: Option<usize>,
     /// Optional offset for pagination
     pub offset: Option<usize>,
+    /// Size each stream's events in bytes.
+    pub with_bytes: Option<bool>,
+    /// Order for `with_bytes`; defaults to event count.
+    pub sort: Option<StreamSort>,
+}
+
+const DEFAULT_STREAMS_WITH_BYTES_LIMIT: usize = 100;
+
+type StreamScanCell = Arc<tokio::sync::OnceCell<Arc<Vec<StreamInfo>>>>;
+
+/// Scans in flight, keyed by tenant. An entry lives only while its scan runs.
+static STREAM_SCANS: LazyLock<Mutex<std::collections::HashMap<String, StreamScanCell>>> =
+    LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+/// Runs `scan` once for concurrent callers for the same tenant and shares its
+/// unordered result; each caller sorts and pages its own copy.
+async fn share_stream_scan<F, Fut>(key: String, scan: F) -> Arc<Vec<StreamInfo>>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Vec<StreamInfo>>,
+{
+    let cell = {
+        let mut scans = STREAM_SCANS.lock().unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(scans.entry(key.clone()).or_default())
+    };
+    let shared = cell
+        .get_or_init(|| async { Arc::new(scan().await) })
+        .await
+        .clone();
+    let mut scans = STREAM_SCANS.lock().unwrap_or_else(PoisonError::into_inner);
+    if scans.get(&key).is_some_and(|c| Arc::ptr_eq(c, &cell)) {
+        scans.remove(&key);
+    }
+    shared
 }
 
 /// Response for listing streams
@@ -1036,6 +1070,28 @@ pub async fn list_streams(
             total: 0,
         });
     };
+    if params.with_bytes.unwrap_or(false) {
+        let scan_store = Arc::clone(&store);
+        let scan_tenant = tenant.clone();
+        let shared = share_stream_scan(tenant, move || async move {
+            tokio::task::spawn_blocking(move || scan_store.stream_sizes(Some(&scan_tenant)))
+                .await
+                .unwrap_or_else(|err| {
+                    tracing::error!(%err, "stream size scan failed");
+                    Vec::new()
+                })
+        })
+        .await;
+        let total = shared.len();
+        let mut streams = shared.as_ref().clone();
+        sort_streams(&mut streams, params.sort.unwrap_or_default());
+        let streams = streams
+            .into_iter()
+            .skip(params.offset.unwrap_or(0))
+            .take(params.limit.unwrap_or(DEFAULT_STREAMS_WITH_BYTES_LIMIT))
+            .collect();
+        return Json(ListStreamsResponse { streams, total });
+    }
     let mut streams = store.list_streams_for_tenant(&tenant);
     let total = streams.len();
 
@@ -3277,6 +3333,173 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn streams_with_bytes_sums_resident_bytes_per_stream() {
+        use crate::domain::entities::Event;
+        use axum::extract::{Query, State};
+
+        let store = create_test_store();
+        let mut expected = 0u64;
+        for payload in [
+            serde_json::json!({"n": 1}),
+            serde_json::json!({"n": "a longer second payload"}),
+        ] {
+            let event = Event::from_strings(
+                "order.placed".to_string(),
+                "e1".to_string(),
+                "tenant-a".to_string(),
+                payload,
+                None,
+            )
+            .unwrap();
+            expected += event.resident_bytes();
+            store.ingest(&event).unwrap();
+        }
+        let other = Event::from_strings(
+            "user.created".to_string(),
+            "e2".to_string(),
+            "tenant-a".to_string(),
+            serde_json::json!({}),
+            None,
+        )
+        .unwrap();
+        store.ingest(&other).unwrap();
+
+        let Json(response) = list_streams(
+            OptionalAuth(None),
+            State(store.clone()),
+            Query(ListStreamsParams {
+                tenant_id: Some("tenant-a".to_string()),
+                limit: None,
+                offset: None,
+                with_bytes: Some(true),
+                sort: None,
+            }),
+        )
+        .await;
+        assert_eq!(response.total, 2);
+        let e1 = response
+            .streams
+            .iter()
+            .find(|s| s.stream_id == "e1")
+            .expect("e1 is listed");
+        assert_eq!(e1.estimated_bytes, Some(expected));
+        assert_eq!(e1.events_last_7d, Some(2));
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_concurrent_requests_share_one_scan() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let tasks: Vec<_> = (0..8)
+            .map(|_| {
+                let scans = Arc::clone(&scans);
+                tokio::spawn(share_stream_scan(
+                    "share-test-tenant".to_string(),
+                    move || async move {
+                        scans.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                        Vec::new()
+                    },
+                ))
+            })
+            .collect();
+        for task in tasks {
+            task.await.unwrap();
+        }
+        assert_eq!(scans.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_scans_once_per_tenant_not_per_query() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let spawn_scan = |tenant: &str| {
+            let scans = Arc::clone(&scans);
+            tokio::spawn(share_stream_scan(tenant.to_string(), move || async move {
+                scans.fetch_add(1, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                Vec::new()
+            }))
+        };
+        let tasks = [
+            spawn_scan("tenant-shared-x"),
+            spawn_scan("tenant-shared-x"),
+            spawn_scan("tenant-shared-y"),
+        ];
+        for task in tasks {
+            task.await.unwrap();
+        }
+        assert_eq!(scans.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_honours_sort_offset_and_limit() {
+        use crate::domain::entities::Event;
+        use axum::extract::{Query, State};
+
+        let store = create_test_store();
+        for (entity, count) in [("s-a", 1), ("s-b", 3), ("s-c", 2)] {
+            for _ in 0..count {
+                let event = Event::from_strings(
+                    "order.placed".to_string(),
+                    entity.to_string(),
+                    "tenant-page".to_string(),
+                    serde_json::json!({}),
+                    None,
+                )
+                .unwrap();
+                store.ingest(&event).unwrap();
+            }
+        }
+
+        let Json(response) = list_streams(
+            OptionalAuth(None),
+            State(store.clone()),
+            Query(ListStreamsParams {
+                tenant_id: Some("tenant-page".to_string()),
+                limit: Some(1),
+                offset: Some(1),
+                with_bytes: Some(true),
+                sort: Some(StreamSort::Events),
+            }),
+        )
+        .await;
+        assert_eq!(response.total, 3);
+        let ids: Vec<_> = response
+            .streams
+            .iter()
+            .map(|s| s.stream_id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["s-c"]);
+    }
+
+    #[test]
+    fn stream_sizes_sums_across_lock_chunks() {
+        use crate::domain::entities::Event;
+
+        let store = create_test_store();
+        let mut expected = 0u64;
+        for n in 0..4_200 {
+            let event = Event::from_strings(
+                "order.placed".to_string(),
+                "chunked".to_string(),
+                "tenant-chunks".to_string(),
+                serde_json::json!({ "n": n, "label": "x".repeat(n % 7) }),
+                None,
+            )
+            .unwrap();
+            expected += event.resident_bytes();
+            store.ingest(&event).unwrap();
+        }
+        let streams = store.stream_sizes(Some("tenant-chunks"));
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].event_count, 4_200);
+        assert_eq!(streams[0].estimated_bytes, Some(expected));
+    }
+
     // The dashboard's streams + event-types counts must be per-tenant. These
     // endpoints used to scan ALL tenants (platform totals shown as "yours", and a
     // cross-tenant spill). Assert each tenant sees only its own, and no-tenant
@@ -3312,6 +3535,8 @@ mod tests {
                     tenant_id: tid.map(String::from),
                     limit: None,
                     offset: None,
+                    with_bytes: None,
+                    sort: None,
                 }),
             )
         };

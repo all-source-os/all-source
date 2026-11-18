@@ -31,7 +31,7 @@ pub const AUTH_SKIP_PATHS: &[&str] = &[
 ///   `/api/v1/consumers`, `/api/v1/stats`, `/api/v1/entities`,
 ///   `/api/v1/duplicates`, `/api/v1/streams`, `/api/v1/replay`,
 ///   `/api/v1/webhooks`, `/api/v1/compaction`, `/api/v1/pipelines`,
-///   `/api/v1/graphql` — data-plane routes. Core is internal-only; the gateway
+///   `/api/v1/graphql`, `/api/v1/read-costs` — data-plane routes. Core is internal-only; the gateway
 ///   authenticates the caller and injects its `tenant_id` (query parameter, or
 ///   the ingest body) before forwarding, so no auth context reaches these
 ///   handlers and that injected `tenant_id` is the only tenant they see.
@@ -52,6 +52,7 @@ pub const AUTH_SKIP_PREFIXES: &[&str] = &[
     "/api/v1/compaction",
     "/api/v1/pipelines",
     "/api/v1/graphql",
+    "/api/v1/read-costs",
 ];
 
 /// Check if a path should skip authentication and rate limiting.

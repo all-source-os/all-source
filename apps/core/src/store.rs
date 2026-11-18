@@ -19,7 +19,7 @@ use crate::{
             schema_evolution::SchemaEvolutionManager,
         },
     },
-    domain::entities::Event,
+    domain::entities::{Event, event::value_heap_bytes},
     error::{AllSourceError, Result},
     infrastructure::{
         hash_state::{FastDashMap, FastSet, fast_dashmap},
@@ -3135,6 +3135,8 @@ impl EventStore {
                     stream_id: entity_id,
                     event_count,
                     last_event_at,
+                    estimated_bytes: None,
+                    events_last_7d: None,
                 }
             })
             .collect()
@@ -3193,8 +3195,98 @@ impl EventStore {
                 stream_id: entity_id.to_string(),
                 event_count: count,
                 last_event_at: Some(last),
+                estimated_bytes: None,
+                events_last_7d: None,
             })
             .collect()
+    }
+
+    /// Every stream of ONE tenant, or of every tenant when `None`, with its heap
+    /// bytes and last-seven-days count. Unordered.
+    ///
+    /// The events lock is held per chunk of `STREAM_SIZE_CHUNK` events, only to
+    /// count them and copy out their payload and metadata; `value_heap_bytes` runs
+    /// on the copies after the guard drops. A copy can carry less spare capacity
+    /// than its original, and a `retain` between chunks shifts positions, so an
+    /// event can be skipped or counted twice mid-scan: the bytes are an estimate.
+    pub fn stream_sizes(&self, tenant: Option<&str>) -> Vec<StreamInfo> {
+        if let Some(tenant_id) = tenant {
+            let _ = self.ensure_tenant_loaded(tenant_id);
+        }
+        let last_week = chrono::Utc::now() - chrono::Duration::days(7);
+        #[derive(Default)]
+        struct Totals {
+            events: usize,
+            bytes: u64,
+            last_7d: usize,
+            last_event_at: Option<chrono::DateTime<chrono::Utc>>,
+        }
+        let mut slots: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut totals: Vec<(String, Totals)> = Vec::new();
+        let mut copies: Vec<(usize, serde_json::Value, Option<serde_json::Value>)> =
+            Vec::with_capacity(STREAM_SIZE_CHUNK);
+        let mut cursor = 0;
+        loop {
+            let events = self.events.read();
+            let end = (cursor + STREAM_SIZE_CHUNK).min(events.len());
+            for ev in &events[cursor.min(end)..end] {
+                if tenant.is_some_and(|t| ev.tenant_id_str() != t) {
+                    continue;
+                }
+                let slot = if let Some(&slot) = slots.get(ev.entity_id_str()) {
+                    slot
+                } else {
+                    let slot = totals.len();
+                    slots.insert(ev.entity_id_str().to_owned(), slot);
+                    totals.push((ev.entity_id_str().to_owned(), Totals::default()));
+                    slot
+                };
+                let stream = &mut totals[slot].1;
+                stream.events += 1;
+                stream.bytes += ev.resident_header_bytes();
+                if ev.timestamp >= last_week {
+                    stream.last_7d += 1;
+                }
+                if stream.last_event_at.is_none_or(|last| ev.timestamp > last) {
+                    stream.last_event_at = Some(ev.timestamp);
+                }
+                copies.push((slot, ev.payload.clone(), ev.metadata.clone()));
+            }
+            let done = end >= events.len();
+            drop(events);
+            cursor = end;
+            for (slot, payload, metadata) in copies.drain(..) {
+                totals[slot].1.bytes += (value_heap_bytes(&payload)
+                    + metadata.as_ref().map_or(0, value_heap_bytes))
+                    as u64;
+            }
+            if done {
+                break;
+            }
+        }
+        totals
+            .into_iter()
+            .map(|(stream_id, totals)| StreamInfo {
+                stream_id,
+                event_count: totals.events,
+                last_event_at: totals.last_event_at,
+                estimated_bytes: Some(totals.bytes),
+                events_last_7d: Some(totals.last_7d),
+            })
+            .collect()
+    }
+
+    /// `stream_sizes` ordered by `sort` and cut to `limit`.
+    pub fn list_streams_with_bytes(
+        &self,
+        tenant: Option<&str>,
+        sort: StreamSort,
+        limit: usize,
+    ) -> Vec<StreamInfo> {
+        let mut streams = self.stream_sizes(tenant);
+        sort_streams(&mut streams, sort);
+        streams.truncate(limit);
+        streams
     }
 
     /// Distinct event types (+ per-type event count) for ONE tenant.
@@ -3629,6 +3721,35 @@ pub struct StreamInfo {
     pub event_count: usize,
     /// Timestamp of the last event in this stream
     pub last_event_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Heap bytes held for this stream. Set only by `list_streams_with_bytes`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_bytes: Option<u64>,
+    /// Events in this stream from the last seven days. Set only by `list_streams_with_bytes`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub events_last_7d: Option<usize>,
+}
+
+/// Ordering for `list_streams_with_bytes`; ties break on `stream_id`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamSort {
+    #[default]
+    Events,
+    Bytes,
+}
+
+/// Events copied out per events-lock hold in `EventStore::stream_sizes`.
+const STREAM_SIZE_CHUNK: usize = 4096;
+
+/// Orders streams by `sort`, largest first; ties break on `stream_id`.
+pub fn sort_streams(streams: &mut [StreamInfo], sort: StreamSort) {
+    streams.sort_by(|a, b| {
+        let by_key = match sort {
+            StreamSort::Events => b.event_count.cmp(&a.event_count),
+            StreamSort::Bytes => b.estimated_bytes.cmp(&a.estimated_bytes),
+        };
+        by_key.then_with(|| a.stream_id.cmp(&b.stream_id))
+    });
 }
 
 /// Information about an event type

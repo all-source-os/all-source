@@ -616,6 +616,100 @@ async fn read_cost_switch_off_records_nothing_and_needs_an_admin() {
     assert_eq!(class_row_of(&rc, "t", "quiet").pages, 0);
 }
 
+async fn get_read_costs(rc: Arc<ReadCost>, uri: &str) -> (StatusCode, serde_json::Value) {
+    let response = Router::new()
+        .route("/api/v1/read-costs", get(serve_read_costs))
+        .layer(Extension(rc))
+        .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&body).unwrap_or_default())
+}
+
+#[tokio::test]
+async fn read_costs_without_tenant_is_400() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "walk", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+    assert_eq!(
+        get_read_costs(Arc::clone(&rc), "/api/v1/read-costs")
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        get_read_costs(rc, "/api/v1/read-costs?tenant_id=").await.0,
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
+async fn read_costs_returns_only_the_named_tenants_rows() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "alpha", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+    rc.observe(
+        base(),
+        &page("b", "beta", None, 3, 3, false),
+        Outcome::Complete,
+        9,
+    );
+
+    let (status, body) = get_read_costs(rc, "/api/v1/read-costs?tenant_id=a").await;
+    assert_eq!(status, StatusCode::OK);
+    let classes: Vec<&str> = body["classes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["stream_class"].as_str().unwrap())
+        .collect();
+    assert_eq!(classes, vec!["alpha"]);
+    let callers: Vec<&str> = body["callers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["stream_class"].as_str().unwrap())
+        .collect();
+    assert_eq!(callers, vec!["alpha"]);
+    assert_eq!(body["callers"][0]["caller"], "unattributed");
+}
+
+#[tokio::test]
+async fn read_costs_orders_by_the_requested_key_and_honours_limit() {
+    let rc = read_cost();
+    rc.observe(
+        base(),
+        &page("a", "small", None, 3, 3, false),
+        Outcome::Complete,
+        1,
+    );
+    for _ in 0..3 {
+        rc.observe(
+            base(),
+            &page("a", "large", None, 3, 3, false),
+            Outcome::Complete,
+            1,
+        );
+    }
+
+    let (_, body) = get_read_costs(rc, "/api/v1/read-costs?tenant_id=a&order=pages&limit=1").await;
+    assert_eq!(body["classes"].as_array().unwrap().len(), 1);
+    assert_eq!(body["classes"][0]["stream_class"], "large");
+    assert_eq!(body["callers"][0]["stream_class"], "large");
+}
+
 #[test]
 fn read_cost_scope_without_filters_is_unscoped_whole() {
     let req = QueryEventsRequest::default();
