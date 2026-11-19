@@ -256,10 +256,15 @@ impl ParquetStorage {
     ) -> Result<Self> {
         let storage_dir = storage_dir.as_ref().to_path_buf();
 
-        // Create storage directory if it doesn't exist
-        fs::create_dir_all(&storage_dir).map_err(|e| {
-            AllSourceError::StorageError(format!("Failed to create storage directory: {e}"))
-        })?;
+        if recover {
+            fs::create_dir_all(&storage_dir).map_err(|e| {
+                AllSourceError::StorageError(format!("Failed to create storage directory: {e}"))
+            })?;
+        } else if !storage_dir.is_dir() {
+            return Err(AllSourceError::StorageError(
+                "Existing storage directory is unavailable".into(),
+            ));
+        }
 
         let schema = event_schema();
 

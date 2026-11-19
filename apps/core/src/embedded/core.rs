@@ -150,7 +150,10 @@ impl EmbeddedCore {
         };
 
         // Spawn background fsync task if interval is configured and WAL exists
-        let sync_handle = if let Some(interval_ms) = config.wal_fsync_interval_ms() {
+        let sync_handle = if let Some(interval_ms) = config
+            .wal_fsync_interval_ms()
+            .filter(|_| !config.read_only())
+        {
             if let Some(wal) = store.wal() {
                 let wal = Arc::clone(wal);
                 let interval = std::time::Duration::from_millis(interval_ms);
@@ -1017,6 +1020,10 @@ impl EmbeddedCore {
         // Stop background fsync task
         if let Some(handle) = &self.sync_handle {
             handle.abort();
+        }
+
+        if self.config.read_only() {
+            return Ok(());
         }
 
         // Final sync if WAL exists (ensure last writes are durable)

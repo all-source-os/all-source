@@ -49,7 +49,7 @@ pub struct WriteAheadLog {
     wal_dir: PathBuf,
 
     /// Current active WAL file
-    current_file: Arc<RwLock<WALFile>>,
+    current_file: Option<Arc<RwLock<WALFile>>>,
 
     /// Configuration
     config: WALConfig,
@@ -255,7 +255,7 @@ impl WriteAheadLog {
 
         Ok(Self {
             wal_dir,
-            current_file: Arc::new(RwLock::new(current_file)),
+            current_file: Some(Arc::new(RwLock::new(current_file))),
             config,
             stats: Arc::new(RwLock::new(WALStats::default())),
             sequence: Arc::new(RwLock::new(erasure_floor.unwrap_or(0))),
@@ -263,6 +263,36 @@ impl WriteAheadLog {
             unreadable_segments: parking_lot::Mutex::new(HashSet::new()),
             erasure_floor_readable: AtomicBool::new(erasure_floor_readable),
         })
+    }
+
+    /// Open an existing WAL without creating, repairing, or opening a writer.
+    pub fn open_read_only(wal_dir: impl Into<PathBuf>, config: WALConfig) -> Result<Self> {
+        let wal_dir = wal_dir.into();
+        let metadata = fs::metadata(&wal_dir).map_err(|e| {
+            AllSourceError::StorageError(format!("Failed to open WAL directory: {e}"))
+        })?;
+        if !metadata.is_dir() {
+            return Err(AllSourceError::StorageError(
+                "WAL path is not a directory".into(),
+            ));
+        }
+        let erasure_floor = super::wal_sequence::read_floor(&wal_dir)?;
+        Ok(Self {
+            wal_dir,
+            current_file: None,
+            config,
+            stats: Arc::new(RwLock::new(WALStats::default())),
+            sequence: Arc::new(RwLock::new(erasure_floor)),
+            replication_tx: parking_lot::Mutex::new(None),
+            unreadable_segments: parking_lot::Mutex::new(HashSet::new()),
+            erasure_floor_readable: AtomicBool::new(true),
+        })
+    }
+
+    fn writer(&self) -> Result<&Arc<RwLock<WALFile>>> {
+        self.current_file
+            .as_ref()
+            .ok_or_else(|| AllSourceError::StorageError("WAL is open read-only".into()))
     }
 
     /// Generate a WAL filename based on sequence
@@ -273,6 +303,7 @@ impl WriteAheadLog {
     /// Write an event to the WAL
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn append(&self, event: Event) -> Result<u64> {
+        let writer = self.writer()?;
         // EventStore may remain open after a recovery error; sequence reuse must fail closed.
         if !self.erasure_floor_readable.load(Ordering::Acquire) {
             return Err(AllSourceError::StorageError(
@@ -289,7 +320,7 @@ impl WriteAheadLog {
         let entry = WALEntry::new(sequence, event);
 
         // Write to current file
-        let mut current = self.current_file.write();
+        let mut current = writer.write();
         let bytes_written = current.write_entry(&entry, self.config.sync_on_write)?;
 
         // Update statistics
@@ -323,6 +354,7 @@ impl WriteAheadLog {
     /// Rotate to a new WAL file
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     fn rotate(&self) -> Result<()> {
+        let writer = self.writer()?;
         let seq = *self.sequence.read();
         let new_file_path = Self::generate_wal_filename(&self.wal_dir, seq);
 
@@ -330,7 +362,7 @@ impl WriteAheadLog {
 
         let new_file = WALFile::new(new_file_path)?;
 
-        let mut current = self.current_file.write();
+        let mut current = writer.write();
         current.flush()?;
         *current = new_file;
 
@@ -401,10 +433,11 @@ impl WriteAheadLog {
     /// this call; otherwise an entry can land in the sealed segment after the
     /// checkpoint's flush has already run.
     pub fn seal(&self) -> Result<PathBuf> {
+        let writer = self.writer()?;
         let seq = *self.sequence.read();
         let new_path = Self::generate_wal_filename(&self.wal_dir, seq);
 
-        let mut current = self.current_file.write();
+        let mut current = writer.write();
         current.flush()?;
         if current.path != new_path {
             *current = WALFile::new(new_path.clone())?;
@@ -416,6 +449,7 @@ impl WriteAheadLog {
     /// Retire every segment older than `active`, the path [`Self::seal`]
     /// returned. Segments at or after it are kept.
     pub fn remove_sealed(&self, active: &Path) -> Result<()> {
+        self.writer()?;
         let Some(active_name) = active.file_name() else {
             return Ok(());
         };
@@ -483,6 +517,7 @@ impl WriteAheadLog {
     /// Recover in sequence order, then move the writer past every recovered
     /// entry. Only for the single process that owns the WAL and appends to it.
     pub fn recover_for_append(&self) -> Result<Vec<Event>> {
+        self.writer()?;
         let mut recovered = self.recover_entries()?;
         // An older segment can end with entries appended after a restart.
         recovered.sort_by_key(|entry| entry.sequence);
@@ -503,6 +538,7 @@ impl WriteAheadLog {
         covered_seq: u64,
         covered: &[CoveredSegment],
     ) -> Result<Vec<WALEntry>> {
+        self.writer()?;
         let floor = match super::wal_sequence::read_floor(&self.wal_dir) {
             Ok(floor) => floor,
             Err(e) => {
@@ -579,6 +615,7 @@ impl WriteAheadLog {
     /// `wal_timestamp`. The next sequence is above `floor` even if no entry
     /// reaches it.
     pub fn recover_entries_for_append(&self, floor: u64) -> Result<Vec<WALEntry>> {
+        self.writer()?;
         let mut recovered = self.recover_entries()?;
         {
             let mut sequence = self.sequence.write();
@@ -739,7 +776,7 @@ impl WriteAheadLog {
     /// Manually flush the current WAL file
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn flush(&self) -> Result<()> {
-        let mut current = self.current_file.write();
+        let mut current = self.writer()?.write();
         current.flush()?;
         Ok(())
     }
@@ -751,7 +788,7 @@ impl WriteAheadLog {
     /// OS has persisted the data to durable storage.
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn sync(&self) -> Result<()> {
-        let mut current = self.current_file.write();
+        let mut current = self.writer()?.write();
         current
             .writer
             .flush()
@@ -772,6 +809,7 @@ impl WriteAheadLog {
     /// Truncate WAL after successful checkpoint
     #[cfg_attr(feature = "hotpath", hotpath::measure)]
     pub fn truncate(&self) -> Result<()> {
+        let writer = self.writer()?;
         tracing::info!("🧹 Truncating WAL after checkpoint");
         let mut floor = super::wal_sequence::read_floor(&self.wal_dir)?;
         if floor > 0 {
@@ -780,7 +818,7 @@ impl WriteAheadLog {
         }
 
         // Close current file
-        let mut current = self.current_file.write();
+        let mut current = writer.write();
         current.flush()?;
 
         let wal_files = self.list_wal_files()?;

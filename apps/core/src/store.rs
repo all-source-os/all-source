@@ -352,10 +352,40 @@ impl EventStore {
             config.storage_dir.as_deref(),
             config.wal_dir.as_deref(),
         )?;
-        Ok(Self::open_config(config))
+        let read_only_wal = if config.read_only {
+            config
+                .wal_dir
+                .as_ref()
+                .map(|dir| WriteAheadLog::open_read_only(dir, config.wal_config.clone()))
+                .transpose()?
+        } else {
+            None
+        };
+        let read_only_storage = if config.read_only {
+            if let Some(dir) = &config.storage_dir {
+                match std::fs::symlink_metadata(dir) {
+                    Ok(_) => Some(ParquetStorage::open_existing(dir)?),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(error) => {
+                        return Err(AllSourceError::StorageError(format!(
+                            "Failed to inspect storage directory: {error}"
+                        )));
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        Self::open_config(config, read_only_wal, read_only_storage)
     }
 
-    fn open_config(config: EventStoreConfig) -> Self {
+    fn open_config(
+        config: EventStoreConfig,
+        read_only_wal: Option<WriteAheadLog>,
+        read_only_storage: Option<ParquetStorage>,
+    ) -> Result<Self> {
         let mut projections = ProjectionManager::new();
 
         // Register built-in projections
@@ -365,44 +395,50 @@ impl EventStore {
         projections.register(Arc::new(EventCounterProjection::new("event_counters")));
 
         // Initialize persistent storage if configured
-        let storage = config.storage_dir.as_ref().and_then(|dir| {
-            match if config.read_only {
-                ParquetStorage::open_existing(dir)
-            } else if let Some(namer) = &config.parquet_file_namer {
-                ParquetStorage::with_config(
-                    dir,
-                    ParquetStorageConfig {
-                        file_namer: Some(namer.clone()),
-                        ..ParquetStorageConfig::default()
-                    },
-                )
-            } else {
-                ParquetStorage::new(dir)
-            } {
-                Ok(storage) => {
-                    tracing::info!("✅ Parquet persistence enabled at: {}", dir.display());
-                    Some(Arc::new(RwLock::new(storage)))
+        let storage = if config.read_only {
+            read_only_storage.map(|storage| Arc::new(RwLock::new(storage)))
+        } else {
+            config.storage_dir.as_ref().and_then(|dir| {
+                match if let Some(namer) = &config.parquet_file_namer {
+                    ParquetStorage::with_config(
+                        dir,
+                        ParquetStorageConfig {
+                            file_namer: Some(namer.clone()),
+                            ..ParquetStorageConfig::default()
+                        },
+                    )
+                } else {
+                    ParquetStorage::new(dir)
+                } {
+                    Ok(storage) => {
+                        tracing::info!("✅ Parquet persistence enabled at: {}", dir.display());
+                        Some(Arc::new(RwLock::new(storage)))
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ Failed to initialize Parquet storage: {}", e);
+                        None
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("❌ Failed to initialize Parquet storage: {}", e);
-                    None
-                }
-            }
-        });
+            })
+        };
 
         // Initialize WAL if configured (v0.2 feature)
-        let wal = config.wal_dir.as_ref().and_then(|dir| {
-            match WriteAheadLog::new(dir, config.wal_config.clone()) {
-                Ok(wal) => {
-                    tracing::info!("✅ WAL enabled at: {}", dir.display());
-                    Some(Arc::new(wal))
+        let wal = if config.read_only {
+            read_only_wal.map(Arc::new)
+        } else {
+            config.wal_dir.as_ref().and_then(|dir| {
+                match WriteAheadLog::new(dir, config.wal_config.clone()) {
+                    Ok(wal) => {
+                        tracing::info!("✅ WAL enabled at: {}", dir.display());
+                        Some(Arc::new(wal))
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ Failed to initialize WAL: {}", e);
+                        None
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("❌ Failed to initialize WAL: {}", e);
-                    None
-                }
-            }
-        });
+            })
+        };
 
         // Initialize compaction manager if Parquet storage is enabled (v0.2 feature)
         let compaction_manager = config.storage_dir.as_ref().map(|dir| {
@@ -691,6 +727,9 @@ impl EventStore {
                     store.metrics.wal_replay_events_total.set(0);
                 }
                 Err(e) => {
+                    if config.read_only {
+                        return Err(e);
+                    }
                     tracing::error!("❌ WAL recovery failed: {}", e);
                 }
             }
@@ -701,7 +740,7 @@ impl EventStore {
             );
         }
 
-        store
+        Ok(store)
     }
 
     /// Whether this store was opened read-only (replica mode).
@@ -903,25 +942,24 @@ impl EventStore {
         let timer = self.metrics.ingestion_duration_seconds.start_timer();
 
         // Reject writes in read-only (replica) mode before touching the WAL.
+        #[cfg(feature = "server")]
         if let Err(e) = self.ensure_writable() {
-            #[cfg(feature = "server")]
-            {
-                self.metrics.ingestion_errors_total.inc();
-                timer.observe_duration();
-            }
+            self.metrics.ingestion_errors_total.inc();
+            timer.observe_duration();
             return Err(e);
         }
+        #[cfg(not(feature = "server"))]
+        self.ensure_writable()?;
 
         // Validate event
-        let validation_result = self.validate_event(event);
-        if let Err(e) = validation_result {
-            #[cfg(feature = "server")]
-            {
-                self.metrics.ingestion_errors_total.inc();
-                timer.observe_duration();
-            }
+        #[cfg(feature = "server")]
+        if let Err(e) = self.validate_event(event) {
+            self.metrics.ingestion_errors_total.inc();
+            timer.observe_duration();
             return Err(e);
         }
+        #[cfg(not(feature = "server"))]
+        self.validate_event(event)?;
 
         let _resident = self.cache_residency_gate.read();
         let _durable = self.durability_gate.read();
