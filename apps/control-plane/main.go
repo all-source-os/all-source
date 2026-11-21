@@ -34,7 +34,7 @@ var openAPIYAML []byte
 // Control plane configuration constants.
 const (
 	// Version is the current version of the control plane.
-	Version = "0.29.0"
+	Version = "0.30.0"
 	// DefaultPort is the default port the control plane listens on.
 	DefaultPort = "3901"
 	// CoreServiceURL is the URL of the core event store service.
