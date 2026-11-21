@@ -605,7 +605,7 @@ impl ReadCost {
         }
     }
 
-    /// Ends every walk idle for more than [`WALK_IDLE`] as abandoned. Does
+    /// Ends every walk idle for more than `WALK_IDLE` as abandoned. Does
     /// nothing while recording is off.
     pub fn sweep(&self, now: Instant) {
         let mut tables = self.lock();
@@ -876,7 +876,7 @@ fn clock() -> Instant {
     tokio::time::Instant::now().into_std()
 }
 
-/// Sweeps every [`SWEEP_EVERY`] until the last `Arc<ReadCost>` drops.
+/// Sweeps every `SWEEP_EVERY` until the last `Arc<ReadCost>` drops.
 pub fn spawn_sweeper(read_cost: &Arc<ReadCost>) -> tokio::task::JoinHandle<()> {
     let read_cost = Arc::downgrade(read_cost);
     tokio::spawn(async move {
