@@ -92,6 +92,7 @@ fn walk_count(rc: &ReadCost) -> usize {
 
 fn truncated_count(rc: &ReadCost, class: &str, kind: &str) -> u64 {
     rc.metrics
+        .read_cost()
         .read_truncated_total
         .with_label_values(&[class, kind])
         .get()
@@ -483,6 +484,7 @@ fn read_cost_invalid_caller_is_labelled_invalid() {
 
 fn header_invalid_count(rc: &ReadCost, header: &str) -> u64 {
     rc.metrics
+        .read_cost()
         .read_header_invalid_total
         .with_label_values(&[header])
         .get()
@@ -551,6 +553,7 @@ fn read_cost_label_overflow_folds_into_other_and_is_counted() {
 
     assert_eq!(
         rc.metrics
+            .read_cost()
             .read_label_overflow_total
             .with_label_values(&["stream_class"])
             .get(),
@@ -558,6 +561,7 @@ fn read_cost_label_overflow_folds_into_other_and_is_counted() {
     );
     let pages = |class: &str| {
         rc.metrics
+            .read_cost()
             .read_pages_total
             .with_label_values(&[class, "complete"])
             .get()
@@ -629,6 +633,7 @@ fn read_cost_whole_reads_count_only_whole_shape() {
 
     assert_eq!(
         rc.metrics
+            .read_cost()
             .read_whole_reads_total
             .with_label_values(&["whole"])
             .get(),
@@ -1082,6 +1087,7 @@ fn read_cost_whole_reads_count_once_per_walk_not_per_page() {
     assert_eq!(caller_row_of(&rc, "t", None, "whole").whole_reads, 1);
     assert_eq!(
         rc.metrics
+            .read_cost()
             .read_whole_reads_total
             .with_label_values(&["whole"])
             .get(),
@@ -1416,6 +1422,7 @@ async fn production_router_sweeps_an_abandoned_walk_on_a_timer() {
     assert_eq!(first_page.status(), StatusCode::OK);
     let abandoned = || {
         metrics
+            .read_cost()
             .read_truncated_total
             .with_label_values(&["walk", "walk_abandoned"])
             .get()

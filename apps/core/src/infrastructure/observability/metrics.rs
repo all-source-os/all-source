@@ -70,6 +70,61 @@ impl LedgerMetrics {
     }
 }
 
+/// Read-cost series. Labels are stream classes, never callers; a class can
+/// equal another tenant's all-letter id, never the requesting tenant's.
+/// Registered on first use, because every store builds a registry and only a
+/// served query records them.
+pub struct ReadCostMetrics {
+    pub read_pages_total: IntCounterVec,
+    pub read_events_matched_total: IntCounterVec,
+    pub read_truncated_total: IntCounterVec,
+    pub read_whole_reads_total: IntCounterVec,
+    pub read_label_overflow_total: IntCounterVec,
+    pub read_header_invalid_total: IntCounterVec,
+}
+
+impl ReadCostMetrics {
+    fn register(registry: &Registry) -> Self {
+        let counter = |name: &str, help: &str, labels: &[&str]| {
+            let counter = IntCounterVec::new(Opts::new(name, help), labels).unwrap();
+            registry.register(Box::new(counter.clone())).unwrap();
+            counter
+        };
+        Self {
+            read_pages_total: counter(
+                "allsource_read_pages_total",
+                "Event query pages by stream class and outcome",
+                &["stream_class", "outcome"],
+            ),
+            read_events_matched_total: counter(
+                "allsource_read_events_matched_total",
+                "Events matched by event query pages, before the page window",
+                &["stream_class"],
+            ),
+            read_truncated_total: counter(
+                "allsource_read_truncated_total",
+                "Event reads cut short: single truncated, walk abandoned or walk evicted",
+                &["stream_class", "kind"],
+            ),
+            read_whole_reads_total: counter(
+                "allsource_read_whole_reads_total",
+                "Event reads with no since, entity or limit filter",
+                &["stream_class"],
+            ),
+            read_label_overflow_total: counter(
+                "allsource_read_label_overflow_total",
+                "Stream classes folded into other because the label set is full",
+                &["label"],
+            ),
+            read_header_invalid_total: counter(
+                "allsource_read_header_invalid_total",
+                "Event query read headers that failed their pattern",
+                &["header"],
+            ),
+        }
+    }
+}
+
 /// Centralized metrics registry for AllSource
 pub struct MetricsRegistry {
     /// Prometheus registry
@@ -143,15 +198,6 @@ pub struct MetricsRegistry {
     pub http_requests_in_flight: IntGauge,
     pub http_response_bytes_total: IntCounterVec,
 
-    // Read cost. Labels are stream classes, never callers; a class can equal
-    // another tenant's all-letter id, never the requesting tenant's.
-    pub read_pages_total: IntCounterVec,
-    pub read_events_matched_total: IntCounterVec,
-    pub read_truncated_total: IntCounterVec,
-    pub read_whole_reads_total: IntCounterVec,
-    pub read_label_overflow_total: IntCounterVec,
-    pub read_header_invalid_total: IntCounterVec,
-
     // Replication metrics (leader)
     pub replication_followers_connected: IntGauge,
     pub replication_wal_shipped_total: IntCounter,
@@ -197,6 +243,7 @@ pub struct MetricsRegistry {
     pub wal_replay_events_total: IntGauge,
 
     ledger: OnceLock<LedgerMetrics>,
+    read_cost: OnceLock<ReadCostMetrics>,
     startup: Tally,
 }
 
@@ -601,60 +648,6 @@ impl MetricsRegistry {
         )
         .unwrap();
 
-        let read_pages_total = IntCounterVec::new(
-            Opts::new(
-                "allsource_read_pages_total",
-                "Event query pages by stream class and outcome",
-            ),
-            &["stream_class", "outcome"],
-        )
-        .unwrap();
-
-        let read_events_matched_total = IntCounterVec::new(
-            Opts::new(
-                "allsource_read_events_matched_total",
-                "Events matched by event query pages, before the page window",
-            ),
-            &["stream_class"],
-        )
-        .unwrap();
-
-        let read_truncated_total = IntCounterVec::new(
-            Opts::new(
-                "allsource_read_truncated_total",
-                "Event reads cut short: single truncated, walk abandoned or walk evicted",
-            ),
-            &["stream_class", "kind"],
-        )
-        .unwrap();
-
-        let read_whole_reads_total = IntCounterVec::new(
-            Opts::new(
-                "allsource_read_whole_reads_total",
-                "Event reads with no since, entity or limit filter",
-            ),
-            &["stream_class"],
-        )
-        .unwrap();
-
-        let read_label_overflow_total = IntCounterVec::new(
-            Opts::new(
-                "allsource_read_label_overflow_total",
-                "Stream classes folded into other because the label set is full",
-            ),
-            &["label"],
-        )
-        .unwrap();
-
-        let read_header_invalid_total = IntCounterVec::new(
-            Opts::new(
-                "allsource_read_header_invalid_total",
-                "Event query read headers that failed their pattern",
-            ),
-            &["header"],
-        )
-        .unwrap();
-
         // Replication metrics (leader)
         let replication_followers_connected = IntGauge::with_opts(Opts::new(
             "allsource_replication_followers_connected",
@@ -912,25 +905,6 @@ impl MetricsRegistry {
             .unwrap();
 
         registry
-            .register(Box::new(read_pages_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(read_events_matched_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(read_truncated_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(read_whole_reads_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(read_label_overflow_total.clone()))
-            .unwrap();
-        registry
-            .register(Box::new(read_header_invalid_total.clone()))
-            .unwrap();
-
-        registry
             .register(Box::new(replication_followers_connected.clone()))
             .unwrap();
         registry
@@ -1012,12 +986,6 @@ impl MetricsRegistry {
             http_request_duration_seconds,
             http_requests_in_flight,
             http_response_bytes_total,
-            read_pages_total,
-            read_events_matched_total,
-            read_truncated_total,
-            read_whole_reads_total,
-            read_label_overflow_total,
-            read_header_invalid_total,
             replication_followers_connected,
             replication_wal_shipped_total,
             replication_wal_shipped_bytes_total,
@@ -1041,6 +1009,7 @@ impl MetricsRegistry {
             resident_structure_bytes,
             wal_replay_events_total,
             ledger: OnceLock::new(),
+            read_cost: OnceLock::new(),
             startup: {
                 let startup = Tally::new(Owner::Metrics);
                 startup.add(METRICS_REGISTRY_BYTES);
@@ -1111,6 +1080,12 @@ impl MetricsRegistry {
     pub fn ledger_metrics(&self) -> &LedgerMetrics {
         self.ledger
             .get_or_init(|| LedgerMetrics::register(&self.registry))
+    }
+
+    /// The read-cost series, registered with this registry on the first call.
+    pub fn read_cost(&self) -> &ReadCostMetrics {
+        self.read_cost
+            .get_or_init(|| ReadCostMetrics::register(&self.registry))
     }
 
     /// Record one completed compaction sweep.

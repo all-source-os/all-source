@@ -560,15 +560,18 @@ impl ReadCost {
         row.last_seen = Some(wall);
 
         self.metrics
+            .read_cost()
             .read_pages_total
             .with_label_values(&[label.as_str(), outcome.as_str()])
             .inc();
         self.metrics
+            .read_cost()
             .read_events_matched_total
             .with_label_values(&[label.as_str()])
             .inc_by(wide(counts.matched));
         if whole {
             self.metrics
+                .read_cost()
                 .read_whole_reads_total
                 .with_label_values(&[label.as_str()])
                 .inc();
@@ -691,6 +694,7 @@ impl ReadCost {
             return class.to_owned();
         }
         self.metrics
+            .read_cost()
             .read_label_overflow_total
             .with_label_values(&["stream_class"])
             .inc();
@@ -703,6 +707,7 @@ impl ReadCost {
 
     fn truncated(&self, label: &str, kind: &str) {
         self.metrics
+            .read_cost()
             .read_truncated_total
             .with_label_values(&[label, kind])
             .inc();
@@ -836,6 +841,7 @@ fn log_rejected(
 ) {
     for header in rejected {
         metrics
+            .read_cost()
             .read_header_invalid_total
             .with_label_values(&[header.name])
             .inc();
