@@ -127,24 +127,90 @@ func TestCallerLabelsAdmitSixtyFourCallersPerTenant(t *testing.T) {
 	labels := newCallerLabels()
 	for i := range maxCallerLabels {
 		name := fmt.Sprintf("caller_%02d", i)
-		if got := labels.label("tenant-a", name); got != name {
+		if got := labels.label("tenant-a", "tenant-a", name); got != name {
 			t.Fatalf("caller %d: got %q, want %q", i, got, name)
 		}
 	}
-	if got := labels.label("tenant-a", "caller_late"); got != overflowLabel {
+	if got := labels.label("tenant-a", "tenant-a", "caller_late"); got != overflowLabel {
 		t.Errorf("65th caller: got %q, want %q", got, overflowLabel)
 	}
-	if got := labels.label("tenant-a", "caller_00"); got != "caller_00" {
+	if got := labels.label("tenant-a", "tenant-a", "caller_00"); got != "caller_00" {
 		t.Errorf("admitted caller after overflow: got %q, want caller_00", got)
 	}
-	if got := labels.label("tenant-b", "caller_late"); got != "caller_late" {
+	if got := labels.label("tenant-b", "tenant-b", "caller_late"); got != "caller_late" {
 		t.Errorf("65th caller of another tenant: got %q, want caller_late", got)
 	}
-	if got := labels.label("tenant-a", ""); got != unattributedCaller {
+	if got := labels.label("tenant-a", "tenant-a", ""); got != unattributedCaller {
 		t.Errorf("empty caller: got %q, want %q", got, unattributedCaller)
 	}
-	if got := labels.label("tenant-a", invalidValue); got != invalidValue {
+	if got := labels.label("tenant-a", "tenant-a", invalidValue); got != invalidValue {
 		t.Errorf("invalid caller: got %q, want %q", got, invalidValue)
+	}
+}
+
+func TestCallerLabelsKeySlotsByTenantIDNotItsSeriesLabel(t *testing.T) {
+	labels := newCallerLabels()
+	for i := range maxCallerLabels {
+		name := fmt.Sprintf("caller_%02d", i)
+		if got := labels.label("overflow-a", overflowLabel, name); got != name {
+			t.Fatalf("tenant a caller %d: got %q, want %q", i, got, name)
+		}
+	}
+	if got := labels.label("overflow-b", overflowLabel, "caller_late"); got != "caller_late" {
+		t.Errorf("second tenant under the other label: got %q, want its own slot", got)
+	}
+	if got := labels.label("overflow-a", overflowLabel, "caller_late"); got != overflowLabel {
+		t.Errorf("65th caller of tenant a: got %q, want %q", got, overflowLabel)
+	}
+}
+
+func TestCallerLabelsPastTheTenantCapShareTheLabelsSlots(t *testing.T) {
+	labels := newCallerLabels()
+	for i := range maxCallerTenants {
+		labels.label(fmt.Sprintf("tracked-%04d", i), overflowLabel, "caller_x")
+	}
+	for i := range maxCallerLabels {
+		name := fmt.Sprintf("caller_%02d", i)
+		if got := labels.label("late-a", overflowLabel, name); got != name {
+			t.Fatalf("late tenant caller %d: got %q, want %q", i, got, name)
+		}
+	}
+	if got := labels.label("late-b", overflowLabel, "caller_late"); got != overflowLabel {
+		t.Errorf("tenant past the cap: got %q, want the shared slots' %q", got, overflowLabel)
+	}
+	if got := labels.label("late-b", overflowLabel, "caller_00"); got != "caller_00" {
+		t.Errorf("caller already in the shared slots: got %q, want caller_00", got)
+	}
+	if got := labels.label("tracked-0000", overflowLabel, "caller_y"); got != "caller_y" {
+		t.Errorf("tracked tenant keeps its own slots: got %q, want caller_y", got)
+	}
+	if len(labels.seen) != maxCallerTenants {
+		t.Errorf("tracked tenants: got %d, want %d", len(labels.seen), maxCallerTenants)
+	}
+}
+
+func TestReservedCallerNamesAreRejectedAsInvalid(t *testing.T) {
+	core, srv := newFakeBackend(okJSON(callerTestBody))
+	defer srv.Close()
+	cp := newTestCP(t, srv.URL, srv.URL)
+
+	for _, reserved := range []string{unattributedCaller, overflowLabel, invalidValue} {
+		t.Run(reserved, func(t *testing.T) {
+			before := metricCount(t, readHeaderInvalid.WithLabelValues(callerHeader))
+			code, _ := eventsQueryWithHeaders(cp, "tenant-attr-reserved", map[string]string{callerHeader: reserved})
+			if code != http.StatusOK {
+				t.Fatalf("status: got %d, want 200", code)
+			}
+			if got := core.header.Get(callerHeader); got != invalidValue {
+				t.Errorf("upstream %s: got %q, want %q", callerHeader, got, invalidValue)
+			}
+			if d := metricCount(t, readHeaderInvalid.WithLabelValues(callerHeader)) - before; d != 1 {
+				t.Errorf("caller invalid counter delta: got %v, want 1", d)
+			}
+		})
+	}
+	if !validCaller("lh.skill_catalog") {
+		t.Error("a plain caller name must stay valid")
 	}
 }
 

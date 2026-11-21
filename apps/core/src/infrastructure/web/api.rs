@@ -1054,6 +1054,45 @@ type StreamScanCell = Arc<tokio::sync::OnceCell<Arc<StreamSizes>>>;
 static STREAM_SCANS: LazyLock<Mutex<std::collections::HashMap<String, StreamScanCell>>> =
     LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
 
+/// How long a completed scan answers later requests for the same tenant.
+const STREAM_SCAN_TTL: std::time::Duration = std::time::Duration::from_secs(30);
+
+type CachedStreamScan = (std::time::Instant, Arc<StreamSizes>);
+
+/// Complete scans, keyed like `STREAM_SCANS`, with when each started. A failed
+/// or incomplete scan never enters.
+static STREAM_SCAN_CACHE: LazyLock<Mutex<std::collections::HashMap<String, CachedStreamScan>>> =
+    LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+fn cached_stream_scan(key: &str, now: std::time::Instant) -> Option<Arc<StreamSizes>> {
+    let cache = STREAM_SCAN_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    cache
+        .get(key)
+        .filter(|(at, _)| now.saturating_duration_since(*at) < STREAM_SCAN_TTL)
+        .map(|(_, sizes)| Arc::clone(sizes))
+}
+
+fn cache_stream_scan(key: String, at: std::time::Instant, sizes: &Arc<StreamSizes>) {
+    if !sizes.complete {
+        return;
+    }
+    let mut cache = STREAM_SCAN_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    cache.retain(|_, (cached_at, _)| at.saturating_duration_since(*cached_at) < STREAM_SCAN_TTL);
+    // Every waiter on one scan lands here, in any order; the scan's own start
+    // is the earliest of theirs.
+    if let Some((cached_at, cached)) = cache.get_mut(&key)
+        && Arc::ptr_eq(cached, sizes)
+    {
+        *cached_at = (*cached_at).min(at);
+        return;
+    }
+    cache.insert(key, (at, Arc::clone(sizes)));
+}
+
 /// Why a tenant read could not be served.
 #[derive(Debug)]
 enum StreamListingError {
@@ -1074,8 +1113,9 @@ impl std::fmt::Display for StreamListingError {
 
 /// Runs `scan` on a blocking thread once for concurrent callers for the same
 /// tenant and shares its unordered result; each caller sorts and pages its own
-/// copy. A scan that panics or fails is neither kept nor shared: its caller
-/// gets the error and each waiter runs its own scan.
+/// copy. A complete result also answers callers for [`STREAM_SCAN_TTL`]. A
+/// scan that panics or fails is neither kept nor shared: its caller gets the
+/// error and each waiter runs its own scan.
 async fn share_stream_scan<F>(
     key: String,
     scan: F,
@@ -1083,6 +1123,20 @@ async fn share_stream_scan<F>(
 where
     F: FnOnce() -> crate::error::Result<StreamSizes> + Send + 'static,
 {
+    share_stream_scan_at(key, std::time::Instant::now(), scan).await
+}
+
+async fn share_stream_scan_at<F>(
+    key: String,
+    now: std::time::Instant,
+    scan: F,
+) -> std::result::Result<Arc<StreamSizes>, StreamListingError>
+where
+    F: FnOnce() -> crate::error::Result<StreamSizes> + Send + 'static,
+{
+    if let Some(cached) = cached_stream_scan(&key, now) {
+        return Ok(cached);
+    }
     let cell = {
         let mut scans = STREAM_SCANS.lock().unwrap_or_else(PoisonError::into_inner);
         Arc::clone(scans.entry(key.clone()).or_default())
@@ -1100,6 +1154,10 @@ where
     let mut scans = STREAM_SCANS.lock().unwrap_or_else(PoisonError::into_inner);
     if scans.get(&key).is_some_and(|c| Arc::ptr_eq(c, &cell)) {
         scans.remove(&key);
+    }
+    drop(scans);
+    if let Ok(sizes) = &shared {
+        cache_stream_scan(key, now, sizes);
     }
     shared
 }
@@ -3488,23 +3546,139 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
 
         let scans = Arc::new(AtomicUsize::new(0));
-        let tasks: Vec<_> = (0..8)
+        let entered = Arc::new(std::sync::Barrier::new(2));
+        let release = Arc::new(std::sync::Barrier::new(2));
+        let first = {
+            let scans = Arc::clone(&scans);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            tokio::spawn(share_stream_scan(
+                "share-test-tenant".to_string(),
+                move || {
+                    scans.fetch_add(1, Ordering::SeqCst);
+                    entered.wait();
+                    release.wait();
+                    Ok(StreamSizes::default())
+                },
+            ))
+        };
+        let wait_entered = Arc::clone(&entered);
+        tokio::task::spawn_blocking(move || wait_entered.wait())
+            .await
+            .unwrap();
+
+        let mut waiters: Vec<_> = (0..7)
             .map(|_| {
                 let scans = Arc::clone(&scans);
-                tokio::spawn(share_stream_scan(
+                Box::pin(share_stream_scan(
                     "share-test-tenant".to_string(),
                     move || {
                         scans.fetch_add(1, Ordering::SeqCst);
-                        std::thread::sleep(std::time::Duration::from_millis(20));
                         Ok(StreamSizes::default())
                     },
                 ))
             })
             .collect();
-        for task in tasks {
-            task.await.unwrap().unwrap();
+        for waiter in &mut waiters {
+            let polled = std::future::poll_fn(|cx| {
+                std::task::Poll::Ready(std::future::Future::poll(waiter.as_mut(), cx))
+            })
+            .await;
+            assert!(
+                polled.is_pending(),
+                "each waiter queues on the scan that is still running"
+            );
+        }
+
+        let wait_release = Arc::clone(&release);
+        tokio::task::spawn_blocking(move || wait_release.wait())
+            .await
+            .unwrap();
+        first.await.unwrap().unwrap();
+        for waiter in waiters {
+            waiter.await.unwrap();
         }
         assert_eq!(scans.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_sequential_repeat_reuses_a_complete_scan_for_thirty_seconds() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let scan = || {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: true,
+                })
+            }
+        };
+        let key = || "ttl-test-tenant".to_string();
+        let t0 = std::time::Instant::now();
+
+        share_stream_scan_at(key(), t0, scan()).await.unwrap();
+        share_stream_scan_at(key(), t0 + std::time::Duration::from_secs(29), scan())
+            .await
+            .unwrap();
+        assert_eq!(scans.load(Ordering::SeqCst), 1);
+
+        share_stream_scan_at(key(), t0 + STREAM_SCAN_TTL, scan())
+            .await
+            .unwrap();
+        assert_eq!(scans.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_incomplete_or_failed_scan_is_never_reused() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let t0 = std::time::Instant::now();
+        let incomplete = {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: false,
+                })
+            }
+        };
+        share_stream_scan_at("ttl-incomplete-tenant".to_string(), t0, incomplete)
+            .await
+            .unwrap();
+        let failed = {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Err(crate::error::AllSourceError::StorageError(
+                    "injected hydration failure".into(),
+                ))
+            }
+        };
+        assert!(
+            share_stream_scan_at("ttl-incomplete-tenant".to_string(), t0, failed)
+                .await
+                .is_err()
+        );
+        let complete = {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: true,
+                })
+            }
+        };
+        let next = share_stream_scan_at("ttl-incomplete-tenant".to_string(), t0, complete)
+            .await
+            .unwrap();
+        assert!(next.complete);
+        assert_eq!(scans.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]

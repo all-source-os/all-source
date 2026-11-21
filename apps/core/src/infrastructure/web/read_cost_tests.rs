@@ -481,6 +481,59 @@ fn read_cost_invalid_caller_is_labelled_invalid() {
     );
 }
 
+fn header_invalid_count(rc: &ReadCost, header: &str) -> u64 {
+    rc.metrics
+        .read_header_invalid_total
+        .with_label_values(&[header])
+        .get()
+}
+
+#[test]
+fn read_cost_rejected_headers_are_counted_on_every_page() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static(CALLER_HEADER),
+        HeaderValue::from_static("Bad Caller"),
+    );
+    headers.insert(
+        HeaderName::from_static(READ_ID_HEADER),
+        HeaderValue::from_static("ZZZZ"),
+    );
+    let facts = ReadCostFacts::from_headers(page("t", "walk", None, 3, 3, false).read, &headers);
+    let rc = read_cost();
+    let t0 = base();
+
+    rc.observe(t0, &facts, Outcome::Complete, 0);
+    rc.observe(at(t0, 1), &facts, Outcome::Complete, 0);
+
+    assert_eq!(header_invalid_count(&rc, "caller"), 2);
+    assert_eq!(header_invalid_count(&rc, "read_id"), 2);
+}
+
+#[test]
+fn read_cost_values_the_gateway_already_marked_invalid_are_not_rejected_again() {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        HeaderName::from_static(CALLER_HEADER),
+        HeaderValue::from_static(INVALID),
+    );
+    headers.insert(
+        HeaderName::from_static(READ_ID_HEADER),
+        HeaderValue::from_static(INVALID),
+    );
+    let facts = ReadCostFacts::from_headers(page("t", "walk", None, 3, 3, false).read, &headers);
+    assert_eq!(facts.read_id, None);
+    assert_eq!(facts.caller.as_deref(), Some(INVALID));
+    assert!(facts.rejected.is_empty());
+
+    let rc = read_cost();
+    rc.observe(base(), &facts, Outcome::Complete, 0);
+
+    assert_eq!(header_invalid_count(&rc, "caller"), 0);
+    assert_eq!(header_invalid_count(&rc, "read_id"), 0);
+    assert_eq!(caller_row_of(&rc, "t", Some(INVALID), "walk").pages, 1);
+}
+
 #[test]
 fn read_cost_label_overflow_folds_into_other_and_is_counted() {
     let rc = read_cost();
@@ -503,6 +556,15 @@ fn read_cost_label_overflow_folds_into_other_and_is_counted() {
             .get(),
         1
     );
+    let pages = |class: &str| {
+        rc.metrics
+            .read_pages_total
+            .with_label_values(&[class, "complete"])
+            .get()
+    };
+    assert_eq!(pages(&format!("c{:03}", LABEL_CAP - 1)), 1);
+    assert_eq!(pages(&format!("c{LABEL_CAP:03}")), 0);
+    assert_eq!(pages(OTHER), 1);
 }
 
 #[test]
@@ -669,14 +731,17 @@ async fn read_cost_limit_zero_probe_is_not_single_truncated() {
     let rc = read_cost();
     let router = app(bulk_store(6_000, "bulk.item"), Arc::clone(&rc), None);
 
-    get_query(
+    let status = get_query(
         &router,
         "/api/v1/events/query?tenant_id=t&event_type=bulk.item&limit=0",
         None,
     )
     .await;
 
-    assert_eq!(class_row_of(&rc, "t", "bulk").single_truncated, 0);
+    assert_eq!(status, StatusCode::OK);
+    let row = class_row_of(&rc, "t", "bulk");
+    assert_eq!(row.pages, 1);
+    assert_eq!(row.single_truncated, 0);
 }
 
 #[tokio::test]
@@ -684,14 +749,17 @@ async fn read_cost_descending_limit_one_is_not_single_truncated() {
     let rc = read_cost();
     let router = app(bulk_store(6_000, "bulk.item"), Arc::clone(&rc), None);
 
-    get_query(
+    let status = get_query(
         &router,
         "/api/v1/events/query?tenant_id=t&event_type=bulk.item&limit=1&order=desc",
         None,
     )
     .await;
 
-    assert_eq!(class_row_of(&rc, "t", "bulk").single_truncated, 0);
+    assert_eq!(status, StatusCode::OK);
+    let row = class_row_of(&rc, "t", "bulk");
+    assert_eq!(row.pages, 1);
+    assert_eq!(row.single_truncated, 0);
 }
 
 #[tokio::test]
@@ -699,14 +767,17 @@ async fn read_cost_offset_page_without_read_id_is_not_single_truncated() {
     let rc = read_cost();
     let router = app(bulk_store(6_000, "bulk.item"), Arc::clone(&rc), None);
 
-    get_query(
+    let status = get_query(
         &router,
         "/api/v1/events/query?tenant_id=t&event_type=bulk.item&limit=5000&offset=100",
         None,
     )
     .await;
 
-    assert_eq!(class_row_of(&rc, "t", "bulk").single_truncated, 0);
+    assert_eq!(status, StatusCode::OK);
+    let row = class_row_of(&rc, "t", "bulk");
+    assert_eq!(row.pages, 1);
+    assert_eq!(row.single_truncated, 0);
 }
 
 #[tokio::test]
@@ -714,14 +785,54 @@ async fn read_cost_cursor_page_with_since_is_not_single_truncated() {
     let rc = read_cost();
     let router = app(bulk_store(6_000, "bulk.item"), Arc::clone(&rc), None);
 
-    get_query(
+    let status = get_query(
         &router,
         "/api/v1/events/query?tenant_id=t&event_type=bulk.item&limit=5000&since=2000-01-01T00:00:00Z",
         None,
     )
     .await;
 
-    assert_eq!(class_row_of(&rc, "t", "bulk").single_truncated, 0);
+    assert_eq!(status, StatusCode::OK);
+    let row = class_row_of(&rc, "t", "bulk");
+    assert_eq!(row.pages, 1);
+    assert_eq!(row.single_truncated, 0);
+}
+
+#[tokio::test]
+async fn read_cost_page_over_the_ten_thousand_clamp_is_single_truncated() {
+    let rc = read_cost();
+    let router = app(bulk_store(10_001, "bulk.item"), Arc::clone(&rc), None);
+
+    let status = get_query(
+        &router,
+        "/api/v1/events/query?tenant_id=t&event_type=bulk.item&limit=50000",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let row = class_row_of(&rc, "t", "bulk");
+    assert_eq!(row.pages, 1);
+    assert_eq!(row.matched_max, 10_001);
+    assert_eq!(row.single_truncated, 1);
+}
+
+#[tokio::test]
+async fn read_cost_malformed_caller_over_http_counts_under_invalid() {
+    let rc = read_cost();
+    let router = app(bulk_store(3, "bulk.item"), Arc::clone(&rc), None);
+    let request = Request::builder()
+        .uri("/api/v1/events/query?tenant_id=t&event_type=bulk.item")
+        .header(CALLER_HEADER, "Not A Caller")
+        .body(Body::empty())
+        .unwrap();
+
+    let status = router.oneshot(request).await.unwrap().status();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(caller_row_of(&rc, "t", Some(INVALID), "bulk").pages, 1);
+    assert_eq!(caller_row_of(&rc, "t", None, "bulk").pages, 0);
+    assert_eq!(header_invalid_count(&rc, "caller"), 1);
 }
 
 #[tokio::test]
@@ -1038,7 +1149,11 @@ fn read_cost_walks_per_tenant_tracks_inserts_and_removals() {
         Outcome::HasMore,
         0,
     );
-    assert_eq!(rc.lock().walks_per_tenant.get("t").copied(), Some(2));
+    assert_eq!(
+        rc.lock().walks_per_tenant.get("t").map(BTreeSet::len),
+        Some(2)
+    );
+    assert_eq!(rc.lock().walks_by_age.len(), 2);
 
     rc.observe(
         at(t0, 2),
@@ -1046,10 +1161,14 @@ fn read_cost_walks_per_tenant_tracks_inserts_and_removals() {
         Outcome::Complete,
         0,
     );
-    assert_eq!(rc.lock().walks_per_tenant.get("t").copied(), Some(1));
+    assert_eq!(
+        rc.lock().walks_per_tenant.get("t").map(BTreeSet::len),
+        Some(1)
+    );
 
     rc.sweep(at(t0, 60));
     assert!(rc.lock().walks_per_tenant.is_empty());
+    assert!(rc.lock().walks_by_age.is_empty());
 }
 
 #[test]

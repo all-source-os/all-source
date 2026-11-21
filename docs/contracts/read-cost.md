@@ -21,7 +21,11 @@ Both are optional and travel as headers, never as query parameters.
   `read_header_invalid` log line carries the header name and the value's
   length only, at most once per minute per header.
 - An invalid read id counts as absent. An invalid caller is counted under the
-  caller `invalid`.
+  caller `invalid`. The reserved names `unattributed`, `other` and `invalid`
+  are rejected as callers like any malformed value.
+- Core takes a value the gateway already replaced with `invalid` as that
+  replacement, without logging or counting it again: a read id of `invalid`
+  is absent and a caller of `invalid` counts under `invalid`.
 - A read with no caller is counted as `unattributed`.
 - Rust SDK 0.30: `ClientConfig::with_caller` sets the caller on every
   request, `QueryEventsParams::caller` overrides it for one query, and
@@ -208,7 +212,9 @@ the events lock for one chunk of 4,096 at a time. Removing events between
 chunks shifts their positions, so Core restarts the scan once; if events are
 removed again, it answers what it counted with `complete: false`, and an
 event may then be skipped or counted twice. Concurrent `with_bytes` requests
-for one tenant share one scan. A scan that fails answers 503
+for one tenant share one scan, and a complete scan answers later `with_bytes`
+requests for that tenant for 30 s after it started, so sizes can trail writes
+by that long; an incomplete scan is not reused. A scan that fails answers 503
 `{"error": "store_unavailable"}` and is not shared with waiting requests,
 which run their own. `total` counts the tenant's streams before paging.
 
@@ -277,7 +283,9 @@ the read permission, and accept a managed key with the `events:read` scope.
 
 The stream class is capped at 256 values per process; later classes count as
 `other`, increment `allsource_read_label_overflow_total{label="stream_class"}`
-and log `read_label_overflow` once per process.
+and log `read_label_overflow` once per process. Event-type and prefix classes
+keep their digit segments, so they count toward the same 256-label cap before
+falling into `other`.
 
 | Series | Labels |
 |---|---|
@@ -286,6 +294,7 @@ and log `read_label_overflow` once per process.
 | `allsource_read_truncated_total` | `stream_class`, `kind` ∈ `single`, `walk_abandoned`, `walk_evicted` |
 | `allsource_read_whole_reads_total` | `stream_class` |
 | `allsource_read_label_overflow_total` | `label` |
+| `allsource_read_header_invalid_total` | `header` ∈ `caller`, `read_id` |
 
 ### Gateway, events-query path
 
@@ -297,7 +306,9 @@ and log `read_label_overflow` once per process.
 
 Per tenant, the first 64 distinct callers per gateway process become labels
 and later ones count as `other`; `unattributed` and `invalid` are always
-available.
+available. The 64 slots belong to the tenant id, not its `tenant` label, so
+tenants counted under `other` each keep their own; past 512 tenant ids, later
+tenants share the slots of their label.
 
 ## Logs
 

@@ -3251,9 +3251,10 @@ impl EventStore {
                 return Ok(value);
             }
         }
-        Err(AllSourceError::StorageError(format!(
-            "tenant {tenant_id:?} left the cache during every read"
-        )))
+        // No tenant id: this text reaches the `tenant read failed` log line.
+        Err(AllSourceError::StorageError(
+            "tenant left the cache during every read".to_owned(),
+        ))
     }
 
     /// Every removal from `events` goes through here, so a chunked reader can

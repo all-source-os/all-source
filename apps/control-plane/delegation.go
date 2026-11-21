@@ -310,7 +310,7 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 			queryShapeRequests.WithLabelValues(selector, bounded, filtered).Inc()
 			tenantQueryBytes.WithLabelValues(tenant, namespace, selector, bounded, filtered).Add(float64(written))
 			tenantQueries.WithLabelValues(tenant, namespace, selector, bounded, filtered).Inc()
-			callerName := queryCallers.label(tenant, caller)
+			callerName := queryCallers.label(query.Get("tenant_id"), tenant, caller)
 			queryCallerBytes.WithLabelValues(tenant, callerName).Add(float64(written))
 			queryCallerQueries.WithLabelValues(tenant, callerName).Inc()
 			if sample := queryEgressSamples.sample(query, written, time.Now(), caller, readID); sample != "" {
@@ -348,12 +348,21 @@ var (
 )
 
 func readAttribution(h http.Header) (caller, readID string) {
-	return validReadHeader(h, callerHeader, callerPattern), validReadHeader(h, readIDHeader, readIDPattern)
+	return validReadHeader(h, callerHeader, validCaller), validReadHeader(h, readIDHeader, readIDPattern.MatchString)
 }
 
-func validReadHeader(h http.Header, name string, pattern *regexp.Regexp) string {
+// validCaller rejects the labels the gateway and Core count under themselves.
+func validCaller(value string) bool {
+	switch value {
+	case unattributedCaller, overflowLabel, invalidValue:
+		return false
+	}
+	return callerPattern.MatchString(value)
+}
+
+func validReadHeader(h http.Header, name string, valid func(string) bool) string {
 	value := h.Get(name)
-	if value == "" || pattern.MatchString(value) {
+	if value == "" || valid(value) {
 		return value
 	}
 	readHeaderInvalid.WithLabelValues(name).Inc()

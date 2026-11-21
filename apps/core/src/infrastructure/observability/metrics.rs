@@ -150,6 +150,7 @@ pub struct MetricsRegistry {
     pub read_truncated_total: IntCounterVec,
     pub read_whole_reads_total: IntCounterVec,
     pub read_label_overflow_total: IntCounterVec,
+    pub read_header_invalid_total: IntCounterVec,
 
     // Replication metrics (leader)
     pub replication_followers_connected: IntGauge,
@@ -645,6 +646,15 @@ impl MetricsRegistry {
         )
         .unwrap();
 
+        let read_header_invalid_total = IntCounterVec::new(
+            Opts::new(
+                "allsource_read_header_invalid_total",
+                "Event query read headers that failed their pattern",
+            ),
+            &["header"],
+        )
+        .unwrap();
+
         // Replication metrics (leader)
         let replication_followers_connected = IntGauge::with_opts(Opts::new(
             "allsource_replication_followers_connected",
@@ -916,6 +926,9 @@ impl MetricsRegistry {
         registry
             .register(Box::new(read_label_overflow_total.clone()))
             .unwrap();
+        registry
+            .register(Box::new(read_header_invalid_total.clone()))
+            .unwrap();
 
         registry
             .register(Box::new(replication_followers_connected.clone()))
@@ -1004,6 +1017,7 @@ impl MetricsRegistry {
             read_truncated_total,
             read_whole_reads_total,
             read_label_overflow_total,
+            read_header_invalid_total,
             replication_followers_connected,
             replication_wal_shipped_total,
             replication_wal_shipped_bytes_total,

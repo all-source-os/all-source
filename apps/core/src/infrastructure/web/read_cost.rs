@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     sync::{
         Arc, LazyLock, Mutex, MutexGuard, PoisonError,
         atomic::{AtomicBool, Ordering},
@@ -194,7 +194,12 @@ impl ReadCostFacts {
                 INVALID.to_owned()
             }
         });
+        // The gateway forwards a rejected value as `invalid` and has already
+        // logged and counted it.
         let read_id = headers.get(READ_ID_HEADER).and_then(|value| {
+            if value.as_bytes() == INVALID.as_bytes() {
+                return None;
+            }
             let text = value.to_str().ok().filter(|text| is_read_id(text));
             if text.is_none() {
                 rejected.push(RejectedHeader {
@@ -308,7 +313,10 @@ struct Tables {
     tenant_evicted: bool,
     tenants: HashMap<String, Tenant>,
     walks: HashMap<(String, String), Walk>,
-    walks_per_tenant: HashMap<String, usize>,
+    /// Every walk in `walks` by last seen, so the oldest is found without a scan.
+    walks_by_age: BTreeSet<(Instant, String, String)>,
+    /// Each tenant's walks by last seen, keyed by read id.
+    walks_per_tenant: HashMap<String, BTreeSet<(Instant, String)>>,
     labels: HashSet<String>,
     label_overflow_logged: bool,
     last_sweep: Option<Instant>,
@@ -318,20 +326,34 @@ struct Tables {
 
 impl Tables {
     fn insert_walk(&mut self, key: (String, String), walk: Walk) {
-        if self.walks.insert(key.clone(), walk).is_none() {
-            *self.walks_per_tenant.entry(key.0).or_default() += 1;
-        }
+        self.remove_walk(&key);
+        let last_seen = walk.last_seen;
+        self.walks_by_age
+            .insert((last_seen, key.0.clone(), key.1.clone()));
+        self.walks_per_tenant
+            .entry(key.0.clone())
+            .or_default()
+            .insert((last_seen, key.1.clone()));
+        self.walks.insert(key, walk);
     }
 
     fn remove_walk(&mut self, key: &(String, String)) -> Option<Walk> {
         let walk = self.walks.remove(key)?;
-        if let Some(count) = self.walks_per_tenant.get_mut(&key.0) {
-            *count -= 1;
-            if *count == 0 {
+        self.walks_by_age
+            .remove(&(walk.last_seen, key.0.clone(), key.1.clone()));
+        if let Some(own) = self.walks_per_tenant.get_mut(&key.0) {
+            own.remove(&(walk.last_seen, key.1.clone()));
+            if own.is_empty() {
                 self.walks_per_tenant.remove(&key.0);
             }
         }
         Some(walk)
+    }
+
+    fn clear_walks(&mut self) {
+        self.walks.clear();
+        self.walks_by_age.clear();
+        self.walks_per_tenant.clear();
     }
 }
 
@@ -373,8 +395,7 @@ impl ReadCost {
         let mut tables = self.lock();
         let was = self.enabled.swap(enabled, Ordering::Relaxed);
         if !enabled {
-            tables.walks.clear();
-            tables.walks_per_tenant.clear();
+            tables.clear_walks();
         } else if !was {
             *tables = Tables {
                 since: Utc::now(),
@@ -469,7 +490,7 @@ impl ReadCost {
             return;
         }
         self.sweep_if_due(&mut tables, now);
-        log_rejected(&mut tables, now, &facts.rejected);
+        log_rejected(&self.metrics, &mut tables, now, &facts.rejected);
 
         let read = &facts.read;
         let counts = read.counts;
@@ -604,10 +625,10 @@ impl ReadCost {
     fn sweep_locked(&self, tables: &mut Tables, now: Instant) {
         tables.last_sweep = Some(now);
         let idle: Vec<(String, String)> = tables
-            .walks
+            .walks_by_age
             .iter()
-            .filter(|(_, walk)| now.saturating_duration_since(walk.last_seen) > WALK_IDLE)
-            .map(|(key, _)| key.clone())
+            .take_while(|(last_seen, _, _)| now.saturating_duration_since(*last_seen) > WALK_IDLE)
+            .map(|(_, tenant, read_id)| (tenant.clone(), read_id.clone()))
             .collect();
         for key in idle {
             if let Some(walk) = tables.remove_walk(&key) {
@@ -637,20 +658,15 @@ impl ReadCost {
     /// evicted walk is `walk_evicted`, never `walk_abandoned`. Neither an
     /// eviction nor an abandon marks a tenant active.
     fn make_room(&self, tables: &mut Tables, tenant: &str) {
-        let own = tables.walks_per_tenant.get(tenant).copied().unwrap_or(0);
-        let oldest = if own >= WALKS_PER_TENANT {
-            tables
-                .walks
-                .iter()
-                .filter(|((t, _), _)| t == tenant)
-                .min_by_key(|(_, walk)| walk.last_seen)
-                .map(|(key, _)| key.clone())
+        let own = tables.walks_per_tenant.get(tenant);
+        let oldest = if let Some(own) = own.filter(|own| own.len() >= WALKS_PER_TENANT) {
+            own.first()
+                .map(|(_, read_id)| (tenant.to_owned(), read_id.clone()))
         } else if tables.walks.len() >= IN_FLIGHT_CAP {
             tables
-                .walks
-                .iter()
-                .min_by_key(|(_, walk)| walk.last_seen)
-                .map(|(key, _)| key.clone())
+                .walks_by_age
+                .first()
+                .map(|(_, t, read_id)| (t.clone(), read_id.clone()))
         } else {
             None
         };
@@ -812,8 +828,17 @@ fn threshold(
     );
 }
 
-fn log_rejected(tables: &mut Tables, now: Instant, rejected: &[RejectedHeader]) {
+fn log_rejected(
+    metrics: &MetricsRegistry,
+    tables: &mut Tables,
+    now: Instant,
+    rejected: &[RejectedHeader],
+) {
     for header in rejected {
+        metrics
+            .read_header_invalid_total
+            .with_label_values(&[header.name])
+            .inc();
         if tables
             .header_logged
             .get(header.name)

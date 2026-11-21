@@ -51,21 +51,27 @@ var queryCallerQueries = tenantMetrics.NewCounterVec(prometheus.CounterOpts{
 
 const (
 	maxCallerLabels    = 64
+	maxCallerTenants   = 2 * maxTenantLabels
 	unattributedCaller = "unattributed"
 )
 
 var queryCallers = newCallerLabels()
 
+// callerLabels admits up to maxCallerLabels callers per tenant. Slots are
+// keyed by tenant id, so tenants whose series label is other do not share 64
+// slots; past maxCallerTenants ids, later tenants share their label's slots.
 type callerLabels struct {
-	mu   sync.Mutex
-	seen map[string]map[string]struct{}
+	mu     sync.Mutex
+	seen   map[string]map[string]struct{}
+	shared map[string]map[string]struct{}
 }
 
 func newCallerLabels() *callerLabels {
-	return &callerLabels{seen: map[string]map[string]struct{}{}}
+	return &callerLabels{seen: map[string]map[string]struct{}{}, shared: map[string]map[string]struct{}{}}
 }
 
-func (c *callerLabels) label(tenant, caller string) string {
+// label returns the caller label for tenantID, whose series label is tenant.
+func (c *callerLabels) label(tenantID, tenant, caller string) string {
 	switch caller {
 	case "":
 		return unattributedCaller
@@ -74,10 +80,18 @@ func (c *callerLabels) label(tenant, caller string) string {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	names := c.seen[tenant]
+	names := c.seen[tenantID]
 	if names == nil {
-		names = map[string]struct{}{}
-		c.seen[tenant] = names
+		if len(c.seen) < maxCallerTenants {
+			names = map[string]struct{}{}
+			c.seen[tenantID] = names
+		} else {
+			names = c.shared[tenant]
+			if names == nil {
+				names = map[string]struct{}{}
+				c.shared[tenant] = names
+			}
+		}
 	}
 	if _, ok := names[caller]; ok {
 		return caller
