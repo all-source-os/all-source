@@ -319,12 +319,17 @@ impl Event {
     /// the capacity of every owned allocation. Object maps are charged by
     /// the map type the build compiles, see `map_bytes`.
     pub fn resident_bytes(&self) -> u64 {
-        let heap = self.event_type.heap_capacity()
+        self.resident_header_bytes()
+            + (value_heap_bytes(&self.payload) + self.metadata.as_ref().map_or(0, value_heap_bytes))
+                as u64
+    }
+
+    /// `resident_bytes` without the payload and metadata trees.
+    pub(crate) fn resident_header_bytes(&self) -> u64 {
+        (std::mem::size_of::<Event>()
+            + self.event_type.heap_capacity()
             + self.entity_id.heap_capacity()
-            + self.tenant_id.heap_capacity()
-            + value_heap_bytes(&self.payload)
-            + self.metadata.as_ref().map_or(0, value_heap_bytes);
-        (std::mem::size_of::<Event>() + heap) as u64
+            + self.tenant_id.heap_capacity()) as u64
     }
 
     // Domain behavior methods

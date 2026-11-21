@@ -122,7 +122,9 @@ mod paginate;
 mod projection_api;
 #[cfg(feature = "projection-worker")]
 pub mod projection_worker;
+mod read_id;
 mod response_meta;
+mod streams;
 mod types;
 #[cfg(feature = "ws")]
 mod ws;
@@ -142,7 +144,9 @@ pub use latest::{
 };
 pub use normalize::normalize_event_type;
 pub use paginate::{EntityPaginator, EventPaginator, DEFAULT_PAGE_SIZE};
+pub use read_id::{InvalidReadId, ReadId};
 pub use response_meta::{EventsQuery, ResponseMeta};
+pub use streams::{ListStreamsResponse, StreamInfo, StreamSort, StreamsParams, TenantStats};
 pub use types::*;
 
 #[cfg(feature = "ws")]

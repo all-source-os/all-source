@@ -19,7 +19,7 @@ use crate::{
             schema_evolution::SchemaEvolutionManager,
         },
     },
-    domain::entities::Event,
+    domain::entities::{Event, event::value_heap_bytes},
     error::{AllSourceError, Result},
     infrastructure::{
         hash_state::{FastDashMap, FastSet, fast_dashmap},
@@ -246,6 +246,8 @@ pub struct EventStore {
     cache_residency_gate: RwLock<()>,
     cache_generations: FastDashMap<String, u64>,
     cache_generations_charge: MapCharge,
+    /// Bumped under the events write lock whenever events leave the Vec.
+    events_removed: std::sync::atomic::AtomicU64,
 
     /// Cadence of the runtime checkpoint loop (Step 6). `None` means
     /// the loop is disabled — WAL grows until boot. Production reads
@@ -446,6 +448,7 @@ impl EventStore {
             strict_archive_limits: config.strict_archive_limits,
             cache_residency_gate: RwLock::new(()),
             cache_generations: fast_dashmap(),
+            events_removed: std::sync::atomic::AtomicU64::new(0),
             cache_generations_charge: MapCharge::new(
                 Owner::CacheGenerations,
                 size_of::<(String, u64)>(),
@@ -1572,7 +1575,7 @@ impl EventStore {
         self.events_resident.release_matching(&events, |e| {
             e.entity_id_str() == entity_id && e.event_type_str() == token_event_type
         });
-        events.retain(|e| {
+        self.retain_events(&mut events, |e| {
             !(e.entity_id_str() == entity_id && e.event_type_str() == token_event_type)
         });
 
@@ -2318,7 +2321,7 @@ impl EventStore {
 
         self.events_resident
             .release_matching(&events, |e| e.tenant_id_str() == tenant_id);
-        events.retain(|e| e.tenant_id_str() != tenant_id);
+        self.retain_events(&mut events, |e| e.tenant_id_str() != tenant_id);
         self.feed_indexes_charge
             .forget(&self.feed_indexes, tenant_id, tenant_id.len() as u64);
         self.feed_indexes.remove(tenant_id);
@@ -3135,6 +3138,8 @@ impl EventStore {
                     stream_id: entity_id,
                     event_count,
                     last_event_at,
+                    estimated_bytes: None,
+                    events_last_7d: None,
                 }
             })
             .collect()
@@ -3170,8 +3175,26 @@ impl EventStore {
     // reflect only the caller's tenant.
 
     /// Distinct entities (+ per-entity event count) for ONE tenant.
-    pub fn list_streams_for_tenant(&self, tenant_id: &str) -> Vec<StreamInfo> {
-        let _ = self.ensure_tenant_loaded(tenant_id);
+    ///
+    /// A tenant that cannot be hydrated is `Err`, never zero streams; one
+    /// evicted between hydration and the end of the read is `complete: false`.
+    pub fn list_streams_for_tenant(&self, tenant_id: &str) -> Result<StreamSizes> {
+        self.list_streams_for_tenant_seamed(tenant_id, &mut || {}, &mut || {})
+    }
+
+    fn list_streams_for_tenant_seamed(
+        &self,
+        tenant_id: &str,
+        after_hydrate: &mut dyn FnMut(),
+        after_read: &mut dyn FnMut(),
+    ) -> Result<StreamSizes> {
+        let (streams, complete) = self.read_tenant(tenant_id, after_hydrate, after_read, || {
+            self.collect_streams_for_tenant(tenant_id)
+        })?;
+        Ok(StreamSizes { streams, complete })
+    }
+
+    fn collect_streams_for_tenant(&self, tenant_id: &str) -> Vec<StreamInfo> {
         let events = self.events.read();
         let mut by_entity: std::collections::HashMap<&str, (usize, chrono::DateTime<chrono::Utc>)> =
             std::collections::HashMap::new();
@@ -3193,13 +3216,310 @@ impl EventStore {
                 stream_id: entity_id.to_string(),
                 event_count: count,
                 last_event_at: Some(last),
+                estimated_bytes: None,
+                events_last_7d: None,
             })
             .collect()
     }
 
-    /// Distinct event types (+ per-type event count) for ONE tenant.
-    pub fn list_event_types_for_tenant(&self, tenant_id: &str) -> Vec<EventTypeInfo> {
-        let _ = self.ensure_tenant_loaded(tenant_id);
+    /// Hydrates `tenant_id`, then runs `read`. The flag is whether the tenant
+    /// stayed resident and unevicted from before hydration until `read` ended.
+    fn read_tenant<T>(
+        &self,
+        tenant_id: &str,
+        after_hydrate: &mut dyn FnMut(),
+        after_read: &mut dyn FnMut(),
+        read: impl FnOnce() -> T,
+    ) -> Result<(T, bool)> {
+        let generation = self.cache_generation(tenant_id);
+        self.ensure_tenant_loaded(tenant_id)?;
+        after_hydrate();
+        let value = read();
+        after_read();
+        let resident =
+            self.is_tenant_loaded(tenant_id) && self.cache_generation(tenant_id) == generation;
+        Ok((value, resident))
+    }
+
+    /// `read` over a tenant that stayed resident throughout; one retry, then
+    /// `Err` rather than counts that may miss the tenant's events.
+    fn read_resident_tenant<T>(&self, tenant_id: &str, mut read: impl FnMut() -> T) -> Result<T> {
+        for _ in 0..2 {
+            let (value, resident) =
+                self.read_tenant(tenant_id, &mut || {}, &mut || {}, &mut read)?;
+            if resident {
+                return Ok(value);
+            }
+        }
+        // No tenant id: this text reaches the `tenant read failed` log line.
+        Err(AllSourceError::StorageError(
+            "tenant left the cache during every read".to_owned(),
+        ))
+    }
+
+    /// Every removal from `events` goes through here, so a chunked reader can
+    /// tell that positions shifted under its cursor.
+    fn retain_events(&self, events: &mut Vec<Event>, keep: impl FnMut(&Event) -> bool) {
+        let before = events.len();
+        events.retain(keep);
+        if events.len() != before {
+            self.events_removed
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Every stream of ONE tenant, or of every tenant when `None`, with its heap
+    /// bytes and last-seven-days count. Unordered.
+    ///
+    /// The events lock is held per chunk of `STREAM_SIZE_CHUNK` events, which
+    /// are sized in place, and released between chunks. Removing events shifts
+    /// positions under the cursor, so a removal mid-scan restarts the scan once;
+    /// a second one returns what was counted with `complete: false`.
+    ///
+    /// A tenant that cannot be hydrated is `Err`, never zero streams. Each
+    /// pass hydrates the tenant first and is complete only if the tenant was
+    /// still resident, and not evicted, when the pass ended.
+    pub fn stream_sizes(&self, tenant: Option<&str>) -> Result<StreamSizes> {
+        self.stream_sizes_seamed(
+            tenant,
+            &mut ScanSeams {
+                after_hydrate: &mut || {},
+                between_chunks: &mut || {},
+                after_scan: &mut || {},
+            },
+        )
+    }
+
+    #[cfg(test)]
+    fn stream_sizes_between(
+        &self,
+        tenant: Option<&str>,
+        mut between_chunks: impl FnMut(),
+    ) -> Result<StreamSizes> {
+        self.stream_sizes_seamed(
+            tenant,
+            &mut ScanSeams {
+                after_hydrate: &mut || {},
+                between_chunks: &mut between_chunks,
+                after_scan: &mut || {},
+            },
+        )
+    }
+
+    /// `stream_sizes` with `after_hydrate` run once a tenant is hydrated and
+    /// `after_scan` once its events are counted, on every pass.
+    #[cfg(test)]
+    fn stream_sizes_racing(
+        &self,
+        tenant: Option<&str>,
+        mut after_hydrate: impl FnMut(),
+        mut after_scan: impl FnMut(),
+    ) -> Result<StreamSizes> {
+        self.stream_sizes_seamed(
+            tenant,
+            &mut ScanSeams {
+                after_hydrate: &mut after_hydrate,
+                between_chunks: &mut || {},
+                after_scan: &mut after_scan,
+            },
+        )
+    }
+
+    fn stream_sizes_seamed(
+        &self,
+        tenant: Option<&str>,
+        seams: &mut ScanSeams<'_>,
+    ) -> Result<StreamSizes> {
+        let last_week = chrono::Utc::now() - chrono::Duration::days(7);
+        let (streams, stable) = self.stream_sizes_pass(tenant, last_week, seams, false)?;
+        if stable {
+            return Ok(StreamSizes {
+                streams,
+                complete: true,
+            });
+        }
+        let (streams, stable) = self.stream_sizes_pass(tenant, last_week, seams, true)?;
+        Ok(StreamSizes {
+            streams,
+            complete: stable,
+        })
+    }
+
+    fn stream_sizes_pass(
+        &self,
+        tenant: Option<&str>,
+        last_week: chrono::DateTime<chrono::Utc>,
+        seams: &mut ScanSeams<'_>,
+        finish_when_moved: bool,
+    ) -> Result<(Vec<StreamInfo>, bool)> {
+        let Some(tenant_id) = tenant else {
+            return Ok(self.scan_stream_sizes(
+                None,
+                last_week,
+                seams.between_chunks,
+                finish_when_moved,
+            ));
+        };
+        let between_chunks = &mut *seams.between_chunks;
+        let ((streams, stable), resident) =
+            self.read_tenant(tenant_id, seams.after_hydrate, seams.after_scan, || {
+                self.scan_stream_sizes(tenant, last_week, between_chunks, finish_when_moved)
+            })?;
+        Ok((streams, stable && resident))
+    }
+
+    /// Bumped by every eviction of `tenant_id`.
+    fn cache_generation(&self, tenant_id: &str) -> u64 {
+        self.cache_generations
+            .get(tenant_id)
+            .map_or(0, |value| *value)
+    }
+
+    /// One pass of `stream_sizes`. Returns early with `false` when events were
+    /// removed mid-scan, unless `finish_when_moved`.
+    ///
+    /// Nothing allocates while the events lock is held: ids of streams first
+    /// seen in a chunk are copied into `fresh_ids`, reserved beforehand, and
+    /// become owned keys after the lock is released. A chunk ends early when
+    /// an id does not fit or two fresh ids share a hash.
+    fn scan_stream_sizes(
+        &self,
+        tenant: Option<&str>,
+        last_week: chrono::DateTime<chrono::Utc>,
+        between_chunks: &mut dyn FnMut(),
+        finish_when_moved: bool,
+    ) -> (Vec<StreamInfo>, bool) {
+        use std::hash::BuildHasher;
+
+        #[derive(Default, Clone, Copy)]
+        struct Totals {
+            events: usize,
+            bytes: u64,
+            last_7d: usize,
+            last_event_at: Option<chrono::DateTime<chrono::Utc>>,
+        }
+        let mut slots: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut totals: Vec<Totals> = Vec::new();
+        let mut fresh_ids = String::new();
+        let mut fresh: Vec<std::ops::Range<usize>> = Vec::new();
+        let mut fresh_by_hash: std::collections::HashMap<u64, usize> =
+            std::collections::HashMap::new();
+        let mut id_room = STREAM_ID_BYTES;
+        let mut removals = None;
+        let mut stable = true;
+        let mut cursor = 0;
+        loop {
+            // A chunk adds at most STREAM_SIZE_CHUNK streams, so these never
+            // reallocate under the lock.
+            totals.reserve(STREAM_SIZE_CHUNK);
+            fresh.reserve(STREAM_SIZE_CHUNK);
+            fresh_by_hash.reserve(STREAM_SIZE_CHUNK);
+            fresh_ids.reserve(id_room);
+            let base = totals.len();
+            let events = self.events.read();
+            let removed = self
+                .events_removed
+                .load(std::sync::atomic::Ordering::Relaxed);
+            if *removals.get_or_insert(removed) != removed || events.len() < cursor {
+                stable = false;
+                if !finish_when_moved {
+                    return (Vec::new(), false);
+                }
+                removals = Some(removed);
+            }
+            let end = (cursor + STREAM_SIZE_CHUNK).min(events.len());
+            let start = cursor.min(end);
+            let mut stop = end;
+            for (offset, ev) in events[start..end].iter().enumerate() {
+                if tenant.is_some_and(|t| ev.tenant_id_str() != t) {
+                    continue;
+                }
+                let id = ev.entity_id_str();
+                let slot = if let Some(&slot) = slots.get(id) {
+                    slot
+                } else {
+                    let hash = slots.hasher().hash_one(id);
+                    match fresh_by_hash.get(&hash) {
+                        Some(&index) if &fresh_ids[fresh[index].clone()] == id => base + index,
+                        Some(_) => {
+                            stop = start + offset;
+                            break;
+                        }
+                        None if fresh_ids.capacity() - fresh_ids.len() < id.len() => {
+                            id_room = id_room.max(id.len());
+                            stop = start + offset;
+                            break;
+                        }
+                        None => {
+                            let at = fresh_ids.len();
+                            fresh_ids.push_str(id);
+                            fresh_by_hash.insert(hash, fresh.len());
+                            fresh.push(at..fresh_ids.len());
+                            totals.push(Totals::default());
+                            totals.len() - 1
+                        }
+                    }
+                };
+                let stream = &mut totals[slot];
+                stream.events += 1;
+                stream.bytes += ev.resident_header_bytes()
+                    + (value_heap_bytes(&ev.payload)
+                        + ev.metadata.as_ref().map_or(0, value_heap_bytes))
+                        as u64;
+                if ev.timestamp >= last_week {
+                    stream.last_7d += 1;
+                }
+                if stream.last_event_at.is_none_or(|last| ev.timestamp > last) {
+                    stream.last_event_at = Some(ev.timestamp);
+                }
+            }
+            let done = stop >= events.len();
+            drop(events);
+            for (index, range) in fresh.drain(..).enumerate() {
+                slots.insert(fresh_ids[range].to_owned(), base + index);
+            }
+            fresh_ids.clear();
+            fresh_by_hash.clear();
+            cursor = stop;
+            if done {
+                break;
+            }
+            between_chunks();
+        }
+        let streams = slots
+            .into_iter()
+            .map(|(stream_id, slot)| (stream_id, totals[slot]))
+            .map(|(stream_id, totals)| StreamInfo {
+                stream_id,
+                event_count: totals.events,
+                last_event_at: totals.last_event_at,
+                estimated_bytes: Some(totals.bytes),
+                events_last_7d: Some(totals.last_7d),
+            })
+            .collect();
+        (streams, stable)
+    }
+
+    /// `stream_sizes` ordered by `sort` and cut to `limit`.
+    pub fn list_streams_with_bytes(
+        &self,
+        tenant: Option<&str>,
+        sort: StreamSort,
+        limit: usize,
+    ) -> Result<StreamSizes> {
+        let mut sizes = self.stream_sizes(tenant)?;
+        sort_streams(&mut sizes.streams, sort);
+        sizes.streams.truncate(limit);
+        Ok(sizes)
+    }
+
+    /// Distinct event types (+ per-type event count) for ONE tenant. `Err`
+    /// when the tenant cannot be hydrated or keeps leaving the cache.
+    pub fn list_event_types_for_tenant(&self, tenant_id: &str) -> Result<Vec<EventTypeInfo>> {
+        self.read_resident_tenant(tenant_id, || self.collect_event_types_for_tenant(tenant_id))
+    }
+
+    fn collect_event_types_for_tenant(&self, tenant_id: &str) -> Vec<EventTypeInfo> {
         let events = self.events.read();
         let mut by_type: std::collections::HashMap<&str, (usize, chrono::DateTime<chrono::Utc>)> =
             std::collections::HashMap::new();
@@ -3234,8 +3554,13 @@ impl EventStore {
     ///
     /// Returns the same four counters as `StoreStats`, plus the per-type census
     /// and time range that callers otherwise reconstruct by paging events.
-    pub fn stats_for_tenant(&self, tenant_id: &str) -> TenantStoreStats {
-        let _ = self.ensure_tenant_loaded(tenant_id);
+    /// `Err` when the tenant cannot be hydrated or keeps leaving the cache,
+    /// never zero counts.
+    pub fn stats_for_tenant(&self, tenant_id: &str) -> Result<TenantStoreStats> {
+        self.read_resident_tenant(tenant_id, || self.collect_stats_for_tenant(tenant_id))
+    }
+
+    fn collect_stats_for_tenant(&self, tenant_id: &str) -> TenantStoreStats {
         let events = self.events.read();
 
         let mut entities: std::collections::HashSet<&str> = std::collections::HashSet::new();
@@ -3629,6 +3954,54 @@ pub struct StreamInfo {
     pub event_count: usize,
     /// Timestamp of the last event in this stream
     pub last_event_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Heap bytes held for this stream. Set only by `list_streams_with_bytes`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_bytes: Option<u64>,
+    /// Events in this stream from the last seven days. Set only by `list_streams_with_bytes`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub events_last_7d: Option<usize>,
+}
+
+/// Ordering for `list_streams_with_bytes`; ties break on `stream_id`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamSort {
+    #[default]
+    Events,
+    Bytes,
+}
+
+/// Events sized per events-lock hold in `EventStore::stream_sizes`.
+const STREAM_SIZE_CHUNK: usize = 4096;
+/// Bytes of new stream ids one chunk may copy before it ends early.
+const STREAM_ID_BYTES: usize = 64 * 1024;
+
+/// Points where a test interleaves work with a `stream_sizes` pass.
+struct ScanSeams<'a> {
+    after_hydrate: &'a mut dyn FnMut(),
+    between_chunks: &'a mut dyn FnMut(),
+    after_scan: &'a mut dyn FnMut(),
+}
+
+/// What `EventStore::stream_sizes` or `list_streams_for_tenant` counted.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct StreamSizes {
+    pub streams: Vec<StreamInfo>,
+    /// `false` when events were removed during the scan and its retry, or
+    /// the tenant was evicted between its hydration and the end of the read,
+    /// so an event can be skipped or counted twice.
+    pub complete: bool,
+}
+
+/// Orders streams by `sort`, largest first; ties break on `stream_id`.
+pub fn sort_streams(streams: &mut [StreamInfo], sort: StreamSort) {
+    streams.sort_by(|a, b| {
+        let by_key = match sort {
+            StreamSort::Events => b.event_count.cmp(&a.event_count),
+            StreamSort::Bytes => b.estimated_bytes.cmp(&a.estimated_bytes),
+        };
+        by_key.then_with(|| a.stream_id.cmp(&b.stream_id))
+    });
 }
 
 /// Information about an event type
@@ -3676,6 +4049,10 @@ mod version_index_reuse_tests;
 #[cfg(test)]
 #[path = "store_tie_break_tests.rs"]
 mod tie_break_tests;
+
+#[cfg(test)]
+#[path = "store_stream_sizes_tests.rs"]
+mod stream_sizes_tests;
 
 #[cfg(test)]
 mod tests {
@@ -6594,14 +6971,14 @@ mod tests {
     fn test_stats_for_tenant_counts_only_that_tenant() {
         let store = seed_two_tenants();
 
-        let alice = store.stats_for_tenant("alice");
+        let alice = store.stats_for_tenant("alice").unwrap();
         assert_eq!(alice.total_events, 3);
         assert_eq!(alice.total_entities, 2);
         assert_eq!(alice.total_event_types, 2);
         assert_eq!(alice.event_types.get("created"), Some(&2));
         assert_eq!(alice.event_types.get("updated"), Some(&1));
 
-        let bob = store.stats_for_tenant("bob");
+        let bob = store.stats_for_tenant("bob").unwrap();
         assert_eq!(bob.total_events, 1);
         assert_eq!(bob.total_entities, 1);
         assert_eq!(bob.total_event_types, 1);
@@ -6613,18 +6990,18 @@ mod tests {
 
         // The global view sees all 4; neither tenant may.
         assert_eq!(store.stats().total_events, 4);
-        assert_eq!(store.stats_for_tenant("alice").total_events, 3);
-        assert_eq!(store.stats_for_tenant("bob").total_events, 1);
+        assert_eq!(store.stats_for_tenant("alice").unwrap().total_events, 3);
+        assert_eq!(store.stats_for_tenant("bob").unwrap().total_events, 1);
 
         // total_ingested is a global process counter, so the scoped form must
         // report the tenant's own total rather than leaking the fleet tally.
-        assert_eq!(store.stats_for_tenant("bob").total_ingested, 1);
+        assert_eq!(store.stats_for_tenant("bob").unwrap().total_ingested, 1);
     }
 
     #[test]
     fn test_stats_for_tenant_unknown_tenant_is_empty_not_global() {
         let store = seed_two_tenants();
-        let nobody = store.stats_for_tenant("does-not-exist");
+        let nobody = store.stats_for_tenant("does-not-exist").unwrap();
 
         assert_eq!(nobody.total_events, 0);
         assert_eq!(nobody.total_entities, 0);
@@ -6636,7 +7013,7 @@ mod tests {
     #[test]
     fn test_stats_for_tenant_reports_time_range() {
         let store = seed_two_tenants();
-        let alice = store.stats_for_tenant("alice");
+        let alice = store.stats_for_tenant("alice").unwrap();
 
         let oldest = alice.oldest_event.expect("oldest");
         let newest = alice.newest_event.expect("newest");

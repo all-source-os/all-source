@@ -200,7 +200,14 @@ pub struct QueryEventsParams {
     pub order: Option<SortOrder>,
     /// Sent as the `If-None-Match` header, never as a query parameter.
     pub if_none_match: Option<String>,
+    /// Sent as `x-allsource-caller`, overriding [`ClientConfig::with_caller`](crate::ClientConfig::with_caller).
+    pub caller: Option<&'static str>,
+    /// Sent as `x-allsource-read-id`. [`EventPaginator`](crate::EventPaginator) sets it on every page.
+    pub read_id: Option<crate::ReadId>,
 }
+
+pub(crate) const CALLER_HEADER: &str = "x-allsource-caller";
+pub(crate) const READ_ID_HEADER: &str = "x-allsource-read-id";
 
 impl QueryEventsParams {
     pub fn new() -> Self {
@@ -300,6 +307,29 @@ impl QueryEventsParams {
     pub fn if_none_match(mut self, etag: &str) -> Self {
         self.if_none_match = Some(etag.to_string());
         self
+    }
+
+    /// Attribute this query to `caller`, overriding the client's default.
+    pub fn caller(mut self, caller: &'static str) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    /// Mark this request as a page of the walk `read_id` identifies.
+    pub fn read_id(mut self, read_id: crate::ReadId) -> Self {
+        self.read_id = Some(read_id);
+        self
+    }
+
+    pub(crate) fn attribution_headers(&self) -> Vec<(&'static str, String)> {
+        let mut headers = Vec::new();
+        if let Some(caller) = self.caller {
+            headers.push((CALLER_HEADER, caller.to_string()));
+        }
+        if let Some(read_id) = &self.read_id {
+            headers.push((READ_ID_HEADER, read_id.to_string()));
+        }
+        headers
     }
 
     /// Convert to query string pairs for reqwest.

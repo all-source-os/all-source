@@ -6,6 +6,7 @@ use crate::types::QueryEventsResponse;
 /// Response headers a caller needs to poll politely: the validator to send
 /// back as `If-None-Match`, and the server's advertised rate-limit state.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ResponseMeta {
     /// `ETag`, verbatim, quotes and weak prefix included.
     pub etag: Option<String>,
@@ -13,6 +14,9 @@ pub struct ResponseMeta {
     pub rate_limit: Option<String>,
     /// `RateLimit-Policy`, verbatim.
     pub rate_limit_policy: Option<String>,
+    /// Length of the decoded body in bytes. Set on the responses that carry
+    /// [`ResponseMeta`] as a field; `None` otherwise.
+    pub body_bytes: Option<u64>,
 }
 
 impl ResponseMeta {
@@ -27,6 +31,7 @@ impl ResponseMeta {
             etag: header("etag"),
             rate_limit: header("ratelimit"),
             rate_limit_policy: header("ratelimit-policy"),
+            body_bytes: None,
         }
     }
 }

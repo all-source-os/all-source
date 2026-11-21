@@ -33,6 +33,7 @@ type fakeBackend struct {
 	tenant string
 	user   string
 	body   []byte
+	header http.Header
 	respBy func(w http.ResponseWriter, r *http.Request)
 }
 
@@ -51,6 +52,7 @@ func newFakeBackend(respBy func(w http.ResponseWriter, r *http.Request)) (*fakeB
 		fb.auth = r.Header.Get("Authorization")
 		fb.tenant = r.Header.Get("X-Tenant-Id")
 		fb.user = r.Header.Get("X-User-Id")
+		fb.header = r.Header.Clone()
 		fb.body = body
 		fb.respBy(w, r)
 	}))

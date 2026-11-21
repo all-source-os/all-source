@@ -107,16 +107,9 @@ async fn a_provider_failure_is_a_config_error_and_sends_nothing() {
 }
 
 #[test]
-fn client_config_still_builds_from_a_struct_literal() {
-    let base = ClientConfig::new("http://localhost:3902", "test-key");
-    let config = ClientConfig {
-        base_url: base.base_url,
-        api_key: base.api_key,
-        timeout: base.timeout,
-        retry: base.retry,
-        circuit_breaker_threshold: 9,
-        circuit_breaker_recovery: base.circuit_breaker_recovery,
-    };
+fn client_config_is_built_by_field_assignment() {
+    let mut config = ClientConfig::new("http://localhost:3902", "test-key");
+    config.circuit_breaker_threshold = 9;
     QueryClient::with_config(config).expect("client");
 }
 
