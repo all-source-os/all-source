@@ -337,18 +337,51 @@
       ]
     },
     {
+      "id": 306,
+      "type": "table",
+      "title": "Wire bytes by caller (window, top 25)",
+      "description": "Event-query response bytes by X-Allsource-Caller. Callers past 64 per tenant share other; a request without the header is unattributed; a header that fails its pattern is invalid, and control_plane_read_header_invalid_total counts it.",
+      "gridPos": { "x": 0, "y": 62, "w": 24, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "tenant" }, "properties": [ { "id": "displayName", "value": "Tenant" } ] },
+          { "matcher": { "id": "byName", "options": "caller" }, "properties": [ { "id": "displayName", "value": "Caller" } ] },
+          { "matcher": { "id": "byName", "options": "Value #A" }, "properties": [ { "id": "displayName", "value": "Wire bytes" }, { "id": "unit", "value": "decbytes" } ] },
+          { "matcher": { "id": "byName", "options": "Value #B" }, "properties": [ { "id": "displayName", "value": "Queries" } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Wire bytes", "desc": true } ] },
+      "targets": [
+        {
+          "refId": "A",
+          "instant": true,
+          "format": "table",
+          "expr": "topk(25, sum by (tenant, caller) (increase(control_plane_tenant_event_query_caller_bytes_total{tenant=~\"$tenant\"}[$__range])) > 0)"
+        },
+        {
+          "refId": "B",
+          "instant": true,
+          "format": "table",
+          "expr": "topk(25, sum by (tenant, caller) (increase(control_plane_tenant_event_query_caller_queries_total{tenant=~\"$tenant\"}[$__range])) > 0)"
+        }
+      ]
+    },
+    {
       "id": 400,
       "type": "row",
       "title": "4 · Who is refused?",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 62, "w": 24, "h": 1 },
+      "gridPos": { "x": 0, "y": 71, "w": 24, "h": 1 },
       "panels": []
     },
     {
       "id": 401,
       "type": "timeseries",
       "title": "Edge responses by status",
-      "gridPos": { "x": 0, "y": 63, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 72, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] } },
@@ -360,7 +393,7 @@
       "id": 402,
       "type": "table",
       "title": "4xx and 5xx by tenant and route (window)",
-      "gridPos": { "x": 12, "y": 63, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 72, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "transformations": [ { "id": "merge", "options": {} }, { "id": "organize", "options": { "excludeByName": { "Time": true } } } ],
       "fieldConfig": {

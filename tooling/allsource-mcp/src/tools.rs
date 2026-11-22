@@ -35,6 +35,8 @@ const MAX_SCAN: usize = 50_000;
 const MAX_WAIT_SECONDS: u64 = 55;
 const WATCH_POLL: Duration = Duration::from_millis(500);
 
+#[path = "stream_sizes.rs"]
+mod stream_sizes;
 #[path = "trace.rs"]
 mod trace;
 
@@ -324,6 +326,57 @@ pub fn tool_definitions(policy: &DiagnosticPolicy) -> Vec<ToolDef> {
                 "required": ["view"]
             }),
         ),
+        read_tool(
+            "stream_sizes",
+            "Stream sizes",
+            "Largest streams and stream classes by events and estimated bytes, with events in the last 7 days. An embedded store is scanned; a --remote store is read from Core's /api/v1/streams?with_bytes=true and /api/v1/stats.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "sort": { "type": "string", "enum": ["events", "bytes"], "default": "events" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": stream_sizes::MAX_STREAM_LIMIT, "default": stream_sizes::DEFAULT_STREAM_LIMIT, "description": "Rows returned for streams and for classes; class totals always cover every stream read" }
+                }
+            }),
+        ),
+        read_tool(
+            "read_costs",
+            "Read costs",
+            "Costliest callers and stream classes of event queries since Core started: pages, whole reads, body bytes, truncated reads by kind, pages per walk. Needs a --remote store; Core keeps these in memory only.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "order": { "type": "string", "enum": stream_sizes::READ_COST_ORDERS, "default": "bytes" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": stream_sizes::MAX_READ_COST_LIMIT, "default": stream_sizes::DEFAULT_READ_COST_LIMIT }
+                }
+            }),
+        ),
+        read_tool(
+            "cap_check",
+            "Check stream caps",
+            "Compare stream-class sizes from stream_sizes against caps and list the classes at or above threshold_pct of their cap. A class with no stream in the store is listed as unmeasured, never as under its cap. When the listing stopped short of the tenant's streams, a class whose measure is only a lower bound and below the threshold is listed as undetermined.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "caps": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": stream_sizes::MAX_CAPS,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "stream_class": { "type": "string", "description": "Class name, ^[a-z][a-z0-9_.]{0,63}$" },
+                                "cap_events": { "type": "integer", "minimum": 1 },
+                                "measure": { "type": "string", "enum": ["largest_stream", "class_total"], "default": "largest_stream", "description": "Compare the class's largest stream, or the sum of its streams" }
+                            },
+                            "required": ["stream_class", "cap_events"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "threshold_pct": { "type": "integer", "minimum": 1, "maximum": 100, "default": stream_sizes::DEFAULT_THRESHOLD_PCT }
+                },
+                "required": ["caps"]
+            }),
+        ),
     ]
 }
 
@@ -377,6 +430,9 @@ async fn execute_tool_inner(
         "trace" => return trace::exec_trace(stores, policy, args).await,
         "get_latest_state" | "list_latest" | "list_changes" => {
             return exec_view_tool(stores, policy, name, args).await;
+        }
+        "stream_sizes" | "read_costs" | "cap_check" => {
+            return stream_sizes::exec_cost_tool(stores, policy, name, args).await;
         }
         _ => {}
     }
@@ -1761,7 +1817,9 @@ async fn exec_sample_events(
 async fn exec_quick_stats(core: &EmbeddedCore, policy: &DiagnosticPolicy) -> Result<Value> {
     let durability = core.durability_status();
     let (statistics, fresh_through) = if let Some(tenant_id) = policy.tenant_id() {
-        let stats = core.stats_for_tenant(tenant_id);
+        let stats = core
+            .stats_for_tenant(tenant_id)
+            .map_err(|err| anyhow::anyhow!("store unavailable: {err}"))?;
         let fresh_through = stats.newest_event.map(|timestamp| timestamp.to_rfc3339());
         (serde_json::to_value(stats)?, fresh_through)
     } else {

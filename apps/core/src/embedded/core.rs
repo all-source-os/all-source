@@ -597,8 +597,9 @@ impl EmbeddedCore {
         self.store.stats()
     }
 
-    /// Get exact statistics for one tenant.
-    pub fn stats_for_tenant(&self, tenant_id: &str) -> crate::store::TenantStoreStats {
+    /// Get exact statistics for one tenant. `Err` when the tenant cannot be
+    /// hydrated, never zero counts.
+    pub fn stats_for_tenant(&self, tenant_id: &str) -> Result<crate::store::TenantStoreStats> {
         self.store.stats_for_tenant(tenant_id)
     }
 

@@ -6,6 +6,69 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
+## [0.30.0] — unreleased
+
+Read attribution. A caller names itself on each read, and each response reports
+how many body bytes it carried, so reads can be counted by who made them.
+
+### Added
+
+- `ClientConfig::with_caller`: sends `x-allsource-caller` on every request,
+  including `get_optional` lookups. A caller that does not match
+  `^[a-z][a-z0-9_.]{0,63}$`, or is `unattributed`, `other` or `invalid`, fails
+  client construction with `Error::Config`, since the gateway and Core would
+  count it as `invalid`.
+- `QueryEventsParams::caller`: overrides the default caller for one query. The
+  same check fails the query with `Error::Config` before it is sent.
+- `QueryEventsParams::read_id` and `ReadId`: `x-allsource-read-id` on one
+  request. `EventPaginator` creates one `ReadId` per walk and sends it on
+  every page.
+- `ResponseMeta::body_bytes`: length of the decoded body. Set on every
+  response read through `get_with_meta`, which serves `QueryEventsResponse::meta`
+  and the meta returned by the latest-state and view-row reads; `None` on a
+  `304`. The decoded length is reported, so under `gzip` it is not the wire
+  length.
+- `ReadId::parse`, with `FromStr` and `TryFrom<&str>`: accepts exactly 16
+  lowercase hex characters, the pattern Core and the gateway accept. A failure
+  is `InvalidReadId`.
+- `CoreClient::list_streams` with `StreamsParams` (`with_bytes`, `sort`,
+  `limit`, `offset`): `GET /api/v1/streams`, answering `ListStreamsResponse`
+  of `StreamInfo` rows. With `with_bytes`, each row carries `estimated_bytes`
+  and `events_last_7d`. `complete` is `false` and `incomplete` names why:
+  `scan_interrupted` when Core saw events removed during the scan and its
+  retry, `bytes_unavailable` when `with_bytes` was asked and Core sent no
+  `complete` or a row without `estimated_bytes` or `events_last_7d` (a Core
+  older than 0.30 ignores `with_bytes`), `completeness_unknown` for a plain
+  listing without `complete`, or Core's own `reason` such as `no_tenant` or
+  `tenant_evicted`.
+  `ListStreamsResponse` is `#[non_exhaustive]` and is not `Deserialize`.
+- `CoreClient::tenant_stats`: `GET /api/v1/stats`, answering `TenantStats`
+  (per-event-type counts and the oldest and newest event). A reply without
+  `event_types` is `Error::Json`, never an empty census.
+
+### Changed
+
+- `handle_response` decodes from the buffered body, so `body_bytes` is known
+  before parsing.
+- `es256-assertion` no longer enables `dep:uuid`: `uuid` is a required
+  dependency now, used by `ReadId`.
+
+### Breaking
+
+- `ClientConfig` and `ResponseMeta` are `#[non_exhaustive]`: struct literals
+  no longer compile outside this crate. Build a `ClientConfig` with
+  `ClientConfig::new` and assign its fields, and read `ResponseMeta` by field.
+- `QueryEventsParams` gained the public fields `caller` and `read_id`, so
+  struct literals that name every field no longer compile. Use the builders.
+- A 2xx body that fails to decode is now `Error::Json`, on every endpoint;
+  before it was `Error::Http`, from `reqwest::Response::json`. `Error::Json`
+  is not retryable and does not count against the circuit breaker, so a
+  malformed body now fails on the first attempt instead of being retried, and
+  code matching `Error::Http` for decode failures no longer sees them.
+  `reqwest` offers no public way to build its error from a `serde_json` error,
+  so keeping `Error::Http` would mean decoding through `Response::json` and
+  losing the body length.
+
 ## [0.29.0] — 2026-11-07
 
 Registered client keys. A tenant client can authenticate with a short-lived

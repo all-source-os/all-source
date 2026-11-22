@@ -200,6 +200,32 @@ pub struct QueryEventsParams {
     pub order: Option<SortOrder>,
     /// Sent as the `If-None-Match` header, never as a query parameter.
     pub if_none_match: Option<String>,
+    /// Sent as `x-allsource-caller`, overriding [`ClientConfig::with_caller`](crate::ClientConfig::with_caller).
+    pub caller: Option<&'static str>,
+    /// Sent as `x-allsource-read-id`. [`EventPaginator`](crate::EventPaginator) sets it on every page.
+    pub read_id: Option<crate::ReadId>,
+}
+
+pub(crate) const CALLER_HEADER: &str = "x-allsource-caller";
+pub(crate) const READ_ID_HEADER: &str = "x-allsource-read-id";
+
+/// Names the gateway and Core keep for themselves; a caller sending one is
+/// counted as `invalid`.
+const RESERVED_CALLERS: [&str; 3] = ["unattributed", "other", "invalid"];
+
+/// Refuses a caller the gateway and Core would rewrite to `invalid`: one not
+/// matching `^[a-z][a-z0-9_.]{0,63}$`, or a reserved name.
+pub(crate) fn check_caller(caller: &str) -> Result<(), crate::Error> {
+    let mut chars = caller.chars();
+    let well_formed = caller.len() <= 64
+        && chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.');
+    if !well_formed || RESERVED_CALLERS.contains(&caller) {
+        return Err(crate::Error::Config(format!(
+            "invalid caller '{caller}': must match ^[a-z][a-z0-9_.]{{0,63}}$ and not be unattributed, other or invalid"
+        )));
+    }
+    Ok(())
 }
 
 impl QueryEventsParams {
@@ -300,6 +326,32 @@ impl QueryEventsParams {
     pub fn if_none_match(mut self, etag: &str) -> Self {
         self.if_none_match = Some(etag.to_string());
         self
+    }
+
+    /// Attribute this query to `caller`, overriding the client's default. The
+    /// query fails with [`Error::Config`](crate::Error::Config), unsent, when
+    /// `caller` breaks the rule [`ClientConfig::with_caller`](crate::ClientConfig::with_caller) states.
+    pub fn caller(mut self, caller: &'static str) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    /// Mark this request as a page of the walk `read_id` identifies.
+    pub fn read_id(mut self, read_id: crate::ReadId) -> Self {
+        self.read_id = Some(read_id);
+        self
+    }
+
+    pub(crate) fn attribution_headers(&self) -> Result<Vec<(&'static str, String)>, crate::Error> {
+        let mut headers = Vec::new();
+        if let Some(caller) = self.caller {
+            check_caller(caller)?;
+            headers.push((CALLER_HEADER, caller.to_string()));
+        }
+        if let Some(read_id) = &self.read_id {
+            headers.push((READ_ID_HEADER, read_id.to_string()));
+        }
+        Ok(headers)
     }
 
     /// Convert to query string pairs for reqwest.

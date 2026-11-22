@@ -95,6 +95,14 @@ impl Store {
             "lastRefreshError": status.last_error.is_some(),
         })
     }
+
+    /// Records a failed refresh, as `fresh_core` would, for tests.
+    #[cfg(test)]
+    pub async fn record_refresh_failure(&self, error: &str) {
+        let mut status = self.refresh.lock().await;
+        status.last_attempt = Some(Instant::now());
+        status.last_error = Some(error.to_owned());
+    }
 }
 
 impl StoreRegistry {
@@ -153,6 +161,16 @@ impl StoreRegistry {
     /// Build a registry around already-open cores, for tests.
     #[cfg(test)]
     pub fn from_cores(cores: Vec<(&str, EmbeddedCore)>) -> Self {
+        Self::from_cores_refreshing_every(cores, Duration::ZERO)
+    }
+
+    /// Build a registry around already-open cores that refresh at most once
+    /// per `refresh_every`, for tests.
+    #[cfg(test)]
+    pub fn from_cores_refreshing_every(
+        cores: Vec<(&str, EmbeddedCore)>,
+        refresh_every: Duration,
+    ) -> Self {
         Self {
             stores: cores
                 .into_iter()
@@ -162,7 +180,7 @@ impl StoreRegistry {
                         Store::new(
                             PathBuf::from(format!("<in-memory:{name}>")),
                             core,
-                            Duration::ZERO,
+                            refresh_every,
                         ),
                     )
                 })

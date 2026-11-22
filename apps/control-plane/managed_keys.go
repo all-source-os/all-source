@@ -305,7 +305,7 @@ func managedScope(c *gin.Context) string {
 	path, method := c.Request.URL.Path, c.Request.Method
 	if method == http.MethodGet {
 		switch {
-		case path == queryEventsPath, path == "/api/v1/event-feed", strings.HasPrefix(path, "/api/v1/entities/"), path == statsAPIPath:
+		case path == queryEventsPath, path == "/api/v1/event-feed", strings.HasPrefix(path, "/api/v1/entities/"), path == statsAPIPath, path == readCostsAPIPath, path == streamsAPIPath:
 			return managedScopeRead
 		case strings.HasPrefix(path, "/api/v1/read-models/"), path == viewsPath, strings.HasPrefix(path, viewsPath+"/"):
 			return "projections:read"

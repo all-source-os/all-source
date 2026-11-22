@@ -16,6 +16,7 @@
 use crate::{
     client::QueryClient,
     error::Error,
+    read_id::ReadId,
     types::{EntitySummary, Event, ListEntitiesParams, QueryEventsParams},
 };
 
@@ -51,6 +52,7 @@ pub struct EventPaginator {
     /// the head of consecutive pages is how the walk notices — see
     /// [`no_progress_error`].
     last_page_head: Option<String>,
+    read_id: ReadId,
 }
 
 /// The error raised when a page repeats the previous page's first item.
@@ -80,6 +82,7 @@ fn no_progress_error(what: &str, offset: u32, head: &str) -> Error {
 impl EventPaginator {
     pub(crate) fn new(client: QueryClient, params: QueryEventsParams, page_size: u32) -> Self {
         let offset = params.offset.unwrap_or(0);
+        let read_id = params.read_id.clone().unwrap_or_default();
         Self {
             client,
             params,
@@ -87,6 +90,7 @@ impl EventPaginator {
             offset,
             exhausted: false,
             last_page_head: None,
+            read_id,
         }
     }
 
@@ -116,7 +120,8 @@ impl EventPaginator {
             .params
             .clone()
             .limit(self.page_size)
-            .offset(requested_offset);
+            .offset(requested_offset)
+            .read_id(self.read_id.clone());
         let resp = self.client.query_events(params).await?;
         let head = resp.events.first().map(|e| e.id.clone());
         if requested_offset > 0 && head.is_some() && head == self.last_page_head {

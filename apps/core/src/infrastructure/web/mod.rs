@@ -16,6 +16,7 @@ pub mod heap_profile_api;
 pub mod http_metrics;
 #[cfg(feature = "prime")]
 pub mod prime_api;
+pub mod read_cost;
 pub mod read_model_api;
 pub mod response_limit;
 mod retained_query;

@@ -31,13 +31,13 @@ hotpath-alloc = ["hotpath/hotpath-alloc"]
 dhat-heap = ["dep:dhat"]
 
 [dependencies]
-allsource-core = { version = "0.29.0", path = "../core", default-features = false, features = [
+allsource-core = { version = "0.30.0", path = "../core", default-features = false, features = [
     "embedded",
     "embedded-replicant",
     "embedded-projections",
 ] }
 # Es256AssertionProvider for registered client keys; same client as allsource-mcp.
-allsource = { version = "0.29.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
+allsource = { version = "0.30.0", path = "../../sdks/rust", default-features = false, features = ["rustls", "es256-assertion"] }
 anyhow = "1.0"
 arboard = "3.4"
 axum = { version = "0.8", features = ["json", "ws"] }

@@ -709,7 +709,12 @@ async fn fetch_entity_state(
 ) -> Result<Conditional<EntityState>, Error> {
     let path = format!("/api/v1/entities/{}/state", urlencode(entity_id));
     let (body, meta) = transport
-        .get_with_meta::<EntityState>(&path, &params.to_query(), params.if_none_match.as_deref())
+        .get_with_meta::<EntityState>(
+            &path,
+            &params.to_query(),
+            &[],
+            params.if_none_match.as_deref(),
+        )
         .await?;
     Ok(match body {
         Some(mut state) => {
@@ -740,7 +745,7 @@ async fn fetch_latest(
 ) -> Result<LatestRow, Error> {
     let path = format!("{}/entities/{}", view_path(view), urlencode(key));
     match transport
-        .get_with_meta::<ViewRow>(&path, &[], if_none_match)
+        .get_with_meta::<ViewRow>(&path, &[], &[], if_none_match)
         .await
     {
         Ok((Some(mut row), meta)) => {
