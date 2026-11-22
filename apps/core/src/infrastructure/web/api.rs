@@ -1,3 +1,4 @@
+use super::read_cost::{ReadCostFacts, ReadFacts, ReadScope};
 #[cfg(feature = "replication")]
 use crate::infrastructure::replication::ReplicationMode;
 use crate::{
@@ -38,17 +39,17 @@ use crate::{
         security::middleware::{Authenticated, OptionalAuth},
         web::{api_v1::AppState, conditional::conditional_json},
     },
-    store::{EventStore, EventTypeInfo, StreamInfo},
+    store::{EventStore, EventTypeInfo, StreamInfo, StreamSizes, StreamSort, page_streams},
 };
 use axum::{
     Json, Router,
     extract::{Path, Query, State, WebSocketUpgrade},
-    http::HeaderMap,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
 use serde::Deserialize;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex, PoisonError};
 use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
@@ -531,6 +532,13 @@ pub struct EventIntegrityParam {
 
 /// `GET /api/v1/events/query`, conditional per the latest-state contract.
 /// The body carries no request-time field, so equal results share a tag.
+/// A query answer, and the read facts for [`query_events`] to record. `read`
+/// is `None` when the request was refused before any read ran.
+pub struct CountedQuery {
+    pub body: Json<QueryEventsResponse>,
+    pub read: Option<ReadFacts>,
+}
+
 pub async fn query_events(
     auth: OptionalAuth,
     req: Query<QueryEventsRequest>,
@@ -540,9 +548,15 @@ pub async fn query_events(
     store: State<SharedStore>,
     headers: HeaderMap,
 ) -> Result<Response> {
-    let Json(body) =
-        query_events_json(auth, req, order_param, offset_param, integrity_param, store).await?;
-    conditional_json(&headers, &body)
+    let counted =
+        query_events_counted(auth, req, order_param, offset_param, integrity_param, store).await?;
+    let mut response = conditional_json(&headers, &counted.body.0)?;
+    if let Some(read) = counted.read {
+        response
+            .extensions_mut()
+            .insert(ReadCostFacts::from_headers(read, &headers));
+    }
+    Ok(response)
 }
 
 pub async fn query_events_json(
@@ -553,6 +567,26 @@ pub async fn query_events_json(
     Query(integrity_param): Query<EventIntegrityParam>,
     State(store): State<SharedStore>,
 ) -> Result<Json<QueryEventsResponse>> {
+    query_events_counted(
+        OptionalAuth(auth),
+        Query(req),
+        Query(order_param),
+        Query(offset_param),
+        Query(integrity_param),
+        State(store),
+    )
+    .await
+    .map(|counted| counted.body)
+}
+
+pub async fn query_events_counted(
+    OptionalAuth(auth): OptionalAuth,
+    Query(req): Query<QueryEventsRequest>,
+    Query(order_param): Query<EventOrderParam>,
+    Query(offset_param): Query<EventOffsetParam>,
+    Query(integrity_param): Query<EventIntegrityParam>,
+    State(store): State<SharedStore>,
+) -> Result<CountedQuery> {
     let offset = offset_param.offset.unwrap_or(0);
     let queried_entity_id = req.entity_id.clone();
 
@@ -583,6 +617,13 @@ pub async fn query_events_json(
         .clone()
         .or_else(|| auth.as_ref().map(|a| a.tenant_id().to_string()));
 
+    let scope = ReadScope::of(
+        &req,
+        enforced_tenant.as_deref(),
+        offset,
+        descending,
+        MAX_QUERY_PAGE,
+    );
     let retained_prefix = integrity_param.integrity.as_deref() == Some("retained-prefix-v1");
     if retained_prefix
         && (enforced_tenant.as_deref().is_none_or(str::is_empty)
@@ -594,7 +635,8 @@ pub async fn query_events_json(
         ));
     }
     if let Some(protocol) = integrity_param.integrity.filter(|_| !retained_prefix) {
-        return super::retained_query::query(
+        let tenant = enforced_tenant.clone().unwrap_or_default();
+        let body = super::retained_query::query(
             store,
             QueryEventsRequest {
                 as_of_valid: None,
@@ -607,8 +649,13 @@ pub async fn query_events_json(
             descending,
             &protocol,
         )
-        .await
-        .map(Json);
+        .await?;
+        let read = (!tenant.is_empty())
+            .then(|| scope.facts(tenant, body.total_count, body.count, body.has_more));
+        return Ok(CountedQuery {
+            body: Json(body),
+            read,
+        });
     }
 
     // FAIL CLOSED (tenant isolation): the public events query must NEVER return
@@ -618,15 +665,19 @@ pub async fn query_events_json(
     // across tenants. A genuine cross-tenant/admin scan is a separate, explicit
     // internal path — it does not ride this endpoint.
     if enforced_tenant.as_deref().unwrap_or("").is_empty() {
-        return Ok(Json(QueryEventsResponse {
-            events: Vec::new(),
-            count: 0,
-            total_count: 0,
-            has_more: false,
-            entity_version: None,
-            archive_integrity: None,
-        }));
+        return Ok(CountedQuery {
+            body: Json(QueryEventsResponse {
+                events: Vec::new(),
+                count: 0,
+                total_count: 0,
+                has_more: false,
+                entity_version: None,
+                archive_integrity: None,
+            }),
+            read: None,
+        });
     }
+    let tenant = enforced_tenant.clone().unwrap_or_default();
 
     // One windowed pass: the store sorts borrowed matches, applies `offset` and
     // `limit`, and clones only the page — while still reporting the pre-window
@@ -677,14 +728,17 @@ pub async fn query_events_json(
 
     tracing::debug!("Query returned {} events (total: {})", count, total_count);
 
-    Ok(Json(QueryEventsResponse {
-        events,
-        count,
-        total_count,
-        has_more,
-        entity_version,
-        archive_integrity: None,
-    }))
+    Ok(CountedQuery {
+        body: Json(QueryEventsResponse {
+            events,
+            count,
+            total_count,
+            has_more,
+            entity_version,
+            archive_integrity: None,
+        }),
+        read: Some(scope.facts(tenant, total_count, count, has_more)),
+    })
 }
 
 pub async fn list_entities(
@@ -943,13 +997,37 @@ pub struct StatsParams {
 pub async fn get_stats(
     State(store): State<SharedStore>,
     Query(params): Query<StatsParams>,
-) -> impl IntoResponse {
-    match params.tenant_id.as_deref() {
-        Some(tenant_id) => {
-            Json(serde_json::to_value(store.stats_for_tenant(tenant_id)).unwrap_or_default())
-        }
-        None => Json(serde_json::to_value(store.stats()).unwrap_or_default()),
+) -> Response {
+    let Some(tenant_id) = params.tenant_id else {
+        return Json(store.stats()).into_response();
+    };
+    match read_blocking(move || store.stats_for_tenant(&tenant_id)).await {
+        Ok(stats) => Json(stats).into_response(),
+        Err(err) => read_unavailable("stats", &err),
     }
+}
+
+/// Runs a store read that may hydrate a tenant on a blocking thread.
+async fn read_blocking<T: Send + 'static>(
+    read: impl FnOnce() -> crate::error::Result<T> + Send + 'static,
+) -> std::result::Result<T, StreamListingError> {
+    tokio::task::spawn_blocking(read)
+        .await
+        .map_err(StreamListingError::Scan)?
+        .map_err(StreamListingError::Store)
+}
+
+/// 503 `store_unavailable` for a read that failed, never an empty answer.
+fn read_unavailable(what: &'static str, err: &StreamListingError) -> Response {
+    tracing::error!(%err, what, "tenant read failed");
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({
+            "error": "store_unavailable",
+            "message": format!("The {what} could not be read; retry shortly.")
+        })),
+    )
+        .into_response()
 }
 
 // v0.10: List all streams (entity_ids) in the event store
@@ -962,6 +1040,139 @@ pub struct ListStreamsParams {
     pub limit: Option<usize>,
     /// Optional offset for pagination
     pub offset: Option<usize>,
+    /// Size each stream's events in bytes.
+    pub with_bytes: Option<bool>,
+    /// Order for `with_bytes`; defaults to event count.
+    pub sort: Option<StreamSort>,
+}
+
+const DEFAULT_STREAMS_WITH_BYTES_LIMIT: usize = 100;
+
+type StreamScanCell = Arc<tokio::sync::OnceCell<Arc<StreamSizes>>>;
+
+/// Scans in flight, keyed by tenant. An entry lives only while its scan runs.
+static STREAM_SCANS: LazyLock<Mutex<std::collections::HashMap<String, StreamScanCell>>> =
+    LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+/// Core skips auth and rate limiting on `/api/v1/streams`, so this bounds the
+/// whole-tenant scans any number of requests, across any tenant ids, can run
+/// at once. Later scans wait for a permit.
+static STREAM_SCAN_PERMITS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+
+/// How long a completed scan answers later requests for the same tenant.
+const STREAM_SCAN_TTL: std::time::Duration = std::time::Duration::from_secs(30);
+
+type CachedStreamScan = (std::time::Instant, Arc<StreamSizes>);
+
+/// Complete scans, keyed like `STREAM_SCANS`, with when each started. A failed
+/// or incomplete scan never enters.
+static STREAM_SCAN_CACHE: LazyLock<Mutex<std::collections::HashMap<String, CachedStreamScan>>> =
+    LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
+
+fn cached_stream_scan(key: &str, now: std::time::Instant) -> Option<Arc<StreamSizes>> {
+    let cache = STREAM_SCAN_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    cache
+        .get(key)
+        .filter(|(at, _)| now.saturating_duration_since(*at) < STREAM_SCAN_TTL)
+        .map(|(_, sizes)| Arc::clone(sizes))
+}
+
+fn cache_stream_scan(key: String, at: std::time::Instant, sizes: &Arc<StreamSizes>) {
+    if !sizes.complete {
+        return;
+    }
+    let mut cache = STREAM_SCAN_CACHE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    cache.retain(|_, (cached_at, _)| at.saturating_duration_since(*cached_at) < STREAM_SCAN_TTL);
+    // Every waiter on one scan lands here, in any order; the scan's own start
+    // is the earliest of theirs.
+    if let Some((cached_at, cached)) = cache.get_mut(&key)
+        && Arc::ptr_eq(cached, sizes)
+    {
+        *cached_at = (*cached_at).min(at);
+        return;
+    }
+    cache.insert(key, (at, Arc::clone(sizes)));
+}
+
+/// Why a tenant read could not be served.
+#[derive(Debug)]
+enum StreamListingError {
+    /// The read panicked.
+    Scan(tokio::task::JoinError),
+    /// The tenant could not be hydrated or kept leaving the cache.
+    Store(crate::error::AllSourceError),
+}
+
+impl std::fmt::Display for StreamListingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scan(err) => write!(f, "scan failed: {err}"),
+            Self::Store(err) => write!(f, "store unavailable: {err}"),
+        }
+    }
+}
+
+/// Runs `scan` on a blocking thread once for concurrent callers for the same
+/// tenant and shares its unordered result; each caller sorts and pages its own
+/// copy. A complete result also answers callers for [`STREAM_SCAN_TTL`]. A
+/// scan that panics or fails is neither kept nor shared: its caller gets the
+/// error and each waiter runs its own scan.
+async fn share_stream_scan<F>(
+    key: String,
+    scan: F,
+) -> std::result::Result<Arc<StreamSizes>, StreamListingError>
+where
+    F: FnOnce() -> crate::error::Result<StreamSizes> + Send + 'static,
+{
+    share_stream_scan_at(key, std::time::Instant::now(), scan).await
+}
+
+async fn share_stream_scan_at<F>(
+    key: String,
+    now: std::time::Instant,
+    scan: F,
+) -> std::result::Result<Arc<StreamSizes>, StreamListingError>
+where
+    F: FnOnce() -> crate::error::Result<StreamSizes> + Send + 'static,
+{
+    if let Some(cached) = cached_stream_scan(&key, now) {
+        return Ok(cached);
+    }
+    let cell = {
+        let mut scans = STREAM_SCANS.lock().unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(scans.entry(key.clone()).or_default())
+    };
+    let shared = cell
+        .get_or_try_init(|| async {
+            let _permit = STREAM_SCAN_PERMITS
+                .acquire()
+                .await
+                .expect("the scan semaphore is never closed");
+            match tokio::task::spawn_blocking(scan).await {
+                Ok(Ok(sizes)) => Ok(Arc::new(sizes)),
+                Ok(Err(err)) => Err(StreamListingError::Store(err)),
+                Err(err) => Err(StreamListingError::Scan(err)),
+            }
+        })
+        .await
+        .cloned();
+    let mut scans = STREAM_SCANS.lock().unwrap_or_else(PoisonError::into_inner);
+    if scans.get(&key).is_some_and(|c| Arc::ptr_eq(c, &cell)) {
+        scans.remove(&key);
+    }
+    drop(scans);
+    if let Ok(sizes) = &shared {
+        cache_stream_scan(key, now, sizes);
+    }
+    shared
+}
+
+fn stream_scan_failed(err: &StreamListingError) -> Response {
+    read_unavailable("stream listing", err)
 }
 
 /// Response for listing streams
@@ -969,13 +1180,33 @@ pub struct ListStreamsParams {
 pub struct ListStreamsResponse {
     pub streams: Vec<StreamInfo>,
     pub total: usize,
+    /// `false` when a `with_bytes` scan saw events removed during it and its
+    /// retry, or the tenant left the cache during it, so counts and bytes can
+    /// skip or repeat events; also `false` when no tenant was named.
+    pub complete: bool,
+    /// `no_tenant` when no tenant was named; `tenant_evicted` when a listing
+    /// without `with_bytes` found the tenant evicted between its hydration
+    /// and the end of the read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
 }
 
 pub async fn list_streams(
+    auth: OptionalAuth,
+    store: State<SharedStore>,
+    params: Query<ListStreamsParams>,
+) -> Response {
+    match stream_listing(auth, store, params).await {
+        Ok(listing) => listing.into_response(),
+        Err(err) => stream_scan_failed(&err),
+    }
+}
+
+async fn stream_listing(
     OptionalAuth(auth): OptionalAuth,
     State(store): State<SharedStore>,
     Query(params): Query<ListStreamsParams>,
-) -> Json<ListStreamsResponse> {
+) -> std::result::Result<Json<ListStreamsResponse>, StreamListingError> {
     // Tenant-scoped + fail closed: no tenant → empty, never a cross-tenant list.
     let tenant = params
         .tenant_id
@@ -983,12 +1214,35 @@ pub async fn list_streams(
         .or_else(|| auth.as_ref().map(|a| a.tenant_id().to_string()))
         .filter(|t| !t.is_empty());
     let Some(tenant) = tenant else {
-        return Json(ListStreamsResponse {
+        return Ok(Json(ListStreamsResponse {
             streams: vec![],
             total: 0,
-        });
+            complete: false,
+            reason: Some("no_tenant"),
+        }));
     };
-    let mut streams = store.list_streams_for_tenant(&tenant);
+    if params.with_bytes.unwrap_or(false) {
+        let scan_store = Arc::clone(&store);
+        let scan_tenant = tenant.clone();
+        let shared =
+            share_stream_scan(tenant, move || scan_store.stream_sizes(Some(&scan_tenant))).await?;
+        let total = shared.streams.len();
+        let streams = page_streams(
+            &shared.streams,
+            params.sort.unwrap_or_default(),
+            params.offset.unwrap_or(0),
+            params.limit.unwrap_or(DEFAULT_STREAMS_WITH_BYTES_LIMIT),
+        );
+        return Ok(Json(ListStreamsResponse {
+            streams,
+            total,
+            complete: shared.complete,
+            reason: None,
+        }));
+    }
+    let listed = read_blocking(move || store.list_streams_for_tenant(&tenant)).await?;
+    let resident = listed.complete;
+    let mut streams = listed.streams;
     let total = streams.len();
 
     // Sort by last_event_at descending (most recent first)
@@ -1009,7 +1263,12 @@ pub async fn list_streams(
 
     tracing::debug!("Listed {} streams (total: {})", streams.len(), total);
 
-    Json(ListStreamsResponse { streams, total })
+    Ok(Json(ListStreamsResponse {
+        streams,
+        total,
+        complete: resident,
+        reason: (!resident).then_some("tenant_evicted"),
+    }))
 }
 
 // v0.10: List all event types in the event store
@@ -1035,7 +1294,7 @@ pub async fn list_event_types(
     OptionalAuth(auth): OptionalAuth,
     State(store): State<SharedStore>,
     Query(params): Query<ListEventTypesParams>,
-) -> Json<ListEventTypesResponse> {
+) -> Response {
     // Tenant-scoped + fail closed: no tenant → empty, never cross-tenant types.
     let tenant = params
         .tenant_id
@@ -1046,9 +1305,14 @@ pub async fn list_event_types(
         return Json(ListEventTypesResponse {
             event_types: vec![],
             total: 0,
-        });
+        })
+        .into_response();
     };
-    let mut event_types = store.list_event_types_for_tenant(&tenant);
+    let mut event_types =
+        match read_blocking(move || store.list_event_types_for_tenant(&tenant)).await {
+            Ok(event_types) => event_types,
+            Err(err) => return read_unavailable("event types", &err),
+        };
     let total = event_types.len();
 
     // Sort by event_count descending (most used first)
@@ -1073,7 +1337,7 @@ pub async fn list_event_types(
         total
     );
 
-    Json(ListEventTypesResponse { event_types, total })
+    Json(ListEventTypesResponse { event_types, total }).into_response()
 }
 
 // v0.2: WebSocket endpoint for real-time event streaming
@@ -3229,6 +3493,453 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn streams_with_bytes_sums_resident_bytes_per_stream() {
+        use crate::domain::entities::Event;
+        use axum::extract::{Query, State};
+
+        let store = create_test_store();
+        let mut expected = 0u64;
+        for payload in [
+            serde_json::json!({"n": 1}),
+            serde_json::json!({"n": "a longer second payload"}),
+        ] {
+            let event = Event::from_strings(
+                "order.placed".to_string(),
+                "e1".to_string(),
+                "tenant-a".to_string(),
+                payload,
+                None,
+            )
+            .unwrap();
+            expected += event.resident_bytes();
+            store.ingest(&event).unwrap();
+        }
+        let other = Event::from_strings(
+            "user.created".to_string(),
+            "e2".to_string(),
+            "tenant-a".to_string(),
+            serde_json::json!({}),
+            None,
+        )
+        .unwrap();
+        store.ingest(&other).unwrap();
+
+        let Json(response) = stream_listing(
+            OptionalAuth(None),
+            State(store.clone()),
+            Query(ListStreamsParams {
+                tenant_id: Some("tenant-a".to_string()),
+                limit: None,
+                offset: None,
+                with_bytes: Some(true),
+                sort: None,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.total, 2);
+        assert!(response.complete);
+        let e1 = response
+            .streams
+            .iter()
+            .find(|s| s.stream_id == "e1")
+            .expect("e1 is listed");
+        assert_eq!(e1.estimated_bytes, Some(expected));
+        assert_eq!(e1.events_last_7d, Some(2));
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_concurrent_requests_share_one_scan() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let entered = Arc::new(std::sync::Barrier::new(2));
+        let release = Arc::new(std::sync::Barrier::new(2));
+        let first = {
+            let scans = Arc::clone(&scans);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            tokio::spawn(share_stream_scan(
+                "share-test-tenant".to_string(),
+                move || {
+                    scans.fetch_add(1, Ordering::SeqCst);
+                    entered.wait();
+                    release.wait();
+                    Ok(StreamSizes::default())
+                },
+            ))
+        };
+        let wait_entered = Arc::clone(&entered);
+        tokio::task::spawn_blocking(move || wait_entered.wait())
+            .await
+            .unwrap();
+
+        let mut waiters: Vec<_> = (0..7)
+            .map(|_| {
+                let scans = Arc::clone(&scans);
+                Box::pin(share_stream_scan(
+                    "share-test-tenant".to_string(),
+                    move || {
+                        scans.fetch_add(1, Ordering::SeqCst);
+                        Ok(StreamSizes::default())
+                    },
+                ))
+            })
+            .collect();
+        for waiter in &mut waiters {
+            let polled = std::future::poll_fn(|cx| {
+                std::task::Poll::Ready(std::future::Future::poll(waiter.as_mut(), cx))
+            })
+            .await;
+            assert!(
+                polled.is_pending(),
+                "each waiter queues on the scan that is still running"
+            );
+        }
+
+        let wait_release = Arc::clone(&release);
+        tokio::task::spawn_blocking(move || wait_release.wait())
+            .await
+            .unwrap();
+        first.await.unwrap().unwrap();
+        for waiter in waiters {
+            waiter.await.unwrap();
+        }
+        assert_eq!(scans.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_sequential_repeat_reuses_a_complete_scan_for_thirty_seconds() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let scan = || {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: true,
+                })
+            }
+        };
+        let key = || "ttl-test-tenant".to_string();
+        let t0 = std::time::Instant::now();
+
+        share_stream_scan_at(key(), t0, scan()).await.unwrap();
+        share_stream_scan_at(key(), t0 + std::time::Duration::from_secs(29), scan())
+            .await
+            .unwrap();
+        assert_eq!(scans.load(Ordering::SeqCst), 1);
+
+        share_stream_scan_at(key(), t0 + STREAM_SCAN_TTL, scan())
+            .await
+            .unwrap();
+        assert_eq!(scans.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_incomplete_or_failed_scan_is_never_reused() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let t0 = std::time::Instant::now();
+        let incomplete = {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: false,
+                })
+            }
+        };
+        share_stream_scan_at("ttl-incomplete-tenant".to_string(), t0, incomplete)
+            .await
+            .unwrap();
+        let failed = {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Err(crate::error::AllSourceError::StorageError(
+                    "injected hydration failure".into(),
+                ))
+            }
+        };
+        assert!(
+            share_stream_scan_at("ttl-incomplete-tenant".to_string(), t0, failed)
+                .await
+                .is_err()
+        );
+        let complete = {
+            let scans = Arc::clone(&scans);
+            move || -> crate::error::Result<StreamSizes> {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: true,
+                })
+            }
+        };
+        let next = share_stream_scan_at("ttl-incomplete-tenant".to_string(), t0, complete)
+            .await
+            .unwrap();
+        assert!(next.complete);
+        assert_eq!(scans.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_scan_panic_is_503_and_not_shared_or_kept() {
+        let failed = share_stream_scan(
+            "panic-test-tenant".to_string(),
+            || -> crate::error::Result<StreamSizes> { panic!("injected scan panic") },
+        )
+        .await;
+        let err = failed.expect_err("a panicking scan is an error, not an empty listing");
+        assert_eq!(
+            stream_scan_failed(&err).status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+
+        let next = share_stream_scan("panic-test-tenant".to_string(), || {
+            Ok(StreamSizes {
+                streams: Vec::new(),
+                complete: true,
+            })
+        })
+        .await
+        .expect("the next scan runs instead of reusing the failure");
+        assert!(next.complete);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_store_error_is_503_and_not_shared_or_kept() {
+        let failed = share_stream_scan("store-error-tenant".to_string(), || {
+            Err(crate::error::AllSourceError::StorageError(
+                "injected hydration failure".into(),
+            ))
+        })
+        .await;
+        let err = failed.expect_err("a failed hydration is an error, not an empty listing");
+        assert_eq!(
+            stream_scan_failed(&err).status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+
+        let next = share_stream_scan("store-error-tenant".to_string(), || {
+            Ok(StreamSizes::default())
+        })
+        .await;
+        assert!(
+            next.is_ok(),
+            "the next scan runs instead of reusing the failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_waiters_on_a_panicking_scan_run_their_own() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let entered = Arc::new(std::sync::Barrier::new(2));
+        let release = Arc::new(std::sync::Barrier::new(2));
+        let first = {
+            let scans = Arc::clone(&scans);
+            let entered = Arc::clone(&entered);
+            let release = Arc::clone(&release);
+            tokio::spawn(share_stream_scan(
+                "panic-wait-tenant".to_string(),
+                move || -> crate::error::Result<StreamSizes> {
+                    scans.fetch_add(1, Ordering::SeqCst);
+                    entered.wait();
+                    release.wait();
+                    panic!("injected scan panic")
+                },
+            ))
+        };
+        let wait_entered = Arc::clone(&entered);
+        tokio::task::spawn_blocking(move || wait_entered.wait())
+            .await
+            .unwrap();
+
+        let waiter = {
+            let scans = Arc::clone(&scans);
+            share_stream_scan("panic-wait-tenant".to_string(), move || {
+                scans.fetch_add(1, Ordering::SeqCst);
+                Ok(StreamSizes {
+                    streams: Vec::new(),
+                    complete: true,
+                })
+            })
+        };
+        tokio::pin!(waiter);
+        let polled = std::future::poll_fn(|cx| {
+            std::task::Poll::Ready(std::future::Future::poll(waiter.as_mut(), cx))
+        })
+        .await;
+        assert!(
+            polled.is_pending(),
+            "the waiter queues on the scan that is still running"
+        );
+        assert_eq!(scans.load(Ordering::SeqCst), 1);
+
+        let wait_release = Arc::clone(&release);
+        tokio::task::spawn_blocking(move || wait_release.wait())
+            .await
+            .unwrap();
+
+        assert!(first.await.unwrap().is_err());
+        assert!(waiter.await.is_ok());
+        assert_eq!(scans.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_scans_once_per_tenant_not_per_query() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let (release, gate) = std::sync::mpsc::channel::<()>();
+        let gate = Arc::new(Mutex::new(gate));
+        let spawn_scan = |tenant: &str| {
+            let scans = Arc::clone(&scans);
+            let gate = Arc::clone(&gate);
+            tokio::spawn(share_stream_scan(tenant.to_string(), move || {
+                scans.fetch_add(1, Ordering::SeqCst);
+                gate.lock().unwrap().recv().unwrap();
+                Ok(StreamSizes::default())
+            }))
+        };
+        let tasks = [
+            spawn_scan("tenant-shared-x"),
+            spawn_scan("tenant-shared-x"),
+            spawn_scan("tenant-shared-y"),
+        ];
+        let holders = || {
+            STREAM_SCANS
+                .lock()
+                .unwrap()
+                .get("tenant-shared-x")
+                .map_or(0, Arc::strong_count)
+        };
+        // The map's handle plus one per caller: both callers are on the cell
+        // while no scan can finish, so the second cannot start its own.
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            while holders() < 3 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("both callers reach the shared scan");
+        release.send(()).unwrap();
+        release.send(()).unwrap();
+        for task in tasks {
+            task.await.unwrap().unwrap();
+        }
+        assert_eq!(scans.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn page_streams_matches_a_full_sort_for_every_page() {
+        use crate::store::sort_streams;
+
+        let streams: Vec<StreamInfo> = (0..40)
+            .map(|i| StreamInfo {
+                stream_id: format!("s-{i:02}"),
+                event_count: (i * 7) % 11,
+                last_event_at: None,
+                estimated_bytes: Some(((i * 5) % 13) as u64),
+                events_last_7d: Some(0),
+            })
+            .collect();
+        for sort in [StreamSort::Events, StreamSort::Bytes] {
+            let mut sorted = streams.clone();
+            sort_streams(&mut sorted, sort);
+            for offset in [0, 1, 7, 39, 40, 41] {
+                for limit in [0, 1, 5, 40, usize::MAX] {
+                    let ids = |page: &[StreamInfo]| -> Vec<String> {
+                        page.iter().map(|s| s.stream_id.clone()).collect()
+                    };
+                    let want: Vec<StreamInfo> =
+                        sorted.iter().skip(offset).take(limit).cloned().collect();
+                    assert_eq!(
+                        ids(&page_streams(&streams, sort, offset, limit)),
+                        ids(&want),
+                        "{sort:?} offset {offset} limit {limit}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn streams_with_bytes_honours_sort_offset_and_limit() {
+        use crate::domain::entities::Event;
+        use axum::extract::{Query, State};
+
+        let store = create_test_store();
+        for (entity, count) in [("s-a", 1), ("s-b", 3), ("s-c", 2)] {
+            for _ in 0..count {
+                let event = Event::from_strings(
+                    "order.placed".to_string(),
+                    entity.to_string(),
+                    "tenant-page".to_string(),
+                    serde_json::json!({}),
+                    None,
+                )
+                .unwrap();
+                store.ingest(&event).unwrap();
+            }
+        }
+
+        let Json(response) = stream_listing(
+            OptionalAuth(None),
+            State(store.clone()),
+            Query(ListStreamsParams {
+                tenant_id: Some("tenant-page".to_string()),
+                limit: Some(1),
+                offset: Some(1),
+                with_bytes: Some(true),
+                sort: Some(StreamSort::Events),
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.total, 3);
+        let ids: Vec<_> = response
+            .streams
+            .iter()
+            .map(|s| s.stream_id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["s-c"]);
+    }
+
+    #[test]
+    fn stream_sizes_sums_across_lock_chunks() {
+        use crate::domain::entities::Event;
+
+        let store = create_test_store();
+        let mut expected = 0u64;
+        for n in 0..4_200 {
+            let event = Event::from_strings(
+                "order.placed".to_string(),
+                "chunked".to_string(),
+                "tenant-chunks".to_string(),
+                serde_json::json!({ "n": n, "label": "x".repeat(n % 7) }),
+                None,
+            )
+            .unwrap();
+            expected += event.resident_bytes();
+            store.ingest(&event).unwrap();
+        }
+        let sizes = store.stream_sizes(Some("tenant-chunks")).unwrap();
+        assert!(sizes.complete);
+        let streams = sizes.streams;
+        assert_eq!(streams.len(), 1);
+        assert_eq!(streams[0].event_count, 4_200);
+        assert_eq!(streams[0].estimated_bytes, Some(expected));
+    }
+
     // The dashboard's streams + event-types counts must be per-tenant. These
     // endpoints used to scan ALL tenants (platform totals shown as "yours", and a
     // cross-tenant spill). Assert each tenant sees only its own, and no-tenant
@@ -3257,34 +3968,35 @@ mod tests {
             .unwrap();
 
         let streams = |tid: Option<&str>| {
-            list_streams(
+            stream_listing(
                 OptionalAuth(None),
                 State(store.clone()),
                 Query(ListStreamsParams {
                     tenant_id: tid.map(String::from),
                     limit: None,
                     offset: None,
+                    with_bytes: None,
+                    sort: None,
                 }),
             )
         };
         assert_eq!(
-            streams(Some("tenant-a")).await.0.total,
+            streams(Some("tenant-a")).await.unwrap().0.total,
             2,
             "tenant-a streams"
         );
         assert_eq!(
-            streams(Some("tenant-b")).await.0.total,
+            streams(Some("tenant-b")).await.unwrap().0.total,
             1,
             "tenant-b streams"
         );
-        assert_eq!(
-            streams(None).await.0.total,
-            0,
-            "no tenant -> no streams (fail closed)"
-        );
+        let unnamed = streams(None).await.unwrap().0;
+        assert_eq!(unnamed.total, 0, "no tenant -> no streams (fail closed)");
+        assert!(!unnamed.complete, "no tenant read nothing");
+        assert_eq!(unnamed.reason, Some("no_tenant"));
 
         let types = |tid: Option<&str>| {
-            list_event_types(
+            let response = list_event_types(
                 OptionalAuth(None),
                 State(store.clone()),
                 Query(ListEventTypesParams {
@@ -3292,23 +4004,17 @@ mod tests {
                     limit: None,
                     offset: None,
                 }),
-            )
+            );
+            async move {
+                let body = axum::body::to_bytes(response.await.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap()["total"].clone()
+            }
         };
-        assert_eq!(
-            types(Some("tenant-a")).await.0.total,
-            2,
-            "tenant-a event types"
-        );
-        assert_eq!(
-            types(Some("tenant-b")).await.0.total,
-            1,
-            "tenant-b event types"
-        );
-        assert_eq!(
-            types(None).await.0.total,
-            0,
-            "no tenant -> no types (fail closed)"
-        );
+        assert_eq!(types(Some("tenant-a")).await, 2, "tenant-a event types");
+        assert_eq!(types(Some("tenant-b")).await, 1, "tenant-b event types");
+        assert_eq!(types(None).await, 0, "no tenant -> no types (fail closed)");
     }
 
     #[tokio::test]

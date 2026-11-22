@@ -1,0 +1,838 @@
+use allsource_core::embedded::{Config, EmbeddedCore, IngestEvent};
+use serde_json::{Value, json};
+
+use super::super::{execute_tool, execute_tool_inner, tool_definitions};
+use crate::{
+    diagnostics::{AccessProfile, DiagnosticPolicy},
+    remote::{RemoteStore, mock::serve_routes},
+    stores::StoreRegistry,
+};
+
+async fn ingest(core: &EmbeddedCore, entity_id: &str, payload: Value) {
+    core.ingest(IngestEvent {
+        entity_id,
+        event_type: "fixture.written",
+        payload,
+        metadata: None,
+        tenant_id: None,
+    })
+    .await
+    .expect("ingest");
+}
+
+/// Two `skill_run` streams of 4 and 1 events, one `auth_member` stream of 2.
+async fn fixture_store() -> StoreRegistry {
+    StoreRegistry::from_cores(vec![("default", fixture_core().await)])
+}
+
+async fn fixture_core() -> EmbeddedCore {
+    let core = EmbeddedCore::open(
+        Config::builder()
+            .single_tenant(true)
+            .build()
+            .expect("valid config"),
+    )
+    .await
+    .expect("in-memory core");
+    for n in 0..4 {
+        ingest(
+            &core,
+            "t1:u1:skill_run:a1",
+            json!({ "n": n, "text": "x".repeat(200) }),
+        )
+        .await;
+    }
+    ingest(&core, "t1:u1:skill_run:b2", json!({ "n": 0 })).await;
+    for n in 0..2 {
+        ingest(&core, "auth-member:u7", json!({ "n": n })).await;
+    }
+    core
+}
+
+async fn registry_with_gateway(base: &str) -> StoreRegistry {
+    fixture_store().await.with_remote(
+        "remote",
+        RemoteStore::new(base, Some("key-1".to_string())).expect("remote"),
+    )
+}
+
+fn local() -> DiagnosticPolicy {
+    DiagnosticPolicy::new(AccessProfile::Local, None, "local").expect("local policy")
+}
+
+fn class<'a>(result: &'a Value, name: &str) -> &'a Value {
+    result["classes"]
+        .as_array()
+        .expect("classes")
+        .iter()
+        .find(|row| row["stream_class"] == name)
+        .unwrap_or_else(|| panic!("class {name} in {result}"))
+}
+
+const STREAMS_BODY: &str = r#"{"streams":[
+    {"stream_id":"t1:u1:skill_run:a1","event_count":900,"last_event_at":"2026-11-17T10:00:00Z","estimated_bytes":90000,"events_last_7d":40},
+    {"stream_id":"t1:u1:skill_run:b2","event_count":100,"last_event_at":"2026-11-16T10:00:00Z","estimated_bytes":5000,"events_last_7d":0},
+    {"stream_id":"auth-member:u7","event_count":50,"last_event_at":null,"estimated_bytes":2500,"events_last_7d":3}
+],"total":3,"complete":true}"#;
+
+const STATS_BODY: &str = r#"{"total_events":1050,"total_entities":3,"total_event_types":2,"total_ingested":1050,"event_types":{"fixture.written":1050},"oldest_event":"2026-01-01T00:00:00Z","newest_event":"2026-11-17T10:00:00Z"}"#;
+
+#[test]
+fn the_three_cost_tools_are_advertised_read_only() {
+    let tools = tool_definitions(&local());
+    for name in ["stream_sizes", "read_costs", "cap_check"] {
+        let tool = tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .unwrap_or_else(|| panic!("{name} advertised"));
+        assert!(tool.annotations.read_only_hint, "{name}");
+        assert!(!tool.annotations.destructive_hint, "{name}");
+        assert!(
+            tool.input_schema["properties"]["store"].is_object(),
+            "{name}"
+        );
+        assert!(
+            tool.input_schema["properties"]["diagnostic"].is_object(),
+            "{name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn stream_sizes_on_an_embedded_store_ranks_streams_and_sums_classes() {
+    let stores = fixture_store().await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "stream_sizes",
+        &json!({ "sort": "events", "limit": 2 }),
+    )
+    .await
+    .expect("sizes");
+
+    let streams = result["streams"].as_array().expect("streams");
+    assert_eq!(streams.len(), 2, "limit cuts the stream rows: {result}");
+    assert_eq!(streams[0]["stream_id"], "t1:u1:skill_run:a1");
+    assert_eq!(streams[0]["stream_class"], "skill_run");
+    assert_eq!(streams[0]["events"], 4);
+    assert_eq!(streams[0]["events_last_7d"], 4);
+    assert!(streams[0]["bytes"].as_u64().expect("bytes") > 800);
+    assert_eq!(streams[1]["stream_id"], "auth-member:u7");
+
+    let skill_run = class(&result, "skill_run");
+    assert_eq!(
+        skill_run["streams"], 2,
+        "classes cover every stream, not the cut"
+    );
+    assert_eq!(skill_run["events"], 5);
+    assert_eq!(skill_run["max_stream_events"], 4);
+    assert_eq!(class(&result, "auth_member")["events"], 2);
+    assert_eq!(result["completeness"]["complete"], true);
+    assert_eq!(result["context"]["store"]["kind"], "embedded");
+}
+
+#[tokio::test]
+async fn stream_sizes_sorts_by_bytes_when_asked() {
+    let stores = fixture_store().await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "stream_sizes",
+        &json!({ "sort": "bytes" }),
+    )
+    .await
+    .expect("sizes");
+
+    assert_eq!(result["streams"][0]["stream_id"], "t1:u1:skill_run:a1");
+    assert_eq!(result["classes"][0]["stream_class"], "skill_run");
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_an_unknown_sort() {
+    let stores = fixture_store().await;
+
+    let error = execute_tool_inner(&stores, &local(), "stream_sizes", &json!({ "sort": "age" }))
+        .await
+        .expect_err("sort is events or bytes");
+
+    assert!(
+        error.to_string().starts_with("invalid argument:"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn stream_sizes_through_the_gateway_reads_streams_with_bytes_and_stats() {
+    let (base, heads) = serve_routes(vec![
+        ("/api/v1/streams", "200 OK", STREAMS_BODY),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "stream_sizes",
+        &json!({ "store": "remote", "sort": "bytes", "limit": 1 }),
+    )
+    .await
+    .expect("sizes");
+    let heads = heads.await.expect("fake gateway");
+
+    let streams_head = heads
+        .iter()
+        .find(|head| head.starts_with("GET /api/v1/streams?"))
+        .expect("streams requested");
+    assert!(streams_head.contains("with_bytes=true"), "{streams_head}");
+    assert!(streams_head.contains("sort=bytes"), "{streams_head}");
+    assert!(
+        streams_head
+            .to_ascii_lowercase()
+            .contains("authorization: bearer key-1"),
+        "{streams_head}"
+    );
+    assert!(
+        heads
+            .iter()
+            .any(|head| head.starts_with("GET /api/v1/stats "))
+    );
+
+    assert_eq!(result["streams"].as_array().expect("streams").len(), 1);
+    assert_eq!(result["streams"][0]["bytes"], 90000);
+    assert_eq!(class(&result, "skill_run")["events"], 1000);
+    assert_eq!(class(&result, "skill_run")["bytes"], 95000);
+    assert_eq!(class(&result, "skill_run")["events_last_7d"], 40);
+    assert_eq!(result["tenant"]["totalEvents"], 1050);
+    assert_eq!(result["tenant"]["oldestEvent"], "2026-01-01T00:00:00Z");
+    assert_eq!(result["completeness"]["complete"], true);
+    assert_eq!(result["context"]["store"]["kind"], "remote");
+}
+
+#[tokio::test]
+async fn stream_sizes_through_the_gateway_says_when_classes_miss_streams() {
+    let (base, heads) = serve_routes(vec![
+        (
+            "/api/v1/streams",
+            "200 OK",
+            r#"{"streams":[{"stream_id":"auth-member:u7","event_count":5,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0}],"total":20001,"complete":true}"#,
+        ),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "stream_sizes",
+        &json!({ "store": "remote" }),
+    )
+    .await
+    .expect("sizes");
+    heads.await.expect("fake gateway");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "stream_limit_reached");
+    assert_eq!(result["completeness"]["omitted"], 20000);
+    assert_eq!(result["page"]["totalCount"], 20001);
+    assert_eq!(result["classes"][0]["complete"], false, "{result}");
+}
+
+#[tokio::test]
+async fn stream_sizes_on_an_embedded_store_after_a_failed_refresh_is_incomplete() {
+    let stores = StoreRegistry::from_cores_refreshing_every(
+        vec![("default", fixture_core().await)],
+        std::time::Duration::from_secs(3600),
+    );
+    stores
+        .get(Some("default"))
+        .expect("default store")
+        .record_refresh_failure("injected refresh failure")
+        .await;
+
+    for tool in ["stream_sizes", "cap_check"] {
+        let args = if tool == "cap_check" {
+            json!({ "caps": [{ "stream_class": "skill_run", "cap_events": 5 }] })
+        } else {
+            json!({})
+        };
+        let result = execute_tool_inner(&stores, &local(), tool, &args)
+            .await
+            .expect(tool);
+
+        assert_eq!(
+            result["completeness"]["complete"], false,
+            "{tool}: {result}"
+        );
+        assert_eq!(result["completeness"]["reason"], "refresh_failed", "{tool}");
+        assert_eq!(
+            result["context"]["store"]["lastRefreshError"], true,
+            "{tool}"
+        );
+        assert_eq!(result["context"]["store"]["kind"], "embedded", "{tool}");
+    }
+}
+
+#[tokio::test]
+async fn stream_sizes_through_the_gateway_reports_an_interrupted_core_scan() {
+    let (base, heads) = serve_routes(vec![
+        (
+            "/api/v1/streams",
+            "200 OK",
+            r#"{"streams":[{"stream_id":"auth-member:u7","event_count":5,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0}],"total":1,"complete":false}"#,
+        ),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "stream_sizes",
+        &json!({ "store": "remote" }),
+    )
+    .await
+    .expect("sizes");
+    heads.await.expect("fake gateway");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "scan_interrupted");
+}
+
+#[tokio::test]
+async fn read_costs_says_its_totals_cover_only_returned_rows_at_the_limit() {
+    let (base, heads) = serve_routes(vec![(
+        "/api/v1/read-costs",
+        "200 OK",
+        r#"{"callers":[],
+            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}],
+            "enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":"2026-11-17T00:00:00Z"}"#,
+    )])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "limit": 1 }),
+    )
+    .await
+    .expect("costs");
+    heads.await.expect("fake gateway");
+
+    assert_eq!(result["totalsCover"], "returned_class_rows");
+    assert_eq!(result["completeness"]["complete"], false);
+}
+
+#[tokio::test]
+async fn read_costs_on_an_embedded_store_is_unsupported_and_names_the_tool() {
+    let stores = fixture_store().await;
+
+    let result = execute_tool(&stores, &local(), "read_costs", &json!({})).await;
+
+    assert_eq!(result["isError"], true);
+    assert_eq!(result["structuredContent"]["error"]["code"], "UNSUPPORTED");
+    let message = result["structuredContent"]["error"]["message"]
+        .as_str()
+        .expect("message");
+    assert!(message.starts_with("unsupported:"), "{message}");
+    assert!(message.contains("read_costs"), "{message}");
+    assert!(message.contains("--remote"), "{message}");
+}
+
+#[tokio::test]
+async fn read_costs_through_the_gateway_returns_caller_and_class_rows() {
+    let (base, heads) = serve_routes(vec![(
+        "/api/v1/read-costs",
+        "200 OK",
+        r#"{"callers":[{"caller":"lh.skill_catalog","stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"body_bytes":9000000,"single_truncated":1,"walk_abandoned":0,"approximate":false}],
+            "classes":[{"stream_class":"skill","logical_reads":3,"pages":40,"whole_reads":3,"single_truncated":1,"walk_abandoned":2,"walk_evicted":1,"matched_sum":60000,"matched_max":20000,"max_pages_per_walk":20}],
+            "enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":"2026-11-17T00:00:00Z"}"#,
+    )])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "order": "pages", "limit": 10 }),
+    )
+    .await
+    .expect("costs");
+    let heads = heads.await.expect("fake gateway");
+
+    assert!(
+        heads[0].starts_with("GET /api/v1/read-costs?"),
+        "{}",
+        heads[0]
+    );
+    assert!(heads[0].contains("order=pages"), "{}", heads[0]);
+    assert!(heads[0].contains("limit=10"), "{}", heads[0]);
+    assert_eq!(result["callers"][0]["caller"], "lh.skill_catalog");
+    assert_eq!(result["callers"][0]["body_bytes"], 9_000_000);
+    assert_eq!(result["classes"][0]["max_pages_per_walk"], 20);
+    assert_eq!(result["maxPagesPerWalk"], 20);
+    assert_eq!(result["totalsCover"], "all_class_rows");
+    assert_eq!(result["truncated"]["single"], 1);
+    assert_eq!(result["truncated"]["walk_abandoned"], 2);
+    assert_eq!(result["truncated"]["walk_evicted"], 1);
+    assert_eq!(result["context"]["store"]["kind"], "remote");
+}
+
+#[tokio::test]
+async fn read_costs_refuses_an_order_core_does_not_know() {
+    let (base, _heads) = serve_routes(vec![]).await;
+    let stores = registry_with_gateway(&base).await;
+
+    let error = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "order": "latency" }),
+    )
+    .await
+    .expect_err("order is closed");
+
+    assert!(
+        error.to_string().starts_with("invalid argument:"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn read_costs_maps_a_gateway_refusal_to_access_denied() {
+    let (base, heads) = serve_routes(vec![(
+        "/api/v1/read-costs",
+        "403 Forbidden",
+        r#"{"error":"scope"}"#,
+    )])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let error = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote" }),
+    )
+    .await
+    .expect_err("refused");
+    heads.await.expect("fake gateway");
+
+    assert!(error.to_string().starts_with("access denied:"), "{error}");
+}
+
+#[tokio::test]
+async fn cap_check_on_an_embedded_store_lists_classes_at_the_threshold() {
+    let stores = fixture_store().await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "cap_check",
+        &json!({
+            "caps": [
+                { "stream_class": "skill_run", "cap_events": 5 },
+                { "stream_class": "auth_member", "cap_events": 100 },
+                { "stream_class": "billing", "cap_events": 10 }
+            ]
+        }),
+    )
+    .await
+    .expect("check");
+
+    let over: Vec<&str> = result["over"]
+        .as_array()
+        .expect("over")
+        .iter()
+        .map(|row| row["stream_class"].as_str().expect("class"))
+        .collect();
+    assert_eq!(over, ["skill_run"], "4 of 5 is 80%: {result}");
+    assert_eq!(result["over"][0]["measured_events"], 4);
+    assert_eq!(result["over"][0]["pct"], 80);
+    assert_eq!(result["thresholdPct"], 80);
+    assert_eq!(result["unmeasured"], json!(["billing"]));
+    assert_eq!(result["undetermined"], json!([]));
+    assert_eq!(result["completeness"]["complete"], true);
+}
+
+#[tokio::test]
+async fn cap_check_can_compare_a_class_total_and_a_custom_threshold() {
+    let stores = fixture_store().await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "cap_check",
+        &json!({
+            "caps": [{ "stream_class": "skill_run", "cap_events": 10, "measure": "class_total" }],
+            "threshold_pct": 50
+        }),
+    )
+    .await
+    .expect("check");
+
+    assert_eq!(result["over"][0]["measured_events"], 5);
+    assert_eq!(result["over"][0]["pct"], 50);
+}
+
+#[tokio::test]
+async fn cap_check_through_the_gateway_reads_stream_sizes() {
+    let (base, heads) = serve_routes(vec![
+        ("/api/v1/streams", "200 OK", STREAMS_BODY),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "cap_check",
+        &json!({
+            "store": "remote",
+            "caps": [
+                { "stream_class": "skill_run", "cap_events": 1000 },
+                { "stream_class": "auth_member", "cap_events": 1000 }
+            ]
+        }),
+    )
+    .await
+    .expect("check");
+    heads.await.expect("fake gateway");
+
+    assert_eq!(result["over"].as_array().expect("over").len(), 1);
+    assert_eq!(result["over"][0]["stream_class"], "skill_run");
+    assert_eq!(result["over"][0]["measured_events"], 900);
+    assert_eq!(result["context"]["store"]["kind"], "remote");
+}
+
+#[tokio::test]
+async fn cap_check_on_a_cut_listing_never_puts_a_lower_bound_under_its_cap() {
+    let (base, heads) = serve_routes(vec![
+        (
+            "/api/v1/streams",
+            "200 OK",
+            r#"{"streams":[
+                {"stream_id":"t1:u1:skill_run:a1","event_count":900,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0},
+                {"stream_id":"auth-member:u7","event_count":50,"last_event_at":null,"estimated_bytes":10,"events_last_7d":0}
+            ],"total":20002,"complete":true}"#,
+        ),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "cap_check",
+        &json!({
+            "store": "remote",
+            "caps": [
+                { "stream_class": "skill_run", "cap_events": 2000 },
+                { "stream_class": "auth_member", "cap_events": 1000, "measure": "class_total" },
+                { "stream_class": "billing", "cap_events": 10 }
+            ]
+        }),
+    )
+    .await
+    .expect("check");
+    heads.await.expect("fake gateway");
+
+    let classes = |bucket: &str| -> Vec<String> {
+        result[bucket]
+            .as_array()
+            .expect(bucket)
+            .iter()
+            .map(|row| row["stream_class"].as_str().expect("class").to_owned())
+            .collect()
+    };
+    assert_eq!(classes("under"), ["skill_run"], "{result}");
+    assert_eq!(
+        classes("undetermined"),
+        ["auth_member", "billing"],
+        "{result}"
+    );
+    assert_eq!(result["unmeasured"], json!([]));
+    assert_eq!(result["completeness"]["reason"], "stream_limit_reached");
+}
+
+#[tokio::test]
+async fn cap_check_refuses_caps_it_cannot_compare() {
+    let stores = fixture_store().await;
+    for args in [
+        json!({}),
+        json!({ "caps": [] }),
+        json!({ "caps": [{ "stream_class": "skill_run", "cap_events": 0 }] }),
+        json!({ "caps": [{ "stream_class": "Skill Run", "cap_events": 5 }] }),
+        json!({ "caps": [{ "stream_class": "skill_run", "cap_events": 5, "measure": "mean" }] }),
+        json!({ "caps": [{ "stream_class": "skill_run", "cap_events": 5 }], "threshold_pct": 0 }),
+    ] {
+        let error = execute_tool_inner(&stores, &local(), "cap_check", &args)
+            .await
+            .expect_err("refused");
+        assert!(
+            error.to_string().starts_with("invalid argument:"),
+            "{args}: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_view_tool_on_an_embedded_store_names_the_tool_it_refused() {
+    let stores = fixture_store().await;
+
+    let error = execute_tool_inner(
+        &stores,
+        &local(),
+        "list_latest",
+        &json!({ "view": "ops_status" }),
+    )
+    .await
+    .expect_err("views need the gateway");
+
+    assert!(
+        error.to_string().starts_with("unsupported: list_latest"),
+        "{error}"
+    );
+}
+
+async fn remote_sizes(streams_body: &'static str, args: Value) -> anyhow::Result<Value> {
+    let (base, _heads) = serve_routes(vec![
+        ("/api/v1/streams", "200 OK", streams_body),
+        ("/api/v1/stats", "200 OK", STATS_BODY),
+    ])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+    execute_tool_inner(&stores, &local(), "stream_sizes", &args).await
+}
+
+/// What a Core older than 0.30 answers: it ignores `with_bytes`.
+const UNSIZED_STREAMS_BODY: &str = r#"{"streams":[
+    {"stream_id":"t1:u1:skill_run:a1","event_count":900,"last_event_at":null},
+    {"stream_id":"auth-member:u7","event_count":50,"last_event_at":null}
+],"total":2}"#;
+
+#[tokio::test]
+async fn stream_sizes_from_a_core_that_ignores_with_bytes_is_incomplete_and_sums_no_bytes() {
+    let result = remote_sizes(UNSIZED_STREAMS_BODY, json!({ "store": "remote" }))
+        .await
+        .expect("sizes by events");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "bytes_unavailable");
+    assert!(class(&result, "skill_run")["bytes"].is_null(), "{result}");
+    assert!(class(&result, "skill_run")["max_stream_bytes"].is_null());
+    assert_eq!(class(&result, "skill_run")["events"], 900);
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_to_rank_by_bytes_core_did_not_send() {
+    let error = remote_sizes(
+        UNSIZED_STREAMS_BODY,
+        json!({ "store": "remote", "sort": "bytes" }),
+    )
+    .await
+    .expect_err("no bytes to rank by");
+
+    assert!(error.to_string().starts_with("unsupported:"), "{error}");
+}
+
+#[tokio::test]
+async fn stream_sizes_with_one_unsized_stream_is_incomplete_even_when_core_says_complete() {
+    let result = remote_sizes(
+        r#"{"streams":[
+            {"stream_id":"a:1","event_count":3,"last_event_at":null,"estimated_bytes":30,"events_last_7d":1},
+            {"stream_id":"b:1","event_count":2,"last_event_at":null}
+        ],"total":2,"complete":true}"#,
+        json!({ "store": "remote" }),
+    )
+    .await
+    .expect("sizes");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "bytes_unavailable");
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_a_stream_row_without_a_count() {
+    let error = remote_sizes(
+        r#"{"streams":[{"stream_id":"a:1","last_event_at":null,"estimated_bytes":30,"events_last_7d":1}],"total":1,"complete":true}"#,
+        json!({ "store": "remote" }),
+    )
+    .await
+    .expect_err("a row without event_count is not a zero-event stream");
+
+    assert!(error.to_string().contains("event_count"), "{error}");
+}
+
+#[tokio::test]
+async fn stream_sizes_refuses_a_listing_without_a_total() {
+    let error = remote_sizes(
+        r#"{"streams":[],"complete":true}"#,
+        json!({ "store": "remote" }),
+    )
+    .await
+    .expect_err("no total means the stream count is unknown");
+
+    assert!(error.to_string().contains("total"), "{error}");
+}
+
+async fn remote_read_costs(body: &'static str) -> anyhow::Result<Value> {
+    let (base, _heads) = serve_routes(vec![("/api/v1/read-costs", "200 OK", body)]).await;
+    let stores = registry_with_gateway(&base).await;
+    execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "limit": 10 }),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn read_costs_refuses_a_reply_without_rows() {
+    let error = remote_read_costs(
+        r#"{"enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":null}"#,
+    )
+    .await
+    .expect_err("missing rows are not empty rows");
+
+    assert!(error.to_string().contains("callers"), "{error}");
+}
+
+#[tokio::test]
+async fn read_costs_with_recording_off_is_incomplete() {
+    let result = remote_read_costs(
+        r#"{"callers":[],"classes":[],"enabled":false,"since":"2026-11-17T00:00:00Z","tenant_tracked":false,"tenant_since":null}"#,
+    )
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "recording_off");
+    assert_eq!(result["recording"]["since"], "2026-11-17T00:00:00Z");
+}
+
+#[tokio::test]
+async fn read_costs_for_an_untracked_tenant_is_incomplete() {
+    let result = remote_read_costs(
+        r#"{"callers":[],"classes":[],"enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":false,"tenant_since":null}"#,
+    )
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "tenant_not_tracked");
+}
+
+const CLASS_ROW: &str = r#"{"stream_class":"skill","logical_reads":3,"pages":4,"whole_reads":0,"single_truncated":0,"walk_abandoned":0,"walk_evicted":0,"matched_sum":6,"matched_max":2,"max_pages_per_walk":2}"#;
+
+fn caller_row(approximate: bool) -> String {
+    format!(
+        r#"{{"caller":"lh.skill","stream_class":"skill","logical_reads":3,"pages":4,"whole_reads":0,"body_bytes":900,"single_truncated":0,"walk_abandoned":0,"approximate":{approximate},"first_seen":null,"last_seen":null}}"#
+    )
+}
+
+fn read_costs_body(callers: &str, classes: &str, tenant_since: &str) -> &'static str {
+    Box::leak(
+        format!(
+            r#"{{"callers":[{callers}],"classes":[{classes}],"enabled":true,"since":"2026-11-17T00:00:00Z","tenant_tracked":true,"tenant_since":"{tenant_since}","instance_id":"0123456789abcdef0123456789abcdef"}}"#
+        )
+        .into_boxed_str(),
+    )
+}
+
+const SINCE: &str = "2026-11-17T00:00:00Z";
+
+#[tokio::test]
+async fn read_costs_with_whole_tables_is_complete_and_names_the_instance() {
+    let result = remote_read_costs(read_costs_body(&caller_row(false), CLASS_ROW, SINCE))
+        .await
+        .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], true, "{result}");
+    assert_eq!(
+        result["recording"]["instanceId"],
+        "0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(result["recording"]["since"], SINCE);
+}
+
+#[tokio::test]
+async fn read_costs_with_an_approximate_caller_row_is_incomplete() {
+    let result = remote_read_costs(read_costs_body(&caller_row(true), CLASS_ROW, SINCE))
+        .await
+        .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "rows_approximate");
+}
+
+#[tokio::test]
+async fn read_costs_with_an_overflowed_class_table_is_incomplete() {
+    let other = CLASS_ROW.replace(r#""stream_class":"skill""#, r#""stream_class":"other""#);
+    let result = remote_read_costs(read_costs_body(
+        &caller_row(false),
+        &format!("{CLASS_ROW},{other}"),
+        SINCE,
+    ))
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "classes_overflowed");
+}
+
+#[tokio::test]
+async fn read_costs_for_a_tenant_that_reentered_the_table_is_incomplete() {
+    let result = remote_read_costs(read_costs_body(
+        &caller_row(false),
+        CLASS_ROW,
+        "2026-11-17T06:00:00Z",
+    ))
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "tenant_reentered");
+}
+
+#[tokio::test]
+async fn read_costs_names_a_cut_table_before_the_limit() {
+    let (base, _heads) = serve_routes(vec![(
+        "/api/v1/read-costs",
+        "200 OK",
+        read_costs_body(&caller_row(true), CLASS_ROW, SINCE),
+    )])
+    .await;
+    let stores = registry_with_gateway(&base).await;
+
+    let result = execute_tool_inner(
+        &stores,
+        &local(),
+        "read_costs",
+        &json!({ "store": "remote", "limit": 1 }),
+    )
+    .await
+    .expect("costs");
+
+    assert_eq!(result["completeness"]["reason"], "rows_approximate");
+}
+
+#[tokio::test]
+async fn read_costs_from_a_core_that_sends_no_recording_state_is_incomplete() {
+    let result = remote_read_costs(r#"{"callers":[],"classes":[]}"#)
+        .await
+        .expect("costs");
+
+    assert_eq!(result["completeness"]["complete"], false);
+    assert_eq!(result["completeness"]["reason"], "recording_state_unknown");
+}

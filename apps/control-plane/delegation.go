@@ -19,10 +19,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/allsource/control-plane/internal/domain/entities"
 	"github.com/allsource/control-plane/internal/infrastructure/corehold"
@@ -243,6 +246,13 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 			req.Header.Set(name, value)
 		}
 	}
+	caller, readID := readAttribution(c.Request.Header)
+	if caller != "" {
+		req.Header.Set(callerHeader, caller)
+	}
+	if readID != "" {
+		req.Header.Set(readIDHeader, readID)
+	}
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
 	}
@@ -300,7 +310,10 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 			queryShapeRequests.WithLabelValues(selector, bounded, filtered).Inc()
 			tenantQueryBytes.WithLabelValues(tenant, namespace, selector, bounded, filtered).Add(float64(written))
 			tenantQueries.WithLabelValues(tenant, namespace, selector, bounded, filtered).Inc()
-			if sample := queryEgressSamples.sample(query, written, time.Now()); sample != "" {
+			callerName := queryCallers.label(query.Get("tenant_id"), tenant, caller)
+			queryCallerBytes.WithLabelValues(tenant, callerName).Add(float64(written))
+			queryCallerQueries.WithLabelValues(tenant, callerName).Inc()
+			if sample := queryEgressSamples.sample(query, written, time.Now(), caller, readID); sample != "" {
 				log.Print(sample)
 			}
 		}
@@ -313,6 +326,51 @@ func (d *delegationClient) forwardRequestChecked(c *gin.Context, method string, 
 // Accept-Encoding is forwarded verbatim, so a compressed backend body passes
 // through undecoded and must keep its Content-Encoding and Vary.
 var forwardedRequestHeaders = []string{"If-None-Match", "Accept-Encoding"}
+
+const (
+	callerHeader     = "X-Allsource-Caller"
+	readIDHeader     = "X-Allsource-Read-Id"
+	invalidValue     = "invalid"
+	readCostsAPIPath = "/api/v1/read-costs"
+	streamsAPIPath   = "/api/v1/streams"
+)
+
+var (
+	callerPattern = regexp.MustCompile(`^[a-z][a-z0-9_.]{0,63}$`)
+	readIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
+
+	readHeaderInvalid = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "control_plane_read_header_invalid_total",
+		Help: "Read-attribution request headers that failed their pattern and were forwarded as invalid.",
+	}, []string{"header"})
+
+	readHeaderLogGates = map[string]*rateGate{callerHeader: {}, readIDHeader: {}}
+)
+
+func readAttribution(h http.Header) (caller, readID string) {
+	return validReadHeader(h, callerHeader, validCaller), validReadHeader(h, readIDHeader, readIDPattern.MatchString)
+}
+
+// validCaller rejects the labels the gateway and Core count under themselves.
+func validCaller(value string) bool {
+	switch value {
+	case unattributedCaller, overflowLabel, invalidValue:
+		return false
+	}
+	return callerPattern.MatchString(value)
+}
+
+func validReadHeader(h http.Header, name string, valid func(string) bool) string {
+	value := h.Get(name)
+	if value == "" || valid(value) {
+		return value
+	}
+	readHeaderInvalid.WithLabelValues(name).Inc()
+	if readHeaderLogGates[name].allow(time.Now(), time.Minute) {
+		log.Printf("read_header_invalid header=%s length=%d", name, len(value))
+	}
+	return invalidValue
+}
 
 var forwardedResponseHeaders = []string{"Content-Type", "Content-Encoding", "Vary", "ETag", "Retry-After", "Cache-Control"}
 
@@ -568,6 +626,20 @@ func (cp *ControlPlane) ProxyExtraction(c *gin.Context) {
 // caller whole-fleet totals. Forcing it also means a caller-supplied tenant_id is
 // overwritten, not honored (#230).
 func (cp *ControlPlane) ProxyStats(c *gin.Context) {
+	cp.proxyTenantGET(c, statsAPIPath)
+}
+
+// ProxyReadCosts serves GET /api/v1/read-costs. Core returns 400 without a
+// tenant_id, so the authenticated tenant is always forced in.
+func (cp *ControlPlane) ProxyReadCosts(c *gin.Context) {
+	cp.proxyTenantGET(c, readCostsAPIPath)
+}
+
+func (cp *ControlPlane) ProxyStreams(c *gin.Context) {
+	cp.proxyTenantGET(c, streamsAPIPath)
+}
+
+func (cp *ControlPlane) proxyTenantGET(c *gin.Context, path string) {
 	_, tenantID, _, ok := authIdentityFromContext(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "message": "no auth context"})
@@ -579,7 +651,7 @@ func (cp *ControlPlane) ProxyStats(c *gin.Context) {
 	if !ok {
 		return
 	}
-	cp.delegation.forwardRequest(c, http.MethodGet, cp.delegation.coreForTenant(tenantID), "/api/v1/stats", q, nil, bearer, nil)
+	cp.delegation.forwardRequest(c, http.MethodGet, cp.delegation.coreForTenant(tenantID), path, q, nil, bearer, nil)
 }
 
 // ProxyEntityState serves GET /api/v1/entities/:entity_id/state tenant-scoped.
