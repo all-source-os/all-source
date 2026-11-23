@@ -1,0 +1,159 @@
+{
+  "at": 1792497780441,
+  "round": 1,
+  "sizes": [
+    1024
+  ],
+  "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+  "messages": [
+    {
+      "info": {
+        "id": "msg_159317733001QfLp0xwlwRj15D",
+        "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+        "role": "user",
+        "time": {
+          "created": 1792497776435
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159317738001Q07SUuoQSnoZEL",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "messageID": "msg_159317733001QfLp0xwlwRj15D",
+          "type": "text",
+          "text": "QA_LOAD: preserve fixture marker during compaction. This is a controlled memory evaluation."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_1593178fb001dZyOZE1WSquQNu",
+        "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+        "role": "user",
+        "time": {
+          "created": 1792497776891
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_1593178fc0014MXoRIU4OmTMrz",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "messageID": "msg_1593178fb001dZyOZE1WSquQNu",
+          "type": "compaction",
+          "auto": false
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15931791e0015Y25lZTty7gfbQ",
+        "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+        "role": "assistant",
+        "time": {
+          "created": 1792497776927,
+          "completed": 1792497778681
+        },
+        "parentID": "msg_1593178fb001dZyOZE1WSquQNu",
+        "modelID": "openai/gpt-4.1-mini",
+        "providerID": "openrouter",
+        "mode": "compaction",
+        "agent": "compaction",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/full/runs/repeated-valid",
+          "root": "/"
+        },
+        "summary": true,
+        "cost": 0.0005948,
+        "tokens": {
+          "total": 1106,
+          "input": 979,
+          "output": 127,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_159317c62001KkC8JS4U6IndQ7",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "messageID": "msg_15931791e0015Y25lZTty7gfbQ",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159317c65001QlWGbxQA2THPWt",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "messageID": "msg_15931791e0015Y25lZTty7gfbQ",
+          "type": "text",
+          "text": "## Objective\n- Preserve the fixture marker during compaction as part of a controlled memory evaluation.\n\n## Important Details\n- The focus is on maintaining the fixture marker intact throughout the compaction process.\n- The context is related to controlled memory evaluation.\n\n## Work State\n### Completed\n- (none)\n\n### Active\n- Understanding or initiating the task to preserve the fixture marker during compaction.\n\n### Blocked\n- (none)\n\n## Next Move\n1. Investigate and implement preservation of the fixture marker during the compaction process.\n2. Validate memory use and correctness after the change.\n\n## Relevant Files\n- (none)",
+          "time": {
+            "start": 1792497777765,
+            "end": 1792497778672
+          }
+        },
+        {
+          "id": "prt_159317ff5001QWy0vIjyAUIXOo",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "messageID": "msg_15931791e0015Y25lZTty7gfbQ",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.0005948,
+          "tokens": {
+            "total": 1106,
+            "input": 979,
+            "output": 127,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_1593180ca0015plVQQeH0YTjbE",
+        "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+        "role": "user",
+        "time": {
+          "created": 1792497778890
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_1593180cb001CbDDikU7o45Qlj",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "messageID": "msg_1593180ca0015plVQQeH0YTjbE",
+          "type": "text",
+          "text": "[restore checkpointed session agent configuration after compaction]\n\n[restored skill instructions loaded earlier in this session; re-injected after compaction]\n\n\n\n## Skill: qa-0\n\nBase directory for this skill: /private/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/skills/qa-0/\nFile references (@path) in this skill are relative to this directory.\n\nBEGIN_0\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nEND_0\n<!-- OMO_INTERNAL_INITIATOR -->\n<!-- OMO_INTERNAL_NOREPLY -->",
+          "synthetic": true,
+          "metadata": {
+            "compaction_continue": true
+          }
+        }
+      ]
+    }
+  ]
+}

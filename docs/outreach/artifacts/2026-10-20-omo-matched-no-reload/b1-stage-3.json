@@ -1,0 +1,278 @@
+{
+  "at": 1792507525071,
+  "stage": 3,
+  "prompt": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea63b8b62ffeK73T9vPF7P2kQy. Return the verified receipt.",
+  "expected": {
+    "stage": 3,
+    "query": "ZEPHYR_49C0BAB77B",
+    "receipt": "receipt-3-1b83dd1e04"
+  },
+  "sourceSessionID": "ses_ea63b8b62ffeK73T9vPF7P2kQy",
+  "score": {
+    "stage": 3,
+    "search": true,
+    "info": true,
+    "receipt": true,
+    "passed": true,
+    "errors": [],
+    "skillCalls": []
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_159c62531001YZoMKlxavlQLQf",
+        "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+        "role": "user",
+        "time": {
+          "created": 1792507520305
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159c6253100251hU8auzPLu6zI",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62531001YZoMKlxavlQLQf",
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea63b8b62ffeK73T9vPF7P2kQy. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159c62588001Vzjl4NeLhSbdpO",
+        "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+        "role": "assistant",
+        "time": {
+          "created": 1792507520392,
+          "completed": 1792507522734
+        },
+        "parentID": "msg_159c62531001YZoMKlxavlQLQf",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/matched/runs/b1",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7341,
+          "input": 983,
+          "output": 130,
+          "reasoning": 42,
+          "cache": {
+            "read": 6186,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159c62bc2001zC5qYNNSQKa8WQ",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62588001Vzjl4NeLhSbdpO",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159c62bc6001LO6iYYWc2BIQQn",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62588001Vzjl4NeLhSbdpO",
+          "type": "reasoning",
+          "text": "Checkpoint 3: query ZEPHYR_49C0BAB77B, session ses_ea63b8b62ffeK73T9vPF7P2kQy.",
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "Checkpoint 3: query ZEPHYR_49C0BAB77B, session ses_ea63b8b62ffeK73T9vPF7P2kQy.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          },
+          "time": {
+            "start": 1792507521990,
+            "end": 1792507522621
+          }
+        },
+        {
+          "id": "prt_159c62cfe0011yucOKVEhWkXBP",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62588001Vzjl4NeLhSbdpO",
+          "type": "tool",
+          "callID": "call_function_m74vbbnwj250_1",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "ZEPHYR_49C0BAB77B",
+              "session_id": "ses_ea63b8b62ffeK73T9vPF7P2kQy",
+              "case_sensitive": true,
+              "limit": 5
+            },
+            "output": "Found 1 matches:\n\n[ses_ea63b8b62ffeK73T9vPF7P2kQy] msg_159c474bb001uLC0V8KGEAIDmr (user) 2026-10-20T14:43:29.595Z\n  ZEPHYR_49C0BAB77B receipt-3-1b83dd1e04. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792507522553,
+              "end": 1792507522624
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "Checkpoint 3: query ZEPHYR_49C0BAB77B, session ses_ea63b8b62ffeK73T9vPF7P2kQy.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "prt_159c62dff001zBs3OVT5f36y6g",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62588001Vzjl4NeLhSbdpO",
+          "type": "tool",
+          "callID": "call_function_m74vbbnwj250_2",
+          "tool": "session_info",
+          "state": {
+            "status": "completed",
+            "input": {
+              "session_id": "ses_ea63b8b62ffeK73T9vPF7P2kQy"
+            },
+            "output": "Session ID: ses_ea63b8b62ffeK73T9vPF7P2kQy\nMessages: 1\nDate Range: 2026-10-20T14:43:29.595Z to 2026-10-20T14:43:29.595Z\nAgents Used: build\nHas Todos: No\nHas Transcript: Yes (1 entries)",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792507522618,
+              "end": 1792507522721
+            }
+          }
+        },
+        {
+          "id": "prt_159c62ea6001Vf7Khop3ngXoSq",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62588001Vzjl4NeLhSbdpO",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0,
+          "tokens": {
+            "total": 7341,
+            "input": 983,
+            "output": 130,
+            "reasoning": 42,
+            "cache": {
+              "read": 6186,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159c62eb2001dALIY3PNYTgrL3",
+        "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+        "role": "assistant",
+        "time": {
+          "created": 1792507522738,
+          "completed": 1792507525014
+        },
+        "parentID": "msg_159c62531001YZoMKlxavlQLQf",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/matched/runs/b1",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7675,
+          "input": 323,
+          "output": 130,
+          "reasoning": 0,
+          "cache": {
+            "read": 7222,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_159c635cc001aiiNNVjMYz1vT0",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62eb2001dALIY3PNYTgrL3",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159c635d0001isvT5rUxv4oFRj",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62eb2001dALIY3PNYTgrL3",
+          "type": "text",
+          "text": "Checkpoint 3 verified.\n\n- **Session**: `ses_ea63b8b62ffeK73T9vPF7P2kQy` (1 message, 2026-10-20T14:43:29.595Z)\n- **Match**: `msg_159c474bb001uLC0V8KGEAIDmr` (1 match, exact query `ZEPHYR_49C0BAB77B`)\n- **Verified receipt**: `ZEPHYR_49C0BAB77B receipt-3-1b83dd1e04. Synthetic ledger record.`",
+          "time": {
+            "start": 1792507524560,
+            "end": 1792507525007
+          }
+        },
+        {
+          "id": "prt_159c637920014HzVdRQ7ofGlBI",
+          "sessionID": "ses_ea63b8b05ffebqrNEZjM8vsHbe",
+          "messageID": "msg_159c62eb2001dALIY3PNYTgrL3",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0,
+          "tokens": {
+            "total": 7675,
+            "input": 323,
+            "output": 130,
+            "reasoning": 0,
+            "cache": {
+              "read": 7222,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

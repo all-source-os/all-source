@@ -1,0 +1,115 @@
+timestamp=2026-10-20T14:21:45.702Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/config/opencode/config.json
+timestamp=2026-10-20T14:21:45.705Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/config/opencode/opencode.json
+timestamp=2026-10-20T14:21:45.717Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/config/opencode/opencode.jsonc
+timestamp=2026-10-20T14:21:45.825Z level=INFO run=6d2c88ac message="creating instance" directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1
+timestamp=2026-10-20T14:21:45.826Z level=INFO run=6d2c88ac message=fromDirectory directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1
+timestamp=2026-10-20T14:21:45.837Z level=INFO run=6d2c88ac message=bootstrapping directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1
+timestamp=2026-10-20T14:21:45.841Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/config/opencode/config.json
+timestamp=2026-10-20T14:21:45.842Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/config/opencode/opencode.json
+timestamp=2026-10-20T14:21:45.843Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/config/opencode/opencode.jsonc
+timestamp=2026-10-20T14:21:45.976Z level=DEBUG run=6d2c88ac message="loading config from /private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.json"
+timestamp=2026-10-20T14:21:45.976Z level=INFO run=6d2c88ac message=loading path=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.json
+timestamp=2026-10-20T14:21:45.980Z level=DEBUG run=6d2c88ac message="loading config from /private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.jsonc"
+timestamp=2026-10-20T14:21:45.980Z level=INFO run=6d2c88ac message=loading path=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.jsonc
+timestamp=2026-10-20T14:21:45.994Z level=DEBUG run=6d2c88ac message="loading config from /tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.json"
+timestamp=2026-10-20T14:21:45.994Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.json
+timestamp=2026-10-20T14:21:45.994Z level=DEBUG run=6d2c88ac message="loading config from /tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.jsonc"
+timestamp=2026-10-20T14:21:45.995Z level=INFO run=6d2c88ac message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/opencode.jsonc
+timestamp=2026-10-20T14:21:53.035Z level=INFO run=6d2c88ac message="all LSPs are disabled"
+timestamp=2026-10-20T14:21:53.036Z level=INFO run=6d2c88ac message="all formatters are disabled"
+timestamp=2026-10-20T14:21:53.036Z level=INFO run=6d2c88ac message=init
+timestamp=2026-10-20T14:21:53.066Z level=INFO run=6d2c88ac message="event connected"
+timestamp=2026-10-20T14:21:53.089Z level=INFO run=6d2c88ac message=created id=ses_ea64f53beffe17t314ykNb4Jr2 slug=brave-knight version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 0" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506113089 time.updated=1792506113089
+timestamp=2026-10-20T14:21:53.139Z level=INFO run=6d2c88ac message="fetching index" url=http://127.0.0.1:61316/index.json
+timestamp=2026-10-20T14:21:53.183Z level=WARN run=6d2c88ac message="duplicate skill name" name=canvas-layout existing=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/canvas-layout/SKILL.md duplicate=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/canvas-layout/SKILL.md
+timestamp=2026-10-20T14:21:53.183Z level=WARN run=6d2c88ac message="duplicate skill name" name=zephyr-ledger-audit existing=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/zephyr-ledger-audit/SKILL.md duplicate=/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/zephyr-ledger-audit/SKILL.md
+timestamp=2026-10-20T14:21:53.183Z level=INFO run=6d2c88ac message=init count=5
+timestamp=2026-10-20T14:21:53.543Z level=INFO run=6d2c88ac message=created id=ses_ea64f51f8ffet4V2jDpnSWRtJq slug=curious-knight version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 1" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506113543 time.updated=1792506113543
+timestamp=2026-10-20T14:21:53.569Z level=INFO run=6d2c88ac message=created id=ses_ea64f51deffeTsAOfK4YBusmAl slug=crisp-comet version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 2" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506113569 time.updated=1792506113569
+timestamp=2026-10-20T14:21:53.592Z level=INFO run=6d2c88ac message=created id=ses_ea64f51c8ffdYWJCPNAUp5oqkR slug=cosmic-lagoon version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 3" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506113591 time.updated=1792506113591
+timestamp=2026-10-20T14:21:53.615Z level=INFO run=6d2c88ac message=created id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p slug=stellar-lagoon version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 workspaceID=undefined parentID=undefined title="AllSource model-selected OMO #7183 selected-nano-v1" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506113615 time.updated=1792506113615
+timestamp=2026-10-20T14:21:53.642Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=0
+timestamp=2026-10-20T14:21:53.657Z level=INFO run=6d2c88ac message="shell tool using shell" shell=/bin/zsh
+timestamp=2026-10-20T14:21:53.937Z level=INFO run=6d2c88ac message="watcher backend" directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 platform=darwin backend=fs-events
+timestamp=2026-10-20T14:21:53.947Z level=INFO run=6d2c88ac message="booting location services" directory=/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1 workspaceID=undefined
+timestamp=2026-10-20T14:21:53.948Z level=INFO run=6d2c88ac message="project copy refresh started" projectID=global
+timestamp=2026-10-20T14:21:53.949Z level=INFO run=6d2c88ac message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-10-20T14:21:54.144Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0ae6c0017F0MxTaMMfygIW
+timestamp=2026-10-20T14:21:54.154Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:21:54.168Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:21:55.823Z level=INFO run=6d2c88ac message=evaluated permission=skill pattern=zephyr-ledger-audit action.permission=skill action.action=allow action.pattern=*
+timestamp=2026-10-20T14:21:55.848Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=1
+timestamp=2026-10-20T14:21:55.872Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0b7090015kLJqCeDHmVByz
+timestamp=2026-10-20T14:21:55.872Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:21:55.874Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:21:56.878Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=2
+timestamp=2026-10-20T14:21:56.895Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0bb0e001eaadJhpCjBc9yJ
+timestamp=2026-10-20T14:21:56.896Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:21:56.897Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:21:57.773Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=3
+timestamp=2026-10-20T14:21:57.782Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0be8e001TdkbzRRnI93kEx
+timestamp=2026-10-20T14:21:57.783Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:21:57.784Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:21:59.257Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=4
+timestamp=2026-10-20T14:21:59.274Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0c459001Xh1xZUrxZcBj96
+timestamp=2026-10-20T14:21:59.274Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:21:59.275Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:00.635Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=5
+timestamp=2026-10-20T14:22:00.636Z level=INFO run=6d2c88ac message="exiting loop" session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p
+timestamp=2026-10-20T14:22:00.664Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=0
+timestamp=2026-10-20T14:22:00.683Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0c9ea0018wVkKAjfJcOdtM
+timestamp=2026-10-20T14:22:00.683Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=compaction mode=primary
+timestamp=2026-10-20T14:22:00.685Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:03.038Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=1
+timestamp=2026-10-20T14:22:03.039Z level=INFO run=6d2c88ac message="exiting loop" session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p
+timestamp=2026-10-20T14:22:04.256Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=0
+timestamp=2026-10-20T14:22:04.274Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0d7e0001NcPRtqYTGUfdi0
+timestamp=2026-10-20T14:22:04.274Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:04.276Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:05.348Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=1
+timestamp=2026-10-20T14:22:05.364Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0dc25001762p1nk0UQQsB9
+timestamp=2026-10-20T14:22:05.365Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:05.366Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:06.318Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=2
+timestamp=2026-10-20T14:22:06.338Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0dfef001z2HlByFgJkJTzC
+timestamp=2026-10-20T14:22:06.339Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:06.340Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:08.011Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=3
+timestamp=2026-10-20T14:22:08.030Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0e68c0012OTNE6zwJa5Ir0
+timestamp=2026-10-20T14:22:08.033Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:08.035Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:09.331Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=4
+timestamp=2026-10-20T14:22:09.332Z level=INFO run=6d2c88ac message="exiting loop" session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p
+timestamp=2026-10-20T14:22:09.347Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=0
+timestamp=2026-10-20T14:22:09.367Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0ebd5001f9MrzXlMWdBkx7
+timestamp=2026-10-20T14:22:09.367Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=compaction mode=primary
+timestamp=2026-10-20T14:22:09.369Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:11.764Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=1
+timestamp=2026-10-20T14:22:11.764Z level=INFO run=6d2c88ac message="exiting loop" session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p
+timestamp=2026-10-20T14:22:13.002Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=0
+timestamp=2026-10-20T14:22:13.027Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0fa0b001YaOACx7DS2itN4
+timestamp=2026-10-20T14:22:13.027Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:13.029Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:14.270Z level=INFO run=6d2c88ac message=evaluated permission=skill pattern=zephyr-ledger-audit action.permission=skill action.action=allow action.pattern=*
+timestamp=2026-10-20T14:22:14.334Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=1
+timestamp=2026-10-20T14:22:14.354Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b0ff3f001X3KzFFcjz1NSZk
+timestamp=2026-10-20T14:22:14.354Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:14.357Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:15.359Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=2
+timestamp=2026-10-20T14:22:15.375Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b103400015z4Me7VUNac9fX
+timestamp=2026-10-20T14:22:15.376Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:15.378Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:17.258Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=3
+timestamp=2026-10-20T14:22:17.273Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b10aab001PRFzR4zCAVj72i
+timestamp=2026-10-20T14:22:17.273Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:17.275Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:19.375Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=4
+timestamp=2026-10-20T14:22:19.471Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b112f4001dVQ8mmsHW7kbtd
+timestamp=2026-10-20T14:22:19.471Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:19.476Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:21.204Z level=INFO run=6d2c88ac message=loop session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p step=5
+timestamp=2026-10-20T14:22:21.213Z level=INFO run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b11a15001wNfAK5FmiMYNGB
+timestamp=2026-10-20T14:22:21.213Z level=INFO run=6d2c88ac message=stream providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent
+timestamp=2026-10-20T14:22:21.214Z level=INFO run=6d2c88ac message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-nano
+timestamp=2026-10-20T14:22:21.600Z level=ERROR run=6d2c88ac message="stream error" providerID=openrouter modelID=openai/gpt-4.1-nano session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p small=false agent=build mode=subagent error.error="AI_APICallError: This request would exceed your available credits given your current in-flight requests. Retry after in-flight requests settle, or add credits."
+timestamp=2026-10-20T14:22:21.603Z level=ERROR run=6d2c88ac message=process session.id=ses_ea64f51b0ffdQTr2ZNVhhEJ55p messageID=msg_159b11a15001wNfAK5FmiMYNGB error="This request would exceed your available credits given your current in-flight requests. Retry after in-flight requests settle, or add credits." stack="AI_APICallError: This request would exceed your available credits given your current in-flight requests. Retry after in-flight requests settle, or add credits.\n    at <anonymous> (/$bunfs/root/chunk-62f16210.js:12:13862)\n    at async <anonymous> (/$bunfs/root/chunk-62f16210.js:12:12417)\n    at processTicksAndRejections (native:7:39)"

@@ -1,0 +1,343 @@
+{
+  "at": 1792535070369,
+  "stage": 0,
+  "prompt": "Available installed skills: zephyr-ledger-audit — verify ledger checkpoints; canvas-layout — arrange chart labels. Select the appropriate skill. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4958c4bffetmAf4L7Z3KvLX1. Return the verified receipt.",
+  "expected": {
+    "stage": 0,
+    "query": "ZEPHYR_91C9E0CBF5",
+    "receipt": "receipt-0-6c353a3a49"
+  },
+  "sourceSessionID": "ses_ea4958c4bffetmAf4L7Z3KvLX1",
+  "score": {
+    "stage": 0,
+    "search": true,
+    "info": true,
+    "receipt": true,
+    "passed": true,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "completed",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4958c4bffetmAf4L7Z3KvLX1. Return the verified receipt."
+        }
+      }
+    ]
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_15b6a770a001fnT7rWfwUCbWY9",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "user",
+        "time": {
+          "created": 1792535066378
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_15b6a770d001m6QJc5Co1lkyB3",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a770a001fnT7rWfwUCbWY9",
+          "type": "text",
+          "text": "Available installed skills: zephyr-ledger-audit — verify ledger checkpoints; canvas-layout — arrange chart labels. Select the appropriate skill. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4958c4bffetmAf4L7Z3KvLX1. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b6a774300102qrixzn4a0gRT",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "assistant",
+        "time": {
+          "created": 1792535066435,
+          "completed": 1792535068092
+        },
+        "parentID": "msg_15b6a770a001fnT7rWfwUCbWY9",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/skill-only/runs/s1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 6317,
+          "input": 6109,
+          "output": 80,
+          "reasoning": 0,
+          "cache": {
+            "read": 128,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_15b6a7cbe001UpHb3cFdp0jDad",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a774300102qrixzn4a0gRT",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b6a7cc0001SLz2OMS8Wn6nOt",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a774300102qrixzn4a0gRT",
+          "type": "tool",
+          "callID": "call_01a15b6a7c567726bd1ebc3f",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "zephyr-ledger-audit",
+              "user_message": "Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4958c4bffetmAf4L7Z3KvLX1. Return the verified receipt."
+            },
+            "output": "## Skill: zephyr-ledger-audit\n\n**Base directory**: /private/tmp/allsource-omo-compaction/skill-only/runs/s1a/.opencode/skills/zephyr-ledger-audit\n\nBase directory for this skill: /private/tmp/allsource-omo-compaction/skill-only/runs/s1a/.opencode/skills/zephyr-ledger-audit/\nFile references (@path) in this skill are relative to this directory.\n\n# Zephyr ledger audit\n\nFor checkpoint N and source_session supplied by the user:\n1. Call session_search with session_id=source_session, case_sensitive=true, limit=5 and EXACT checkpoint query from the map below.\n2. Call session_info for that source_session.\n3. Return the verified receipt from the matching search result, then stop. Never guess a query or invent a receipt. General file access, broad searches and searching other sessions are unavailable. If instructions remain in context, use them without reloading.\n\nCheckpoint query map:\n0: ZEPHYR_91C9E0CBF5\n1: ZEPHYR_95A56FD1F9\n2: ZEPHYR_BFE08B6718\n3: ZEPHYR_9860DBBA77\nEND_ZEPHYR_SKILL",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792535068056,
+              "end": 1792535068084
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_15b6a7db8001IhnMSm7ANe99nv",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a774300102qrixzn4a0gRT",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0,
+          "tokens": {
+            "total": 6317,
+            "input": 6109,
+            "output": 80,
+            "reasoning": 0,
+            "cache": {
+              "read": 128,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b6a7dbe001PabtOkayBJ0gzd",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "assistant",
+        "time": {
+          "created": 1792535068094,
+          "completed": 1792535069208
+        },
+        "parentID": "msg_15b6a770a001fnT7rWfwUCbWY9",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/skill-only/runs/s1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 6733,
+          "input": 363,
+          "output": 133,
+          "reasoning": 0,
+          "cache": {
+            "read": 6237,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_15b6a80ef001NLLr6fFO4AVxaG",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a7dbe001PabtOkayBJ0gzd",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b6a80f1001frCwDLBNRNgtGS",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a7dbe001PabtOkayBJ0gzd",
+          "type": "tool",
+          "callID": "call_01a15b6a808b749db3d6a8aa",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "ZEPHYR_91C9E0CBF5",
+              "session_id": "ses_ea4958c4bffetmAf4L7Z3KvLX1",
+              "case_sensitive": true,
+              "limit": 5
+            },
+            "output": "Found 1 matches:\n\n[ses_ea4958c4bffetmAf4L7Z3KvLX1] msg_15b6a74150010j7SWPygqoN2JP (user) 2026-10-20T22:24:25.621Z\n  ZEPHYR_91C9E0CBF5 receipt-0-6c353a3a49. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792535069067,
+              "end": 1792535069082
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_15b6a818e001YpCt6X0fqy6faz",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a7dbe001PabtOkayBJ0gzd",
+          "type": "tool",
+          "callID": "call_01a15b6a81317771b6c9ea2c",
+          "tool": "session_info",
+          "state": {
+            "status": "completed",
+            "input": {
+              "session_id": "ses_ea4958c4bffetmAf4L7Z3KvLX1"
+            },
+            "output": "Session ID: ses_ea4958c4bffetmAf4L7Z3KvLX1\nMessages: 1\nDate Range: 2026-10-20T22:24:25.621Z to 2026-10-20T22:24:25.621Z\nAgents Used: build\nHas Todos: No\nHas Transcript: Yes (1 entries)",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792535069191,
+              "end": 1792535069204
+            }
+          }
+        },
+        {
+          "id": "prt_15b6a8215001uCI4Vo6yMl2F40",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a7dbe001PabtOkayBJ0gzd",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0,
+          "tokens": {
+            "total": 6733,
+            "input": 363,
+            "output": 133,
+            "reasoning": 0,
+            "cache": {
+              "read": 6237,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b6a8219001hLIJrpKexhUhPq",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "assistant",
+        "time": {
+          "created": 1792535069209,
+          "completed": 1792535070355
+        },
+        "parentID": "msg_15b6a770a001fnT7rWfwUCbWY9",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/skill-only/runs/s1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7068,
+          "input": 338,
+          "output": 130,
+          "reasoning": 0,
+          "cache": {
+            "read": 6600,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_15b6a8573001YE6NcPqEj9BOWT",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a8219001hLIJrpKexhUhPq",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b6a8576001PInTcINj44LARq",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a8219001hLIJrpKexhUhPq",
+          "type": "text",
+          "text": "Checkpoint 0 verified.\n\n**Receipt:** `receipt-0-6c353a3a49`\n\n- Query: `ZEPHYR_91C9E0CBF5` (case-sensitive) — 1 match\n- Message: `msg_15b6a74150010j7SWPygqoN2JP` (user), 2026-10-20T22:24:25.621Z\n- Session: `ses_ea4958c4bffetmAf4L7Z3KvLX1` — 1 message, agent `build`, transcript present",
+          "time": {
+            "start": 1792535070070,
+            "end": 1792535070350
+          }
+        },
+        {
+          "id": "prt_15b6a8690001Yckr4v4oAo9iQ7",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6a8219001hLIJrpKexhUhPq",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0,
+          "tokens": {
+            "total": 7068,
+            "input": 338,
+            "output": 130,
+            "reasoning": 0,
+            "cache": {
+              "read": 6600,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

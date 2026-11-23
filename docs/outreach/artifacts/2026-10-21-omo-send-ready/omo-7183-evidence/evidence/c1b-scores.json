@@ -1,0 +1,73 @@
+[
+  {
+    "stage": 0,
+    "search": true,
+    "info": true,
+    "receipt": true,
+    "passed": true,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "completed",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "checkpoint 0, source_session=ses_ea4542cbdffezaWPnkba8rWi9B"
+        }
+      }
+    ]
+  },
+  {
+    "stage": 1,
+    "search": false,
+    "info": true,
+    "receipt": false,
+    "passed": false,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "error",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "checkpoint 1, source_session=ses_ea4542ae8ffenhJU9D9k6c9jKq"
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      }
+    ]
+  },
+  {
+    "stage": 2,
+    "search": false,
+    "info": true,
+    "receipt": false,
+    "passed": false,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "error",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "Run checkpoint 2 for source_session=ses_ea4542ac4ffeqC6XfFCd6R1pJJ"
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      }
+    ]
+  },
+  {
+    "stage": 3,
+    "search": false,
+    "info": true,
+    "receipt": false,
+    "passed": false,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "error",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "Run Zephyr ledger audit checkpoint 3 for source_session=ses_ea4542a60fferQoKVUfp88U2EN"
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      }
+    ]
+  }
+]

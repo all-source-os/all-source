@@ -1,0 +1,10 @@
+{
+  "sessionID": "ses_ea64c6bb6ffea0ArdZTlBBO932",
+  "sources": [
+    "ses_ea64c6e3fffeT7H1oIzMB4xnhP",
+    "ses_ea64c6c18ffe6EOQxX4xt1aQqO",
+    "ses_ea64c6bf6ffeyFyGwmq2Ly0UDs",
+    "ses_ea64c6bdcfferyt45zPWzOdhay"
+  ],
+  "model": "minimax/minimax-m3.1-flash:free"
+}

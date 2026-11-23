@@ -1,0 +1,17 @@
+{
+  "plugin": [
+    "file:///tmp/allsource-omo-compaction/full-plugin.ts"
+  ],
+  "mcp": {
+    "lsp": {
+      "enabled": true,
+      "type": "local"
+    }
+  },
+  "permission": {
+    "task": "deny",
+    "external_directory": "allow",
+    "webfetch": "allow",
+    "*": "deny"
+  }
+}

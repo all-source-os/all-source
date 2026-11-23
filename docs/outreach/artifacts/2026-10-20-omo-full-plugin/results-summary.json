@@ -1,0 +1,378 @@
+{
+  "date": "2026-10-20",
+  "head": "93d44a0760448f7f07d2795c6239d51db5ab6576",
+  "opencodeCompactionRuntime": "1.18.22",
+  "opencodeAdditionalLoaderRuntime": "1.19.3",
+  "bun": "1.4.3",
+  "model": "openrouter/openai/gpt-4.1-mini",
+  "requestedMaxOutputTokens": 256,
+  "integration": "native loader -> full default OMO server -> delegated native hooks; programmatic discovered-skill execution",
+  "sourceHashes": {
+    "hooks/compaction-context-injector/hook.ts": "ffb67fca3b9647f990594bbbbdbd4fe5018217d4283623620d7c29901cadce08",
+    "hooks/compaction-context-injector/recovery.ts": "8eb15a3c333bd11a702bbad12392088809e80bd96368f4b22605da38cec2fcb1",
+    "hooks/compaction-context-injector/constants.ts": "b70def05c148c2bc0f475f7409c4d4e048a0c6e5881174a374a3ab681f3c60d8",
+    "hooks/compaction-context-injector/skill-reinjection.ts": "50dcb57f3baa75fdd75c6e176285b6bc24e019db1795a5c45744a53762331b5f",
+    "shared/session-loaded-skills.ts": "35be0b637313a7ec75392c975dfd0af4474b8a00aac29d7363b05752fbb9bf91",
+    "tools/skill/tools.ts": "bed314e04e638cfc28b6ad917af513681e7fc9e0890084447e358e4933bdd2ac",
+    "plugin/session-compacting.ts": "157483645b034ee40a37ff2ccc657e6c7ae47d3549480b117eee457dd0b8badf"
+  },
+  "bundleSha256": "ee3739675452673d7aaf1d12118724645c06a15c02dabf4056dac3c091bd4c49",
+  "frontendAssetSha256": "159c32005214c1620077ad4e5a8afdbadaf0bc25978df9a80bb1a59b9f5233e8",
+  "firstThirdEventGapMs": 70819,
+  "cases": [
+    {
+      "run": "repeated-valid",
+      "initialized": {
+        "at": 1792497776221,
+        "kind": "full-plugin-initialized",
+        "hooks": [
+          "tool",
+          "chat.params",
+          "chat.headers",
+          "command.execute.before",
+          "chat.message",
+          "experimental.chat.messages.transform",
+          "experimental.chat.system.transform",
+          "config",
+          "event",
+          "tool.definition",
+          "tool.execute.before",
+          "tool.execute.after",
+          "experimental.session.compacting",
+          "experimental.compaction.autocontinue",
+          "dispose"
+        ],
+        "tools": [
+          "grep",
+          "glob",
+          "session_list",
+          "session_read",
+          "session_search",
+          "session_info",
+          "background_output",
+          "background_cancel",
+          "call_omo_agent",
+          "look_at",
+          "task",
+          "skill_mcp",
+          "skill",
+          "interactive_bash"
+        ]
+      },
+      "loaded": [
+        {
+          "at": 1792497776467,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "name": "qa-0",
+          "bytes": 1334,
+          "endMarker": true
+        }
+      ],
+      "compactedEvents": [
+        {
+          "at": 1792497778682,
+          "kind": "hook-enter",
+          "name": "event",
+          "eventType": "session.compacted"
+        },
+        {
+          "at": 1792497783127,
+          "kind": "hook-enter",
+          "name": "event",
+          "eventType": "session.compacted"
+        },
+        {
+          "at": 1792497849501,
+          "kind": "hook-enter",
+          "name": "event",
+          "eventType": "session.compacted"
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "fixtureBytes": [
+            1024
+          ],
+          "summaryMessages": 1,
+          "recoveryMessages": [
+            {
+              "id": "prt_1593180cb001CbDDikU7o45Qlj",
+              "bytes": 1453,
+              "sha256": "be3de490262c4205d33a222d7e538f68846de0d17d4ee6fbd001163596ac5bfb",
+              "synthetic": true
+            }
+          ]
+        },
+        {
+          "round": 2,
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "fixtureBytes": [
+            1024
+          ],
+          "summaryMessages": 2,
+          "recoveryMessages": [
+            {
+              "id": "prt_1593180cb001CbDDikU7o45Qlj",
+              "bytes": 1453,
+              "sha256": "be3de490262c4205d33a222d7e538f68846de0d17d4ee6fbd001163596ac5bfb",
+              "synthetic": true
+            }
+          ]
+        },
+        {
+          "round": 3,
+          "sessionID": "ses_ea6ce88e6ffepYvCVSjFIfy5fU",
+          "fixtureBytes": [
+            1024
+          ],
+          "summaryMessages": 3,
+          "recoveryMessages": [
+            {
+              "id": "prt_1593180cb001CbDDikU7o45Qlj",
+              "bytes": 1453,
+              "sha256": "be3de490262c4205d33a222d7e538f68846de0d17d4ee6fbd001163596ac5bfb",
+              "synthetic": true
+            },
+            {
+              "id": "prt_15932957c002SbumyVi8SDmldZ",
+              "bytes": 1453,
+              "sha256": "be3de490262c4205d33a222d7e538f68846de0d17d4ee6fbd001163596ac5bfb",
+              "synthetic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "run": "single-1m",
+      "initialized": {
+        "at": 1792497979554,
+        "kind": "full-plugin-initialized",
+        "hooks": [
+          "tool",
+          "chat.params",
+          "chat.headers",
+          "command.execute.before",
+          "chat.message",
+          "experimental.chat.messages.transform",
+          "experimental.chat.system.transform",
+          "config",
+          "event",
+          "tool.definition",
+          "tool.execute.before",
+          "tool.execute.after",
+          "experimental.session.compacting",
+          "experimental.compaction.autocontinue",
+          "dispose"
+        ],
+        "tools": [
+          "grep",
+          "glob",
+          "session_list",
+          "session_read",
+          "session_search",
+          "session_info",
+          "background_output",
+          "background_cancel",
+          "call_omo_agent",
+          "look_at",
+          "task",
+          "skill_mcp",
+          "skill",
+          "interactive_bash"
+        ]
+      },
+      "loaded": [
+        {
+          "at": 1792497979776,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb6eaaffeOqpIy2r1xrByvG",
+          "name": "qa-0",
+          "bytes": 1048876,
+          "endMarker": true
+        }
+      ],
+      "compactedEvents": [
+        {
+          "at": 1792497982247,
+          "kind": "hook-enter",
+          "name": "event",
+          "eventType": "session.compacted"
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "sessionID": "ses_ea6cb6eaaffeOqpIy2r1xrByvG",
+          "fixtureBytes": [
+            1048576
+          ],
+          "summaryMessages": 1,
+          "recoveryMessages": [
+            {
+              "id": "prt_159349be6002aldH55Ehg3uquo",
+              "bytes": 1049000,
+              "sha256": "881b116236ac81a16f7f924369c3d157d95b99ad0c23ae5ecffcee5cdf623496",
+              "synthetic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "run": "multi-512k",
+      "initialized": {
+        "at": 1792498002512,
+        "kind": "full-plugin-initialized",
+        "hooks": [
+          "tool",
+          "chat.params",
+          "chat.headers",
+          "command.execute.before",
+          "chat.message",
+          "experimental.chat.messages.transform",
+          "experimental.chat.system.transform",
+          "config",
+          "event",
+          "tool.definition",
+          "tool.execute.before",
+          "tool.execute.after",
+          "experimental.session.compacting",
+          "experimental.compaction.autocontinue",
+          "dispose"
+        ],
+        "tools": [
+          "grep",
+          "glob",
+          "session_list",
+          "session_read",
+          "session_search",
+          "session_info",
+          "background_output",
+          "background_cancel",
+          "call_omo_agent",
+          "look_at",
+          "task",
+          "skill_mcp",
+          "skill",
+          "interactive_bash"
+        ]
+      },
+      "loaded": [
+        {
+          "at": 1792498002752,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-0",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002752,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-1",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002752,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-2",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002752,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-3",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002753,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-4",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002753,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-5",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002753,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-6",
+          "bytes": 65838,
+          "endMarker": true
+        },
+        {
+          "at": 1792498002753,
+          "kind": "full-skill-tool-result",
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "name": "qa-7",
+          "bytes": 65838,
+          "endMarker": true
+        }
+      ],
+      "compactedEvents": [
+        {
+          "at": 1792498004558,
+          "kind": "hook-enter",
+          "name": "event",
+          "eventType": "session.compacted"
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "sessionID": "ses_ea6cb14ecffeSZJVwVM7875ofE",
+          "fixtureBytes": [
+            65536,
+            65536,
+            65536,
+            65536,
+            65536,
+            65536,
+            65536,
+            65536
+          ],
+          "summaryMessages": 1,
+          "recoveryMessages": [
+            {
+              "id": "prt_15934f30c002Gpyzb18wqM626y",
+              "bytes": 526127,
+              "sha256": "e287a83e5c019e210a56526d5c97a9a178f03411878cc9998ee1751d5c029203",
+              "synthetic": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "cleanup": "QA runtime process query returned no matching process",
+  "excluded": [
+    "unstaged bundle import failures",
+    "preliminary repeated run with invalid unified config placement; one successful provider retry"
+  ],
+  "limits": [
+    "no model-selected skill loading or host tool output limit test",
+    "manual compaction, auto:false",
+    "autocontinue registered but not invoked",
+    "large recovery not submitted to downstream generation",
+    "LSP MCP registered but not exercised",
+    "no product code changes or full release/typecheck claim"
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "slot": "b2b",
+  "pair": "b2",
+  "skillText": "on",
+  "model": "minimax/minimax-m3.1-flash:free",
+  "fixtureSha256": "aebae1b83546b48158c241c8febaff561514220f6475fa328e72aa5ab185b5b2",
+  "config": {
+    "plugin": [
+      "/tmp/allsource-omo-compaction/readiness-observer.ts"
+    ],
+    "model": "openrouter/minimax/minimax-m3.1-flash:free",
+    "agent": {
+      "build": {
+        "prompt": "You are a controlled ledger-audit assistant. Select the matching installed skill through available tools. Follow its procedure exactly. Use instructions already in context instead of reloading. Never guess identifiers. Return the verified receipt and stop once required tool evidence is available. If evidence cannot be obtained, state that plainly. Do not narrate future actions.",
+        "maxSteps": 5
+      }
+    },
+    "mcp": {
+      "lsp": {
+        "enabled": false
+      }
+    },
+    "provider": {
+      "openrouter": {
+        "options": {
+          "apiKey": "[REDACTED]"
+        },
+        "models": {
+          "minimax/minimax-m3.1-flash:free": {
+            "limit": {
+              "context": 1000000,
+              "output": 2048
+            },
+            "options": {
+              "maxTokens": 2048,
+              "temperature": 0,
+              "reasoning": {
+                "effort": "low"
+              }
+            }
+          }
+        }
+      }
+    },
+    "permission": {
+      "*": "deny",
+      "skill": "allow",
+      "session_search": "allow",
+      "session_info": "allow"
+    }
+  },
+  "omo": {
+    "telemetry": false,
+    "auto_update": false,
+    "disabled_mcps": [
+      "websearch",
+      "context7",
+      "grep_app",
+      "lsp"
+    ],
+    "codegraph": {
+      "enabled": false,
+      "telemetry": false
+    },
+    "agents": {
+      "sisyphus": {
+        "model": "openrouter/minimax/minimax-m3.1-flash:free"
+      }
+    },
+    "disabled_hooks": [
+      "auto-update-checker"
+    ]
+  },
+  "policy": "initial native skill succeeds once; all subsequent skill executions throw before native code; source-scoped opaque searches only"
+}

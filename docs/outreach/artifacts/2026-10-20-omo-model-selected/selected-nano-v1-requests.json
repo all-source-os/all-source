@@ -1,0 +1,296 @@
+[
+  {
+    "at": 1792506105822,
+    "path": "/global/health",
+    "status": 200
+  },
+  {
+    "at": 1792506113054,
+    "path": "/config",
+    "status": 200
+  },
+  {
+    "at": 1792506113096,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 0"
+    }
+  },
+  {
+    "at": 1792506113541,
+    "path": "/session/ses_ea64f53beffe17t314ykNb4Jr2/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_2A1BE9828C receipt-0-ed36eac8ce. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506113547,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 1"
+    }
+  },
+  {
+    "at": 1792506113566,
+    "path": "/session/ses_ea64f51f8ffet4V2jDpnSWRtJq/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_484903FA4F receipt-1-5568e1a5c2. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506113571,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 2"
+    }
+  },
+  {
+    "at": 1792506113590,
+    "path": "/session/ses_ea64f51deffeTsAOfK4YBusmAl/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_C085B5EF7B receipt-2-b51505651c. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506113593,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 3"
+    }
+  },
+  {
+    "at": 1792506113613,
+    "path": "/session/ses_ea64f51c8ffdYWJCPNAUp5oqkR/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_597D942EE4 receipt-3-5f251dc4b5. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506113617,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "AllSource model-selected OMO #7183 selected-nano-v1"
+    }
+  },
+  {
+    "at": 1792506113627,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506120637,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Available installed skill metadata: zephyr-ledger-audit — verify Zephyr ledger checkpoints; canvas-layout — arrange chart labels and screen layouts. Select the appropriate skill and follow its procedure. Do not guess opaque ledger queries. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea64f53beffe17t314ykNb4Jr2. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506120647,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506123040,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/summarize",
+    "status": 200,
+    "body": {
+      "providerID": "openrouter",
+      "modelID": "openai/gpt-4.1-nano",
+      "auto": false
+    }
+  },
+  {
+    "at": 1792506124244,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506124247,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506129333,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 1. source_session=ses_ea64f51f8ffet4V2jDpnSWRtJq. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506129341,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506131778,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/summarize",
+    "status": 200,
+    "body": {
+      "providerID": "openrouter",
+      "modelID": "openai/gpt-4.1-nano",
+      "auto": false
+    }
+  },
+  {
+    "at": 1792506132985,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506132988,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  },
+  {
+    "at": 1792506141605,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-nano"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 2. source_session=ses_ea64f51deffeTsAOfK4YBusmAl. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506141611,
+    "path": "/session/ses_ea64f51b0ffdQTr2ZNVhhEJ55p/message",
+    "status": 200
+  }
+]

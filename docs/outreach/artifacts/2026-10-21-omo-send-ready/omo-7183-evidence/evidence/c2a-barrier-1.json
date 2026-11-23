@@ -1,0 +1,61 @@
+{
+  "stage": 1,
+  "startedAt": 1792539596188,
+  "releasedAt": 1792539596420,
+  "elapsedMs": 232,
+  "expectedRecoveries": 1,
+  "state": "accepted-and-stored",
+  "polls": [
+    {
+      "at": 1792539596209,
+      "enters": 1,
+      "exits": 0,
+      "summaries": 1,
+      "dispatches": 0,
+      "responses": 0,
+      "stored": 0,
+      "idle": true,
+      "matched": true,
+      "initialized": true,
+      "latch": true,
+      "regime": true,
+      "status": null
+    },
+    {
+      "at": 1792539596314,
+      "enters": 1,
+      "exits": 0,
+      "summaries": 1,
+      "dispatches": 0,
+      "responses": 0,
+      "stored": 0,
+      "idle": true,
+      "matched": true,
+      "initialized": true,
+      "latch": true,
+      "regime": true,
+      "status": null
+    },
+    {
+      "at": 1792539596420,
+      "enters": 1,
+      "exits": 1,
+      "summaries": 1,
+      "dispatches": 1,
+      "responses": 1,
+      "stored": 1,
+      "idle": true,
+      "matched": true,
+      "initialized": true,
+      "latch": true,
+      "regime": true,
+      "status": null
+    }
+  ],
+  "storedRecoveryIDs": [
+    "msg_15baf9659001aFwLVjhklmU7Av"
+  ],
+  "eventExitAt": 1792539596386,
+  "acceptedAt": 1792539596382,
+  "statuses": {}
+}

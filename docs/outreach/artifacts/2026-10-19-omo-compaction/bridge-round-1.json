@@ -1,0 +1,158 @@
+{
+  "round": 1,
+  "at": 1792412119640,
+  "sizes": [
+    1024
+  ],
+  "messages": [
+    {
+      "info": {
+        "id": "msg_1541663fa001YBf8w72ju2LZE7",
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+        "role": "user",
+        "time": {
+          "created": 1792412115962
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_1541663ff001QeP2RkEG2qhCFp",
+          "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+          "messageID": "msg_1541663fa001YBf8w72ju2LZE7",
+          "type": "text",
+          "text": "QA_LOAD: synthetic skill boundary fixture. Remember fixture marker."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_1541664fb001LSoOyNozQgDUCh",
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+        "role": "user",
+        "time": {
+          "created": 1792412116219
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_1541664fc001h7c9G0pg0PfwCY",
+          "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+          "messageID": "msg_1541664fb001LSoOyNozQgDUCh",
+          "type": "compaction",
+          "auto": false
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_154166501001XF30tyYOWvzAnf",
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+        "role": "assistant",
+        "time": {
+          "created": 1792412116225,
+          "completed": 1792412117833
+        },
+        "parentID": "msg_1541664fb001LSoOyNozQgDUCh",
+        "modelID": "openai/gpt-4.1-mini",
+        "providerID": "openrouter",
+        "mode": "compaction",
+        "agent": "compaction",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/runs/bridge",
+          "root": "/"
+        },
+        "summary": true,
+        "cost": 0.0003996,
+        "tokens": {
+          "total": 573,
+          "input": 431,
+          "output": 142,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_15416678a001sdlv0hdQZTTWJs",
+          "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+          "messageID": "msg_154166501001XF30tyYOWvzAnf",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15416678c001Cqnfw6wPIExO5h",
+          "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+          "messageID": "msg_154166501001XF30tyYOWvzAnf",
+          "type": "text",
+          "text": "## Objective\n- Create a synthetic skill boundary fixture.\n- Remember or mark the fixture for later use.\n\n## Important Details\n- The term \"QA_LOAD\" indicates loading or setting up a test fixture.\n- The fixture is related to a synthetic skill boundary, possibly for testing or simulation.\n- Need to ensure the fixture marker is remembered or stored for accessibility.\n\n## Work State\n### Completed\n- User issued instruction to load synthetic skill boundary fixture with marker.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. Implement or define the synthetic skill boundary fixture.\n2. Store or annotate the fixture marker as indicated.\n\n## Relevant Files\n- (none)",
+          "time": {
+            "start": 1792412116876,
+            "end": 1792412117827
+          }
+        },
+        {
+          "id": "prt_154166b460013jXHR5OY3J5qUW",
+          "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+          "messageID": "msg_154166501001XF30tyYOWvzAnf",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.0003996,
+          "tokens": {
+            "total": 573,
+            "input": 431,
+            "output": 142,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_154166bf60011xtcfElRkmeXDM",
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+        "role": "user",
+        "time": {
+          "created": 1792412118006
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_154166bf7001MioeU8pWf8kKJX",
+          "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr",
+          "messageID": "msg_154166bf60011xtcfElRkmeXDM",
+          "type": "text",
+          "text": "[restore checkpointed session agent configuration after compaction]\n\n[restored skill instructions loaded earlier in this session; re-injected after compaction]\n\n\n\n## Skill: qa-0\n\nBEGIN_0\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\nEND_0\n<!-- OMO_INTERNAL_INITIATOR -->\n<!-- OMO_INTERNAL_NOREPLY -->",
+          "synthetic": true,
+          "metadata": {
+            "compaction_continue": true
+          }
+        }
+      ]
+    }
+  ]
+}

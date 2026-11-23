@@ -1,5 +1,47 @@
-import { describe, expect, it } from "vitest";
-import { cleanAnalyticsUrl, isAnalyticsTest } from "@/lib/product-analytics";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanAnalyticsUrl, initProductAnalytics, isAnalyticsTest } from "@/lib/product-analytics";
+
+const posthogInit = vi.hoisted(() => vi.fn());
+vi.mock("posthog-js", () => ({ posthog: { init: posthogInit } }));
+
+describe("exception tracking", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    window.__allsourceAnalytics = undefined;
+  });
+
+  it("sends only the exception type, never the message or stack", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "phc_test");
+    vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://ph.example/");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await initProductAnalytics();
+    window.dispatchEvent(
+      new ErrorEvent("error", { message: "secret token abc", error: new Error("secret") })
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://ph.example/i/v0/e/");
+    expect(init.credentials).toBe("omit");
+    expect(init.body).not.toContain("secret");
+    const { properties } = JSON.parse(init.body);
+    expect(properties.$exception_type).toBe("ClientError");
+    expect(properties.$exception_mechanism).toBe("window.error");
+    expect(properties.exception_contract).toBe("type-only");
+
+    const { before_send } = posthogInit.mock.calls[0]?.[1] ?? {};
+    const event = before_send({
+      event: "$exception",
+      properties: { $exception_list: [{ value: "secret" }], $exception_message: "secret" },
+    });
+    expect(JSON.stringify(event)).not.toContain("secret");
+    expect(event.properties.$exception_type).toBe("ClientError");
+  });
+});
 
 describe("analytics traffic classification", () => {
   it("keeps ordinary canonical-host traffic in production", () => {

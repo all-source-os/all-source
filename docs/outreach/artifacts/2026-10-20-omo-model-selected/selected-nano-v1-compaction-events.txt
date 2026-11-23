@@ -1,0 +1,6 @@
+data: {"id":"evt_159b0ac2a001dqMyWUT7ePphef","type":"server.connected","properties":{}}
+
+data: {"id":"evt_159b0d31e002gng3Q1RuRp7PZ2","type":"session.compacted","properties":{"sessionID":"ses_ea64f51b0ffdQTr2ZNVhhEJ55p"}}
+
+data: {"id":"evt_159b0f533002XRqCFgg73m1H9a","type":"session.compacted","properties":{"sessionID":"ses_ea64f51b0ffdQTr2ZNVhhEJ55p"}}
+

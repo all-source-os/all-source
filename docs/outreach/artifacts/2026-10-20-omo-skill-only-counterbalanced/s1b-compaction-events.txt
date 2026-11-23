@@ -1,0 +1,7 @@
+data: {"id":"evt_15b6ce7d9001osTen3xl2ZKlk3","type":"server.connected","properties":{}}
+
+data: {"id":"evt_15b6d4f920029S1U0OmxyY40TC","type":"session.compacted","properties":{"sessionID":"ses_ea4930987ffebcFHvQDItE98T7"}}
+
+data: {"id":"evt_15b6db18b001V9k2PXUimu1a4M","type":"session.compacted","properties":{"sessionID":"ses_ea4930987ffebcFHvQDItE98T7"}}
+
+data: {"id":"evt_15b6f0021001B805Bfo28YxUms","type":"session.compacted","properties":{"sessionID":"ses_ea4930987ffebcFHvQDItE98T7"}}

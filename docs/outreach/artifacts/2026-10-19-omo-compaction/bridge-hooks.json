@@ -1,0 +1,56 @@
+[
+  {
+    "kind": "skill-loaded",
+    "name": "qa-0",
+    "bodyBytes": 1018,
+    "resultBytes": 1100
+  },
+  {
+    "at": 1792412116216,
+    "kind": "capture",
+    "round": 1,
+    "contextBytes": 2578
+  },
+  {
+    "at": 1792412118012,
+    "event": {
+      "id": "evt_154166b4a0014SRusRF4fEGGGG",
+      "type": "session.compacted",
+      "properties": {
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr"
+      }
+    }
+  },
+  {
+    "at": 1792412119644,
+    "kind": "capture",
+    "round": 2,
+    "contextBytes": 2578
+  },
+  {
+    "at": 1792412121350,
+    "event": {
+      "id": "evt_1541678f3001eyNH50bZ6W73k5",
+      "type": "session.compacted",
+      "properties": {
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr"
+      }
+    }
+  },
+  {
+    "at": 1792412184153,
+    "kind": "capture",
+    "round": 3,
+    "contextBytes": 2578
+  },
+  {
+    "at": 1792412186180,
+    "event": {
+      "id": "evt_15417759b001cx0yesEoh2d0V4",
+      "type": "session.compacted",
+      "properties": {
+        "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr"
+      }
+    }
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "fixtures": [
+    {
+      "stage": 0,
+      "query": "ZEPHYR_6062E44A71",
+      "receipt": "receipt-0-edf1f1e247"
+    },
+    {
+      "stage": 1,
+      "query": "ZEPHYR_9B45E9C8DD",
+      "receipt": "receipt-1-458cb9a149"
+    },
+    {
+      "stage": 2,
+      "query": "ZEPHYR_14446BCA28",
+      "receipt": "receipt-2-bd078eebde"
+    },
+    {
+      "stage": 3,
+      "query": "ZEPHYR_58C8CCA0D5",
+      "receipt": "receipt-3-5605d01ba5"
+    }
+  ],
+  "skill": "# Zephyr ledger audit\n\nFor checkpoint N and source_session supplied by the user:\n1. Call session_search with session_id=source_session, case_sensitive=true, limit=5 and EXACT checkpoint query from the map below.\n2. Call session_info for that source_session.\n3. Return the verified receipt from the matching search result, then stop. Never guess a query or invent a receipt. General file access, broad searches and searching other sessions are unavailable. If instructions remain in context, use them without reloading.\n\nCheckpoint query map:\n0: ZEPHYR_6062E44A71\n1: ZEPHYR_9B45E9C8DD\n2: ZEPHYR_14446BCA28\n3: ZEPHYR_58C8CCA0D5\nEND_ZEPHYR_SKILL\n"
+}

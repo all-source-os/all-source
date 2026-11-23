@@ -1,0 +1,44 @@
+{
+  "method": "OpenCode 1.18.22 native db CLI, read-only SELECT, isolated profile",
+  "query": "SELECT session_id,data FROM part WHERE session_id IN ('ses_ea4671eb9ffefEFCwpHo6IEd5U','ses_ea4670e56ffePbPz8MjepN0aJi','ses_ea4670c68ffeiyu62U73UPmse2','ses_ea4670a57ffemKNS3WkRUY3yHX') ORDER BY session_id",
+  "rows": [
+    {
+      "session_id": "ses_ea4670a57ffemKNS3WkRUY3yHX",
+      "data": "{\"type\":\"text\",\"text\":\"ZEPHYR_9860DBBA77 receipt-3-05692bbc80. Synthetic ledger record.\"}"
+    },
+    {
+      "session_id": "ses_ea4670c68ffeiyu62U73UPmse2",
+      "data": "{\"type\":\"text\",\"text\":\"ZEPHYR_BFE08B6718 receipt-2-a541ad6e96. Synthetic ledger record.\"}"
+    },
+    {
+      "session_id": "ses_ea4670e56ffePbPz8MjepN0aJi",
+      "data": "{\"type\":\"text\",\"text\":\"ZEPHYR_95A56FD1F9 receipt-1-cdb4ae4c8e. Synthetic ledger record.\"}"
+    },
+    {
+      "session_id": "ses_ea4671eb9ffefEFCwpHo6IEd5U",
+      "data": "{\"type\":\"text\",\"text\":\"ZEPHYR_91C9E0CBF5 receipt-0-6c353a3a49. Synthetic ledger record.\"}"
+    }
+  ],
+  "checks": [
+    {
+      "stage": 0,
+      "sourceSessionID": "ses_ea4671eb9ffefEFCwpHo6IEd5U",
+      "bodyPresent": true
+    },
+    {
+      "stage": 1,
+      "sourceSessionID": "ses_ea4670e56ffePbPz8MjepN0aJi",
+      "bodyPresent": true
+    },
+    {
+      "stage": 2,
+      "sourceSessionID": "ses_ea4670c68ffeiyu62U73UPmse2",
+      "bodyPresent": true
+    },
+    {
+      "stage": 3,
+      "sourceSessionID": "ses_ea4670a57ffemKNS3WkRUY3yHX",
+      "bodyPresent": true
+    }
+  ]
+}

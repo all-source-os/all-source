@@ -1,0 +1,248 @@
+{
+  "at": 1792537988579,
+  "stage": 3,
+  "prompt": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea46a96f7ffeJqFGUUzgkGFhHF. Return the verified receipt.",
+  "expected": {
+    "stage": 3,
+    "query": "ZEPHYR_9860DBBA77",
+    "receipt": "receipt-3-05692bbc80"
+  },
+  "sourceSessionID": "ses_ea46a96f7ffeJqFGUUzgkGFhHF",
+  "score": {
+    "stage": 3,
+    "search": true,
+    "info": true,
+    "receipt": true,
+    "passed": true,
+    "errors": [],
+    "skillCalls": []
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_15b97000e001NAfRbmGlasY9ck",
+        "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+        "role": "user",
+        "time": {
+          "created": 1792537985038
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_15b97000f00131o0KgdsEhPX7B",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b97000e001NAfRbmGlasY9ck",
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea46a96f7ffeJqFGUUzgkGFhHF. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b970074001d6hpH0NIThhO3b",
+        "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+        "role": "assistant",
+        "time": {
+          "created": 1792537985140,
+          "completed": 1792537986950
+        },
+        "parentID": "msg_15b97000e001NAfRbmGlasY9ck",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/readiness/runs/b1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7345,
+          "input": 1026,
+          "output": 125,
+          "reasoning": 0,
+          "cache": {
+            "read": 6194,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_15b9704fe001F1dIV147VXXzmZ",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b970074001d6hpH0NIThhO3b",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b970501001WWcxpa7lE16eL2",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b970074001d6hpH0NIThhO3b",
+          "type": "tool",
+          "callID": "call_function_gdjko9p4olt5_1",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "ZEPHYR_9860DBBA77",
+              "session_id": "ses_ea46a96f7ffeJqFGUUzgkGFhHF",
+              "case_sensitive": true,
+              "limit": 5
+            },
+            "output": "Found 1 matches:\n\n[ses_ea46a96f7ffeJqFGUUzgkGFhHF] msg_15b956913001dXgYuOTGxv4HqK (user) 2026-10-20T23:11:20.851Z\n  ZEPHYR_9860DBBA77 receipt-3-05692bbc80. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792537986623,
+              "end": 1792537986822
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_15b970641001NeoOejT5Pfglpb",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b970074001d6hpH0NIThhO3b",
+          "type": "tool",
+          "callID": "call_function_gdjko9p4olt5_2",
+          "tool": "session_info",
+          "state": {
+            "status": "completed",
+            "input": {
+              "session_id": "ses_ea46a96f7ffeJqFGUUzgkGFhHF"
+            },
+            "output": "Session ID: ses_ea46a96f7ffeJqFGUUzgkGFhHF\nMessages: 1\nDate Range: 2026-10-20T23:11:20.851Z to 2026-10-20T23:11:20.851Z\nAgents Used: build\nHas Todos: No\nHas Transcript: Yes (1 entries)",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792537986719,
+              "end": 1792537986919
+            }
+          }
+        },
+        {
+          "id": "prt_15b970769001HQidr7757az3st",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b970074001d6hpH0NIThhO3b",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0,
+          "tokens": {
+            "total": 7345,
+            "input": 1026,
+            "output": 125,
+            "reasoning": 0,
+            "cache": {
+              "read": 6194,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b9707af0012ScYx9x6fnb4IA",
+        "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+        "role": "assistant",
+        "time": {
+          "created": 1792537986991,
+          "completed": 1792537988567
+        },
+        "parentID": "msg_15b97000e001NAfRbmGlasY9ck",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/readiness/runs/b1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7618,
+          "input": 310,
+          "output": 76,
+          "reasoning": 0,
+          "cache": {
+            "read": 7232,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_15b970c29001xZ85dduJoOhwMb",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b9707af0012ScYx9x6fnb4IA",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b970c2c001Wtd58zVaqqRTl2",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b9707af0012ScYx9x6fnb4IA",
+          "type": "text",
+          "text": "Verified receipt:\n\n`ZEPHYR_9860DBBA77 receipt-3-05692bbc80. Synthetic ledger record.`\n\n(1 match, from msg_15b956913001dXgYuOTGxv4HqK in session `ses_ea46a96f7ffeJqFGUUzgkGFhHF`.)",
+          "time": {
+            "start": 1792537988140,
+            "end": 1792537988550
+          }
+        },
+        {
+          "id": "prt_15b970dc80014KfcWOBs3inYBx",
+          "sessionID": "ses_ea46a96d7ffe7U5wF3tV5Qpaox",
+          "messageID": "msg_15b9707af0012ScYx9x6fnb4IA",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0,
+          "tokens": {
+            "total": 7618,
+            "input": 310,
+            "output": 76,
+            "reasoning": 0,
+            "cache": {
+              "read": 7232,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

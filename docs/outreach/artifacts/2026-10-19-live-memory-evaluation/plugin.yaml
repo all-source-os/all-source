@@ -1,0 +1,3 @@
+name: outage-probe-sqlite
+version: 1.0.0
+description: Synthetic isolated outage probe

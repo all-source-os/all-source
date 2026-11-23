@@ -1,0 +1,25 @@
+{"[opencode]":{
+    "telemetry": false,
+    "auto_update": false,
+    "disabled_mcps": [
+      "websearch",
+      "context7",
+      "grep_app"
+    ],
+    "codegraph": {
+      "enabled": false,
+      "telemetry": false
+    },
+    "agents": {
+      "sisyphus": {
+        "model": "openrouter/openai/gpt-4.1-mini"
+      }
+    },
+    "disabled_hooks": [
+      "auto-update-checker"
+    ]
+  },
+  "_migrations": [
+    "2026-08-reasoning-unification"
+  ]
+}

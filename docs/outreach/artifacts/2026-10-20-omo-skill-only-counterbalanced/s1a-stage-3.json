@@ -1,0 +1,278 @@
+{
+  "at": 1792535175454,
+  "stage": 3,
+  "prompt": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea4958920ffeB5VSMqyTsA7udq. Return the verified receipt.",
+  "expected": {
+    "stage": 3,
+    "query": "ZEPHYR_9860DBBA77",
+    "receipt": "receipt-3-05692bbc80"
+  },
+  "sourceSessionID": "ses_ea4958920ffeB5VSMqyTsA7udq",
+  "score": {
+    "stage": 3,
+    "search": true,
+    "info": true,
+    "receipt": true,
+    "passed": true,
+    "errors": [],
+    "skillCalls": []
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_15b6c15eb0018GcH4ot8pR1Npb",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "user",
+        "time": {
+          "created": 1792535172587
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_15b6c15ec001PfvXXN8YlHW5jJ",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c15eb0018GcH4ot8pR1Npb",
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea4958920ffeB5VSMqyTsA7udq. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b6c15f5001gfCjLHpHC1ANeb",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "assistant",
+        "time": {
+          "created": 1792535172597,
+          "completed": 1792535174083
+        },
+        "parentID": "msg_15b6c15eb0018GcH4ot8pR1Npb",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/skill-only/runs/s1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7304,
+          "input": 919,
+          "output": 122,
+          "reasoning": 64,
+          "cache": {
+            "read": 6199,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_15b6c18fb001tZEhmI73PMGq57",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c15f5001gfCjLHpHC1ANeb",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b6c18fd001pY2TfTPcOCiUbu",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c15f5001gfCjLHpHC1ANeb",
+          "type": "reasoning",
+          "text": "Query for checkpoint 3: ZEPHYR_9860DBBA77, session ses_ea4958920ffeB5VSMqyTsA7udq.\n\nWait — \"checkpoint 3\" but the skill map index 3. Yes.\n\nCall session_search and session_info in parallel.",
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "Query for checkpoint 3: ZEPHYR_9860DBBA77, session ses_ea4958920ffeB5VSMqyTsA7udq.\n\nWait — \"checkpoint 3\" but the skill map index 3. Yes.\n\nCall session_search and session_info in parallel.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          },
+          "time": {
+            "start": 1792535173373,
+            "end": 1792535174038
+          }
+        },
+        {
+          "id": "prt_15b6c1ac7001NuRhrYBpr6bNQU",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c15f5001gfCjLHpHC1ANeb",
+          "type": "tool",
+          "callID": "call_function_i8swdb0h3qb7_1",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "ZEPHYR_9860DBBA77",
+              "session_id": "ses_ea4958920ffeB5VSMqyTsA7udq",
+              "case_sensitive": true,
+              "limit": 5
+            },
+            "output": "Found 1 matches:\n\n[ses_ea4958920ffeB5VSMqyTsA7udq] msg_15b6a76ed001T13i63FYiyX7k1 (user) 2026-10-20T22:24:26.349Z\n  ZEPHYR_9860DBBA77 receipt-3-05692bbc80. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792535174032,
+              "end": 1792535174058
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": [
+                {
+                  "type": "reasoning.text",
+                  "text": "Query for checkpoint 3: ZEPHYR_9860DBBA77, session ses_ea4958920ffeB5VSMqyTsA7udq.\n\nWait — \"checkpoint 3\" but the skill map index 3. Yes.\n\nCall session_search and session_info in parallel.",
+                  "format": "unknown",
+                  "index": 0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "prt_15b6c1b93001jbJ1rpPQykg8r3",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c15f5001gfCjLHpHC1ANeb",
+          "type": "tool",
+          "callID": "call_function_i8swdb0h3qb7_2",
+          "tool": "session_info",
+          "state": {
+            "status": "completed",
+            "input": {
+              "session_id": "ses_ea4958920ffeB5VSMqyTsA7udq"
+            },
+            "output": "Session ID: ses_ea4958920ffeB5VSMqyTsA7udq\nMessages: 1\nDate Range: 2026-10-20T22:24:26.349Z to 2026-10-20T22:24:26.349Z\nAgents Used: build\nHas Todos: No\nHas Transcript: Yes (1 entries)",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792535174037,
+              "end": 1792535174077
+            }
+          }
+        },
+        {
+          "id": "prt_15b6c1bc0001J0dRnyZlPfmtjk",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c15f5001gfCjLHpHC1ANeb",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0,
+          "tokens": {
+            "total": 7304,
+            "input": 919,
+            "output": 122,
+            "reasoning": 64,
+            "cache": {
+              "read": 6199,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_15b6c1bc6001skX9xTHnhoHKar",
+        "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+        "role": "assistant",
+        "time": {
+          "created": 1792535174086,
+          "completed": 1792535175440
+        },
+        "parentID": "msg_15b6c15eb0018GcH4ot8pR1Npb",
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/skill-only/runs/s1a",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 7614,
+          "input": 307,
+          "output": 114,
+          "reasoning": 0,
+          "cache": {
+            "read": 7193,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_15b6c1f49001nc53ToKQ3VEbUu",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c1bc6001skX9xTHnhoHKar",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_15b6c1f4b001MQgg2jwd7Wjxqp",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c1bc6001skX9xTHnhoHKar",
+          "type": "text",
+          "text": "**Verified receipt: `receipt-3-05692bbc80`**\n\n- Source session: `ses_ea4958920ffeB5VSMqyTsA7udq` (1 message, agent `build`, transcript 2026-10-20T22:24:26.349Z)\n- Checkpoint 3 query `ZEPHYR_9860DBBA77` (case-sensitive): 1 match in `msg_15b6a76ed001T13i63FYiyX7k1`",
+          "time": {
+            "start": 1792535174987,
+            "end": 1792535175434
+          }
+        },
+        {
+          "id": "prt_15b6c210e001YiJZsYOUIWaQPj",
+          "sessionID": "ses_ea4958907ffeCPt716sEyaS2G9",
+          "messageID": "msg_15b6c1bc6001skX9xTHnhoHKar",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0,
+          "tokens": {
+            "total": 7614,
+            "input": 307,
+            "output": 114,
+            "reasoning": 0,
+            "cache": {
+              "read": 7193,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

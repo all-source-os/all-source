@@ -1,0 +1,174 @@
+[
+  {
+    "at": 1792506067048,
+    "path": "/global/health",
+    "status": 200
+  },
+  {
+    "at": 1792506073328,
+    "path": "/config",
+    "status": 200
+  },
+  {
+    "at": 1792506073356,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 0"
+    }
+  },
+  {
+    "at": 1792506073685,
+    "path": "/session/ses_ea64feef9ffeDYTThM88VnCaYM/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-mini"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_6E9F4F691A receipt-0-d214bcdb8a. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506073688,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 1"
+    }
+  },
+  {
+    "at": 1792506073696,
+    "path": "/session/ses_ea64feda8ffeOYKHOfX5DQQ4xM/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-mini"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_57716BE766 receipt-1-d4343b7e30. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506073699,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 2"
+    }
+  },
+  {
+    "at": 1792506073708,
+    "path": "/session/ses_ea64fed9effdYqM7vARcHax9Fy/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-mini"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_6AEAE9B24A receipt-2-63ecceec91. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506073711,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 3"
+    }
+  },
+  {
+    "at": 1792506073753,
+    "path": "/session/ses_ea64fed91ffeLNfTpNVvqPBA7c/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-mini"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_366C648F28 receipt-3-022b9b66fc. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506073756,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "AllSource model-selected OMO #7183 selected-v1"
+    }
+  },
+  {
+    "at": 1792506073758,
+    "path": "/session/ses_ea64fed65ffdhKlw8kWvqFcwrn/message",
+    "status": 200
+  },
+  {
+    "at": 1792506075505,
+    "path": "/session/ses_ea64fed65ffdhKlw8kWvqFcwrn/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "openai/gpt-4.1-mini"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Available installed skill metadata: zephyr-ledger-audit — verify Zephyr ledger checkpoints; canvas-layout — arrange chart labels and screen layouts. Select the appropriate skill and follow its procedure. Do not guess opaque ledger queries. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea64feef9ffeDYTThM88VnCaYM. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792506075510,
+    "path": "/session/ses_ea64fed65ffdhKlw8kWvqFcwrn/message",
+    "status": 200
+  }
+]

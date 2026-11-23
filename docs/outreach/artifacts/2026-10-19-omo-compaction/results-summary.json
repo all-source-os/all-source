@@ -1,0 +1,239 @@
+{
+  "date": "2026-10-19",
+  "head": "93d44a0760448f7f07d2795c6239d51db5ab6576",
+  "opencode": "1.18.22",
+  "bun": "1.4.3",
+  "model": "openrouter/openai/gpt-4.1-mini",
+  "integration": "external native-event bridge; full OMO plugin loader unverified",
+  "sourceHashes": {
+    "hooks/compaction-context-injector/hook.ts": "ffb67fca3b9647f990594bbbbdbd4fe5018217d4283623620d7c29901cadce08",
+    "hooks/compaction-context-injector/recovery.ts": "8eb15a3c333bd11a702bbad12392088809e80bd96368f4b22605da38cec2fcb1",
+    "hooks/compaction-context-injector/constants.ts": "b70def05c148c2bc0f475f7409c4d4e048a0c6e5881174a374a3ab681f3c60d8",
+    "hooks/compaction-context-injector/skill-reinjection.ts": "50dcb57f3baa75fdd75c6e176285b6bc24e019db1795a5c45744a53762331b5f",
+    "shared/session-loaded-skills.ts": "35be0b637313a7ec75392c975dfd0af4474b8a00aac29d7363b05752fbb9bf91",
+    "tools/skill/tools.ts": "bed314e04e638cfc28b6ad917af513681e7fc9e0890084447e358e4933bdd2ac",
+    "plugin/session-compacting.ts": "157483645b034ee40a37ff2ccc657e6c7ae47d3549480b117eee457dd0b8badf"
+  },
+  "cases": [
+    {
+      "name": "bridge",
+      "loadedSkills": [
+        {
+          "kind": "skill-loaded",
+          "name": "qa-0",
+          "bodyBytes": 1018,
+          "resultBytes": 1100
+        }
+      ],
+      "compactedEvents": [
+        {
+          "at": 1792412118012,
+          "event": {
+            "id": "evt_154166b4a0014SRusRF4fEGGGG",
+            "type": "session.compacted",
+            "properties": {
+              "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr"
+            }
+          }
+        },
+        {
+          "at": 1792412121350,
+          "event": {
+            "id": "evt_1541678f3001eyNH50bZ6W73k5",
+            "type": "session.compacted",
+            "properties": {
+              "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr"
+            }
+          }
+        },
+        {
+          "at": 1792412186180,
+          "event": {
+            "id": "evt_15417759b001cx0yesEoh2d0V4",
+            "type": "session.compacted",
+            "properties": {
+              "sessionID": "ses_eabe99c15ffeVhq2PyGYXIQ8kr"
+            }
+          }
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "at": 1792412119640,
+          "summaryMessages": 1,
+          "recoveryMessages": [
+            {
+              "id": "prt_154166bf7001MioeU8pWf8kKJX",
+              "bytes": 1259,
+              "sha256": "6e3e2f9acaf4dea9d04b75902f00feff13992ce6785c691293588b1dfbe4d167",
+              "synthetic": true
+            }
+          ]
+        },
+        {
+          "round": 2,
+          "at": 1792412123146,
+          "summaryMessages": 2,
+          "recoveryMessages": [
+            {
+              "id": "prt_154166bf7001MioeU8pWf8kKJX",
+              "bytes": 1259,
+              "sha256": "6e3e2f9acaf4dea9d04b75902f00feff13992ce6785c691293588b1dfbe4d167",
+              "synthetic": true
+            }
+          ]
+        },
+        {
+          "round": 3,
+          "at": 1792412187817,
+          "summaryMessages": 3,
+          "recoveryMessages": [
+            {
+              "id": "prt_154166bf7001MioeU8pWf8kKJX",
+              "bytes": 1259,
+              "sha256": "6e3e2f9acaf4dea9d04b75902f00feff13992ce6785c691293588b1dfbe4d167",
+              "synthetic": true
+            },
+            {
+              "id": "prt_15417763f001SoREZzAQojiYRh",
+              "bytes": 1259,
+              "sha256": "6e3e2f9acaf4dea9d04b75902f00feff13992ce6785c691293588b1dfbe4d167",
+              "synthetic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "single-1m",
+      "loadedSkills": [
+        {
+          "kind": "skill-loaded",
+          "name": "qa-0",
+          "bodyBytes": 1048576,
+          "resultBytes": 1048658
+        }
+      ],
+      "compactedEvents": [
+        {
+          "at": 1792412199375,
+          "event": {
+            "id": "evt_15417a8f4001xm5O82n4FEQC87",
+            "type": "session.compacted",
+            "properties": {
+              "sessionID": "ses_eabe85edcffeZct86CTT3bpJoc"
+            }
+          }
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "at": 1792412200974,
+          "summaryMessages": 1,
+          "recoveryMessages": [
+            {
+              "id": "prt_15417a9b2002eML987kn49BiQJ",
+              "bytes": 1048817,
+              "sha256": "9365c1997b9e0c38a3bdeb18921134b629487addecc49dbe8f50858788f9ae3f",
+              "synthetic": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "multi-512k",
+      "loadedSkills": [
+        {
+          "kind": "skill-loaded",
+          "name": "qa-0",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-1",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-2",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-3",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-4",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-5",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-6",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        },
+        {
+          "kind": "skill-loaded",
+          "name": "qa-7",
+          "bodyBytes": 65536,
+          "resultBytes": 65618
+        }
+      ],
+      "compactedEvents": [
+        {
+          "at": 1792412291151,
+          "event": {
+            "id": "evt_154190ec6001akOK6lVdVPUDyk",
+            "type": "session.compacted",
+            "properties": {
+              "sessionID": "ses_eabe6fd3fffe2X0u3atVO26xwX"
+            }
+          }
+        }
+      ],
+      "rounds": [
+        {
+          "round": 1,
+          "at": 1792412292620,
+          "summaryMessages": 1,
+          "recoveryMessages": [
+            {
+              "id": "prt_154191018001Z2umRV16q2yp1D",
+              "bytes": 524655,
+              "sha256": "cd6648595fc2bb9d8f1b0f97182278fceef2da86c900335346fd4cff327e1a4e",
+              "synthetic": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "scopedTests": {
+    "reinjection": {
+      "passed": 3,
+      "assertions": 8
+    },
+    "skillFactory": {
+      "passed": 9,
+      "assertions": 17
+    },
+    "rootPreload": "failed before execution; unrelated vendored LSP npm ci",
+    "typecheck": "not run; no upstream changes"
+  }
+}

@@ -1,0 +1,45 @@
+[
+  {
+    "slot": "p1a",
+    "failure": {
+      "at": 1792534896209,
+      "error": "TimeoutError: The operation timed out."
+    },
+    "fullPluginInitialized": false,
+    "dispatchControlRecords": 0,
+    "baselineSnapshotExists": false,
+    "storedRecoveryCounts": []
+  },
+  {
+    "slot": "q1a",
+    "failure": {
+      "at": 1792534934562,
+      "error": "Error: Unable to connect. Is the computer able to access the url?"
+    },
+    "fullPluginInitialized": true,
+    "dispatchControlRecords": 0,
+    "baselineSnapshotExists": false,
+    "storedRecoveryCounts": []
+  },
+  {
+    "slot": "r1a",
+    "failure": null,
+    "fullPluginInitialized": true,
+    "dispatchControlRecords": 0,
+    "baselineSnapshotExists": true,
+    "storedRecoveryCounts": [
+      {
+        "round": 1,
+        "count": 1
+      },
+      {
+        "round": 2,
+        "count": 1
+      },
+      {
+        "round": 3,
+        "count": 2
+      }
+    ]
+  }
+]

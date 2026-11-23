@@ -1,0 +1,30 @@
+timestamp=2026-10-19T12:16:36.725Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode/config.json
+timestamp=2026-10-19T12:16:36.727Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode/opencode.json
+timestamp=2026-10-19T12:16:36.728Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode/opencode.jsonc
+timestamp=2026-10-19T12:16:36.898Z level=INFO run=6b891af9 message="creating instance" directory=/private/tmp/allsource-omo-compaction/runs/single-1m
+timestamp=2026-10-19T12:16:36.898Z level=INFO run=6b891af9 message=fromDirectory directory=/private/tmp/allsource-omo-compaction/runs/single-1m
+timestamp=2026-10-19T12:16:36.911Z level=INFO run=6b891af9 message=bootstrapping directory=/private/tmp/allsource-omo-compaction/runs/single-1m
+timestamp=2026-10-19T12:16:36.914Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode/config.json
+timestamp=2026-10-19T12:16:36.915Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode/opencode.json
+timestamp=2026-10-19T12:16:36.915Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode/opencode.jsonc
+timestamp=2026-10-19T12:16:36.915Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/opencode.json
+timestamp=2026-10-19T12:16:36.925Z level=DEBUG run=6b891af9 message="loaded custom config" path=/tmp/allsource-omo-compaction/runs/single-1m/opencode.json
+timestamp=2026-10-19T12:16:36.927Z level=INFO run=6b891af9 message=loading path=/private/tmp/allsource-omo-compaction/runs/single-1m/opencode.json
+timestamp=2026-10-19T12:16:36.929Z level=DEBUG run=6b891af9 message="loading config from OPENCODE_CONFIG_DIR" path=/tmp/allsource-omo-compaction/runs/single-1m/config
+timestamp=2026-10-19T12:16:37.116Z level=DEBUG run=6b891af9 message="loading config from /tmp/allsource-omo-compaction/runs/single-1m/config/opencode.json"
+timestamp=2026-10-19T12:16:37.116Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode.json
+timestamp=2026-10-19T12:16:37.119Z level=DEBUG run=6b891af9 message="loading config from /tmp/allsource-omo-compaction/runs/single-1m/config/opencode.jsonc"
+timestamp=2026-10-19T12:16:37.119Z level=INFO run=6b891af9 message=loading path=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode.jsonc
+timestamp=2026-10-19T12:16:37.138Z level=INFO run=6b891af9 message="all LSPs are disabled"
+timestamp=2026-10-19T12:16:37.138Z level=INFO run=6b891af9 message="all formatters are disabled"
+timestamp=2026-10-19T12:16:37.138Z level=INFO run=6b891af9 message=init
+timestamp=2026-10-19T12:16:37.144Z level=INFO run=6b891af9 message="event connected"
+timestamp=2026-10-19T12:16:37.155Z level=INFO run=6b891af9 message=created id=ses_eabe85edcffeZct86CTT3bpJoc slug=tidy-orchid version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/runs/single-1m path=private/tmp/allsource-omo-compaction/runs/single-1m workspaceID=undefined parentID=undefined title="AllSource #7183 single-1m" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792412197155 time.updated=1792412197155
+timestamp=2026-10-19T12:16:37.542Z level=INFO run=6b891af9 message=loop session.id=ses_eabe85edcffeZct86CTT3bpJoc step=0
+timestamp=2026-10-19T12:16:37.547Z level=INFO run=6b891af9 message=process session.id=ses_eabe85edcffeZct86CTT3bpJoc messageID=msg_15417a2a9001DyLweglhqTijlY
+timestamp=2026-10-19T12:16:37.548Z level=INFO run=6b891af9 message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_eabe85edcffeZct86CTT3bpJoc small=false agent=compaction mode=primary
+timestamp=2026-10-19T12:16:37.567Z level=INFO run=6b891af9 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-19T12:16:39.156Z level=INFO run=6b891af9 message=loop session.id=ses_eabe85edcffeZct86CTT3bpJoc step=1
+timestamp=2026-10-19T12:16:39.156Z level=INFO run=6b891af9 message="exiting loop" session.id=ses_eabe85edcffeZct86CTT3bpJoc
+timestamp=2026-10-19T12:16:43.512Z level=WARN run=6b891af9 message="background dependency install failed" dir=/tmp/allsource-omo-compaction/runs/single-1m/config/opencode error="Cause([Fail(NpmInstallFailedError (cause: Error: process terminated))])"
+timestamp=2026-10-19T12:16:43.616Z level=WARN run=6b891af9 message="background dependency install failed" dir=/tmp/allsource-omo-compaction/runs/single-1m/config error="Cause([Fail(NpmInstallFailedError (cause: Error: process terminated))])"

@@ -1,0 +1,267 @@
+{
+  "date": "2026-10-19",
+  "record_kind": "Recorded from executed stage commands and observed zero exits; container IDs not captured.",
+  "containers": [
+    {
+      "project": "nanobot",
+      "case": "explicit-correction-over-inference",
+      "stage": "consolidate",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "consolidate",
+        "--case",
+        "0"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "explicit-correction-over-inference",
+      "stage": "recall",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "recall",
+        "--case",
+        "0"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "explicit-correction-over-inference",
+      "stage": "retrieval",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "retrieval",
+        "--case",
+        "0"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "situational-preference-stays-scoped",
+      "stage": "consolidate",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "consolidate",
+        "--case",
+        "1"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "situational-preference-stays-scoped",
+      "stage": "recall",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "recall",
+        "--case",
+        "1"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "situational-preference-stays-scoped",
+      "stage": "retrieval",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "retrieval",
+        "--case",
+        "1"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "retain-complete-proposal-reference",
+      "stage": "consolidate",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "consolidate",
+        "--case",
+        "2"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "retain-complete-proposal-reference",
+      "stage": "recall",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "recall",
+        "--case",
+        "2"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "nanobot",
+      "case": "retain-complete-proposal-reference",
+      "stage": "retrieval",
+      "argv": [
+        "python",
+        "/harness/run_eval.py",
+        "--source",
+        "/src",
+        "--corpus",
+        "/harness/corpus.json",
+        "--root",
+        "/evidence/serial-bounded",
+        "--model",
+        "openai/gpt-4.1-mini",
+        "--stage",
+        "retrieval",
+        "--case",
+        "2"
+      ],
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "hermes",
+      "stage": "baseline",
+      "docker_name": "allsource-hermes-baseline-01a1538d",
+      "argv": [
+        "python",
+        "/harness/probe_stage.py",
+        "baseline"
+      ],
+      "profile_mount": "/profile",
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "hermes",
+      "stage": "outage",
+      "docker_name": "allsource-hermes-outage-01a1538d",
+      "argv": [
+        "python",
+        "/harness/probe_stage.py",
+        "outage"
+      ],
+      "profile_mount": "/profile",
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    },
+    {
+      "project": "hermes",
+      "stage": "restore",
+      "docker_name": "allsource-hermes-restore-01a1538d",
+      "argv": [
+        "python",
+        "/harness/probe_stage.py",
+        "restore"
+      ],
+      "profile_mount": "/profile",
+      "new_docker_run": true,
+      "auto_remove": true,
+      "exit_code": 0
+    }
+  ],
+  "deadline_seconds": 300,
+  "credentials": "OpenRouter key passed via private env file, never command argument; env file excluded.",
+  "container_ids": null
+}

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "status": "prepared; live-provider evaluation not executed",
+  "target_project": "HKUDS/nanobot",
+  "source_ref": "8778c697744f8334c5794cd37502e8eb77ee5585",
+  "purpose": "Evaluate source attribution, correction precedence and scope after existing released continuity fixes.",
+  "cases": [
+    {
+      "name": "explicit-correction-over-inference",
+      "session_key": "evaluation:correction",
+      "messages": [
+        {"id": "a1", "role": "assistant", "content": "I infer you prefer dark mode."},
+        {"id": "a2", "role": "assistant", "content": "Your preference is dark mode."},
+        {"id": "u1", "role": "user", "content": "No. I prefer light mode. Dark mode was your guess."},
+        {"id": "a3", "role": "assistant", "content": "I will use light mode."}
+      ],
+      "second_cycle_messages": [
+        {"id": "a4", "role": "assistant", "content": "An old note says the user prefers dark mode."},
+        {"id": "u2", "role": "user", "content": "That old note was wrong. Keep my correction: light mode."}
+      ],
+      "fresh_session_query": "Which display mode did I explicitly request, and where did I say that?",
+      "expected": {
+        "current_value": "light mode",
+        "source_message_ids": ["u1", "u2"],
+        "prohibited_confirmed_user_fact": "dark mode",
+        "source_reference_required": true
+      }
+    },
+    {
+      "name": "situational-preference-stays-scoped",
+      "session_key": "evaluation:scope",
+      "messages": [
+        {"id": "u1", "role": "user", "content": "Use blue for the landing-page mockup."},
+        {"id": "a1", "role": "assistant", "content": "The user prefers blue for all designs."},
+        {"id": "u2", "role": "user", "content": "Only this landing-page mockup. I have not chosen a colour for mobile onboarding."}
+      ],
+      "second_cycle_messages": [
+        {"id": "u3", "role": "user", "content": "Keep the landing-page decision. Mobile onboarding colour remains undecided."}
+      ],
+      "fresh_session_query": "What colour should mobile onboarding use, and what source establishes that?",
+      "expected": {
+        "current_value": "undecided",
+        "source_message_ids": ["u2", "u3"],
+        "prohibited_confirmed_user_fact": "blue for all designs",
+        "source_reference_required": true
+      }
+    },
+    {
+      "name": "retain-complete-proposal-reference",
+      "session_key": "evaluation:delivery",
+      "messages": [
+        {"id": "u1", "role": "user", "content": "Propose two approaches to migrate the inventory view."},
+        {"id": "a1", "role": "assistant", "content": "Option 1: replace the table immediately. Option 2: build a parallel projection from existing events, compare it, then switch reads."}
+      ],
+      "second_cycle_messages": [
+        {"id": "u2", "role": "user", "content": "Proceed with Option 2."}
+      ],
+      "fresh_session_query": "What did Option 2 mean, and which message established it?",
+      "expected": {
+        "current_value": "build a parallel projection, compare it, then switch reads",
+        "source_message_ids": ["a1", "u2"],
+        "source_reference_required": true,
+        "limitation": "Control for shipped delivery-continuity fixes; not a claim of current regression."
+      }
+    }
+  ],
+  "execution_contract": [
+    "Use isolated workspace and provider/model configuration; record exact versions and prompts.",
+    "Run archive, Dream, second-cycle archive, second Dream, and fresh-session recall.",
+    "Record actual summary, memory files and source mapping at every boundary; never replace results with expectations.",
+    "Run structural mocked-provider arm separately from real-provider semantic arm.",
+    "Score correct value, source attribution and scope separately; absent source support is unsupported, not a fabricated citation.",
+    "Any AllSource comparison must receive identical events and disclose its additional source metadata."
+  ],
+  "results": null
+}

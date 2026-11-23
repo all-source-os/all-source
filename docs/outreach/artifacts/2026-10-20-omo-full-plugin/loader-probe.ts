@@ -1,0 +1,10 @@
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs'
+const mode=process.env.LOADER_MODE || 'global-clean'
+const root=`/tmp/allsource-omo-compaction/loader-${mode}`
+mkdirSync(`${root}/config/opencode`,{recursive:true})
+writeFileSync(`${root}/marker.ts`,`import {appendFileSync} from 'node:fs';appendFileSync('${root}/loaded.txt','module\\n');export default {id:'allsource-loader-marker',async server(){appendFileSync('${root}/loaded.txt','server\\n');return {config:async()=>appendFileSync('${root}/loaded.txt','config\\n')}}}`)
+writeFileSync(mode.startsWith('local')?`${root}/opencode.json`:`${root}/config/opencode/opencode.json`,JSON.stringify({plugin:[process.env.QA_PLUGIN || `${root}/marker.ts`],permission:process.env.QA_DENY==='1'?'deny':undefined}))
+const env:any={...(mode.endsWith('inherit')?process.env:{}),PATH:process.env.PATH!,HOME:root,XDG_DATA_HOME:`${root}/data`,XDG_CONFIG_HOME:`${root}/config`,XDG_STATE_HOME:`${root}/state`,XDG_CACHE_HOME:`${root}/cache`,OPENCODE_DISABLE_MODELS_FETCH:'true',OPENCODE_DISABLE_AUTOUPDATE:'true'}
+if(mode.startsWith('local')){env.OPENCODE_CONFIG=`${root}/opencode.json`;env.OPENCODE_CONFIG_DIR=`${root}/config`}
+const child=Bun.spawn([process.env.QA_BINARY || '/tmp/allsource-omo-compaction/runtime/opencode','--log-level','DEBUG','--print-logs','serve','--port','43820','--hostname','127.0.0.1'],{cwd:root,env,stdout:Bun.file(`${root}/stdout.log`),stderr:Bun.file(`${root}/stderr.log`)})
+try{for(let i=0;i<100;i++){try{const r=await fetch('http://127.0.0.1:43820/global/health');if(r.ok)break}catch{}await Bun.sleep(100)}for(const route of ['/config','/agent','/session']){const r=await fetch('http://127.0.0.1:43820'+route,{signal:AbortSignal.timeout(25000)});console.log(route,r.status);writeFileSync(`${root}/${route.slice(1)}.json`,await r.text())}console.log('markers',await Bun.file(`${root}/loaded.txt`).exists()?readFileSync(`${root}/loaded.txt`,'utf8'):'absent')}finally{child.kill('SIGINT');await Promise.race([child.exited,Bun.sleep(2000)]);if(child.exitCode===null)child.kill('SIGKILL');await child.exited}
