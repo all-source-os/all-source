@@ -1,0 +1,159 @@
+{
+  "date": "2026-10-19",
+  "scope": "One synthetic run per case, real OpenRouter model and real upstream runtime APIs; no AllSource comparison.",
+  "nanobot_source": "8778c697744f8334c5794cd37502e8eb77ee5585",
+  "hermes_source": "d923a5eb487a17c0a68801bba9ef0f56c81040a8",
+  "model": "openai/gpt-4.1-mini",
+  "nanobot_generation": {
+    "temperature": 0,
+    "max_tokens": 1024
+  },
+  "nanobot": [
+    {
+      "case": "explicit-correction-over-inference",
+      "cycle_status": "completed",
+      "dream_cycles_completed": [
+        true,
+        true
+      ],
+      "value_retention": "pass",
+      "projection_recall": "You explicitly requested the light mode over dark mode. You stated this preference in your user profile file USER.md with the line:\n\n\"User prefers light mode over dark mode.\"",
+      "model_retrieval": "I searched the saved conversations for any explicit mention of \"display mode\" but found no relevant results. Therefore, I cannot find the original statement where you explicitly requested a display mode. However, from the user profile data I have, you prefer light mode over dark mode. This is derived memory, not an original message from a conversation.",
+      "original_source_found_by_model": false,
+      "provider_calls": {
+        "consolidate": 7,
+        "recall": 1,
+        "retrieval": 2
+      },
+      "provider_error_responses": 0,
+      "source_store_control_matches": 2,
+      "original_transcript_readable": true
+    },
+    {
+      "case": "situational-preference-stays-scoped",
+      "cycle_status": "completed",
+      "dream_cycles_completed": [
+        true,
+        true
+      ],
+      "value_retention": "pass",
+      "projection_recall": "The mobile onboarding color remains undecided. There is no established source or decision yet for the mobile onboarding color. The only color decision made so far is that the landing-page mockup will use blue only.",
+      "model_retrieval": "The mobile onboarding color remains undecided. This is established in the session with the statement: \"Keep the landing-page decision. Mobile onboarding colour remains undecided.\" The landing-page mockup uses blue only, but no color decision has been made for mobile onboarding yet. This original message is from the session titled \"Keep the landing-page decision. Mobile onboarding colour remains undecided.\"",
+      "original_source_found_by_model": true,
+      "provider_calls": {
+        "consolidate": 7,
+        "recall": 1,
+        "retrieval": 3
+      },
+      "provider_error_responses": 0,
+      "source_store_control_matches": 2,
+      "original_transcript_readable": true
+    },
+    {
+      "case": "retain-complete-proposal-reference",
+      "cycle_status": "completed",
+      "dream_cycles_completed": [
+        true,
+        true
+      ],
+      "value_retention": "pass",
+      "projection_recall": "Option 2 means to build a parallel projection from existing events, compare it with the current state, and then switch reads to the new projection. This approach is a cautious migration strategy that ensures the new projection is accurate before fully switching over.\n\nThe message that established Option 2 is the one stating:\n\n\"Current decision: Proceeding with Option 2 \u0014 build a parallel projection from existing events, compare it, then switch reads.\"\n\nThis message explicitly sets the current decision to proceed with Option 2.",
+      "model_retrieval": "I searched for the exact phrase \"Option 2 build a parallel projection from existing events, compare it, then switch reads\" in saved conversations but did not find any matching original message.\n\nThe statement about Option 2 appears to be derived memory or a summary rather than a direct quote from a previous conversation. It means to create a new parallel data projection from existing event data, verify it by comparing with the current state, and then switch the system to read from the new projection once verified.\n\nIf you want, I can help you draft a message or document to formally establish this approach as the original statement.",
+      "original_source_found_by_model": false,
+      "provider_calls": {
+        "consolidate": 7,
+        "recall": 1,
+        "retrieval": 2
+      },
+      "provider_error_responses": 0,
+      "source_store_control_matches": 2,
+      "original_transcript_readable": true
+    }
+  ],
+  "native_history_control": "Separately seeded corpus transcripts immediately before retrieval via native SessionManager. Proves read/search capability, not preservation across prior archive/Dream cycles. Match counts include fresh recall sessions and are not independent corroboration.",
+  "hermes": [
+    {
+      "stage": "baseline",
+      "startup": {
+        "manager_active": true,
+        "providers": [
+          "outage-probe-sqlite"
+        ],
+        "tools": [
+          "memory",
+          "probe_memory_recall",
+          "probe_memory_write"
+        ]
+      },
+      "external_sqlite_rows": {
+        "baseline_canary": "SYNTHETIC_BASELINE_CANARY_73e9"
+      },
+      "builtin_memory_files": {},
+      "model_completed": true,
+      "model_failed": false,
+      "api_calls": 2,
+      "model_response": "The key \"baseline_canary\" was stored with the exact value \"SYNTHETIC_BASELINE_CANARY_73e9\" and successfully recalled with the same value from the external SQLite memory."
+    },
+    {
+      "stage": "outage",
+      "startup": {
+        "manager_active": false,
+        "providers": [],
+        "tools": [
+          "memory"
+        ]
+      },
+      "external_sqlite_rows": {
+        "baseline_canary": "SYNTHETIC_BASELINE_CANARY_73e9"
+      },
+      "builtin_memory_files": {
+        "memories/MEMORY.md": "SYNTHETIC_OUTAGE_CANARY_ba42 is a test-only recovery canary indicating the external memory provider was configured but its plugin directory was removed before this fresh process."
+      },
+      "model_completed": true,
+      "model_failed": false,
+      "api_calls": 2,
+      "model_response": "Stored the fact durably using the 'memory' tool for persistent facts. It is now saved and isolated from the external provider, which did not receive it."
+    },
+    {
+      "stage": "restore",
+      "startup": {
+        "manager_active": true,
+        "providers": [
+          "outage-probe-sqlite"
+        ],
+        "tools": [
+          "memory",
+          "probe_memory_recall",
+          "probe_memory_write"
+        ]
+      },
+      "external_sqlite_rows": {
+        "baseline_canary": "SYNTHETIC_BASELINE_CANARY_73e9"
+      },
+      "builtin_memory_files": {
+        "memories/MEMORY.md": "SYNTHETIC_OUTAGE_CANARY_ba42 is a test-only recovery canary indicating the external memory provider was configured but its plugin directory was removed before this fresh process."
+      },
+      "model_completed": true,
+      "model_failed": false,
+      "api_calls": 2,
+      "model_response": "External memory facts currently stored:\n- baseline_canary: SYNTHETIC_BASELINE_CANARY_73e9\n\nBuilt-in memory context includes:\n- SYNTHETIC_OUTAGE_CANARY_ba42 (a test-only recovery canary indicating the external memory provider was configured but its plugin directory was removed before this fresh process)"
+    }
+  ],
+  "hermes_warning_observed": "Memory provider 'outage-probe-sqlite' is configured but not installed and not in the plugin catalog.",
+  "hermes_limit": "Synthetic standalone SQLite adapter with no mirroring hook; no production provider migration claim.",
+  "shortlist": [
+    {
+      "candidate": "oh-my-openagent",
+      "disposition": "first technical contribution candidate; prior contact and patch ownership checks remain"
+    },
+    {
+      "candidate": "nanobot",
+      "disposition": "downgraded to test/retrieval diagnostic contribution; no memory-loss design-partner pitch supported"
+    },
+    {
+      "candidate": "Hermes",
+      "disposition": "held for real-provider destination/migration need; warning and persistence worked in synthetic probe"
+    }
+  ],
+  "send_state": "unsent"
+}

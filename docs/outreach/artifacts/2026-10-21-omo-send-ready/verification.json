@@ -1,0 +1,144 @@
+{
+  "date": "2026-10-21",
+  "archive": "omo-7183-evidence.zip",
+  "archiveSha256": "80039d13f42b9581de8673e7ef14e7a9f972ddcdd6f5998b93fd6a1f6571383f",
+  "archiveBytes": 990957,
+  "entries": 170,
+  "sourceFilesTranspile": true,
+  "sensitiveContentScan": true,
+  "offline": {
+    "verified": true,
+    "providerRequests": 73,
+    "nativeModelSteps": 73,
+    "barriers": 16,
+    "postCompactionPasses": {
+      "on": 4,
+      "off": 0
+    },
+    "arms": [
+      {
+        "slot": "c1a",
+        "skillText": "on",
+        "stages": [
+          {
+            "stage": 0,
+            "passed": true,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 1,
+            "passed": true,
+            "firstFullSkill": true,
+            "firstCurrentQuery": true
+          },
+          {
+            "stage": 2,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "firstFullSkill": true,
+            "firstCurrentQuery": true
+          }
+        ]
+      },
+      {
+        "slot": "c1b",
+        "skillText": "off",
+        "stages": [
+          {
+            "stage": 0,
+            "passed": true,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 1,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 2,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 3,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          }
+        ]
+      },
+      {
+        "slot": "c2a",
+        "skillText": "off",
+        "stages": [
+          {
+            "stage": 0,
+            "passed": true,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 1,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 2,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 3,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          }
+        ]
+      },
+      {
+        "slot": "c2b",
+        "skillText": "on",
+        "stages": [
+          {
+            "stage": 0,
+            "passed": true,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 1,
+            "passed": true,
+            "firstFullSkill": true,
+            "firstCurrentQuery": true
+          },
+          {
+            "stage": 2,
+            "passed": false,
+            "firstFullSkill": false,
+            "firstCurrentQuery": false
+          },
+          {
+            "stage": 3,
+            "passed": true,
+            "firstFullSkill": true,
+            "firstCurrentQuery": true
+          }
+        ]
+      }
+    ]
+  },
+  "extractedArchiveVerified": true,
+  "portableEditsLiveRerun": false,
+  "sendPerformed": false
+}

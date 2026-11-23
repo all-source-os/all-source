@@ -1,0 +1,19 @@
+{
+  "sharedFixtureSha256": "ba2af471676c9f0508bd1aaa44ee403e8d704c02966b83f5f4ba917d95b4872f",
+  "installedSkillSha256": "fc0b08922a852b1b6d49820624559661a3b31fb4744fde8b6ea6a8de21202962",
+  "hostConfigsIdentical": true,
+  "normalizedOmoConfigsIdentical": true,
+  "onlyOmoConfigDifference": "disabled_hooks adds compaction-context-injector in off arm",
+  "controllerSha256": "8f6e5199d6f37b52d79a5ea472eb1f34385dc4c95f5faf4dfaf54203be384c6e",
+  "observerSha256": "f0279196d4ef85f97db9f1cd389a2981756bef2029691146dc6e689d428188db",
+  "model": "openrouter/minimax/minimax-m3.1-flash:free",
+  "opencode": "1.18.22",
+  "bun": "1.3.9",
+  "order": [
+    "off",
+    "on"
+  ],
+  "nativeIdsPathsTimestampsDiffer": true,
+  "providerSeed": false,
+  "temperatureRequested": 0
+}

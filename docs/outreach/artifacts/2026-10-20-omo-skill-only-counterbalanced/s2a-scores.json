@@ -1,0 +1,81 @@
+[
+  {
+    "stage": 0,
+    "search": true,
+    "info": true,
+    "receipt": true,
+    "passed": true,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "completed",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "Run Zephyr ledger audit checkpoint 0. source_session=ses_ea490901affe0UWzlC2If92ida. Return the verified receipt."
+        }
+      }
+    ]
+  },
+  {
+    "stage": 1,
+    "search": false,
+    "info": true,
+    "receipt": false,
+    "passed": false,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "error",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "Run Zephyr ledger audit checkpoint 1. source_session=ses_ea4908c18ffeJV5H52EzbF8ZM1. Return the verified receipt."
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      },
+      {
+        "status": "error",
+        "input": {
+          "name": "Zephyr-Ledger-Audit",
+          "user_message": "checkpoint 1 source_session=ses_ea4908c18ffeJV5H52EzbF8ZM1"
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      }
+    ]
+  },
+  {
+    "stage": 2,
+    "search": false,
+    "info": true,
+    "receipt": false,
+    "passed": false,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "error",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "checkpoint 2, source_session=ses_ea4908be3ffeE4VjFpYq18plqO"
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      }
+    ]
+  },
+  {
+    "stage": 3,
+    "search": false,
+    "info": true,
+    "receipt": false,
+    "passed": false,
+    "errors": [],
+    "skillCalls": [
+      {
+        "status": "error",
+        "input": {
+          "name": "zephyr-ledger-audit",
+          "user_message": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea4908baaffemoCme3lreQw0CS. Return the verified receipt."
+        },
+        "error": "QA policy: skill reload is blocked after the initial successful load."
+      }
+    ]
+  }
+]

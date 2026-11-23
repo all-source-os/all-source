@@ -1,0 +1,27 @@
+{
+  "stage": 0,
+  "startedAt": 1792538283036,
+  "releasedAt": 1792538283055,
+  "elapsedMs": 19,
+  "expectedRecoveries": 0,
+  "state": "initial-ready",
+  "polls": [
+    {
+      "at": 1792538283055,
+      "enters": 0,
+      "exits": 0,
+      "summaries": 0,
+      "dispatches": 0,
+      "responses": 0,
+      "stored": 0,
+      "idle": true,
+      "matched": true,
+      "initialized": true,
+      "latch": true,
+      "regime": true,
+      "status": null
+    }
+  ],
+  "storedRecoveryIDs": [],
+  "statuses": {}
+}

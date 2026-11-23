@@ -27,6 +27,85 @@ See
 
 ## Deduplication index
 
+### 2026-10-19 live memory evaluation — all drafts unsent
+
+[Live evidence, revised shortlist and exact drafts](./2026-10-19-live-memory-evaluation.md).
+
+- nanobot: three synthetic value-retention cases passed after two native archive/Dream cycles and fresh-container recall. Separate seeded-history control could read originals; two model searches missed existing text. Downgrade to test/retrieval contribution.
+- Hermes: real runtime plus synthetic SQLite plugin; warning visible, outage marker persisted built-in, baseline persisted external after restoration. No data loss observed; hold real-provider acquisition pitch.
+- oh-my-openagent: first technical-contribution candidate from this group; existing PR owner and earlier project contact still require coordination.
+- No send, public action or prior approval changed. Earlier pending-evaluation draft wording retired; only linked replacement drafts apply.
+
+### 2026-10-19 memory-fix audit and unsent drafts
+
+[Audit, exact drafts and artifact evidence](./2026-10-19-memory-fix-audit-and-drafts.md).
+
+- nanobot: old continuity paths replaced in released v0.3.5; three-case provenance/correction corpus prepared. Live semantic evaluation pending. Conditional draft to joaoinacio, unsent.
+- oh-my-openagent: #7183 open and owned by AceRothstein71; payload probe executed against pinned helpers, results recorded. Technical-only draft, unsent; coordinate prior DevNewbie1826 project contact first.
+- Hermes: released startup recovery/warnings supersede original silent-fallback pitch. Destination probe prepared, not run; diagnostic draft to bedpan held.
+- No comments, messages, issues, reviews, PRs or sends. No prior approval or contact state changed. User explicitly instructed not to send. These drafts are not an approved batch.
+
+### 2026-09-24 contribution-research screening
+
+Outcome: **0 newly qualified opportunities from 11 screened Rust SDK issues**.
+This is a bounded screening result, not a claim that no opportunities exist.
+No public actions, sales drafts, or approval requests. No top two selected:
+existing patches or contribution ownership cover the concrete opportunities.
+
+Source: public GitHub REST issue bodies, open PR list and issue discussions,
+checked September 24. Project activity verified by maintainer release commit
+`9427a929959e665e0d12e9395f674026baf4bd48` on September 23 (v3.4.1).
+Repository rules: [docs/CONTRIBUTE.MD](https://github.com/modelcontextprotocol/rust-sdk/blob/main/docs/CONTRIBUTE.MD)
+requires discussion before PRs and formatting/Clippy checks (`just fix`);
+documents optional coverage tooling. Root CONTRIBUTING.md is absent.
+
+| Issue / author | Short quoted evidence | Disposition |
+| --- | --- | --- |
+| [#1283](https://github.com/modelcontextprotocol/rust-sdk/issues/1283), anilloutombam | “silently ignoring the error” | Malformed result/error response acceptance already covered by open #1287. Exclude duplicate parser regression. |
+| [#1272](https://github.com/modelcontextprotocol/rust-sdk/issues/1272), DaleSeo | “second is silently discarded” | Duplicate-header rejection already covered by #1274. Exclude duplicate patch. |
+| [#1271](https://github.com/modelcontextprotocol/rust-sdk/issues/1271), DaleSeo | “silently accepted” | Initialize/header contradiction already covered by #1275. Exclude duplicate validation tests. |
+| [#1268](https://github.com/modelcontextprotocol/rust-sdk/issues/1268), austintraver | “HTTP 403” | Default-port origin normalization already has #1270 and #1282. Exclude competing implementation. |
+| [#1265](https://github.com/modelcontextprotocol/rust-sdk/issues/1265), DaleSeo | “match on the message text” | Structured metadata errors already covered by #1280. Exclude duplicate API change. |
+| [#1242](https://github.com/modelcontextprotocol/rust-sdk/issues/1242), ismail-rt | “client ends up with no tools” | Empty cacheScope compatibility already has #1241 and #1281. Exclude competing fix. |
+| [#1172](https://github.com/modelcontextprotocol/rust-sdk/issues/1172), github-gregory-bougeard | “making per-client observability impossible” | Stateless peer identity already covered by #1173. Exclude duplicate tracing fix. |
+| [#1030](https://github.com/modelcontextprotocol/rust-sdk/issues/1030), marvinbaudach | “never checks a maximum length” | Stdio buffer bounds covered by #1049; HTTP body scope also has #1246. No uncovered artifact established. |
+| [#388](https://github.com/modelcontextprotocol/rust-sdk/issues/388), bug-ops | “Transport Layer Rate Limiting” | IgorKasianenko posted working fork and tests; ECD5A already offered separate security-test matrix. Exclude both implementation and competing test offer. |
+| [#1203](https://github.com/modelcontextprotocol/rust-sdk/issues/1203), trickyfalcon | “never follows HTTP redirects” | dawNotPoi already offered same-origin 307 regression and safe redirect policy; reporter endorses that direction. Exclude duplicate reproducer/patch. |
+| [#982](https://github.com/modelcontextprotocol/rust-sdk/issues/982), DaleSeo | “per-AS keying of custom credential/state stores” | Hold: genuine extension point, but storage/API/security scope and smallest accepted contribution not established. No independent failing test or maintainer-approved scope verified. Not ranked as qualified. |
+
+Contribution value would be protocol correctness, bounded resource use or
+reliable state restoration regardless of AllSource. AllSource relevance is MCP
+transport/state expertise, not a reason to propose database replacement. Risk of
+appearing promotional is high if adding generic offers to already-owned threads;
+no product links or unsolicited reviews should be posted. Revisit only after a
+specific maintainer request or material ownership/scope change. Preserve all
+previous ledger entries and pending approvals; this screening grants none.
+
+### 2026-09-22 contribution-research screening
+
+Outcome: **0 newly qualified opportunities in this screening**, not a claim that none exist across GitHub. No comments, issues, PRs, messages, or pushes were made. No sales drafts. No top-two artifact plans selected because the screened set did not establish two duplicate-safe contributions. Existing unsent work and local ledger edits were preserved.
+
+Public issue bodies and discussions were read through GitHub's API. The initial ten-candidate set was rejected or held rather than padded into an outreach batch:
+
+| Repository / issue | Reporter | Technical evidence and disposition |
+| --- | --- | --- |
+| [langgraph #8803](https://github.com/langchain-ai/langgraph/issues/8803) | blipbyte | Stale checkpoint format-version docstring. Reporter and other contributors already have fixes; assignment requests and #8807/#8985 show competing work. Exclude duplicate patch. |
+| [langgraph #7992](https://github.com/langchain-ai/langgraph/issues/7992) | vidigoat | Restored Topic/NamedBarrierValue containers alias checkpoints. Reporter owns #7993; other contributors explicitly withdrew competing work. Exclude duplicate patch. |
+| [langgraph #8810](https://github.com/langchain-ai/langgraph/issues/8810) | 1fanwang | Older cancellation checkpoint can overwrite newer shallow PostgreSQL checkpoint. Reporter already prepared #8811; another contributor withdrew. Exclude duplicate patch. |
+| [langgraph #9021](https://github.com/langchain-ai/langgraph/issues/9021) | remote-controlled-man | Dataclass init=False fields deserialize to None. Multiple contributors already claim tested fixes. No distinct missing test established; hold rather than pile on. |
+| [langgraph #8942](https://github.com/langchain-ai/langgraph/issues/8942) | Hotragn | SQLite metadata retains legacy writes key. Reporter explicitly requests ownership and has a tested branch; competing submissions already caused friction. Exclude. Adjacent InMemorySaver behavior is only a research lead, not yet an independently verified bug. |
+| [langgraph #8701](https://github.com/langchain-ai/langgraph/issues/8701) | Whxuan0701 | Nested metadata conformance coverage. ALDRIN121 already prepared #8741 pending assignment. Exclude duplicate tests. |
+| [mem0 #7272](https://github.com/mem0ai/mem0/issues/7272) | 56wj | V3 removed context-manager methods. Reporter already has focused restoration and tests pending accepted label. Exclude duplicate patch. |
+| [mem0 #5867](https://github.com/mem0ai/mem0/issues/5867) | utkucanaytac | Conflicting ADD-only memories. Existing #6017 and extensive promotional commentary; no new bounded, independently verified artifact established. Hold. |
+| [mem0 #7173](https://github.com/mem0ai/mem0/issues/7173) | Serena-Peng29 | Sync delete_all repeatedly lists entity store. Reporter already has patch and regression tests. Exclude duplicate performance work. |
+| [mem0 #7302](https://github.com/mem0ai/mem0/issues/7302) | PowderXu | Cancellation marks undelivered recall as seen. Reporter welcomed tsumon's contribution; tsumon reports completed tests and commit 495ff00. Exclude competing patch. |
+
+Additional screening: PydanticAI #8476 has another contributor investigating; #6775 depends on unmerged realtime infrastructure according to the issue triage discussion; #6974 and #7546 remain unqualified leads because current implementation/PR overlap was not established in this run. Graphiti #1707 already has status-signal PR #1715 and diagnostics work under discussion. Graphiti #1380 initially looked suitable, but [open PR #1463](https://github.com/getzep/graphiti/pull/1463) already implements the requested MCP extraction-instruction passthrough; exclude it.
+
+Repository-rule findings: [Mem0 contributing guide](https://github.com/mem0ai/mem0/blob/main/CONTRIBUTING.md) requires linked accepted issues for code PRs, runnable evidence, AI disclosure, and a CLA. [Graphiti contributing guide](https://github.com/getzep/graphiti/blob/main/CONTRIBUTING.md) requires issue-first discussion and rfc-approved for feature PRs. LangGraph discussions show assignment gates and auto-closed duplicate submissions; its root CONTRIBUTING.md lookup returned 404, so full authoritative rules were not established. Graphiti showed recent merged contributor-intake work (#1902, September 21), but project activity alone does not make occupied issues suitable.
+
+Contribution value must be independent of AllSource: no storage replacement pitch, product link, or generic replay advice should be added to these threads. Next research should prioritize a genuinely uncovered reproducer or maintainer-requested test, not another assignment request on these issues. These URLs are screening records, not contacts or approvals; reconsider only if ownership/scope materially changes.
+
 | Builder / handle | Project | First prepared | Channel | Status | Follow-up due |
 | --- | --- | --- | --- | --- | --- |
 | Sajjad Khan | LangGraph crash recovery | 2026-08-28 | Website contact form | Blocked: sender-data approval required | No |
@@ -1538,9 +1617,33 @@ one malformed-JSON error. This focused patch reports which condition failed,
 preserves remote-error redaction, and adds six synthetic response fixtures.
 Validation: [insert actual commands/results].”
 
-Approval state: **research only**. No clone/fork, comment, PR, or external
-message. Ask founder for fresh approval before public GitHub action. Recheck
-issue/PR ownership and maintainer rules immediately before acting.
+Approval state: **local artifact work and fork branch pushes approved
+2026-09-14**. Two signed commits were pushed to the existing `decebal/openclaw`
+fork. No upstream PR, issue comment, or external message was sent. Recheck
+issue/PR ownership and maintainer rules before any later upstream action;
+`clawsweeper:no-new-fix-pr` remains a separate gate for #146985. Upstream
+#148033 already has an open overlapping PR (#148135).
+
+Local artifacts: `../openclaw-contrib` at OpenClaw source snapshot
+`128bfffba4becf3b1c31c7d29c9bd67169b23261` (official archive; existing
+fork remote added).
+#148033 now forwards present `senderId` into `ContextEngine.assemble()`; three
+full-runner regressions cover Alice, Bob, and absent identity. #146985 now
+reports bounded, payload-free reasons for eight invalid embedding responses.
+Both regressions failed before their fixes. Focused suites: 175 tests passed;
+`tsgo:core`, `tsgo:test:packages`, `tsgo:test:src`, targeted `oxlint`, `oxfmt`,
+four-file `git diff --check`, and full `pnpm build` passed. Full `tsgo:all`,
+`pnpm lint`, and `pnpm format:check` passed before push. After Git-object
+hydration and network access, full `pnpm check --timed` passed independently on
+both pushed branches, including all 96 package locks. Full `pnpm test` started
+its 687-shard suite but was stopped after two unrelated MCP-runtime tests timed
+out under parallel load; that file passed alone (124/124). Post-commit focused
+tests passed: sender-context 64/64, embedding/redaction 33/33. Git object
+hydration removed the Android wrapper false-positive status; worktree clean.
+Verified fork branches:
+`fix/148033-context-assemble-sender` at `ed4ed8555ae63f86bbd7fa75872ea28e6f962c21`
+and `fix/146985-embedding-diagnostics` at
+`b3a5553b767aa4f64af72654ad73303eb53e3ce1`.
 
 ## Contribution queue summary — 2026-09-12 08:01 UTC
 
@@ -3726,3 +3829,43 @@ Message (82 words):
 | Sent time | Recipient | Channel | Public URL | Outcome |
 | --- | --- | --- | --- | --- |
 | — | — | — | — | Awaiting approval |
+
+
+## 2026-10-19: oh-my-openagent #7183 evaluation, unsent
+
+[Real compaction report, artifacts and draft](./2026-10-19-omo-compaction-evaluation.md). Existing owner AceRothstein71; MoerAI already requested bounds/one-shot tests. Native-event integration measured repeated reinjection after cooldown and complete large payloads. Prior public AllSource approach to DevNewbie1826 on #7764 confirmed; no recipient response observed in current issue comments. Connected Gmail sent search returned no exact project/handle matches. Coordinate that existing project contact before proposing another action. No candidate added as contacted; no send or product invitation approved.
+
+
+## 2026-10-20: oh-my-openagent full-plugin evaluation, unsent
+
+[Full-plugin report and replacement draft](./2026-10-20-omo-full-plugin-evaluation.md). QA packaging omitted real shared-skill assets; staging them resolves native loading. Full OMO compaction confirms 1 → 1 → 2 recoveries and complete large fixture bodies. Existing AceRothstein71/MoerAI work and September 10 project contact remain controlling. No recipient marked contacted; no public comment, message, email draft or send created.
+
+
+## 2026-10-20: OMO model-selected skill/tool evaluation, unsent
+
+[Latest report, artifacts and replacement draft](./2026-10-20-omo-model-selected-evaluation.md). Matching skill selected over decoy; specialized native search/source-inspection calls and correct receipts at baseline plus three compactions. Skill reloaded after compaction 2; reuse without reload observed after 1 and 3. Earlier nano wrong-query/provider failure retained. Existing AceRothstein71/MoerAI ownership and prior project contact still control. No design-partner invitation or outbound action approved; no recipient added as contacted.
+
+
+## 2026-10-20: matched OMO no-reload evaluation, unsent
+
+[Latest matched report, artifacts and replacement draft](./2026-10-20-omo-matched-no-reload-evaluation.md). Both baselines passed. Recovery on passed 2/3 post-compaction checkpoints; off passed 0/3. Reload gate allowed exactly one initial native load per arm and blocked later attempts. Immediate second compaction still failed with recovery on; first/third succeeded. Whole-hook toggle, one pair and restricted fallback limits documented. Existing owner/reviewer and prior project contact still control. No design-partner invitation or outbound action approved; no recipient added as contacted.
+
+
+## 2026-10-20: counterbalanced OMO skill-only evaluation, unsent
+
+[Current report, control evidence and replacement draft](./2026-10-20-omo-skill-only-counterbalanced-evaluation.md). Skill text on passed 4/6 post-compaction workflows; off passed 0/6 across two opposite-order pairs. All baselines passed; reload stayed blocked. Agent/model/tools recovery and cooldown stayed active, and all 12 summary-injection outputs matched. Skill-off removes only the outgoing skill block after native recovery decisions; no whole-hook disable. Prior project contact must be coordinated before any approach. No message sent, external draft created or recipient marked contacted.
+
+
+## 2026-10-21: OMO readiness-barrier rerun, unsent
+
+[Current report, control evidence and replacement draft](./2026-10-21-omo-readiness-barrier-evaluation.md). Skill text on passed 4/6 post-compaction workflows; off passed 0/6 across two opposite-order pairs with readiness barriers. All four baselines passed. Reload remained blocked. All 16 barriers passed before tasks; eight eligible recoveries accepted and stored first; four immediate checkpoints confirmed cooldown suppression; zero late task-turn recoveries. Skill-only dispatch observer unchanged; agent/model/tools and summary injection preserved. Prior project contact still requires coordination. No external draft, message, send or contacted-state update.
+
+
+## 2026-10-21: OMO provider-payload capture, unsent
+
+[Current report, captured bodies and replacement draft](./2026-10-21-omo-provider-payload-evaluation.md). Provider-captured rerun: skill text on passed 4/6 post-compaction workflows; off passed 0/6. All four baselines passed; reload stayed blocked. 73 accepted provider calls matched native model steps, including compaction inputs and every continuation. Readiness, agent/model/tools, summary injection and reload controls retained. Headers/credentials excluded. Prior project contact still requires coordination. No external draft, message, send or contacted-state update.
+
+
+## 2026-10-21: OMO outreach prepared for review, unsent
+
+[Final comment and sanitised evidence ZIP](./2026-10-21-omo-send-ready.md). Live PR remains open at tested head, authored by AceRothstein71. Direct comments and project-wide commenter search show existing MoerAI review and prior decebal contact only on #7764; no reply/pass observed. Connected sent-mail search has no matching thread. Public remote docs link is unavailable, so the package is local and ready for later attachment. No public comment, upload, email draft or send; no recipient marked contacted.

@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-19",
+  "sources": {
+    "nanobot": {
+      "repository": "https://github.com/HKUDS/nanobot",
+      "commit": "8778c697744f8334c5794cd37502e8eb77ee5585",
+      "archive_sha256": "c29e37468087af9ea6846ec89393887358e1b5388dc17492fbdf6bc936fd596d"
+    },
+    "hermes": {
+      "repository": "https://github.com/NousResearch/hermes-agent",
+      "commit": "d923a5eb487a17c0a68801bba9ef0f56c81040a8",
+      "archive_sha256": "616649f8ac7e3bb186999d000d77511e733b3930bd2b5921be4a85673320ef8b"
+    }
+  },
+  "images": {
+    "nanobot": "python@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1",
+    "hermes": "python@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170"
+  },
+  "model": {
+    "connection": "OpenRouter",
+    "requested_model": "openai/gpt-4.1-mini",
+    "nanobot_temperature": 0,
+    "nanobot_max_tokens": 1024,
+    "hermes_max_tokens": 1200
+  },
+  "isolation": {
+    "production_home_mounted": false,
+    "production_stores_mounted": false,
+    "model_key_in_evidence": false,
+    "messaging_credentials_used": false,
+    "container_root_read_only": true,
+    "containers_auto_removed": true
+  },
+  "harness_sha256_after_collection": {
+    "run_nanobot_eval.py": "269385ebd123ba774705c18c90b35725b497a3cd85531d62b48ff1babf96fe2b",
+    "session_control.py": "5ceef99598d2968e8b907c3c65ec341f08f58e6ca583e3286087bff8b2158ee2",
+    "hermes_probe_stage.py": "3512a466ec0f0ac26b65010b4674b7fead808d9db03b80ae50ef27f89c267fd5",
+    "sqlite_provider.py": "cc67d8636c71935e017eb1a26cd0a332870e290f9d5fbfdb639668fde9240f62"
+  },
+  "limits": [
+    "One final synthetic run per case; not statistical evidence.",
+    "Nanobot native session control seeds source transcripts immediately before retrieval, not before consolidation.",
+    "Hermes plugin synthetic, no mirroring/migration hook.",
+    "Docker IDs not recorded; stage CLI execution and output retained.",
+    "Earlier malformed-context/concurrent-credit-limited attempts excluded."
+  ]
+}

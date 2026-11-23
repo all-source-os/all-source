@@ -1,0 +1,40 @@
+timestamp=2026-10-19T12:15:11.932Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode/config.json
+timestamp=2026-10-19T12:15:11.935Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode/opencode.json
+timestamp=2026-10-19T12:15:11.935Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode/opencode.jsonc
+timestamp=2026-10-19T12:15:12.061Z level=INFO run=b20967ae message="creating instance" directory=/private/tmp/allsource-omo-compaction/runs/bridge
+timestamp=2026-10-19T12:15:12.062Z level=INFO run=b20967ae message=fromDirectory directory=/private/tmp/allsource-omo-compaction/runs/bridge
+timestamp=2026-10-19T12:15:12.067Z level=INFO run=b20967ae message=bootstrapping directory=/private/tmp/allsource-omo-compaction/runs/bridge
+timestamp=2026-10-19T12:15:12.075Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode/config.json
+timestamp=2026-10-19T12:15:12.075Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode/opencode.json
+timestamp=2026-10-19T12:15:12.075Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode/opencode.jsonc
+timestamp=2026-10-19T12:15:12.075Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/opencode.json
+timestamp=2026-10-19T12:15:12.079Z level=DEBUG run=b20967ae message="loaded custom config" path=/tmp/allsource-omo-compaction/runs/bridge/opencode.json
+timestamp=2026-10-19T12:15:12.080Z level=INFO run=b20967ae message=loading path=/private/tmp/allsource-omo-compaction/runs/bridge/opencode.json
+timestamp=2026-10-19T12:15:12.081Z level=DEBUG run=b20967ae message="loading config from OPENCODE_CONFIG_DIR" path=/tmp/allsource-omo-compaction/runs/bridge/config
+timestamp=2026-10-19T12:15:12.088Z level=DEBUG run=b20967ae message="loading config from /tmp/allsource-omo-compaction/runs/bridge/config/opencode.json"
+timestamp=2026-10-19T12:15:12.088Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode.json
+timestamp=2026-10-19T12:15:12.193Z level=DEBUG run=b20967ae message="loading config from /tmp/allsource-omo-compaction/runs/bridge/config/opencode.jsonc"
+timestamp=2026-10-19T12:15:12.193Z level=INFO run=b20967ae message=loading path=/tmp/allsource-omo-compaction/runs/bridge/config/opencode.jsonc
+timestamp=2026-10-19T12:15:15.938Z level=INFO run=b20967ae message="all LSPs are disabled"
+timestamp=2026-10-19T12:15:15.939Z level=INFO run=b20967ae message="all formatters are disabled"
+timestamp=2026-10-19T12:15:15.939Z level=INFO run=b20967ae message=init
+timestamp=2026-10-19T12:15:15.942Z level=INFO run=b20967ae message="event connected"
+timestamp=2026-10-19T12:15:15.946Z level=INFO run=b20967ae message=created id=ses_eabe99c15ffeVhq2PyGYXIQ8kr slug=shiny-comet version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/runs/bridge path=private/tmp/allsource-omo-compaction/runs/bridge workspaceID=undefined parentID=undefined title="AllSource #7183 bridge" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792412115946 time.updated=1792412115946
+timestamp=2026-10-19T12:15:16.222Z level=INFO run=b20967ae message=loop session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr step=0
+timestamp=2026-10-19T12:15:16.227Z level=INFO run=b20967ae message=process session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr messageID=msg_154166501001XF30tyYOWvzAnf
+timestamp=2026-10-19T12:15:16.228Z level=INFO run=b20967ae message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr small=false agent=compaction mode=primary
+timestamp=2026-10-19T12:15:16.243Z level=INFO run=b20967ae message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-19T12:15:17.834Z level=INFO run=b20967ae message=loop session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr step=1
+timestamp=2026-10-19T12:15:17.834Z level=INFO run=b20967ae message="exiting loop" session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr
+timestamp=2026-10-19T12:15:19.649Z level=INFO run=b20967ae message=loop session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr step=0
+timestamp=2026-10-19T12:15:19.651Z level=INFO run=b20967ae message=process session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr messageID=msg_1541672620019hYY59nFW7ksMv
+timestamp=2026-10-19T12:15:19.651Z level=INFO run=b20967ae message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr small=false agent=compaction mode=primary
+timestamp=2026-10-19T12:15:19.653Z level=INFO run=b20967ae message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-19T12:15:21.331Z level=INFO run=b20967ae message=loop session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr step=1
+timestamp=2026-10-19T12:15:21.333Z level=INFO run=b20967ae message="exiting loop" session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr
+timestamp=2026-10-19T12:16:24.159Z level=INFO run=b20967ae message=loop session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr step=0
+timestamp=2026-10-19T12:16:24.161Z level=INFO run=b20967ae message=process session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr messageID=msg_154176e60001y9x1OE4SJuD5ki
+timestamp=2026-10-19T12:16:24.161Z level=INFO run=b20967ae message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr small=false agent=compaction mode=primary
+timestamp=2026-10-19T12:16:24.162Z level=INFO run=b20967ae message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-19T12:16:26.011Z level=INFO run=b20967ae message=loop session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr step=1
+timestamp=2026-10-19T12:16:26.012Z level=INFO run=b20967ae message="exiting loop" session.id=ses_eabe99c15ffeVhq2PyGYXIQ8kr

@@ -1,0 +1,9 @@
+memory:
+  provider: outage-probe-sqlite
+  memory_enabled: true
+  user_profile_enabled: true
+agent:
+  api_max_retries: 1
+providers:
+  openrouter:
+    request_timeout_seconds: 90

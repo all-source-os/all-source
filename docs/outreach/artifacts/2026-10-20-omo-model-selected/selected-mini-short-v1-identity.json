@@ -1,0 +1,10 @@
+{
+  "sessionID": "ses_ea64d3385ffenjX7MSOqq4rVEf",
+  "sources": [
+    "ses_ea64d351dffedyl1TOWzgA8Ea5",
+    "ses_ea64d33cbffeZmhRXhWKnIR1Tq",
+    "ses_ea64d33adffeRU6qp301ObrrZW",
+    "ses_ea64d3390ffe0XgNPOAEs5XqsF"
+  ],
+  "model": "openai/gpt-4.1-mini"
+}

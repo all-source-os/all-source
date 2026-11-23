@@ -1,0 +1,85 @@
+{
+  "checkedAt": "2026-10-20 23:50:59 UTC",
+  "localDate": "2026-10-21",
+  "timezone": "Europe/Lisbon",
+  "channel": "Public top-level comment on existing PR",
+  "destination": "https://github.com/code-yeongyu/oh-my-openagent/pull/7183",
+  "recipient": "AceRothstein71",
+  "sender": "decebal",
+  "pr": {
+    "state": "open",
+    "merged": false,
+    "draft": false,
+    "mergeable": false,
+    "head": "93d44a0760448f7f07d2795c6239d51db5ab6576",
+    "updated_at": "2026-09-01T16:29:52Z"
+  },
+  "discussion": [
+    {
+      "url": "https://github.com/code-yeongyu/oh-my-openagent/pull/7183#issuecomment-5489222380",
+      "author": "MoerAI",
+      "createdAt": "2026-09-01T05:12:03Z",
+      "updatedAt": "2026-09-01T05:12:03Z"
+    }
+  ],
+  "priorProjectContact": {
+    "url": "https://github.com/code-yeongyu/oh-my-openagent/issues/7764#issuecomment-5616313504",
+    "recipient": "DevNewbie1826",
+    "outboundPromise": "No follow-up after pass",
+    "checkedComments": [
+      {
+        "url": "https://github.com/code-yeongyu/oh-my-openagent/issues/7764#issuecomment-5613928742",
+        "author": "code-yeongyu"
+      },
+      {
+        "url": "https://github.com/code-yeongyu/oh-my-openagent/issues/7764#issuecomment-5616313504",
+        "author": "decebal"
+      }
+    ],
+    "replyOrOptOutObserved": false
+  },
+  "githubCommentSearch": [
+    {
+      "scope": "issues",
+      "total": 1,
+      "incomplete": false,
+      "issues": [
+        {
+          "number": 7764,
+          "url": "https://github.com/code-yeongyu/oh-my-openagent/issues/7764",
+          "state": "closed"
+        }
+      ]
+    },
+    {
+      "scope": "pull requests",
+      "total": 0,
+      "incomplete": false,
+      "issues": []
+    }
+  ],
+  "gmail": {
+    "scope": "Connected Gmail; all-mail and sent-mail exact project/handle query",
+    "allMailResults": 1,
+    "sentResults": 0,
+    "paginationComplete": true,
+    "matchedItem": "Unrelated September 3 Web Tools Weekly newsletter; no direct outreach thread",
+    "query": "in:anywhere {\"oh-my-openagent\" \"oh-my-opencode\" \"AceRothstein71\" \"DevNewbie1826\" \"sghng\"}",
+    "limits": "Does not audit other mailboxes, private chats, aliases or an independent CRM"
+  },
+  "publicEvidence": {
+    "repository": "all-source-os/all-source",
+    "visibility": "public",
+    "providerReportOnMain": "NOT_FOUND (404); local docs must not be linked as already public"
+  },
+  "authorization": {
+    "status": "Prepared only",
+    "sendAuthorized": false,
+    "externalDraftCreated": false
+  },
+  "limits": [
+    "GitHub search indexing can lag; relevant comment threads were fetched directly",
+    "No inferred consent from silence",
+    "Recheck current head and replies immediately before any later send"
+  ]
+}

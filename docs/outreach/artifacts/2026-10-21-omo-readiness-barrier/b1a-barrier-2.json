@@ -1,0 +1,31 @@
+{
+  "stage": 2,
+  "startedAt": 1792537897954,
+  "releasedAt": 1792537897989,
+  "elapsedMs": 35,
+  "expectedRecoveries": 1,
+  "state": "settled-cooldown-suppressed",
+  "polls": [
+    {
+      "at": 1792537897989,
+      "enters": 2,
+      "exits": 2,
+      "summaries": 2,
+      "dispatches": 1,
+      "responses": 1,
+      "stored": 1,
+      "idle": true,
+      "matched": true,
+      "initialized": true,
+      "latch": true,
+      "regime": true,
+      "status": null
+    }
+  ],
+  "storedRecoveryIDs": [
+    "msg_15b9589c8001xe3eTORgS6TiDV"
+  ],
+  "eventExitAt": 1792537897955,
+  "acceptedAt": 1792537889244,
+  "statuses": {}
+}

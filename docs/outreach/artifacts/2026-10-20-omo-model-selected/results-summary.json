@@ -1,0 +1,256 @@
+{
+  "date": "2026-10-20",
+  "head": "93d44a0760448f7f07d2795c6239d51db5ab6576",
+  "opencode": "1.18.22",
+  "harnessBun": "1.3.9",
+  "model": "openrouter/minimax/minimax-m3.1-flash:free",
+  "sourceHashes": {
+    "hooks/compaction-context-injector/hook.ts": "ffb67fca3b9647f990594bbbbdbd4fe5018217d4283623620d7c29901cadce08",
+    "hooks/compaction-context-injector/recovery.ts": "8eb15a3c333bd11a702bbad12392088809e80bd96368f4b22605da38cec2fcb1",
+    "hooks/compaction-context-injector/constants.ts": "b70def05c148c2bc0f475f7409c4d4e048a0c6e5881174a374a3ab681f3c60d8",
+    "hooks/compaction-context-injector/skill-reinjection.ts": "50dcb57f3baa75fdd75c6e176285b6bc24e019db1795a5c45744a53762331b5f",
+    "shared/session-loaded-skills.ts": "35be0b637313a7ec75392c975dfd0af4474b8a00aac29d7363b05752fbb9bf91",
+    "tools/skill/tools.ts": "bed314e04e638cfc28b6ad917af513681e7fc9e0890084447e358e4933bdd2ac",
+    "plugin/session-compacting.ts": "157483645b034ee40a37ff2ccc657e6c7ae47d3549480b117eee457dd0b8badf"
+  },
+  "bundleSha256": "ee3739675452673d7aaf1d12118724645c06a15c02dabf4056dac3c091bd4c49",
+  "fullPlugin": true,
+  "observerOnly": true,
+  "forcedToolChoice": false,
+  "metadataSupplied": true,
+  "shortAuditPrompt": true,
+  "allMcpDisabled": true,
+  "stages": [
+    {
+      "stage": 0,
+      "sourceSessionID": "ses_ea64c6e3fffeT7H1oIzMB4xnhP",
+      "receipt": "receipt-0-43caeb1c42",
+      "query": "ZEPHYR_D714D5A379",
+      "skillCalls": 1,
+      "tools": [
+        {
+          "tool": "skill",
+          "callID": "call_function_rjt3nk75w99z_1",
+          "status": "completed",
+          "input": {
+            "name": "zephyr-ledger-audit",
+            "user_message": "Run checkpoint 0. source_session=ses_ea64c6e3fffeT7H1oIzMB4xnhP"
+          },
+          "outputSha256": "c8c015f73f112656e54588498df653145680904496ab8d0c78460ca9bb4fd4db"
+        },
+        {
+          "tool": "session_search",
+          "callID": "call_e7c33e9782e34ed8bb98e1e6",
+          "status": "completed",
+          "input": {
+            "query": "ZEPHYR_D714D5A379",
+            "session_id": "ses_ea64c6e3fffeT7H1oIzMB4xnhP",
+            "case_sensitive": true,
+            "limit": 5
+          },
+          "outputSha256": "f159eee58c11bf70c1ad718a4fb8baa29380067b854dea9c7cb571314f90fe7c"
+        },
+        {
+          "tool": "session_info",
+          "callID": "call_2d40d3ce1d7943d28d01b3c8",
+          "status": "completed",
+          "input": {
+            "session_id": "ses_ea64c6e3fffeT7H1oIzMB4xnhP"
+          },
+          "outputSha256": "6a87d7ee21d4ae5e132b34d76862c6ff08686451adac650ea3ae47fa673bd618"
+        }
+      ],
+      "answers": [
+        "ZEPHYR_D714D5A379 receipt-0-43caeb1c42. Synthetic ledger record."
+      ],
+      "passed": true
+    },
+    {
+      "stage": 1,
+      "sourceSessionID": "ses_ea64c6c18ffe6EOQxX4xt1aQqO",
+      "receipt": "receipt-1-57e090b834",
+      "query": "ZEPHYR_9FC0783002",
+      "skillCalls": 0,
+      "tools": [
+        {
+          "tool": "session_search",
+          "callID": "call_function_ulm57gnc53rj_1",
+          "status": "completed",
+          "input": {
+            "query": "ZEPHYR_9FC0783002",
+            "session_id": "ses_ea64c6c18ffe6EOQxX4xt1aQqO",
+            "case_sensitive": true,
+            "limit": 5
+          },
+          "outputSha256": "90ca65a7716a0d182daae41e89ea29aed1707078dbdc83a18f824a4f2a83f0e4"
+        },
+        {
+          "tool": "session_info",
+          "callID": "call_function_ulm57gnc53rj_2",
+          "status": "completed",
+          "input": {
+            "session_id": "ses_ea64c6c18ffe6EOQxX4xt1aQqO"
+          },
+          "outputSha256": "a15a53a72cb2fccd17f71b859a2b3fdd866036e9c0e4f63e66e5f6000d4c283b"
+        }
+      ],
+      "answers": [
+        "ZEPHYR_9FC0783002 receipt-1-57e090b834. Synthetic ledger record."
+      ],
+      "passed": true
+    },
+    {
+      "stage": 2,
+      "sourceSessionID": "ses_ea64c6bf6ffeyFyGwmq2Ly0UDs",
+      "receipt": "receipt-2-d09581f451",
+      "query": "ZEPHYR_78AFDF23A4",
+      "skillCalls": 1,
+      "tools": [
+        {
+          "tool": "skill",
+          "callID": "call_function_bpr0jpjapl2r_1",
+          "status": "completed",
+          "input": {
+            "name": "zephyr-ledger-audit"
+          },
+          "outputSha256": "c8c015f73f112656e54588498df653145680904496ab8d0c78460ca9bb4fd4db"
+        },
+        {
+          "tool": "session_search",
+          "callID": "call_function_xvr5yu2lii5n_1",
+          "status": "completed",
+          "input": {
+            "query": "ZEPHYR_78AFDF23A4",
+            "session_id": "ses_ea64c6bf6ffeyFyGwmq2Ly0UDs",
+            "case_sensitive": true,
+            "limit": 5
+          },
+          "outputSha256": "b66ba4241a55f0bd46f838982446bd8fd15d574b732e3093de9f23e10a33069f"
+        },
+        {
+          "tool": "session_info",
+          "callID": "call_function_xvr5yu2lii5n_2",
+          "status": "completed",
+          "input": {
+            "session_id": "ses_ea64c6bf6ffeyFyGwmq2Ly0UDs"
+          },
+          "outputSha256": "7e97e39efdd61a69b52beaff792e3f801f3488166db649cbb8f162b861bf56cd"
+        }
+      ],
+      "answers": [
+        "ZEPHYR_78AFDF23A4 receipt-2-d09581f451. Synthetic ledger record."
+      ],
+      "passed": true
+    },
+    {
+      "stage": 3,
+      "sourceSessionID": "ses_ea64c6bdcfferyt45zPWzOdhay",
+      "receipt": "receipt-3-d420a55812",
+      "query": "ZEPHYR_DAEB1EEEE7",
+      "skillCalls": 0,
+      "tools": [
+        {
+          "tool": "session_search",
+          "callID": "call_function_nlp3b6pxvn3i_1",
+          "status": "completed",
+          "input": {
+            "query": "ZEPHYR_DAEB1EEEE7",
+            "session_id": "ses_ea64c6bdcfferyt45zPWzOdhay",
+            "case_sensitive": true,
+            "limit": 5
+          },
+          "outputSha256": "8444ae4b9082f3709539bce46b830333178a3fa635f9876fe6cfeb2d7b4f80c7"
+        },
+        {
+          "tool": "session_info",
+          "callID": "call_function_nlp3b6pxvn3i_2",
+          "status": "completed",
+          "input": {
+            "session_id": "ses_ea64c6bdcfferyt45zPWzOdhay"
+          },
+          "outputSha256": "4ea1f90228d08a6aa885543f10865ddfda2d14bcd4029662609ffb35a5113a6d"
+        }
+      ],
+      "answers": [
+        "ZEPHYR_DAEB1EEEE7 receipt-3-d420a55812. Synthetic ledger record."
+      ],
+      "passed": true
+    }
+  ],
+  "compactions": [
+    {
+      "round": 1,
+      "summaryMessages": 1,
+      "recoveryMessages": [
+        {
+          "id": "prt_159b3c32a001fRWUyiaAaoMhOb",
+          "bytes": 1302,
+          "sha256": "4d052efae59f7fbdd1a1bb0509941fa45e1c4f7fa4dc8ce6a364005917f52a34"
+        }
+      ],
+      "latestSummary": "## Objective\n- Run Zephyr ledger audit checkpoint 0 for `source_session=ses_ea64c6e3fffeT7H1oIzMB4xnhP`.\n- Return the verified literal receipt.\n\n## Important Details\n- Checkpoint query: `ZEPHYR_D714D5A379`\n- `session_search` used `query=\"ZEPHYR_D714D5A379\"`, `session_id=\"ses_ea64c6e3fffeT7H1oIzMB4xnhP\"`, `case_sensitive=true`, `limit=5`.\n- `session_info` confirmed the source session exists.\n- Skill procedure requires returning only the literal receipt from the matching search result after source validation.\n\n## Work State\n### Completed\n- Executed `session_search` for checkpoint 0 and found 1 match.\n- Executed `session_info` successfully for `ses_ea64c6e3fffeT7H1oIzMB4xnhP`.\n- Returned the verified receipt: `ZEPHYR_D714D5A379 receipt-0-43caeb1c42. Synthetic ledger record.`\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- (none)"
+    },
+    {
+      "round": 2,
+      "summaryMessages": 2,
+      "recoveryMessages": [
+        {
+          "id": "prt_159b3c32a001fRWUyiaAaoMhOb",
+          "bytes": 1302,
+          "sha256": "4d052efae59f7fbdd1a1bb0509941fa45e1c4f7fa4dc8ce6a364005917f52a34"
+        }
+      ],
+      "latestSummary": "## Objective\n- Run Zephyr ledger audit checkpoints 0 and 1 and return each verified literal receipt.\n\n## Important Details\n- Checkpoint 0: `source_session=ses_ea64c6e3fffeT7H1oIzMB4xnhP`, query `ZEPHYR_D714D5A379`.\n- Checkpoint 1: `source_session=ses_ea64c6c18ffe6EOQxX4xt1aQqO`, query `ZEPHYR_9FC0783002`.\n- Each search used `case_sensitive=true` and `limit=5`; `session_info` confirmed the source session exists.\n- The skill requires returning only the literal receipt from the matching search result after source validation.\n\n## Work State\n### Completed\n- Checkpoint 0 verified receipt: `ZEPHYR_D714D5A379 receipt-0-43caeb1c42. Synthetic ledger record.`\n- Checkpoint 1 verified receipt: `ZEPHYR_9FC0783002 receipt-1-57e090b834. Synthetic ledger record.`\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- (none)"
+    },
+    {
+      "round": 3,
+      "summaryMessages": 3,
+      "recoveryMessages": [
+        {
+          "id": "prt_159b3c32a001fRWUyiaAaoMhOb",
+          "bytes": 1302,
+          "sha256": "4d052efae59f7fbdd1a1bb0509941fa45e1c4f7fa4dc8ce6a364005917f52a34"
+        },
+        {
+          "id": "prt_159b4f682002y7o8Z1WfYZa2rY",
+          "bytes": 1302,
+          "sha256": "4d052efae59f7fbdd1a1bb0509941fa45e1c4f7fa4dc8ce6a364005917f52a34"
+        }
+      ],
+      "latestSummary": "## Objective\n- Run Zephyr ledger audit checkpoints 0, 1, and 2 and return each verified literal receipt.\n\n## Important Details\n- Checkpoint 0: `source_session=ses_ea64c6e3fffeT7H1oIzMB4xnhP`, query `ZEPHYR_D714D5A379`.\n- Checkpoint 1: `source_session=ses_ea64c6c18ffe6EOQxX4xt1aQqO`, query `ZEPHYR_9FC0783002`.\n- Checkpoint 2: `source_session=ses_ea64c6bf6ffeyFyGwmq2Ly0UDs`, query `ZEPHYR_78AFDF23A4`.\n- Each search used `case_sensitive=true` and `limit=5`; `session_info` confirmed the source session exists.\n- The skill requires returning only the literal receipt from the matching search result after source validation.\n\n## Work State\n### Completed\n- Checkpoint 0 verified receipt: `ZEPHYR_D714D5A379 receipt-0-43caeb1c42. Synthetic ledger record.`\n- Checkpoint 1 verified receipt: `ZEPHYR_9FC0783002 receipt-1-57e090b834. Synthetic ledger record.`\n- Checkpoint 2 verified receipt: `ZEPHYR_78AFDF23A4 receipt-2-d09581f451. Synthetic ledger record.`\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- (none)"
+    }
+  ],
+  "firstThirdEventGapMs": 78709,
+  "counts": {
+    "checkpointsPassed": 4,
+    "independentConversations": 1,
+    "skillCalls": 2,
+    "sessionSearchCalls": 4,
+    "sessionInfoCalls": 4
+  },
+  "earlierAttempts": [
+    {
+      "run": "selected-v1",
+      "outcome": "initial mini prompt allowance rejection"
+    },
+    {
+      "run": "selected-nano-v1",
+      "outcome": "partial native tool success; incorrect queries after second compaction; terminal in-flight-budget 402"
+    },
+    {
+      "run": "selected-mini-short-v1",
+      "outcome": "initial mini prompt allowance rejection"
+    }
+  ],
+  "limits": [
+    "reload after second compaction",
+    "no causal ablation",
+    "one successful conversation",
+    "synthetic records and metadata-supplied skill choice",
+    "no team/MCP tool test",
+    "manual auto:false compaction",
+    "no model-selected large-payload test",
+    "not a controlled model comparison"
+  ],
+  "cleanup": "No QA-owned OpenCode runtime remained at process check"
+}

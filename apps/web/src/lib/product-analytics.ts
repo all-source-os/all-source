@@ -7,6 +7,7 @@ type AnalyticsProperties = Record<string, AnalyticsValue>;
 
 interface AnalyticsState {
   client: PostHogClient | null;
+  exceptionTrackingInstalled: boolean;
   initialization: Promise<PostHogClient | null> | null;
   initialized: boolean;
   testTraffic?: boolean;
@@ -37,10 +38,43 @@ function analyticsState(): AnalyticsState | null {
   if (typeof window === "undefined") return null;
   window.__allsourceAnalytics ??= {
     client: null,
+    exceptionTrackingInstalled: false,
     initialization: null,
     initialized: false,
   };
   return window.__allsourceAnalytics;
+}
+
+function installExceptionTracking(key: string, apiHost: string): void {
+  const state = analyticsState();
+  if (!state || state.exceptionTrackingInstalled) return;
+
+  const capture = (mechanism: string) => {
+    void fetch(`${apiHost.replace(/\/$/, "")}/i/v0/e/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      keepalive: true,
+      body: JSON.stringify({
+        api_key: key,
+        event: "$exception",
+        properties: {
+          distinct_id: `exception:${BET}:${crypto.randomUUID()}`,
+          ...commonProperties(),
+          $exception_type: "ClientError",
+          $exception_mechanism: mechanism,
+          $geoip_disable: true,
+          $process_person_profile: false,
+          exception_contract: "type-only",
+        },
+      }),
+    }).catch(() => {});
+  };
+
+  window.addEventListener("error", () => capture("window.error"));
+  window.addEventListener("unhandledrejection", () => capture("window.unhandledrejection"));
+  state.exceptionTrackingInstalled = true;
 }
 
 export function cleanAnalyticsUrl(value: unknown, fallbackOrigin?: string): string | undefined {
@@ -93,12 +127,22 @@ export function initProductAnalytics(): Promise<PostHogClient | null> {
   if (state.initialization) return state.initialization;
 
   state.initialization = import("posthog-js").then(({ posthog }) => {
+    const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com";
     posthog.init(key, {
-      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://eu.i.posthog.com",
+      api_host: apiHost,
       autocapture: false,
+      capture_exceptions: false,
       before_send: (event) => {
         if (!event?.properties) return event;
         Object.assign(event.properties, commonProperties());
+
+        if (event.event === "$exception") {
+          for (const property of Object.keys(event.properties)) {
+            if (property.startsWith("$exception_")) delete event.properties[property];
+          }
+          event.properties.$exception_type = "ClientError";
+          event.properties.exception_contract = "type-only";
+        }
 
         for (const property of ["$current_url", "$referrer"]) {
           const value = cleanAnalyticsUrl(event.properties[property], window.location.origin);
@@ -121,6 +165,7 @@ export function initProductAnalytics(): Promise<PostHogClient | null> {
     });
     state.client = posthog;
     state.initialized = true;
+    installExceptionTracking(key, apiHost);
     return posthog;
   });
 

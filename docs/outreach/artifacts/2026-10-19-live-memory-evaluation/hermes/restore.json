@@ -1,0 +1,99 @@
+{
+  "stage": "restore",
+  "startup": {
+    "manager_active": true,
+    "providers": [
+      "outage-probe-sqlite"
+    ],
+    "tools": [
+      "memory",
+      "probe_memory_recall",
+      "probe_memory_write"
+    ]
+  },
+  "notices": [],
+  "events": [],
+  "conversation": {
+    "final_response": "External memory facts currently stored:\n- baseline_canary: SYNTHETIC_BASELINE_CANARY_73e9\n\nBuilt-in memory context includes:\n- SYNTHETIC_OUTAGE_CANARY_ba42 (a test-only recovery canary indicating the external memory provider was configured but its plugin directory was removed before this fresh process)",
+    "last_reasoning": null,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Use probe_memory_recall with no key to list all external memory facts. Separately report any SYNTHETIC_OUTAGE_CANARY fact already present in the built-in memory supplied to you. Do not copy, repair, or write any memories. Clearly distinguish external memory recall from built-in memory context.",
+        "timestamp": 1792409816.5752473
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "reasoning": null,
+        "finish_reason": "tool_calls",
+        "timestamp": 1792409818.835367,
+        "tool_calls": [
+          {
+            "id": "call_lprZRe6bgDMBpkzbuW8iS3bW",
+            "call_id": "call_lprZRe6bgDMBpkzbuW8iS3bW",
+            "response_item_id": "fc_lprZRe6bgDMBpkzbuW8iS3bW",
+            "type": "function",
+            "function": {
+              "name": "probe_memory_recall",
+              "arguments": "{ \"key\": \"\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "name": "probe_memory_recall",
+        "tool_name": "probe_memory_recall",
+        "content": "{\"success\": true, \"destination\": \"external_sqlite\", \"memories\": {\"baseline_canary\": \"SYNTHETIC_BASELINE_CANARY_73e9\"}}",
+        "tool_call_id": "call_lprZRe6bgDMBpkzbuW8iS3bW",
+        "timestamp": 1792409818.885996
+      },
+      {
+        "role": "assistant",
+        "content": "External memory facts currently stored:\n- baseline_canary: SYNTHETIC_BASELINE_CANARY_73e9\n\nBuilt-in memory context includes:\n- SYNTHETIC_OUTAGE_CANARY_ba42 (a test-only recovery canary indicating the external memory provider was configured but its plugin directory was removed before this fresh process)",
+        "reasoning": null,
+        "finish_reason": "stop",
+        "timestamp": 1792409820.33588
+      }
+    ],
+    "api_calls": 2,
+    "completed": true,
+    "turn_exit_reason": "text_response(finish_reason=stop)",
+    "failed": false,
+    "partial": false,
+    "interrupted": false,
+    "response_transformed": false,
+    "pre_transform_response": null,
+    "response_previewed": false,
+    "response_reused": false,
+    "model": "openai/gpt-4.1-mini",
+    "requested_model": "openai/gpt-4.1-mini",
+    "served_model": null,
+    "provider": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "input_tokens": 3701,
+    "output_tokens": 105,
+    "cache_read_tokens": 3328,
+    "cache_write_tokens": 0,
+    "reasoning_tokens": 0,
+    "prompt_tokens": 7029,
+    "completion_tokens": 105,
+    "total_tokens": 7134,
+    "last_prompt_tokens": 3546,
+    "estimated_cost_usd": 0.0019812,
+    "cost_status": "estimated",
+    "cost_source": "provider_models_api",
+    "service_tier": null,
+    "session_id": "outage-probe-restore",
+    "turn_id": "outage-probe-restore:04db7c15-f943-41c6-b559-28bbe50712ca:47cee0d8",
+    "current_turn_user_idx": 0,
+    "user_intervened": false
+  },
+  "external_sqlite_rows": {
+    "baseline_canary": "SYNTHETIC_BASELINE_CANARY_73e9"
+  },
+  "builtin_memory_files": {
+    "memories/MEMORY.md": "SYNTHETIC_OUTAGE_CANARY_ba42 is a test-only recovery canary indicating the external memory provider was configured but its plugin directory was removed before this fresh process."
+  }
+}

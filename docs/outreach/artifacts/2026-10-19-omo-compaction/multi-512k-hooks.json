@@ -1,0 +1,66 @@
+[
+  {
+    "kind": "skill-loaded",
+    "name": "qa-0",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-1",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-2",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-3",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-4",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-5",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-6",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "kind": "skill-loaded",
+    "name": "qa-7",
+    "bodyBytes": 65536,
+    "resultBytes": 65618
+  },
+  {
+    "at": 1792412288959,
+    "kind": "capture",
+    "round": 1,
+    "contextBytes": 2578
+  },
+  {
+    "at": 1792412291151,
+    "event": {
+      "id": "evt_154190ec6001akOK6lVdVPUDyk",
+      "type": "session.compacted",
+      "properties": {
+        "sessionID": "ses_eabe6fd3fffe2X0u3atVO26xwX"
+      }
+    }
+  }
+]

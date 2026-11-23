@@ -70,6 +70,20 @@ bun test:ui-components
 bun test:report
 ```
 
+### Against a production web build
+
+These configs start `apps/web` with `next start`, so build it first.
+
+```bash
+# SEO content checks
+(cd ../../apps/web && bun run build)
+bunx playwright test --config playwright.seo.config.ts
+
+# Exception capture: PostHog must be configured at build time; requests are intercepted locally
+(cd ../../apps/web && NEXT_PUBLIC_POSTHOG_KEY=phc_e2e_local bun run build)
+bunx playwright test --config playwright.analytics.config.ts
+```
+
 ## Writing Tests
 
 ### Using Page Objects

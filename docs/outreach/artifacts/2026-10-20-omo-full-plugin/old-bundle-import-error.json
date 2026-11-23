@@ -1,0 +1,4 @@
+{
+  "error": "Error: ENOENT: no such file or directory, open '/private/tmp/allsource-omo-compaction/source/skills/frontend/SKILL.md'",
+  "stack": "Error: ENOENT: no such file or directory, open '/private/tmp/allsource-omo-compaction/source/skills/frontend/SKILL.md'\n    at readFileSync (unknown)\n    at <anonymous> (/private/tmp/allsource-omo-compaction/source/qa-plugin.js:12168:49)\n    at /private/tmp/allsource-omo-compaction/source/qa-plugin.js:12188:36"
+}

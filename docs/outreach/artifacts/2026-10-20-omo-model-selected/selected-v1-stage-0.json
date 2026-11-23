@@ -1,0 +1,116 @@
+{
+  "at": 1792506075510,
+  "stage": 0,
+  "prompt": "Available installed skill metadata: zephyr-ledger-audit — verify Zephyr ledger checkpoints; canvas-layout — arrange chart labels and screen layouts. Select the appropriate skill and follow its procedure. Do not guess opaque ledger queries. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea64feef9ffeDYTThM88VnCaYM. Return the verified receipt.",
+  "expected": {
+    "stage": 0,
+    "query": "ZEPHYR_6E9F4F691A",
+    "receipt": "receipt-0-d214bcdb8a"
+  },
+  "sourceSessionID": "ses_ea64feef9ffeDYTThM88VnCaYM",
+  "messages": [
+    {
+      "info": {
+        "id": "msg_159b012a0001lMms0O2Uq6RfAb",
+        "sessionID": "ses_ea64fed65ffdhKlw8kWvqFcwrn",
+        "role": "user",
+        "time": {
+          "created": 1792506073760
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-mini"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159b012a10014xz3GFwwbtTArI",
+          "sessionID": "ses_ea64fed65ffdhKlw8kWvqFcwrn",
+          "messageID": "msg_159b012a0001lMms0O2Uq6RfAb",
+          "type": "text",
+          "text": "Available installed skill metadata: zephyr-ledger-audit — verify Zephyr ledger checkpoints; canvas-layout — arrange chart labels and screen layouts. Select the appropriate skill and follow its procedure. Do not guess opaque ledger queries. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea64feef9ffeDYTThM88VnCaYM. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b012b4001SMx9WM2Dz5g84d",
+        "sessionID": "ses_ea64fed65ffdhKlw8kWvqFcwrn",
+        "role": "assistant",
+        "time": {
+          "created": 1792506073780,
+          "completed": 1792506075502
+        },
+        "error": {
+          "name": "APIError",
+          "data": {
+            "message": "Prompt tokens limit exceeded: 8879 > 6400. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account",
+            "statusCode": 402,
+            "isRetryable": false,
+            "responseHeaders": {
+              "access-control-allow-origin": "*",
+              "access-control-expose-headers": "X-Generation-Id,X-Provider-Name,request-id,cf-ray",
+              "cf-ray": "a4d8aaf49d87948b-LHR",
+              "connection": "keep-alive",
+              "content-type": "application/json",
+              "date": "Tue, 20 Oct 2026 14:21:15 GMT",
+              "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+              "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+              "server": "cloudflare",
+              "transfer-encoding": "chunked",
+              "x-content-type-options": "nosniff",
+              "x-generation-id": "gen-1792506074-RR4yc5qKmvzVxPT2b60r",
+              "set-cookie": "[REDACTED]"
+            },
+            "responseBody": "{\"error\":{\"message\":\"Prompt tokens limit exceeded: 8879 > 6400. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"limit_source\":\"openrouter_credits\",\"remedy_hint\":\"Add credits at https://openrouter.ai/settings/credits, or lower max_tokens / prompt size to fit your remaining balance.\",\"provider_name\":null,\"previous_errors\":[{\"code\":402,\"message\":\"Prompt tokens limit exceeded: 8879 > 6400. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\"}]}},\"user_id\":\"[REDACTED]\"}",
+            "metadata": {
+              "url": "https://openrouter.ai/api/v1/chat/completions"
+            }
+          }
+        },
+        "parentID": "msg_159b012a0001lMms0O2Uq6RfAb",
+        "modelID": "openai/gpt-4.1-mini",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-v1",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        }
+      },
+      "parts": []
+    }
+  ]
+}

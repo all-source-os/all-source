@@ -1,0 +1,4 @@
+data: {"id":"evt_1541902a8001mMUrWP6ayEgmKt","type":"server.connected","properties":{}}
+
+data: {"id":"evt_154190ec6001akOK6lVdVPUDyk","type":"session.compacted","properties":{"sessionID":"ses_eabe6fd3fffe2X0u3atVO26xwX"}}
+

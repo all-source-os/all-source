@@ -1,0 +1,625 @@
+{
+  "at": 1792506124244,
+  "stage": 1,
+  "messages": [
+    {
+      "info": {
+        "id": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "user",
+        "time": {
+          "created": 1792506113629
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-nano"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159b0ae5f001ffzlBROD49Xn0X",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+          "type": "text",
+          "text": "Available installed skill metadata: zephyr-ledger-audit — verify Zephyr ledger checkpoints; canvas-layout — arrange chart labels and screen layouts. Select the appropriate skill and follow its procedure. Do not guess opaque ledger queries. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea64f53beffe17t314ykNb4Jr2. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0ae6c0017F0MxTaMMfygIW",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506113644,
+          "completed": 1792506115847
+        },
+        "parentID": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0008005,
+        "tokens": {
+          "total": 7849,
+          "input": 7797,
+          "output": 52,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0b5c00017qFwt9hQ4SjjZn",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0ae6c0017F0MxTaMMfygIW",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0b5c20010HolFp1ngdpJQ6",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0ae6c0017F0MxTaMMfygIW",
+          "type": "tool",
+          "callID": "call_LctoRA8O9PTqI9cLguK7CRGW",
+          "tool": "skill",
+          "state": {
+            "status": "completed",
+            "input": {
+              "name": "zephyr-ledger-audit",
+              "user_message": "Verify Zephyr ledger checkpoint 0 with source_session=ses_ea64f53beffe17t314ykNb4Jr2."
+            },
+            "output": "## Skill: zephyr-ledger-audit\n\n**Base directory**: /private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/zephyr-ledger-audit\n\nBase directory for this skill: /private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/zephyr-ledger-audit/\nFile references (@path) in this skill are relative to this directory.\n\n# Zephyr ledger audit\n\nFor a requested checkpoint N and source_session provided by the user, execute this procedure.\n1. Call session_search with session_id=source_session, case_sensitive=true, limit=5, and EXACT query from the checkpoint map below.\n2. Call session_info for the same source_session to validate the source exists.\n3. Return the receipt from that search result only after the source check succeeds. Never invent a receipt. Do not use general file tools. Repeat this procedure for each new checkpoint.\n\nCheckpoint query map:\n0: ZEPHYR_2A1BE9828C\n1: ZEPHYR_484903FA4F\n2: ZEPHYR_C085B5EF7B\n3: ZEPHYR_597D942EE4\n\nIf these instructions remain in your context, use them directly without loading this skill again.\nEND_ZEPHYR_SKILL",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506115807,
+              "end": 1792506115829
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0b703001Mv4efbbtZ2rjkK",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0ae6c0017F0MxTaMMfygIW",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0008005,
+          "tokens": {
+            "total": 7849,
+            "input": 7797,
+            "output": 52,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0b7090015kLJqCeDHmVByz",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506115849,
+          "completed": 1792506116877
+        },
+        "parentID": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0002601,
+        "tokens": {
+          "total": 8193,
+          "input": 457,
+          "output": 56,
+          "reasoning": 0,
+          "cache": {
+            "read": 7680,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0b9d6001hQBshgoQzSE1rF",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0b7090015kLJqCeDHmVByz",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0b9d80012Jj7y7KedFto86",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0b7090015kLJqCeDHmVByz",
+          "type": "tool",
+          "callID": "call_GC7pwY2exa4WLwylNVfl2KXF",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "ZEPHYR_2A1BE9828C",
+              "session_id": "ses_ea64f53beffe17t314ykNb4Jr2",
+              "case_sensitive": true,
+              "limit": 5
+            },
+            "output": "Found 1 matches:\n\n[ses_ea64f53beffe17t314ykNb4Jr2] msg_159b0ac91001VD6uz1FIE4fKEr (user) 2026-10-20T14:21:53.170Z\n  ZEPHYR_2A1BE9828C receipt-0-ed36eac8ce. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506116816,
+              "end": 1792506116828
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0bb0a001jcBM63DQojxj1r",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0b7090015kLJqCeDHmVByz",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0002601,
+          "tokens": {
+            "total": 8193,
+            "input": 457,
+            "output": 56,
+            "reasoning": 0,
+            "cache": {
+              "read": 7680,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0bb0e001eaadJhpCjBc9yJ",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506116878,
+          "completed": 1792506117772
+        },
+        "parentID": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0002373,
+        "tokens": {
+          "total": 8325,
+          "input": 229,
+          "output": 32,
+          "reasoning": 0,
+          "cache": {
+            "read": 8064,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0bdda0014fWWoBgvYRdEUe",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0bb0e001eaadJhpCjBc9yJ",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0bddd001MKHXdPxA4ebppb",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0bb0e001eaadJhpCjBc9yJ",
+          "type": "tool",
+          "callID": "call_5i1VXDGhCZLveRwbkaQ3iNzi",
+          "tool": "session_info",
+          "state": {
+            "status": "completed",
+            "input": {
+              "session_id": "ses_ea64f53beffe17t314ykNb4Jr2"
+            },
+            "output": "Session ID: ses_ea64f53beffe17t314ykNb4Jr2\nMessages: 1\nDate Range: 2026-10-20T14:21:53.170Z to 2026-10-20T14:21:53.170Z\nAgents Used: build\nHas Todos: No\nHas Transcript: Yes (1 entries)",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506117724,
+              "end": 1792506117734
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0be89001seOUndjAF0kECv",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0bb0e001eaadJhpCjBc9yJ",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0002373,
+          "tokens": {
+            "total": 8325,
+            "input": 229,
+            "output": 32,
+            "reasoning": 0,
+            "cache": {
+              "read": 8064,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0be8e001TdkbzRRnI93kEx",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506117774,
+          "completed": 1792506119256
+        },
+        "parentID": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0002637,
+        "tokens": {
+          "total": 8505,
+          "input": 221,
+          "output": 92,
+          "reasoning": 0,
+          "cache": {
+            "read": 8192,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0c21e001iQgxsZ6P8MoZ9H",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0be8e001TdkbzRRnI93kEx",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0c220001N95QrJ5PnEqtwM",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0be8e001TdkbzRRnI93kEx",
+          "type": "text",
+          "text": "The session contains a message referencing the receipt for checkpoint ZEPHYR_2A1BE9828C. I will now extract and verify this receipt to complete the ledger audit.",
+          "time": {
+            "start": 1792506118688,
+            "end": 1792506119253
+          }
+        },
+        {
+          "id": "prt_159b0c2d9001NXzk9cLRjLoSVC",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0be8e001TdkbzRRnI93kEx",
+          "type": "tool",
+          "callID": "call_H5UjGXitMHYtJlvx9UMmNqbd",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "receipt-0-ed36eac8ce",
+              "session_id": "ses_ea64f53beffe17t314ykNb4Jr2",
+              "case_sensitive": true,
+              "limit": 1
+            },
+            "output": "Found 1 matches:\n\n[ses_ea64f53beffe17t314ykNb4Jr2] msg_159b0ac91001VD6uz1FIE4fKEr (user) 2026-10-20T14:21:53.170Z\n  ZEPHYR_2A1BE9828C receipt-0-ed36eac8ce. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506119197,
+              "end": 1792506119205
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0c456001Q0ckvHEWgLcwZp",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0be8e001TdkbzRRnI93kEx",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0002637,
+          "tokens": {
+            "total": 8505,
+            "input": 221,
+            "output": 92,
+            "reasoning": 0,
+            "cache": {
+              "read": 8192,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0c459001Xh1xZUrxZcBj96",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506119257,
+          "completed": 1792506120635
+        },
+        "parentID": "msg_159b0ae5d001rW83RA4Q0RWhAX",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.00024,
+        "tokens": {
+          "total": 8703,
+          "input": 84,
+          "output": 43,
+          "reasoning": 0,
+          "cache": {
+            "read": 8576,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0c6ea001yjKxubvL95y6WL",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c459001Xh1xZUrxZcBj96",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0c6eb001icXY1UfxU7ibQz",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c459001Xh1xZUrxZcBj96",
+          "type": "text",
+          "text": "The message confirms the presence of the receipt for checkpoint ZEPHYR_2A1BE9828C. Since the session info indicates the message is the record itself, the receipt is verified. \n\nI will now compile and return the verified receipt.",
+          "time": {
+            "start": 1792506119915,
+            "end": 1792506120632
+          }
+        },
+        {
+          "id": "prt_159b0c9b90016nf0nVO6pZNCt8",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c459001Xh1xZUrxZcBj96",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.00024,
+          "tokens": {
+            "total": 8703,
+            "input": 84,
+            "output": 43,
+            "reasoning": 0,
+            "cache": {
+              "read": 8576,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0c9d3001m7vr4sCmA0YSHs",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "user",
+        "time": {
+          "created": 1792506120659
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-nano"
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159b0c9d30025Ur2KM67LirEon",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c9d3001m7vr4sCmA0YSHs",
+          "type": "compaction",
+          "auto": false
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0c9ea0018wVkKAjfJcOdtM",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506120682,
+          "completed": 1792506123037
+        },
+        "parentID": "msg_159b0c9d3001m7vr4sCmA0YSHs",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "compaction",
+        "agent": "compaction",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "summary": true,
+        "cost": 0.000302,
+        "tokens": {
+          "total": 2171,
+          "input": 1888,
+          "output": 283,
+          "reasoning": 0,
+          "cache": {
+            "read": 0,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0cdde001HXeNA63dmOnreY",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c9ea0018wVkKAjfJcOdtM",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0cde1001x8IIlmISI8AyPX",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c9ea0018wVkKAjfJcOdtM",
+          "type": "text",
+          "text": "## 1. User Requests\n- Verify Zephyr ledger checkpoint 0 with provided session and receipt details\n\n## 2. Final Goal\n- Complete verification of the ledger checkpoint receipt\n\n## 3. Work Completed\n- Executed session_search for checkpoint ZEPHYR_2A1BE9828C\n- Validated session info for source session\n- Confirmed receipt presence for checkpoint\n- Verified receipt matches session message\n\n## 4. Remaining Tasks\n- Compile and return the verified receipt\n\n## 5. Active Working Context\n- Files: /private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/zephyr-ledger-audit\n- Code in Progress: Receipt verification, session info validation\n- External References: None\n- State & Variables: session_id, source_session, receipt identifiers\n\n## 6. Explicit Constraints\n- \"Select the appropriate skill and follow its procedure.\"\n- \"Do not guess opaque ledger queries.\"\n- \"Repeat this procedure for each new checkpoint.\"\n\n## 7. Agent Verification State\n- Current Agent: assistant\n- Verification Progress: Receipt for checkpoint ZEPHYR_2A1BE9828C verified\n- Pending Verifications: None\n- Previous Rejections: None\n- Acceptance Status: Verified receipt\n\n## 8. Delegated Agent Sessions\n- None",
+          "time": {
+            "start": 1792506121697,
+            "end": 1792506123033
+          }
+        },
+        {
+          "id": "prt_159b0d31b001BLZVBYhrqAp17n",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0c9ea0018wVkKAjfJcOdtM",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.000302,
+          "tokens": {
+            "total": 2171,
+            "input": 1888,
+            "output": 283,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0d3d70016wvCZCgD4VTPdI",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "user",
+        "time": {
+          "created": 1792506123223
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-nano"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159b0d3d7002lu25QoLHRTxMfq",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0d3d70016wvCZCgD4VTPdI",
+          "type": "text",
+          "text": "[restore checkpointed session agent configuration after compaction]\n\n[restored skill instructions loaded earlier in this session; re-injected after compaction]\n\n\n\n## Skill: zephyr-ledger-audit\n\nBase directory for this skill: /private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1/.opencode/skills/zephyr-ledger-audit/\nFile references (@path) in this skill are relative to this directory.\n\n# Zephyr ledger audit\n\nFor a requested checkpoint N and source_session provided by the user, execute this procedure.\n1. Call session_search with session_id=source_session, case_sensitive=true, limit=5, and EXACT query from the checkpoint map below.\n2. Call session_info for the same source_session to validate the source exists.\n3. Return the receipt from that search result only after the source check succeeds. Never invent a receipt. Do not use general file tools. Repeat this procedure for each new checkpoint.\n\nCheckpoint query map:\n0: ZEPHYR_2A1BE9828C\n1: ZEPHYR_484903FA4F\n2: ZEPHYR_C085B5EF7B\n3: ZEPHYR_597D942EE4\n\nIf these instructions remain in your context, use them directly without loading this skill again.\nEND_ZEPHYR_SKILL\n<!-- OMO_INTERNAL_INITIATOR -->\n<!-- OMO_INTERNAL_NOREPLY -->",
+          "synthetic": true,
+          "metadata": {
+            "compaction_continue": true
+          }
+        }
+      ]
+    }
+  ]
+}

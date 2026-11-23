@@ -1,0 +1,77 @@
+{
+  "source": "Native OMO logger; filtered to exact evaluation subject and context-injector only",
+  "subject": "ses_ea462340affeJNOD5xDdBhfASs",
+  "records": [
+    {
+      "at": 1792538437965,
+      "message": "[compaction-context-injector] Captured agent checkpoint before compaction",
+      "data": {
+        "sessionID": "ses_ea462340affeJNOD5xDdBhfASs",
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "hasTools": true,
+        "skillCount": 1
+      }
+    },
+    {
+      "at": 1792538442330,
+      "message": "[compaction-context-injector] Re-injected checkpointed agent config",
+      "data": {
+        "sessionID": "ses_ea462340affeJNOD5xDdBhfASs",
+        "reason": "session.compacted",
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        }
+      }
+    },
+    {
+      "at": 1792538446181,
+      "message": "[compaction-context-injector] Captured agent checkpoint before compaction",
+      "data": {
+        "sessionID": "ses_ea462340affeJNOD5xDdBhfASs",
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "hasTools": true,
+        "skillCount": 1
+      }
+    },
+    {
+      "at": 1792538529887,
+      "message": "[compaction-context-injector] Captured agent checkpoint before compaction",
+      "data": {
+        "sessionID": "ses_ea462340affeJNOD5xDdBhfASs",
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        },
+        "hasTools": true,
+        "skillCount": 1
+      }
+    },
+    {
+      "at": 1792538535932,
+      "message": "[compaction-context-injector] Re-injected checkpointed agent config",
+      "data": {
+        "sessionID": "ses_ea462340affeJNOD5xDdBhfASs",
+        "reason": "session.compacted",
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "minimax/minimax-m3.1-flash:free"
+        }
+      }
+    }
+  ],
+  "captures": 3,
+  "successfulRestorations": 2,
+  "cooldownChronologyVerified": true
+}

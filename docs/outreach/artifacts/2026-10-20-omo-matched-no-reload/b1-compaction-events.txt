@@ -1,0 +1,8 @@
+data: {"id":"evt_159c4713c001CuVaSS9Rpt0Bkl","type":"server.connected","properties":{}}
+
+data: {"id":"evt_159c4af3a001YmnPYRzCvUDoOO","type":"session.compacted","properties":{"sessionID":"ses_ea63b8b05ffebqrNEZjM8vsHbe"}}
+
+data: {"id":"evt_159c4d159001EUapH7DMkyIzb5","type":"session.compacted","properties":{"sessionID":"ses_ea63b8b05ffebqrNEZjM8vsHbe"}}
+
+data: {"id":"evt_159c61f65001FKBW9HkvXz3v6N","type":"session.compacted","properties":{"sessionID":"ses_ea63b8b05ffebqrNEZjM8vsHbe"}}
+

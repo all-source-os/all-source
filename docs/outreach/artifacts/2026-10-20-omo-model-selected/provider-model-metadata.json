@@ -1,0 +1,23 @@
+{
+  "source": "https://openrouter.ai/api/v1/models",
+  "at": "2026-10-20T14:26:33.098Z",
+  "model": {
+    "id": "minimax/minimax-m3.1-flash:free",
+    "context": 1000000,
+    "parameters": [
+      "include_reasoning",
+      "max_tokens",
+      "reasoning",
+      "reasoning_effort",
+      "response_format",
+      "temperature",
+      "tool_choice",
+      "tools",
+      "top_p"
+    ],
+    "pricing": {
+      "prompt": "0",
+      "completion": "0"
+    }
+  }
+}

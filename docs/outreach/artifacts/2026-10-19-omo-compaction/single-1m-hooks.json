@@ -1,0 +1,24 @@
+[
+  {
+    "kind": "skill-loaded",
+    "name": "qa-0",
+    "bodyBytes": 1048576,
+    "resultBytes": 1048658
+  },
+  {
+    "at": 1792412197528,
+    "kind": "capture",
+    "round": 1,
+    "contextBytes": 2578
+  },
+  {
+    "at": 1792412199375,
+    "event": {
+      "id": "evt_15417a8f4001xm5O82n4FEQC87",
+      "type": "session.compacted",
+      "properties": {
+        "sessionID": "ses_eabe85edcffeZct86CTT3bpJoc"
+      }
+    }
+  }
+]

@@ -1,0 +1,1189 @@
+{
+  "arms": [
+    {
+      "slot": "c1a",
+      "pair": "c1",
+      "skillText": "on",
+      "stages": [
+        {
+          "stage": 0,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "I'll load the zephyr-ledger-audit skill.\n**Verified receipt — Zephyr ledger audit, checkpoint 0**\n\n- Skill: `zephyr-ledger-audit` (checkpoint 0)\n- Query: `ZEPHYR_91C9E0CBF5` (case-sensitive)\n- Source session: `ses_ea4563981ffem4DFrlX05YPtW4` — 1 message, 2026-10-20T23:33:35.581Z, agent `build`, transcript present (1 entry)\n- Search result: 1 match — `msg_15ba9c6dd0012x5hDGL0BMKnuF` (user)\n\n**Receipt:** `receipt-0-6c353a3a49` — Synthetic ledger record.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "completed",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4563981ffem4DFrlX05YPtW4. Return the verified receipt."
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_91C9E0CBF5",
+                "session_id": "ses_ea4563981ffem4DFrlX05YPtW4",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4563981ffem4DFrlX05YPtW4"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 1,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "**Verified receipt (checkpoint 1):** `receipt-1-cdb4ae4c8e`\n\n- Query: `ZEPHYR_95A56FD1F9` (case-sensitive, limit 5) in `ses_ea4563707ffeJGdpzsj9UxfDzC` → 1 match: `msg_15ba9c90b001rSwVusnQ8Dysns` (user, 2026-10-20T23:33:36.139Z)\n- Session info: 1 message, 1 transcript entry, agent `build`",
+          "calls": [
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_95A56FD1F9",
+                "session_id": "ses_ea4563707ffeJGdpzsj9UxfDzC",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4563707ffeJGdpzsj9UxfDzC"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "Maximum steps for this agent have been reached, so the audit could not be completed.\n\n**What was accomplished**\n- Attempted to load the `zephyr-ledger-audit` skill; reload was blocked by policy (\"skill reload is blocked after the initial successful load\"), so I relied on the procedure already in context.\n- Retrieved `session_info` for the requested source session `ses_ea45636dbffeTnbeOejNdWuheo`: 1 message, 1 transcript entry, agent `build`, dated 2026-10-20T23:33:36Z.\n- Attempted the required opaque checkpoint-query `session_search` (limit=5) on that session only. Every attempt was rejected by QA policy: \"inspect only the requested source with an opaque checkpoint query; broad searches are blocked.\"\n\n**What remains**\n- The exact case-sensitive checkpoint query string for checkpoint 2 was never obtained, so the mandatory `session_search` (limit=5) could not be executed.\n- Consequently no verified receipt (checkpoint-0/1-style `receipt-2-...`) could be produced. I will not fabricate a query identifier or a receipt.\n\n**Recommended next step**\n- Supply the checkpoint 2 opaque query token (the `ZEPHYR_<HASH>`-style identifier used for checkpoints 0 and 1) directly, or provide the skill file contents/loaded skill text so the per-checkpoint query list is in context. With that token I can run the single permitted `session_search` on `ses_ea45636dbffeTnbeOejNdWuheo` and return the verified receipt.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "checkpoint 2, source_session=ses_ea45636dbffeTnbeOejNdWuheo"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ses_ea45636dbffeTnbeOejNdWuheo",
+                "limit": 5
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea45636dbffeTnbeOejNdWuheo"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR",
+                "session_id": "ses_ea45636dbffeTnbeOejNdWuheo",
+                "limit": 5
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "limit": 5,
+                "query": "checkpoint 2",
+                "session_id": "ses_ea45636dbffeTnbeOejNdWuheo"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            }
+          ]
+        },
+        {
+          "stage": 3,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "Verified receipt: `receipt-3-05692bbc80`\n\n- Query: `ZEPHYR_9860DBBA77` (checkpoint 3), case-sensitive, `limit=5`, session `ses_ea4563664ffebpurUwOGp3xdHt` → 1 match (`msg_15ba9c9ad001NrzRqAca45JaTl`)\n- Session info: 1 message, 1 transcript entry, agent `build`, 2026-10-20T23:33:36.301Z",
+          "calls": [
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_9860DBBA77",
+                "session_id": "ses_ea4563664ffebpurUwOGp3xdHt",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4563664ffebpurUwOGp3xdHt"
+              }
+            }
+          ]
+        }
+      ],
+      "compactions": [
+        {
+          "round": 1,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 1,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run the Zephyr ledger audit at checkpoint 0 for `source_session=ses_ea4563981ffem4DFrlX05YPtW4` and return the verified receipt.\n\n## Important Details\n- Selected skill: `zephyr-ledger-audit`.\n- Checkpoint 0 exact case-sensitive query: `ZEPHYR_91C9E0CBF5`.\n- Skill requires `session_search` with `session_id=ses_ea4563981ffem4DFrlX05YPtW4`, `case_sensitive=true`, and `limit=5`, followed by `session_info`.\n- Skill base directory: `/private/tmp/allsource-omo-compaction/provider/runs/c1a/.opencode/skills/zephyr-ledger-audit/`.\n\n## Work State\n### Completed\n- Loaded the `zephyr-ledger-audit` skill.\n- Executed the exact checkpoint 0 search; found 1 matching result: `msg_15ba9c6dd0012x5hDGL0BMKnuF` from user `ses_ea4563981ffem4DFrlX05YPtW4`.\n- Retrieved session info: 1 message, date range `2026-10-20T23:33:35.581Z` to `2026-10-20T23:33:35.581Z`, agent `build`, transcript present with 1 entry.\n- Verified receipt returned: `receipt-0-6c353a3a49` — Synthetic ledger record.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c1a/.opencode/skills/zephyr-ledger-audit/`: skill instructions used for the audit."
+        },
+        {
+          "round": 2,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 1,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audits for checkpoints 0 and 1 and return the verified receipts.\n\n## Important Details\n- Checkpoint 0: query `ZEPHYR_91C9E0CBF5`, `source_session=ses_ea4563981ffem4DFrlX05YPtW4`.\n- Checkpoint 1: query `ZEPHYR_95A56FD1F9`, `source_session=ses_ea4563707ffeJGdpzsj9UxfDzC`.\n- Each audit requires an exact case-sensitive `session_search` with `limit=5`, followed by `session_info`.\n- Never guess queries or invent receipts.\n\n## Work State\n### Completed\n- Checkpoint 0: found 1 match (`msg_15ba9c6dd0012x5hDGL0BMKnuF`); verified receipt `receipt-0-6c353a3a49`.\n- Checkpoint 0 session info: 1 message, 1 transcript entry, agent `build`.\n- Checkpoint 1: found 1 match (`msg_15ba9c90b001rSwVusnQ8Dysns`); verified receipt `receipt-1-cdb4ae4c8e`.\n- Checkpoint 1 session info: 1 message, 1 transcript entry, agent `build`.\n- Returned the checkpoint 1 verified receipt.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c1a/.opencode/skills/zephyr-ledger-audit/`: skill instructions used for both audits."
+        },
+        {
+          "round": 3,
+          "rawSnapshotConfigRecoveries": 2,
+          "configRecoveries": 2,
+          "skillRecoveries": 2,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audit checkpoint 2 for `source_session=ses_ea45636dbffeTnbeOejNdWuheo` and return the verified receipt.\n\n## Important Details\n- Checkpoint 0 used query `ZEPHYR_91C9E0CBF5` with `source_session=ses_ea4563981ffem4DFrlX05YPtW4`; receipt `receipt-0-6c353a3a49`.\n- Checkpoint 1 used query `ZEPHYR_95A56FD1F9` with `source_session=ses_ea4563707ffeJGdpzsj9UxfDzC`; receipt `receipt-1-cdb4ae4c8e`.\n- Each audit requires an exact case-sensitive `session_search` with `limit=5`, followed by `session_info`.\n- Never guess queries or invent receipts.\n- The checkpoint 2 opaque query token has not been obtained.\n\n## Work State\n### Completed\n- Checkpoint 0: found 1 match (`msg_15ba9c6dd0012x5hDGL0BMKnuF`); verified receipt `receipt-0-6c353a3a49`.\n- Checkpoint 1: found 1 match (`msg_15ba9c90b001rSwVusnQ8Dysns`); verified receipt `receipt-1-cdb4ae4c8e`.\n- Checkpoint 0 and 1 session info: 1 message, 1 transcript entry, agent `build`.\n- Retrieved checkpoint 2 source session info for `ses_ea45636dbffeTnbeOejNdWuheo`: 1 message, 1 transcript entry, agent `build`, dated `2026-10-20T23:33:36.167Z`.\n- Attempted to load the `zephyr-ledger-audit` skill; reload was blocked with: `QA policy: skill reload is blocked after the initial successful load.`\n\n### Active\n- (none)\n\n### Blocked\n- Required checkpoint 2 `session_search` could not run because the exact opaque query token is unknown.\n- QA policy rejected broad searches with: `inspect only the requested source with an opaque checkpoint query; broad searches are blocked.`\n- No checkpoint 2 verified receipt was produced; fabricating a query identifier or receipt is prohibited.\n\n## Next Move\n1. Obtain the checkpoint 2 opaque query token (`ZEPHYR_<HASH>`-style identifier) or the relevant loaded skill text.\n2. Run `session_search` with that exact case-sensitive token, `session_id=ses_ea45636dbffeTnbeOejNdWuheo`, and `limit=5`; then run `session_info` and return the verified receipt.\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c1a/.opencode/skills/zephyr-ledger-audit/`: skill instructions containing the required audit procedure and checkpoint query mapping."
+        }
+      ],
+      "readiness": [
+        {
+          "stage": 0,
+          "state": "initial-ready",
+          "elapsedMs": 21,
+          "polls": 1,
+          "releasedAt": 1792539216381,
+          "taskCreatedAt": 1792539216390,
+          "leadMs": 9,
+          "storedRecoveryCount": 0
+        },
+        {
+          "stage": 1,
+          "state": "accepted-and-stored",
+          "elapsedMs": 519,
+          "polls": 4,
+          "releasedAt": 1792539229250,
+          "taskCreatedAt": 1792539229284,
+          "leadMs": 34,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539229169,
+          "acceptedAt": 1792539229121
+        },
+        {
+          "stage": 2,
+          "state": "settled-cooldown-suppressed",
+          "elapsedMs": 50,
+          "polls": 1,
+          "releasedAt": 1792539239109,
+          "taskCreatedAt": 1792539239148,
+          "leadMs": 39,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539239054,
+          "acceptedAt": 1792539229121
+        },
+        {
+          "stage": 3,
+          "state": "accepted-and-stored",
+          "elapsedMs": 228,
+          "polls": 3,
+          "releasedAt": 1792539317707,
+          "taskCreatedAt": 1792539317717,
+          "leadMs": 10,
+          "storedRecoveryCount": 2,
+          "eventExitAt": 1792539317667,
+          "acceptedAt": 1792539317665
+        }
+      ],
+      "blockedReloads": 1,
+      "dispatches": [
+        {
+          "at": 1792539229040,
+          "changed": 0,
+          "status": 204
+        },
+        {
+          "at": 1792539317657,
+          "changed": 0,
+          "status": 204
+        }
+      ],
+      "gap12": 10322,
+      "gap13": 88756,
+      "summaryInjectionSha256": "e96ccb7666e4ea77dd708545774377cf7a8cb64be0212345eaadbb9095de50a3",
+      "postPasses": 2
+    },
+    {
+      "slot": "c1b",
+      "pair": "c1",
+      "skillText": "off",
+      "stages": [
+        {
+          "stage": 0,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "I'll load the ledger audit skill.\n**Verified receipt — checkpoint 0**\n\n- Skill: `zephyr-ledger-audit` (base dir: `.opencode/skills/zephyr-ledger-audit`)\n- Checkpoint: 0 → query `ZEPHYR_91C9E0CBF5`\n- Source session: `ses_ea4542cbdffezaWPnkba8rWi9B` — 1 message, 2026-10-20T23:35:49.877Z, agent `build`, transcript: 1 entry\n- Search: 1 match (case-sensitive, limit 5) in `msg_15babd374001AuTZXDSybNsC2y` (user)\n- **Receipt: `receipt-0-6c353a3a49`** — \"ZEPHYR_91C9E0CBF5 receipt-0-6c353a3a49. Synthetic ledger record.\"",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "completed",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "checkpoint 0, source_session=ses_ea4542cbdffezaWPnkba8rWi9B"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_91C9E0CBF5",
+                "session_id": "ses_ea4542cbdffezaWPnkba8rWi9B",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4542cbdffezaWPnkba8rWi9B"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 1,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "Maximum steps for this agent have been reached. No further tool calls are possible.\n\n**What was accomplished**\n- The `zephyr-ledger-audit` skill was already loaded in a prior context; a reload attempt was blocked by policy (\"skill reload is blocked after the initial successful load\"), and per instructions I proceeded using already-loaded context rather than reloading.\n- Retrieved metadata for the requested source session `ses_ea4542ae8ffenhJU9D9k6c9jKq` via `session_info`: 1 message, date range `2026-10-20T23:35:50.300Z`, agent `build`, transcript present with 1 entry, no todos.\n- Attempted the required opaque checkpoint-1 search against that source session only (case-sensitive, limit 5). Every search attempt was rejected by QA policy, which permits only inspection of the requested source with an opaque checkpoint query.\n\n**What was not completed**\n- The actual checkpoint-1 message search and the matching ledger record.\n- The verified receipt for checkpoint 1 was **not** obtained. No receipt can be issued without that evidence; I will not fabricate one.\n\n**Recommended next steps**\n- Supply the opaque checkpoint-1 query string (e.g. the `ZEPHYR_*` token mapped to checkpoint 1 in the skill's checkpoint map) so the search can be issued against `ses_ea4542ae8ffenhJU9D9k6c9jKq` with `case_sensitive=true`, `limit=5`.\n- Alternatively, restore the skill's checkpoint query map into context (the SKILL.md file at `.opencode/skills/zephyr-ledger-audit/SKILL.md`) so the checkpoint-1 token can be resolved without a skill reload.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "checkpoint 1, source_session=ses_ea4542ae8ffenhJU9D9k6c9jKq"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR_",
+                "limit": 20
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4542ae8ffenhJU9D9k6c9jKq"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "checkpoint",
+                "session_id": "ses_ea4542ae8ffenhJU9D9k6c9jKq"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR_",
+                "session_id": "ses_ea4542ae8ffenhJU9D9k6c9jKq",
+                "limit": 5,
+                "case_sensitive": true
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "**Maximum steps for this agent have been reached — tools are disabled. No verified receipt could be issued for checkpoint 2.**\n\n## What was accomplished\n- Loaded the `zephyr-ledger-audit` skill selection (but a reload attempt was refused: \"QA policy: skill reload is blocked after the initial successful load.\"), so the checkpoint-query map remains unavailable in context.\n- Retrieved metadata for the requested source session `ses_ea4542ac4ffeqC6XfFCd6R1pJJ`: 1 message, date range `2026-10-20T23:35:50.337Z`, agent `build`, transcript present (1 entry), no todos.\n- Tested the only opaque checkpoint token available in context (`ZEPHYR_91C9E0CBF5`, the checkpoint-0 token) against the target session: **no matches**, confirming the checkpoint-2 query token is a distinct value.\n- Attempted a session-scoped search for `ZEPHYR`, which was refused: \"QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked.\"\n\n## Remaining tasks\n- Resolve the opaque checkpoint-2 query token from the skill's checkpoint map (`.opencode/skills/zephyr-ledger-audit/SKILL.md`, loaded path `/private/tmp/allsource-omo-compaction/provider/runs/c1b/.opencode/skills/zephyr-ledger-audit`).\n- Search only `ses_ea4542ac4ffeqC6XfFCd6R1pJJ` with that token, `case_sensitive=true`, `limit=5`.\n- Confirm the unique matching ledger record and return its verified receipt.\n\n## Recommendation\n- Re-run this audit in a fresh session (or restore the skill's checkpoint-query map into context) so the checkpoint-2 opaque token is available, then execute the single scoped search and return the receipt. No receipt should be inferred or fabricated, since the checkpoint-2 ledger record has not been observed.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run checkpoint 2 for source_session=ses_ea4542ac4ffeqC6XfFCd6R1pJJ"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4542ac4ffeqC6XfFCd6R1pJJ"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR",
+                "session_id": "ses_ea4542ac4ffeqC6XfFCd6R1pJJ",
+                "case_sensitive": true,
+                "limit": 5
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "case_sensitive": true,
+                "limit": 5,
+                "query": "ZEPHYR_91C9E0CBF5",
+                "session_id": "ses_ea4542ac4ffeqC6XfFCd6R1pJJ"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 3,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "Maximum steps for this agent have been reached; no further tool calls are possible in this turn.\n\n**What was accomplished**\n- The `zephyr-ledger-audit` skill reload attempt for checkpoint 3 was rejected by QA policy (`skill reload is blocked after the initial successful load`), so the checkpoint query map — which holds the opaque checkpoint-1/2/3 tokens — could not be restored.\n- Retrieved verified metadata for the requested source session `ses_ea4542a60fferQoKVUfp88U2EN`: 1 message, date range `2026-10-20T23:35:50.443Z` → `2026-10-20T23:35:50.443Z`, agent `build`, transcript present (1 entry), no todos.\n- Attempted an opaque-token search in the requested source only; it was rejected (`inspect only the requested source with an opaque checkpoint query; broad searches are blocked`) because the actual checkpoint-3 token could not be obtained without the skill file contents.\n- A follow-up `session_info` on the earlier checkpoint-0 source was also blocked by the same policy, so no cross-session recovery of the token map was possible.\n\n**Remaining tasks**\n- Obtain the opaque checkpoint-3 query token from `.opencode/skills/zephyr-ledger-audit/SKILL.md` (checkpoint query map) into context.\n- Run `session_search` scoped to `ses_ea4542a60fferQoKVUfp88U2EN` with that token, `case_sensitive=true`, `limit=5`.\n- Verify the unique match and return the verified receipt for checkpoint 3.\n- Also still outstanding from earlier checkpoints: checkpoint 1 (`ses_ea4542ae8ffenhJU9D9k6c9jKq`) and checkpoint 2 (`ses_ea4542ac4ffeqC6XfFCd6R1pJJ`) receipts, whose tokens are likewise unknown.\n\n**Recommendation**\n- Resume with the skill's checkpoint query map available in context (e.g. open `/private/tmp/allsource-omo-compaction/provider/runs/c1b/.opencode/skills/zephyr-ledger-audit/SKILL.md` and read the checkpoint→token entries), then perform the single scoped opaque search per checkpoint. No receipt can be issued for checkpoint 3 without that token, and fabricating one is not permitted.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run Zephyr ledger audit checkpoint 3 for source_session=ses_ea4542a60fferQoKVUfp88U2EN"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4542a60fferQoKVUfp88U2EN"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR",
+                "session_id": "ses_ea4542a60fferQoKVUfp88U2EN",
+                "case_sensitive": true,
+                "limit": 5
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_info",
+              "status": "error",
+              "input": {
+                "session_id": "ses_ea4542cbdffezaWPnkba8rWi9B"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            }
+          ]
+        }
+      ],
+      "compactions": [
+        {
+          "round": 1,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 0,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Verify Zephyr ledger audit checkpoint 0 for `source_session=ses_ea4542cbdffezaWPnkba8rWi9B`.\n- Return the verified receipt.\n\n## Important Details\n- Used skill: `zephyr-ledger-audit`.\n- Checkpoint 0 query: `ZEPHYR_91C9E0CBF5`.\n- Search required: `case_sensitive=true`, `limit=5`, exact source session.\n- Verified receipt: `receipt-0-6c353a3a49`.\n\n## Work State\n### Completed\n- Loaded `/private/tmp/allsource-omo-compaction/provider/runs/c1b/.opencode/skills/zephyr-ledger-audit`.\n- Found one case-sensitive match in `ses_ea4542cbdffezaWPnkba8rWi9B`, message `msg_15babd374001AuTZXDSybNsC2y`.\n- Confirmed via `session_info`: 1 message, date `2026-10-20T23:35:49.877Z`, agent `build`, transcript with 1 entry.\n- Returned receipt: `receipt-0-6c353a3a49` — `ZEPHYR_91C9E0CBF5 receipt-0-6c353a3a49. Synthetic ledger record.`\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c1b/.opencode/skills/zephyr-ledger-audit`: skill definition and checkpoint query map."
+        },
+        {
+          "round": 2,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 0,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Verify Zephyr ledger audit checkpoint 1 for `source_session=ses_ea4542ae8ffenhJU9D9k6c9jKq`.\n- Return the verified receipt.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`.\n- Checkpoint 0 is complete; checkpoint 1 requires the opaque checkpoint-1 query from the skill’s checkpoint map.\n- Searches must target only the requested source session with an opaque query, `case_sensitive=true`, and `limit=5`.\n- Skill reload error: `QA policy: skill reload is blocked after the initial successful load.`\n- Broad-search error: `QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked.`\n- No checkpoint-1 receipt was issued; fabricating one is prohibited.\n\n## Work State\n### Completed\n- Checkpoint 0 query `ZEPHYR_91C9E0CBF5` was verified in `ses_ea4542cbdffezaWPnkba8rWi9B`.\n- Checkpoint 0 receipt: `receipt-0-6c353a3a49`.\n- Retrieved checkpoint-1 source metadata via `session_info`: session `ses_ea4542ae8ffenhJU9D9k6c9jKq`, 1 message, date range `2026-10-20T23:35:50.300Z`, agent `build`, transcript present with 1 entry, no todos.\n\n### Active\n- Determining the opaque checkpoint-1 query token and matching ledger record.\n\n### Blocked\n- The checkpoint-1 opaque query token is unavailable in current context.\n- Reloading `zephyr-ledger-audit` is blocked by QA policy.\n- Searches using broad, guessed, or non-opaque queries are blocked by QA policy.\n\n## Next Move\n1. Restore the checkpoint-query map from `.opencode/skills/zephyr-ledger-audit/SKILL.md` into context, or obtain the opaque checkpoint-1 query token from the user.\n2. Search only `ses_ea4542ae8ffenhJU9D9k6c9jKq` with that token, `case_sensitive=true`, and `limit=5`; verify the unique match and return its receipt.\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c1b/.opencode/skills/zephyr-ledger-audit`: loaded skill definition and checkpoint query map.\n- `.opencode/skills/zephyr-ledger-audit/SKILL.md`: contains the checkpoint-query map needed to resolve checkpoint 1."
+        },
+        {
+          "round": 3,
+          "rawSnapshotConfigRecoveries": 2,
+          "configRecoveries": 2,
+          "skillRecoveries": 0,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audit checkpoint 2 for `source_session=ses_ea4542ac4ffeqC6XfFCd6R1pJJ`.\n- Return the verified receipt; earlier checkpoint-1 audit for `ses_ea4542ae8ffenhJU9D9k6c9jKq` also remains unresolved.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`.\n- Searches must inspect only the requested source session using an opaque checkpoint query, with `case_sensitive=true` and `limit=5`.\n- Checkpoint 0 is complete; checkpoints 1 and 2 require distinct opaque tokens from the skill’s checkpoint map.\n- Skill reload error: `QA policy: skill reload is blocked after the initial successful load.`\n- Broad-search error: `QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked.`\n- No checkpoint-1 or checkpoint-2 receipt was issued; fabricating one is prohibited.\n\n## Work State\n### Completed\n- Checkpoint 0 query `ZEPHYR_91C9E0CBF5` was verified in `ses_ea4542cbdffezaWPnkba8rWi9B`.\n- Checkpoint 0 receipt: `receipt-0-6c353a3a49`.\n- Checkpoint-1 metadata retrieved for `ses_ea4542ae8ffenhJU9D9k6c9jKq`: 1 message, date range `2026-10-20T23:35:50.300Z`, agent `build`, transcript present with 1 entry, no todos.\n- Checkpoint-2 metadata retrieved for `ses_ea4542ac4ffeqC6XfFCd6R1pJJ`: 1 message, date range `2026-10-20T23:35:50.337Z`, agent `build`, transcript present with 1 entry, no todos.\n- Checkpoint-0 token `ZEPHYR_91C9E0CBF5` was searched in the checkpoint-2 source and returned no matches, confirming the checkpoint-2 token is distinct.\n\n### Active\n- Resolving the opaque checkpoint-2 query token and matching ledger record.\n- Checkpoint-1 opaque query token remains unresolved.\n\n### Blocked\n- The checkpoint-1 and checkpoint-2 opaque query tokens are unavailable in current context.\n- Reloading `zephyr-ledger-audit` is blocked by QA policy.\n- Broad, guessed, or non-opaque searches are blocked by QA policy.\n- Agent reached maximum steps during the checkpoint-2 attempt, so no verified receipt could be issued.\n\n## Next Move\n1. Restore the checkpoint-query map from `.opencode/skills/zephyr-ledger-audit/SKILL.md` into context or obtain the opaque checkpoint-2 token.\n2. Search only `ses_ea4542ac4ffeqC6XfFCd6R1pJJ` with that token, `case_sensitive=true`, and `limit=5`; verify the unique match and return its receipt.\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c1b/.opencode/skills/zephyr-ledger-audit`: loaded skill definition and checkpoint query map.\n- `.opencode/skills/zephyr-ledger-audit/SKILL.md`: contains checkpoint-1 and checkpoint-2 opaque query tokens."
+        }
+      ],
+      "readiness": [
+        {
+          "stage": 0,
+          "state": "initial-ready",
+          "elapsedMs": 12,
+          "polls": 1,
+          "releasedAt": 1792539350480,
+          "taskCreatedAt": 1792539350484,
+          "leadMs": 4,
+          "storedRecoveryCount": 0
+        },
+        {
+          "stage": 1,
+          "state": "accepted-and-stored",
+          "elapsedMs": 229,
+          "polls": 3,
+          "releasedAt": 1792539360803,
+          "taskCreatedAt": 1792539360808,
+          "leadMs": 5,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539360772,
+          "acceptedAt": 1792539360769
+        },
+        {
+          "stage": 2,
+          "state": "settled-cooldown-suppressed",
+          "elapsedMs": 8,
+          "polls": 1,
+          "releasedAt": 1792539379023,
+          "taskCreatedAt": 1792539379034,
+          "leadMs": 11,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539379016,
+          "acceptedAt": 1792539360769
+        },
+        {
+          "stage": 3,
+          "state": "accepted-and-stored",
+          "elapsedMs": 241,
+          "polls": 3,
+          "releasedAt": 1792539462718,
+          "taskCreatedAt": 1792539462724,
+          "leadMs": 6,
+          "storedRecoveryCount": 2,
+          "eventExitAt": 1792539462680,
+          "acceptedAt": 1792539462669
+        }
+      ],
+      "blockedReloads": 3,
+      "dispatches": [
+        {
+          "at": 1792539360761,
+          "changed": 1,
+          "status": 204
+        },
+        {
+          "at": 1792539462662,
+          "changed": 1,
+          "status": 204
+        }
+      ],
+      "gap12": 18440,
+      "gap13": 101902,
+      "summaryInjectionSha256": "e96ccb7666e4ea77dd708545774377cf7a8cb64be0212345eaadbb9095de50a3",
+      "postPasses": 0
+    },
+    {
+      "slot": "c2a",
+      "pair": "c2",
+      "skillText": "off",
+      "stages": [
+        {
+          "stage": 0,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "I'll load the ledger audit skill.\n**Verified receipt — Zephyr ledger audit, checkpoint 0**\n\n- Skill: `zephyr-ledger-audit`\n- Source session: `ses_ea4509165ffeVbNExHRDygUrYt` (1 message, 2026-10-20T23:39:46.251Z, agent `build`, transcript present, no todos)\n- Checkpoint query (exact, case-sensitive): `ZEPHYR_6062E44A71` → 1 match\n- Matching result: `msg_15baf6ecb001lm2zqMeFhwVkkJ` (user), 2026-10-20T23:39:46.251Z\n- Receipt text: `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n\nCheckpoint 0 verified.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "completed",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4509165ffeVbNExHRDygUrYt"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A71",
+                "session_id": "ses_ea4509165ffeVbNExHRDygUrYt",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4509165ffeVbNExHRDygUrYt"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 1,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "## Status: Maximum steps reached\n\n**Objective**\nRun Zephyr ledger audit checkpoint 1 for `source_session=ses_ea4508ff1ffe1CfgiuNnbzka15` and return the verified receipt.\n\n**What was accomplished**\n- Attempted to load the `zephyr-ledger-audit` skill for the checkpoint-1 procedure — blocked by QA policy (skill reload blocked after the initial successful load, from the earlier checkpoint 0).\n- Attempted a broad `session_search` for `ZEPHYR` to discover the checkpoint query — blocked by QA policy (only the requested source with an opaque checkpoint query may be inspected).\n- Successfully ran `session_info` for `ses_ea4508ff1ffe1CfgiuNnbzka15`: 1 message, 2026-10-20T23:39:46.580Z, agent `build`, transcript present (1 entry), no todos.\n- Ran a scoped `session_search` for the known checkpoint-0 token `ZEPHYR_6062E44A71` within the target session — no matches (expected; checkpoint 1 uses a different opaque query token).\n\n**Remaining tasks (not completed)**\n- Obtain the exact opaque checkpoint-1 query token (it is not in my current context; the skill file could not be re-read).\n- Execute `session_search` with that token scoped to `ses_ea4508ff1ffe1CfgiuNnbzka15`.\n- Match the resulting message ID and return the verified checkpoint-1 receipt in the required format.\n\n**Recommendation / next step**\n- Re-run this checkpoint with the skill procedure available (allow the `zephyr-ledger-audit` skill to be loaded, or provide the checkpoint-1 opaque query token directly). Then perform the single scoped search and emit the receipt, e.g. `ZEPHYR_<TOKEN> receipt-1-<hash> ...` matching the checkpoint-0 format `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n\n**Verified receipt: not obtained.** The step budget was exhausted before the checkpoint-1 query could be issued, so no receipt can be attested for checkpoint 1.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "checkpoint 1, source_session=ses_ea4508ff1ffe1CfgiuNnbzka15"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR",
+                "limit": 20
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4508ff1ffe1CfgiuNnbzka15"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A71",
+                "session_id": "ses_ea4508ff1ffe1CfgiuNnbzka15"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "Maximum steps for this agent have been reached — tools are disabled, so the audit could not be completed.\n\n## Accomplished\n- Loaded the `zephyr-ledger-audit` skill attempt — blocked by QA policy (\"skill reload is blocked after the initial successful load\"), so the procedure text was never re-read.\n- Retrieved session metadata for the checkpoint-2 target `ses_ea4508fcaffeoHMd3W353uDrWh`: 1 message, transcript present (1 entry), no todos, agent `build`, timestamp `2026-10-20T23:39:46.629Z`.\n- Attempted a scoped search for `ZEPHYR` within the target session — rejected by QA policy (\"broad searches are blocked\").\n- Attempted a scoped search with the inferred token `ZEPHYR_6062E44A72` — returned \"No matches found\" (no error, so the token was accepted as well-formed but does not appear in this session's content).\n\n## Not completed\n- No verified checkpoint-2 receipt was obtained.\n- The exact opaque checkpoint-2 query token remains unknown; checkpoint-0 used `ZEPHYR_6062E44A71`, and the guessed suffix pattern for checkpoint 2 did not match.\n- No checkpoint-2 message/receipt identification was performed.\n\n## Recommendations\n1. Restore access to the `zephyr-ledger-audit` skill instructions (the initial load's policy blocks reload), or provide the checkpoint-2 opaque query token directly.\n2. Run `session_search` with that exact token scoped to `ses_ea4508fcaffeoHMd3W353uDrWh`; do not substitute broader terms like `ZEPHYR`, which are rejected.\n3. Report the receipt verbatim from the matching message, as was done for checkpoint 0 (`ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`).",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4508fcaffeoHMd3W353uDrWh"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR",
+                "session_id": "ses_ea4508fcaffeoHMd3W353uDrWh"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A72",
+                "session_id": "ses_ea4508fcaffeoHMd3W353uDrWh"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 3,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "## Status: Maximum steps reached — no checkpoint-3 receipt obtained\n\n### What was accomplished\n- Loaded the `zephyr-ledger-audit` skill intent, but the skill tool refused: `QA policy: skill reload is blocked after the initial successful load.` The skill procedure (which defines the exact opaque query-token derivation) was therefore not obtainable in this run.\n- Retrieved metadata for the requested source session `ses_ea4508f9affeMqdnAr2shf2xOm`: 1 message, 1 transcript entry, no todos, agent `build`, timestamp `2026-10-20T23:39:46.680Z`.\n- Ran scoped `session_search` calls against that source session only, using candidate opaque checkpoint tokens: `ZEPHYR_6062E44A73`, `ZEPHYR_6062E44A72`, `ZEPHYR_6062E44A74`, `ZEPHYR_6062E44A75`, `ZEPHYR_6062E44A70` — all returned **No matches found**.\n- A broad search for `ZEPHYR_6062E44A71` and a partial `ZEPHYR` search were rejected by policy (`inspect only the requested source with an opaque checkpoint query; broad searches are blocked`), confirming only full-length opaque tokens scoped to the target session are permitted.\n\n### Remaining tasks\n- Obtain the exact opaque checkpoint-3 query token and run a scoped `session_search` against `ses_ea4508f9affeMqdnAr2shf2xOm` to retrieve the verified receipt.\n- Checkpoint-1 (`ses_ea4508ff1ffe1CfgiuNnbzka15`) and checkpoint-2 (`ses_ea4508fcaffeoHMd3W353uDrWh`) receipts also remain outstanding from earlier checkpoints.\n- Only checkpoint 0 (`ses_ea4509165ffeVbNExHRDygUrYt`) is verified, via receipt `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n\n### Recommended next steps\n1. Re-enable the `zephyr-ledger-audit` skill load (or open `/private/tmp/allsource-omo-compaction/provider/runs/c2a/.opencode/skills/zephyr-ledger-audit/SKILL.md` directly) to recover the token-derivation rule and the per-checkpoint token table.\n2. With the derived token, run `session_search(query=<exact token>, session_id=ses_ea4508f9affeMqdnAr2shf2xOm)` and record the matching message plus its receipt line verbatim.\n3. Repeat for checkpoints 1 and 2 with their own derived tokens, in scoped order, and report each receipt exactly as returned.",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea4508f9affeMqdnAr2shf2xOm. Return the verified receipt."
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea4508f9affeMqdnAr2shf2xOm"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR_6062E44A71"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR",
+                "session_id": "ses_ea4509165ffeVbNExHRDygUrYt"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A73",
+                "session_id": "ses_ea4508f9affeMqdnAr2shf2xOm"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A72",
+                "session_id": "ses_ea4508f9affeMqdnAr2shf2xOm"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A74",
+                "session_id": "ses_ea4508f9affeMqdnAr2shf2xOm"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A75",
+                "session_id": "ses_ea4508f9affeMqdnAr2shf2xOm"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A70",
+                "session_id": "ses_ea4508f9affeMqdnAr2shf2xOm"
+              }
+            }
+          ]
+        }
+      ],
+      "compactions": [
+        {
+          "round": 1,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 0,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audit checkpoint 0 for `source_session=ses_ea4509165ffeVbNExHRDygUrYt` and return the verified receipt.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`\n- Exact case-sensitive checkpoint query: `ZEPHYR_6062E44A71`\n- Verified receipt: `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n- Matching message: `msg_15baf6ecb001lm2zqMeFhwVkkJ`\n- Session info: 1 message, transcript present, no todos, agent `build`.\n\n## Work State\n### Completed\n- Loaded `zephyr-ledger-audit`.\n- Ran `session_search` with the exact checkpoint query and requested session.\n- Ran `session_info` for `ses_ea4509165ffeVbNExHRDygUrYt`.\n- Confirmed 1 matching search result and returned the verified checkpoint 0 receipt.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2a/.opencode/skills/zephyr-ledger-audit/`: Skill instructions used for the audit."
+        },
+        {
+          "round": 2,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 0,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audit checkpoint 1 for `source_session=ses_ea4508ff1ffe1CfgiuNnbzka15` and return the verified receipt.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`.\n- Exact checkpoint-0 query: `ZEPHYR_6062E44A71`.\n- Checkpoint-1 requires a different opaque checkpoint query token; it is currently unknown.\n- Searches must be scoped to the requested source session with the opaque checkpoint query; broad searches are prohibited.\n- Target session: 1 message, transcript present (1 entry), no todos, agent `build`, date range `2026-10-20T23:39:46.580Z` to `2026-10-20T23:39:46.580Z`.\n\n## Work State\n### Completed\n- Previously completed checkpoint 0 for `source_session=ses_ea4509165ffeVbNExHRDygUrYt`.\n- Verified checkpoint-0 message: `msg_15baf6ecb001lm2zqMeFhwVkkJ`.\n- Verified checkpoint-0 receipt: `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n- Ran `session_info` for checkpoint-1 source session `ses_ea4508ff1ffe1CfgiuNnbzka15`.\n- Scoped a checkpoint-1 search using `ZEPHYR_6062E44A71`; no matches were found, confirming the checkpoint-specific token differs.\n\n### Active\n- Obtaining the exact opaque checkpoint-1 query token.\n- Preparing to run one scoped `session_search` and identify the matching message/receipt.\n\n### Blocked\n- Skill reload failed with: `QA policy: skill reload is blocked after the initial successful load.`\n- Broad search failed with: `QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked.`\n- Verified checkpoint-1 receipt has not been obtained.\n\n## Next Move\n1. Make the `zephyr-ledger-audit` skill procedure available or obtain the exact opaque checkpoint-1 query token directly.\n2. Run `session_search` with that token scoped to `ses_ea4508ff1ffe1CfgiuNnbzka15`, then return the matching verified receipt.\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2a/.opencode/skills/zephyr-ledger-audit/`: Skill instructions required for the audit procedure."
+        },
+        {
+          "round": 3,
+          "rawSnapshotConfigRecoveries": 2,
+          "configRecoveries": 2,
+          "skillRecoveries": 0,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audit checkpoint 2 for `source_session=ses_ea4508fcaffeoHMd3W353uDrWh` and return the verified receipt.\n- Earlier checkpoint-1 request for `ses_ea4508ff1ffe1CfgiuNnbzka15` remains unresolved.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`.\n- Exact checkpoint-0 query: `ZEPHYR_6062E44A71`.\n- Checkpoint-specific opaque query tokens for checkpoints 1 and 2 are still unknown.\n- Searches must use the exact opaque checkpoint query scoped to the requested source session; broad searches are prohibited.\n- Checkpoint-2 target metadata: 1 message, transcript present (1 entry), no todos, agent `build`, timestamp `2026-10-20T23:39:46.629Z`.\n- Checkpoint-1 target metadata: 1 message, transcript present (1 entry), no todos, agent `build`, timestamp `2026-10-20T23:39:46.580Z`.\n\n## Work State\n### Completed\n- Checkpoint 0 completed for `source_session=ses_ea4509165ffeVbNExHRDygUrYt`.\n- Verified checkpoint-0 message: `msg_15baf6ecb001lm2zqMeFhwVkkJ`.\n- Verified checkpoint-0 receipt: `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n- Checkpoint-1 scoped search with `ZEPHYR_6062E44A71` returned no matches, confirming its token differs.\n- Retrieved checkpoint-2 session metadata.\n- Checkpoint-2 scoped search with inferred token `ZEPHYR_6062E44A72` returned no matches.\n\n### Active\n- Obtaining the exact opaque checkpoint-2 query token, then running a scoped search and identifying the verified receipt.\n- Checkpoint-1 receipt remains outstanding.\n\n### Blocked\n- Skill reload failed with: `QA policy: skill reload is blocked after the initial successful load.`\n- Broad checkpoint-2 search failed with: `QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked.`\n- Exact opaque query tokens for checkpoints 1 and 2 are unknown.\n- No checkpoint-1 or checkpoint-2 receipt has been obtained.\n\n## Next Move\n1. Make the `zephyr-ledger-audit` skill procedure available or obtain the exact checkpoint-2 opaque query token directly.\n2. Run `session_search` with that exact token scoped to `ses_ea4508fcaffeoHMd3W353uDrWh`, then return the matching receipt verbatim.\n3. Separately obtain the checkpoint-1 token and complete the earlier checkpoint-1 request for `ses_ea4508ff1ffe1CfgiuNnbzka15`.\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2a/.opencode/skills/zephyr-ledger-audit/`: Skill instructions required for the audit procedure."
+        }
+      ],
+      "readiness": [
+        {
+          "stage": 0,
+          "state": "initial-ready",
+          "elapsedMs": 5,
+          "polls": 1,
+          "releasedAt": 1792539586714,
+          "taskCreatedAt": 1792539586730,
+          "leadMs": 16,
+          "storedRecoveryCount": 0
+        },
+        {
+          "stage": 1,
+          "state": "accepted-and-stored",
+          "elapsedMs": 232,
+          "polls": 3,
+          "releasedAt": 1792539596420,
+          "taskCreatedAt": 1792539596424,
+          "leadMs": 4,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539596386,
+          "acceptedAt": 1792539596382
+        },
+        {
+          "stage": 2,
+          "state": "settled-cooldown-suppressed",
+          "elapsedMs": 24,
+          "polls": 1,
+          "releasedAt": 1792539613287,
+          "taskCreatedAt": 1792539613313,
+          "leadMs": 26,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539613265,
+          "acceptedAt": 1792539596382
+        },
+        {
+          "stage": 3,
+          "state": "accepted-and-stored",
+          "elapsedMs": 253,
+          "polls": 3,
+          "releasedAt": 1792539689720,
+          "taskCreatedAt": 1792539689746,
+          "leadMs": 26,
+          "storedRecoveryCount": 2,
+          "eventExitAt": 1792539689681,
+          "acceptedAt": 1792539689677
+        }
+      ],
+      "blockedReloads": 3,
+      "dispatches": [
+        {
+          "at": 1792539596375,
+          "changed": 1,
+          "status": 204
+        },
+        {
+          "at": 1792539689666,
+          "changed": 1,
+          "status": 204
+        }
+      ],
+      "gap12": 17073,
+      "gap13": 93278,
+      "summaryInjectionSha256": "e96ccb7666e4ea77dd708545774377cf7a8cb64be0212345eaadbb9095de50a3",
+      "postPasses": 0
+    },
+    {
+      "slot": "c2b",
+      "pair": "c2",
+      "skillText": "on",
+      "stages": [
+        {
+          "stage": 0,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "**Verified receipt — Zephyr ledger audit, checkpoint 0**\n\n- Skill: `zephyr-ledger-audit`\n- Source session: `ses_ea44e4820ffetQndZLtSJSVk0a` (1 message, 2026-10-20T23:42:16.084Z, agent: build)\n- Checkpoint query: `ZEPHYR_6062E44A71` (case-sensitive, limit 5) → 1 match\n- Matching result: `msg_15bb1b814001LWmQdyKBIEII0n` (user)\n- Receipt: **`ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`**",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "completed",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run Zephyr ledger audit checkpoint 0. source_session=ses_ea44e4820ffetQndZLtSJSVk0a. Return the verified receipt."
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_6062E44A71",
+                "session_id": "ses_ea44e4820ffetQndZLtSJSVk0a",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea44e4820ffetQndZLtSJSVk0a"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 1,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "**ZEPHYR_9B45E9C8DD receipt-1-458cb9a149. Synthetic ledger record.**\n\n- Source session: `ses_ea44e4624fferRUA33nDNSi7T9` (1 message, 2026-10-20T23:42:16.542Z, agent `build`)\n- Match: `msg_15bb1b9de001z3KcbcGI69sRvd` (1 match)",
+          "calls": [
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_9B45E9C8DD",
+                "session_id": "ses_ea44e4624fferRUA33nDNSi7T9",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea44e4624fferRUA33nDNSi7T9"
+              }
+            }
+          ]
+        },
+        {
+          "stage": 2,
+          "passed": false,
+          "search": false,
+          "info": true,
+          "receipt": false,
+          "answer": "**Maximum steps for this agent have been reached.** Tool access is disabled; this is a text-only summary.\n\n## What was accomplished\n- The `zephyr-ledger-audit` skill was invoked for checkpoint 2 with `source_session=ses_ea44e460bffefHSd2sHn3ndVm6`. The reload was blocked by QA policy (skill was already loaded earlier in this session), and its instructions were reused from context: search the named source session only, with `case_sensitive=true`, `limit=5`, using the exact opaque checkpoint query.\n- `session_info` for `ses_ea44e460bffefHSd2sHn3ndVm6` succeeded: 1 message, dated `2026-10-20T23:42:16.568Z`, agent `build`, transcript available (1 entry).\n- Attempted `session_search` calls for `ZEPHYR_`, `checkpoint`, and `receipt-2` were all rejected by the QA policy (\"inspect only the requested source with an opaque checkpoint query; broad searches are blocked\") because the exact checkpoint-2 query token was not supplied.\n\n## Remaining tasks (not completed)\n- Retrieve the exact opaque checkpoint-2 query token (the `ZEPHYR_...` checkpoint id) for checkpoint 2.\n- Run `session_search(query=<checkpoint2 token>, session_id=ses_ea44e460bffefHSd2sHn3ndVm6, case_sensitive=true, limit=5)` to locate the single ledger record message.\n- Confirm the returned receipt string matches the checkpoint-2 record.\n- Return the verified receipt.\n\n## Recommendation\n- Re-run this audit with the checkpoint-2 query token supplied explicitly (as was done for checkpoints 0 and 1, e.g. `ZEPHYR_6062E44A71` / `ZEPHYR_9B45E9C8DD`). Once the exact token is provided, the remaining three steps are a single search plus a one-line receipt, and the verified receipt for checkpoint 2 can be returned immediately.\n\n## Current status\n- No receipt has been verified for checkpoint 2 yet. The previously verified receipts (checkpoints 0 and 1) remain valid: `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.` and `ZEPHYR_9B45E9C8DD receipt-1-458cb9a149. Synthetic ledger record.`",
+          "calls": [
+            {
+              "tool": "skill",
+              "status": "error",
+              "input": {
+                "name": "zephyr-ledger-audit",
+                "user_message": "Run checkpoint 2 audit, source_session=ses_ea44e460bffefHSd2sHn3ndVm6"
+              },
+              "error": "QA policy: skill reload is blocked after the initial successful load."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "query": "ZEPHYR_",
+                "session_id": "ses_ea44e460bffefHSd2sHn3ndVm6",
+                "case_sensitive": true,
+                "limit": 5
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea44e460bffefHSd2sHn3ndVm6"
+              }
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "limit": 5,
+                "query": "checkpoint",
+                "session_id": "ses_ea44e460bffefHSd2sHn3ndVm6"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "case_sensitive": true,
+                "limit": 5,
+                "query": "ZEPHYR_"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            },
+            {
+              "tool": "session_search",
+              "status": "error",
+              "input": {
+                "case_sensitive": true,
+                "limit": 5,
+                "query": "receipt-2"
+              },
+              "error": "QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked."
+            }
+          ]
+        },
+        {
+          "stage": 3,
+          "passed": true,
+          "search": true,
+          "info": true,
+          "receipt": true,
+          "answer": "**Verified receipt (checkpoint 3):**\n\n`ZEPHYR_58C8CCA0D5 receipt-3-5605d01ba5. Synthetic ledger record.`\n\n- Source session: `ses_ea44e45f8ffeNAjCxjPeHqIoka` — 1 message, 2026-10-20T23:42:16.586Z, agent `build`, transcript present (1 entry)\n- Match: 1 (msg_15bb1ba0a001pCrAeLB0t3rtuo, user)",
+          "calls": [
+            {
+              "tool": "session_search",
+              "status": "completed",
+              "input": {
+                "query": "ZEPHYR_58C8CCA0D5",
+                "session_id": "ses_ea44e45f8ffeNAjCxjPeHqIoka",
+                "case_sensitive": true,
+                "limit": 5
+              }
+            },
+            {
+              "tool": "session_info",
+              "status": "completed",
+              "input": {
+                "session_id": "ses_ea44e45f8ffeNAjCxjPeHqIoka"
+              }
+            }
+          ]
+        }
+      ],
+      "compactions": [
+        {
+          "round": 1,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 1,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run the Zephyr ledger audit checkpoint 0 for the specified source session and return the verified receipt.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`\n- Source session: `ses_ea44e4820ffetQndZLtSJSVk0a`\n- Checkpoint 0 query: `ZEPHYR_6062E44A71`\n- Search constraints: `case_sensitive=true`, `limit=5`\n\n## Work State\n### Completed\n- Executed `session_search` and `session_info` for the source session.\n- Found exactly 1 matching result: `msg_15bb1b814001LWmQdyKBIEII0n`.\n- Verified receipt: **`ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`**\n- Session metadata confirmed 1 message, dated `2026-10-20T23:42:16.084Z`, with agent `build`.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2b/.opencode/skills/zephyr-ledger-audit/`: skill base directory and audit instructions."
+        },
+        {
+          "round": 2,
+          "rawSnapshotConfigRecoveries": 1,
+          "configRecoveries": 1,
+          "skillRecoveries": 1,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audits for checkpoints 0 and 1 and return the verified receipts.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`\n- Search constraints: `case_sensitive=true`, `limit=5`, exact checkpoint query required.\n- Checkpoint 0 query: `ZEPHYR_6062E44A71`; source session: `ses_ea44e4820ffetQndZLtSJSVk0a`.\n- Checkpoint 1 query: `ZEPHYR_9B45E9C8DD`; source session: `ses_ea44e4624fferRUA33nDNSi7T9`.\n\n## Work State\n### Completed\n- Checkpoint 0: executed `session_search` and `session_info`; found exactly 1 match at `msg_15bb1b814001LWmQdyKBIEII0n`.\n- Verified checkpoint 0 receipt: **`ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`**\n- Checkpoint 0 session metadata: 1 message dated `2026-10-20T23:42:16.084Z`, agent `build`.\n- Checkpoint 1: executed `session_search` and `session_info`; found exactly 1 match at `msg_15bb1b9de001z3KcbcGI69sRvd`.\n- Verified checkpoint 1 receipt: **`ZEPHYR_9B45E9C8DD receipt-1-458cb9a149. Synthetic ledger record.`**\n- Checkpoint 1 session metadata: 1 message dated `2026-10-20T23:42:16.542Z`, agent `build`.\n\n### Active\n- (none)\n\n### Blocked\n- (none)\n\n## Next Move\n1. (none)\n2. (none)\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2b/.opencode/skills/zephyr-ledger-audit/`: skill base directory and audit instructions."
+        },
+        {
+          "round": 3,
+          "rawSnapshotConfigRecoveries": 2,
+          "configRecoveries": 2,
+          "skillRecoveries": 2,
+          "lateDispatches": [],
+          "recoveryMessagesDuringTurn": [],
+          "summary": "## Objective\n- Run Zephyr ledger audit checkpoint 2 for `source_session=ses_ea44e460bffefHSd2sHn3ndVm6` and return the verified receipt.\n\n## Important Details\n- Skill: `zephyr-ledger-audit`.\n- Search constraints: inspect only the requested source session, use the exact opaque checkpoint query, `case_sensitive=true`, and `limit=5`.\n- Checkpoint 2 query token is unknown; do not guess identifiers.\n- Checkpoint 0 query: `ZEPHYR_6062E44A71`; source session: `ses_ea44e4820ffetQndZLtSJSVk0a`.\n- Checkpoint 1 query: `ZEPHYR_9B45E9C8DD`; source session: `ses_ea44e4624fferRUA33nDNSi7T9`.\n\n## Work State\n### Completed\n- Checkpoint 0: found exactly 1 match at `msg_15bb1b814001LWmQdyKBIEII0n`; verified receipt: `ZEPHYR_6062E44A71 receipt-0-edf1f1e247. Synthetic ledger record.`\n- Checkpoint 1: found exactly 1 match at `msg_15bb1b9de001z3KcbcGI69sRvd`; verified receipt: `ZEPHYR_9B45E9C8DD receipt-1-458cb9a149. Synthetic ledger record.`\n- Checkpoint 2 source metadata retrieved: 1 message dated `2026-10-20T23:42:16.568Z`, agent `build`, transcript available with 1 entry.\n- Attempted skill reload for checkpoint 2; blocked with: `QA policy: skill reload is blocked after the initial successful load.`\n\n### Active\n- Checkpoint 2 audit is incomplete; no receipt has been verified.\n\n### Blocked\n- Exact checkpoint-2 opaque query token is unavailable.\n- Broad searches for `ZEPHYR_`, `checkpoint`, and `receipt-2` were rejected with: `QA policy: inspect only the requested source with an opaque checkpoint query; broad searches are blocked`.\n- The prior agent reached maximum steps and tool access was disabled.\n\n## Next Move\n1. Retrieve the exact checkpoint-2 query token from the audit skill instructions at `/private/tmp/allsource-omo-compaction/provider/runs/c2b/.opencode/skills/zephyr-ledger-audit/SKILL.md`.\n2. Run `session_search(query=<checkpoint2 token>, session_id=ses_ea44e460bffefHSd2sHn3ndVm6, case_sensitive=true, limit=5)`, verify the single returned receipt, and return it.\n\n## Relevant Files\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2b/.opencode/skills/zephyr-ledger-audit/SKILL.md`: audit instructions and likely source of the exact checkpoint-2 query token.\n- `/private/tmp/allsource-omo-compaction/provider/runs/c2b/.opencode/skills/zephyr-ledger-audit/`: skill base directory."
+        }
+      ],
+      "readiness": [
+        {
+          "stage": 0,
+          "state": "initial-ready",
+          "elapsedMs": 10,
+          "polls": 1,
+          "releasedAt": 1792539736608,
+          "taskCreatedAt": 1792539736611,
+          "leadMs": 3,
+          "storedRecoveryCount": 0
+        },
+        {
+          "stage": 1,
+          "state": "accepted-and-stored",
+          "elapsedMs": 381,
+          "polls": 4,
+          "releasedAt": 1792539745930,
+          "taskCreatedAt": 1792539745937,
+          "leadMs": 7,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539745880,
+          "acceptedAt": 1792539745849
+        },
+        {
+          "stage": 2,
+          "state": "settled-cooldown-suppressed",
+          "elapsedMs": 40,
+          "polls": 1,
+          "releasedAt": 1792539752993,
+          "taskCreatedAt": 1792539752999,
+          "leadMs": 6,
+          "storedRecoveryCount": 1,
+          "eventExitAt": 1792539752954,
+          "acceptedAt": 1792539745849
+        },
+        {
+          "stage": 3,
+          "state": "accepted-and-stored",
+          "elapsedMs": 2477,
+          "polls": 5,
+          "releasedAt": 1792539837886,
+          "taskCreatedAt": 1792539838180,
+          "leadMs": 294,
+          "storedRecoveryCount": 2,
+          "eventExitAt": 1792539837877,
+          "acceptedAt": 1792539837859
+        }
+      ],
+      "blockedReloads": 1,
+      "dispatches": [
+        {
+          "at": 1792539745827,
+          "changed": 0,
+          "status": 204
+        },
+        {
+          "at": 1792539837568,
+          "changed": 0,
+          "status": 204
+        }
+      ],
+      "gap12": 7416,
+      "gap13": 89754,
+      "summaryInjectionSha256": "e96ccb7666e4ea77dd708545774377cf7a8cb64be0212345eaadbb9095de50a3",
+      "postPasses": 2
+    }
+  ],
+  "controls": {
+    "order": [
+      "on",
+      "off",
+      "off",
+      "on"
+    ],
+    "independentMatchedPairs": 2,
+    "hostConfigsIdentical": true,
+    "omoConfigsIdentical": true,
+    "readinessBarriersVerified": 16,
+    "lateRecoveryMessages": 0,
+    "nativeDependencyLockHashes": [
+      "a21f64a4f652872c453bd3eccf61a6b54eb6de90456c6b4aff76f21f9625cb24",
+      "fa38dccd573ef350605cb0407be20f71d28ec2b1b4e81b98851c5cc8b2badc76"
+    ],
+    "nativeRuntimeSha256": "33684a2aa6aad5386069fe44031f928aaa36cf860bb6e430ed7241ff92f6c8dd",
+    "bun": "1.3.9",
+    "summaryInjectionOutputsIdentical": true,
+    "summaryInjectionSha256": "e96ccb7666e4ea77dd708545774377cf7a8cb64be0212345eaadbb9095de50a3",
+    "recoveryEnvelopeIdentical": true,
+    "recoveryEnvelope": {
+      "noReply": true,
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      }
+    },
+    "nativeConfigRecoveryCounts": [
+      1,
+      1,
+      2
+    ],
+    "reloadSuccesses": 0,
+    "model": "openrouter/minimax/minimax-m3.1-flash:free",
+    "providerSeed": false,
+    "bundleSha256": "ee3739675452673d7aaf1d12118724645c06a15c02dabf4056dac3c091bd4c49",
+    "sourceHashes": {
+      "hooks/compaction-context-injector/hook.ts": "ffb67fca3b9647f990594bbbbdbd4fe5018217d4283623620d7c29901cadce08",
+      "hooks/compaction-context-injector/recovery.ts": "8eb15a3c333bd11a702bbad12392088809e80bd96368f4b22605da38cec2fcb1",
+      "hooks/compaction-context-injector/constants.ts": "b70def05c148c2bc0f475f7409c4d4e048a0c6e5881174a374a3ab681f3c60d8",
+      "hooks/compaction-context-injector/skill-reinjection.ts": "50dcb57f3baa75fdd75c6e176285b6bc24e019db1795a5c45744a53762331b5f",
+      "shared/session-loaded-skills.ts": "35be0b637313a7ec75392c975dfd0af4474b8a00aac29d7363b05752fbb9bf91",
+      "tools/skill/tools.ts": "bed314e04e638cfc28b6ad917af513681e7fc9e0890084447e358e4933bdd2ac",
+      "plugin/session-compacting.ts": "157483645b034ee40a37ff2ccc657e6c7ae47d3549480b117eee457dd0b8badf"
+    },
+    "controllerSha256": "868388d6155e59eceea123e85460559128e9cad0dabac921ac3a9b5ad58002cb",
+    "observerSha256": "17f57ece928b9b6291ae3fa64152773b88bb11e98afcc7f0e19df05a739be7ee",
+    "baselineObserverSha256": "d36d71de38bba2d8efeeb0b1f5fe76806b6b3b1ecb1a98ab71f02f87528a129e",
+    "providerCaptureSha256": "3a694fd212e66e52f97eaa72e10c17364f4532d96be48538975acc8e5cfe2545"
+  },
+  "date": "2026-10-21",
+  "head": "93d44a0760448f7f07d2795c6239d51db5ab6576",
+  "postPasses": {
+    "on": 4,
+    "off": 0,
+    "denominatorPerCondition": 6
+  },
+  "provider": {
+    "requests": 73,
+    "accepted200": 73,
+    "coverageVerified": true,
+    "firstFullBody": {
+      "freshOn": 4,
+      "cooldownOn": 0,
+      "off": 0
+    },
+    "firstCurrentQueryAnywhere": {
+      "freshOn": 4,
+      "cooldownOn": 0,
+      "off": 0
+    }
+  },
+  "barriers": 16,
+  "lateRecoveries": 0,
+  "sourceBodiesVerified": 16,
+  "providerInterruptions": 0
+}

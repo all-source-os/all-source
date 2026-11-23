@@ -1,0 +1,13 @@
+{
+  "keySource": "OPENROUTER_API_KEY environment only",
+  "nativeDependencySeed": "QA_DEPENDENCY_SEED, validated @opencode-ai/plugin version 1.18.22",
+  "originalControllerSha256": "868388d6155e59eceea123e85460559128e9cad0dabac921ac3a9b5ad58002cb",
+  "portableControllerSha256": "6638a3ec138a02b51f9bf25a62d1440cb9a17071c7ed6c6603f31b93fd58f9d5",
+  "readinessFunctionSha256": "cf21361eee98778a4827a8f02a486c3365c8a3896d66a1ffab8fc0a5fcbcebba",
+  "readinessFunctionUnchanged": true,
+  "coreObserverSha256": "d36d71de38bba2d8efeeb0b1f5fe76806b6b3b1ecb1a98ab71f02f87528a129e",
+  "coreObserverMatchesEvaluated": true,
+  "providerCaptureSha256": "3a694fd212e66e52f97eaa72e10c17364f4532d96be48538975acc8e5cfe2545",
+  "providerCaptureMatchesEvaluated": true,
+  "portableEditsLiveRerun": false
+}

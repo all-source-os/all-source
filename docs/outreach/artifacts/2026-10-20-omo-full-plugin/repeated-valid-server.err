@@ -1,0 +1,43 @@
+timestamp=2026-10-20T12:02:46.681Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/config/opencode/config.json
+timestamp=2026-10-20T12:02:46.684Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/config/opencode/opencode.json
+timestamp=2026-10-20T12:02:46.699Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/config/opencode/opencode.jsonc
+timestamp=2026-10-20T12:02:46.837Z level=INFO run=edba0d7d message="creating instance" directory=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid
+timestamp=2026-10-20T12:02:46.838Z level=INFO run=edba0d7d message=fromDirectory directory=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid
+timestamp=2026-10-20T12:02:46.850Z level=INFO run=edba0d7d message=bootstrapping directory=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid
+timestamp=2026-10-20T12:02:46.856Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/config/opencode/config.json
+timestamp=2026-10-20T12:02:46.857Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/config/opencode/opencode.json
+timestamp=2026-10-20T12:02:46.858Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/config/opencode/opencode.jsonc
+timestamp=2026-10-20T12:02:47.036Z level=DEBUG run=edba0d7d message="loading config from /private/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.json"
+timestamp=2026-10-20T12:02:47.037Z level=INFO run=edba0d7d message=loading path=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.json
+timestamp=2026-10-20T12:02:47.039Z level=DEBUG run=edba0d7d message="loading config from /private/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.jsonc"
+timestamp=2026-10-20T12:02:47.039Z level=INFO run=edba0d7d message=loading path=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.jsonc
+timestamp=2026-10-20T12:02:47.059Z level=DEBUG run=edba0d7d message="loading config from /tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.json"
+timestamp=2026-10-20T12:02:47.059Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.json
+timestamp=2026-10-20T12:02:47.061Z level=DEBUG run=edba0d7d message="loading config from /tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.jsonc"
+timestamp=2026-10-20T12:02:47.061Z level=INFO run=edba0d7d message=loading path=/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/opencode.jsonc
+timestamp=2026-10-20T12:02:56.330Z level=INFO run=edba0d7d message="all LSPs are disabled"
+timestamp=2026-10-20T12:02:56.331Z level=INFO run=edba0d7d message="all formatters are disabled"
+timestamp=2026-10-20T12:02:56.331Z level=INFO run=edba0d7d message=init
+timestamp=2026-10-20T12:02:56.357Z level=INFO run=edba0d7d message="event connected"
+timestamp=2026-10-20T12:02:56.379Z level=INFO run=edba0d7d message="fetching index" url=http://127.0.0.1:54388/index.json
+timestamp=2026-10-20T12:02:56.405Z level=WARN run=edba0d7d message="duplicate skill name" name=qa-0 existing=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/skills/qa-0/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/repeated-valid/.opencode/skills/qa-0/SKILL.md
+timestamp=2026-10-20T12:02:56.405Z level=INFO run=edba0d7d message=init count=4
+timestamp=2026-10-20T12:02:56.409Z level=INFO run=edba0d7d message=created id=ses_ea6ce88e6ffepYvCVSjFIfy5fU slug=clever-cactus version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/full/runs/repeated-valid path=private/tmp/allsource-omo-compaction/full/runs/repeated-valid workspaceID=undefined parentID=undefined title="AllSource full OMO #7183 repeated-valid" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792497776409 time.updated=1792497776409
+timestamp=2026-10-20T12:02:56.897Z level=INFO run=edba0d7d message=loop session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU step=0
+timestamp=2026-10-20T12:02:56.930Z level=INFO run=edba0d7d message=process session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU messageID=msg_15931791e0015Y25lZTty7gfbQ
+timestamp=2026-10-20T12:02:56.932Z level=INFO run=edba0d7d message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU small=false agent=compaction mode=primary
+timestamp=2026-10-20T12:02:56.954Z level=INFO run=edba0d7d message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-20T12:02:58.683Z level=INFO run=edba0d7d message=loop session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU step=1
+timestamp=2026-10-20T12:02:58.684Z level=INFO run=edba0d7d message="exiting loop" session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU
+timestamp=2026-10-20T12:03:00.549Z level=INFO run=edba0d7d message=loop session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU step=0
+timestamp=2026-10-20T12:03:00.769Z level=INFO run=edba0d7d message=process session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU messageID=msg_159318819001f69vH0pezEUKws
+timestamp=2026-10-20T12:03:00.769Z level=INFO run=edba0d7d message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU small=false agent=compaction mode=primary
+timestamp=2026-10-20T12:03:00.812Z level=INFO run=edba0d7d message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-20T12:03:03.128Z level=INFO run=edba0d7d message=loop session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU step=1
+timestamp=2026-10-20T12:03:03.128Z level=INFO run=edba0d7d message="exiting loop" session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU
+timestamp=2026-10-20T12:04:06.854Z level=INFO run=edba0d7d message=loop session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU step=0
+timestamp=2026-10-20T12:04:06.863Z level=INFO run=edba0d7d message=process session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU messageID=msg_159328a4e001af7l1YdbkBG5uI
+timestamp=2026-10-20T12:04:06.863Z level=INFO run=edba0d7d message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU small=false agent=compaction mode=primary
+timestamp=2026-10-20T12:04:06.866Z level=INFO run=edba0d7d message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-20T12:04:09.502Z level=INFO run=edba0d7d message=loop session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU step=1
+timestamp=2026-10-20T12:04:09.503Z level=INFO run=edba0d7d message="exiting loop" session.id=ses_ea6ce88e6ffepYvCVSjFIfy5fU

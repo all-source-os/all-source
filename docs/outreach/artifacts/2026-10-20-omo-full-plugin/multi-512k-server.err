@@ -1,0 +1,38 @@
+timestamp=2026-10-20T12:06:36.087Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/config/opencode/config.json
+timestamp=2026-10-20T12:06:36.089Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/config/opencode/opencode.json
+timestamp=2026-10-20T12:06:36.101Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/config/opencode/opencode.jsonc
+timestamp=2026-10-20T12:06:36.219Z level=INFO run=e962c0c2 message="creating instance" directory=/private/tmp/allsource-omo-compaction/full/runs/multi-512k
+timestamp=2026-10-20T12:06:36.219Z level=INFO run=e962c0c2 message=fromDirectory directory=/private/tmp/allsource-omo-compaction/full/runs/multi-512k
+timestamp=2026-10-20T12:06:36.230Z level=INFO run=e962c0c2 message=bootstrapping directory=/private/tmp/allsource-omo-compaction/full/runs/multi-512k
+timestamp=2026-10-20T12:06:36.234Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/config/opencode/config.json
+timestamp=2026-10-20T12:06:36.234Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/config/opencode/opencode.json
+timestamp=2026-10-20T12:06:36.235Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/config/opencode/opencode.jsonc
+timestamp=2026-10-20T12:06:36.249Z level=DEBUG run=e962c0c2 message="loading config from /private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.json"
+timestamp=2026-10-20T12:06:36.249Z level=INFO run=e962c0c2 message=loading path=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.json
+timestamp=2026-10-20T12:06:36.360Z level=DEBUG run=e962c0c2 message="loading config from /private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.jsonc"
+timestamp=2026-10-20T12:06:36.360Z level=INFO run=e962c0c2 message=loading path=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.jsonc
+timestamp=2026-10-20T12:06:36.374Z level=DEBUG run=e962c0c2 message="loading config from /tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.json"
+timestamp=2026-10-20T12:06:36.374Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.json
+timestamp=2026-10-20T12:06:36.375Z level=DEBUG run=e962c0c2 message="loading config from /tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.jsonc"
+timestamp=2026-10-20T12:06:36.375Z level=INFO run=e962c0c2 message=loading path=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/opencode.jsonc
+timestamp=2026-10-20T12:06:42.632Z level=INFO run=e962c0c2 message="all LSPs are disabled"
+timestamp=2026-10-20T12:06:42.633Z level=INFO run=e962c0c2 message="all formatters are disabled"
+timestamp=2026-10-20T12:06:42.633Z level=INFO run=e962c0c2 message=init
+timestamp=2026-10-20T12:06:42.655Z level=INFO run=e962c0c2 message="event connected"
+timestamp=2026-10-20T12:06:42.683Z level=INFO run=e962c0c2 message="fetching index" url=http://127.0.0.1:56432/index.json
+timestamp=2026-10-20T12:06:42.702Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-7 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-7/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-7/SKILL.md
+timestamp=2026-10-20T12:06:42.702Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-5 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-5/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-5/SKILL.md
+timestamp=2026-10-20T12:06:42.702Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-2 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-2/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-2/SKILL.md
+timestamp=2026-10-20T12:06:42.703Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-3 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-3/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-3/SKILL.md
+timestamp=2026-10-20T12:06:42.703Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-1 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-1/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-1/SKILL.md
+timestamp=2026-10-20T12:06:42.703Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-6 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-6/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-6/SKILL.md
+timestamp=2026-10-20T12:06:42.703Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-4 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-4/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-4/SKILL.md
+timestamp=2026-10-20T12:06:42.703Z level=WARN run=e962c0c2 message="duplicate skill name" name=qa-0 existing=/private/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-0/SKILL.md duplicate=/tmp/allsource-omo-compaction/full/runs/multi-512k/.opencode/skills/qa-0/SKILL.md
+timestamp=2026-10-20T12:06:42.704Z level=INFO run=e962c0c2 message=init count=11
+timestamp=2026-10-20T12:06:42.707Z level=INFO run=e962c0c2 message=created id=ses_ea6cb14ecffeSZJVwVM7875ofE slug=witty-rocket version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/full/runs/multi-512k path=private/tmp/allsource-omo-compaction/full/runs/multi-512k workspaceID=undefined parentID=undefined title="AllSource full OMO #7183 multi-512k" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792498002707 time.updated=1792498002707
+timestamp=2026-10-20T12:06:43.045Z level=INFO run=e962c0c2 message=loop session.id=ses_ea6cb14ecffeSZJVwVM7875ofE step=0
+timestamp=2026-10-20T12:06:43.065Z level=INFO run=e962c0c2 message=process session.id=ses_ea6cb14ecffeSZJVwVM7875ofE messageID=msg_15934ec77001Eia0TLWMmEESFO
+timestamp=2026-10-20T12:06:43.066Z level=INFO run=e962c0c2 message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_ea6cb14ecffeSZJVwVM7875ofE small=false agent=compaction mode=primary
+timestamp=2026-10-20T12:06:43.078Z level=INFO run=e962c0c2 message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-20T12:06:44.559Z level=INFO run=e962c0c2 message=loop session.id=ses_ea6cb14ecffeSZJVwVM7875ofE step=1
+timestamp=2026-10-20T12:06:44.559Z level=INFO run=e962c0c2 message="exiting loop" session.id=ses_ea6cb14ecffeSZJVwVM7875ofE

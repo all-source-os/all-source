@@ -68,6 +68,23 @@ Welcome to the AllSource documentation. This hub provides comprehensive guides, 
 - [Schema evolution example evidence (2026-11-08)](./seo/2026-11-08-schema-evolution-evidence.md): replay example, source evidence, and release limits.
 - [Schema evolution SEO review (2026-11-09)](./seo/2026-11-09-schema-review.md): proposed correction and local HTML preview.
 - [Directory and registry listings (2026-10-21)](./outreach/2026-10-21-directory-listings.md): product facts for listings, MCP registry and ClawHub routes, curated directories and the submission log.
+- [Manual and external actions](./manual-and-external-actions.md): actions that need account authority, publication or third-party response, with the evidence each one must leave.
+- [AllSource SEO assessment (2026-11-10)](./seo/2026-11-10-seo-assessment.md): observed search intent and proposed content improvements.
+- [Fintech AI decision-context discovery review (2026-11-12)](./outreach/2026-11-12-fintech-discovery-review.md): sourced prospects, messages sent after approval, contact-history limits and exclusions.
+- [Outreach skill verification (2026-11-11)](./outreach/2026-11-11-outreach-skill-verification.md): synthetic walkthrough, page checks and outstanding verification.
+- [AllSource outreach skill presentation](./outreach/allsource-outreach-skill.html): skill package ([source](../skills/allsource-outreach/SKILL.md), [zip](./outreach/allsource-outreach.zip)), workflow and example prompt.
+- [AllSource outreach comparison (2026-11-11)](./plans/2026-11-11-outreach-comparison.md): proposed GojiBerry and AllSource workflows, review controls and measurement.
+- [OMO send-ready package (2026-10-21)](./outreach/2026-10-21-omo-send-ready.md): refreshed ownership/contact checks, final PR comment and sanitised evidence ZIP.
+- [OMO provider-payload evaluation (2026-10-21)](./outreach/2026-10-21-omo-provider-payload-evaluation.md): captured model inputs, summary/continuation distinction and counterbalanced controls.
+- [OMO readiness-barrier evaluation (2026-10-21)](./outreach/2026-10-21-omo-readiness-barrier-evaluation.md): counterbalanced skill-only rerun, pre-task settlement proof and cooldown controls.
+- [OMO counterbalanced skill-only evaluation (2026-10-20)](./outreach/2026-10-20-omo-skill-only-counterbalanced-evaluation.md): dispatch-only control, matched summary injection and blocked reload.
+- [OMO matched recovery/no-reload evaluation (2026-10-20)](./outreach/2026-10-20-omo-matched-no-reload-evaluation.md): recovery on 2/3 vs off 0/3, cooldown gap and enforced reload block.
+- [OMO model-selected skill/tool evaluation (2026-10-20)](./outreach/2026-10-20-omo-model-selected-evaluation.md): four checkpoint workflows, middle reload and counter-evidence.
+- [Full OMO #7183 plugin evaluation (2026-10-20)](./outreach/2026-10-20-omo-full-plugin-evaluation.md): loader fix and native compaction/payload matrix.
+- [Oh-my-openagent #7183 real compaction evaluation (2026-10-19)](./outreach/2026-10-19-omo-compaction-evaluation.md): repeated recovery, payload bounds and ownership checks.
+- [Live nanobot/Hermes memory evaluation (2026-10-19)](./outreach/2026-10-19-live-memory-evaluation.md): real-provider results, isolated outage behaviour and revised shortlist.
+- [Current memory fixes and artifact-led drafts (2026-10-19)](./outreach/2026-10-19-memory-fix-audit-and-drafts.md): released fixes, remaining gaps, runnable measurement and conditional outreach copy.
+- [Memory-failure design-partner research (2026-10-19)](./research/2026-10-19-memory-failure-design-partners.md): public evidence for 30 projects, qualification and prior-contact checks.
 
 | | Link | Description |
 |---|------|-------------|

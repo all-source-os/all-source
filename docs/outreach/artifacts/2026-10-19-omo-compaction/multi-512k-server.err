@@ -1,0 +1,28 @@
+timestamp=2026-10-19T12:18:06.590Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode/config.json
+timestamp=2026-10-19T12:18:06.618Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode/opencode.json
+timestamp=2026-10-19T12:18:06.619Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode/opencode.jsonc
+timestamp=2026-10-19T12:18:06.993Z level=INFO run=d3b7138b message="creating instance" directory=/private/tmp/allsource-omo-compaction/runs/multi-512k
+timestamp=2026-10-19T12:18:06.994Z level=INFO run=d3b7138b message=fromDirectory directory=/private/tmp/allsource-omo-compaction/runs/multi-512k
+timestamp=2026-10-19T12:18:07.008Z level=INFO run=d3b7138b message=bootstrapping directory=/private/tmp/allsource-omo-compaction/runs/multi-512k
+timestamp=2026-10-19T12:18:07.023Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode/config.json
+timestamp=2026-10-19T12:18:07.023Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode/opencode.json
+timestamp=2026-10-19T12:18:07.023Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode/opencode.jsonc
+timestamp=2026-10-19T12:18:07.024Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/opencode.json
+timestamp=2026-10-19T12:18:07.047Z level=DEBUG run=d3b7138b message="loaded custom config" path=/tmp/allsource-omo-compaction/runs/multi-512k/opencode.json
+timestamp=2026-10-19T12:18:07.049Z level=INFO run=d3b7138b message=loading path=/private/tmp/allsource-omo-compaction/runs/multi-512k/opencode.json
+timestamp=2026-10-19T12:18:07.106Z level=DEBUG run=d3b7138b message="loading config from OPENCODE_CONFIG_DIR" path=/tmp/allsource-omo-compaction/runs/multi-512k/config
+timestamp=2026-10-19T12:18:07.576Z level=DEBUG run=d3b7138b message="loading config from /tmp/allsource-omo-compaction/runs/multi-512k/config/opencode.json"
+timestamp=2026-10-19T12:18:07.576Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode.json
+timestamp=2026-10-19T12:18:07.578Z level=DEBUG run=d3b7138b message="loading config from /tmp/allsource-omo-compaction/runs/multi-512k/config/opencode.jsonc"
+timestamp=2026-10-19T12:18:07.579Z level=INFO run=d3b7138b message=loading path=/tmp/allsource-omo-compaction/runs/multi-512k/config/opencode.jsonc
+timestamp=2026-10-19T12:18:07.633Z level=INFO run=d3b7138b message="all LSPs are disabled"
+timestamp=2026-10-19T12:18:07.634Z level=INFO run=d3b7138b message="all formatters are disabled"
+timestamp=2026-10-19T12:18:07.635Z level=INFO run=d3b7138b message=init
+timestamp=2026-10-19T12:18:07.656Z level=INFO run=d3b7138b message="event connected"
+timestamp=2026-10-19T12:18:07.681Z level=INFO run=d3b7138b message=created id=ses_eabe6fd3fffe2X0u3atVO26xwX slug=glowing-engine version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/runs/multi-512k path=private/tmp/allsource-omo-compaction/runs/multi-512k workspaceID=undefined parentID=undefined title="AllSource #7183 multi-512k" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792412287681 time.updated=1792412287681
+timestamp=2026-10-19T12:18:08.979Z level=INFO run=d3b7138b message=loop session.id=ses_eabe6fd3fffe2X0u3atVO26xwX step=0
+timestamp=2026-10-19T12:18:09.000Z level=INFO run=d3b7138b message=process session.id=ses_eabe6fd3fffe2X0u3atVO26xwX messageID=msg_1541907e6001Q8Q0B70q13knLy
+timestamp=2026-10-19T12:18:09.002Z level=INFO run=d3b7138b message=stream providerID=openrouter modelID=openai/gpt-4.1-mini session.id=ses_eabe6fd3fffe2X0u3atVO26xwX small=false agent=compaction mode=primary
+timestamp=2026-10-19T12:18:09.031Z level=INFO run=d3b7138b message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=openai/gpt-4.1-mini
+timestamp=2026-10-19T12:18:10.759Z level=INFO run=d3b7138b message=loop session.id=ses_eabe6fd3fffe2X0u3atVO26xwX step=1
+timestamp=2026-10-19T12:18:10.761Z level=INFO run=d3b7138b message="exiting loop" session.id=ses_eabe6fd3fffe2X0u3atVO26xwX

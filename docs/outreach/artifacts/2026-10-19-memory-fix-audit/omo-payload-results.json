@@ -1,0 +1,57 @@
+{
+  "source_ref": "93d44a0760448f7f07d2795c6239d51db5ab6576",
+  "runtime": "bun 1.3.9",
+  "input": "Synthetic ASCII skill bodies; bytes are not tokens.",
+  "controls": [
+    "empty input",
+    "latest version replaces prior body",
+    "session isolation",
+    "explicit clear"
+  ],
+  "source_hashes": [
+    {
+      "path": "packages/omo-opencode/src/hooks/compaction-context-injector/skill-reinjection.ts",
+      "sha256": "50dcb57f3baa75fdd75c6e176285b6bc24e019db1795a5c45744a53762331b5f"
+    },
+    {
+      "path": "packages/omo-opencode/src/shared/session-loaded-skills.ts",
+      "sha256": "35be0b637313a7ec75392c975dfd0af4474b8a00aac29d7363b05752fbb9bf91"
+    }
+  ],
+  "measurements": [
+    {
+      "skill_count": 1,
+      "input_body_bytes": 1024,
+      "output_bytes": 1141,
+      "second_render_bytes": 1141,
+      "all_bodies_preserved": true
+    },
+    {
+      "skill_count": 1,
+      "input_body_bytes": 65536,
+      "output_bytes": 65653,
+      "second_render_bytes": 65653,
+      "all_bodies_preserved": true
+    },
+    {
+      "skill_count": 1,
+      "input_body_bytes": 1048576,
+      "output_bytes": 1048693,
+      "second_render_bytes": 1048693,
+      "all_bodies_preserved": true
+    },
+    {
+      "skill_count": 8,
+      "input_body_bytes": 524288,
+      "output_bytes": 524580,
+      "second_render_bytes": 524580,
+      "all_bodies_preserved": true
+    }
+  ],
+  "limits": [
+    "Runs actual PR formatter and skill store, not OpenCode or recovery event dispatch.",
+    "Second render is another pure function call, not a second compaction event.",
+    "No accepted budget exists here; this measures growth, not a threshold failure.",
+    "No live model, process restart, prompt placement, tokenization, or AllSource integration tested."
+  ]
+}

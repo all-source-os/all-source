@@ -1,0 +1,12 @@
+{"at":1792497542549,"kind":"module-evaluated"}
+{"at":1792497542807,"kind":"loader-error","error":"Error: ENOENT: no such file or directory, open '/private/tmp/allsource-omo-compaction/source/dist/skills/frontend/SKILL.md'","stack":"Error: ENOENT: no such file or directory, open '/private/tmp/allsource-omo-compaction/source/dist/skills/frontend/SKILL.md'\n    at readFileSync (unknown)\n    at <anonymous> (/private/tmp/allsource-omo-compaction/source/dist/index.js:109683:49)\n    at /private/tmp/allsource-omo-compaction/source/dist/index.js:109703:36\n    at processTicksAndRejections (native:7:39)"}
+{"at":1792497589138,"kind":"module-evaluated"}
+{"at":1792497589384,"kind":"full-module-imported"}
+{"at":1792497590297,"kind":"full-plugin-initialized","hooks":["tool","chat.params","chat.headers","command.execute.before","chat.message","experimental.chat.messages.transform","experimental.chat.system.transform","config","event","tool.definition","tool.execute.before","tool.execute.after","experimental.session.compacting","experimental.compaction.autocontinue","dispose"],"tools":["grep","glob","session_list","session_read","session_search","session_info","background_output","background_cancel","call_omo_agent","look_at","task","skill_mcp","skill","interactive_bash"]}
+{"at":1792497590298,"kind":"hook-enter","name":"config"}
+{"at":1792497590589,"kind":"hook-exit","name":"config"}
+{"at":1792497826499,"kind":"module-evaluated"}
+{"at":1792497826689,"kind":"full-module-imported"}
+{"at":1792497827238,"kind":"full-plugin-initialized","hooks":["tool","chat.params","chat.headers","command.execute.before","chat.message","experimental.chat.messages.transform","experimental.chat.system.transform","config","event","tool.definition","tool.execute.before","tool.execute.after","experimental.session.compacting","experimental.compaction.autocontinue","dispose"],"tools":["grep","glob","session_list","session_read","session_search","session_info","background_output","background_cancel","call_omo_agent","look_at","task","skill_mcp","skill","interactive_bash"]}
+{"at":1792497827239,"kind":"hook-enter","name":"config"}
+{"at":1792497827497,"kind":"hook-exit","name":"config"}

@@ -1,0 +1,103 @@
+timestamp=2026-10-20T14:24:53.479Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/config/opencode/config.json
+timestamp=2026-10-20T14:24:53.493Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/config/opencode/opencode.json
+timestamp=2026-10-20T14:24:53.501Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/config/opencode/opencode.jsonc
+timestamp=2026-10-20T14:24:53.666Z level=INFO run=e44c681a message="creating instance" directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1
+timestamp=2026-10-20T14:24:53.667Z level=INFO run=e44c681a message=fromDirectory directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1
+timestamp=2026-10-20T14:24:53.681Z level=INFO run=e44c681a message=bootstrapping directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1
+timestamp=2026-10-20T14:24:53.686Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/config/opencode/config.json
+timestamp=2026-10-20T14:24:53.687Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/config/opencode/opencode.json
+timestamp=2026-10-20T14:24:53.688Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/config/opencode/opencode.jsonc
+timestamp=2026-10-20T14:24:53.875Z level=DEBUG run=e44c681a message="loading config from /private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.json"
+timestamp=2026-10-20T14:24:53.875Z level=INFO run=e44c681a message=loading path=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.json
+timestamp=2026-10-20T14:24:53.879Z level=DEBUG run=e44c681a message="loading config from /private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.jsonc"
+timestamp=2026-10-20T14:24:53.879Z level=INFO run=e44c681a message=loading path=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.jsonc
+timestamp=2026-10-20T14:24:53.895Z level=DEBUG run=e44c681a message="loading config from /tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.json"
+timestamp=2026-10-20T14:24:53.896Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.json
+timestamp=2026-10-20T14:24:53.897Z level=DEBUG run=e44c681a message="loading config from /tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.jsonc"
+timestamp=2026-10-20T14:24:53.897Z level=INFO run=e44c681a message=loading path=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/opencode.jsonc
+timestamp=2026-10-20T14:25:02.863Z level=INFO run=e44c681a message="all LSPs are disabled"
+timestamp=2026-10-20T14:25:02.865Z level=INFO run=e44c681a message="all formatters are disabled"
+timestamp=2026-10-20T14:25:02.865Z level=INFO run=e44c681a message=init
+timestamp=2026-10-20T14:25:02.894Z level=INFO run=e44c681a message="event connected"
+timestamp=2026-10-20T14:25:02.912Z level=INFO run=e44c681a message=created id=ses_ea64c6e3fffeT7H1oIzMB4xnhP slug=shiny-squid version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 0" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506302912 time.updated=1792506302912
+timestamp=2026-10-20T14:25:02.956Z level=INFO run=e44c681a message="fetching index" url=http://127.0.0.1:62568/index.json
+timestamp=2026-10-20T14:25:02.992Z level=WARN run=e44c681a message="duplicate skill name" name=zephyr-ledger-audit existing=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/skills/zephyr-ledger-audit/SKILL.md duplicate=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/skills/zephyr-ledger-audit/SKILL.md
+timestamp=2026-10-20T14:25:02.992Z level=WARN run=e44c681a message="duplicate skill name" name=canvas-layout existing=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/skills/canvas-layout/SKILL.md duplicate=/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1/.opencode/skills/canvas-layout/SKILL.md
+timestamp=2026-10-20T14:25:02.993Z level=INFO run=e44c681a message=init count=5
+timestamp=2026-10-20T14:25:03.464Z level=INFO run=e44c681a message=created id=ses_ea64c6c18ffe6EOQxX4xt1aQqO slug=tidy-panda version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 1" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506303463 time.updated=1792506303463
+timestamp=2026-10-20T14:25:03.497Z level=INFO run=e44c681a message=created id=ses_ea64c6bf6ffeyFyGwmq2Ly0UDs slug=silent-orchid version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 2" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506303497 time.updated=1792506303497
+timestamp=2026-10-20T14:25:03.523Z level=INFO run=e44c681a message=created id=ses_ea64c6bdcfferyt45zPWzOdhay slug=hidden-island version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 workspaceID=undefined parentID=undefined title="Zephyr source checkpoint 3" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506303523 time.updated=1792506303523
+timestamp=2026-10-20T14:25:03.561Z level=INFO run=e44c681a message=created id=ses_ea64c6bb6ffea0ArdZTlBBO932 slug=curious-planet version=1.18.22 projectID=global directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 path=private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 workspaceID=undefined parentID=undefined title="AllSource model-selected OMO #7183 selected-minimax-free-v1" agent=undefined model=undefined metadata=undefined permission=undefined cost=0 tokens.input=0 tokens.output=0 tokens.reasoning=0 tokens.cache.read=0 tokens.cache.write=0 time.created=1792506303561 time.updated=1792506303561
+timestamp=2026-10-20T14:25:03.642Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:25:03.662Z level=INFO run=e44c681a message="shell tool using shell" shell=/bin/zsh
+timestamp=2026-10-20T14:25:05.183Z level=INFO run=e44c681a message="watcher backend" directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 platform=darwin backend=fs-events
+timestamp=2026-10-20T14:25:05.215Z level=INFO run=e44c681a message="project copy refresh started" projectID=global
+timestamp=2026-10-20T14:25:05.216Z level=INFO run=e44c681a message="project copy refresh done" projectID=global updated=[] removed=[]
+timestamp=2026-10-20T14:25:05.241Z level=INFO run=e44c681a message="booting location services" directory=/private/tmp/allsource-omo-compaction/model/runs/selected-minimax-free-v1 workspaceID=undefined
+timestamp=2026-10-20T14:25:05.594Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3949e001B4FlXAGf8khOPQ
+timestamp=2026-10-20T14:25:05.596Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:05.613Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:06.927Z level=INFO run=e44c681a message=evaluated permission=skill pattern=zephyr-ledger-audit action.permission=skill action.action=allow action.pattern=*
+timestamp=2026-10-20T14:25:06.944Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:25:06.970Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3a181001SZNTZ8LjtAoluA
+timestamp=2026-10-20T14:25:06.971Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:06.974Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:08.554Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=2
+timestamp=2026-10-20T14:25:08.575Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3a7cb001nUZ2wjMNtMObCc
+timestamp=2026-10-20T14:25:08.576Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:08.578Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:11.208Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=3
+timestamp=2026-10-20T14:25:11.209Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932
+timestamp=2026-10-20T14:25:11.247Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:25:11.272Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3b266001ROjRHg9GisG2r1
+timestamp=2026-10-20T14:25:11.272Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=compaction mode=primary
+timestamp=2026-10-20T14:25:11.274Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:15.346Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:25:15.347Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932
+timestamp=2026-10-20T14:25:16.988Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:25:17.172Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3c8c0001Oq4m46U1sYqwqo
+timestamp=2026-10-20T14:25:17.173Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:17.175Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:18.380Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:25:18.411Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3ce2d0016ren8i5FTGLvuo
+timestamp=2026-10-20T14:25:18.412Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:18.419Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:19.437Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=2
+timestamp=2026-10-20T14:25:19.437Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932
+timestamp=2026-10-20T14:25:19.464Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:25:19.493Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3d2820016e4aiGu7ED9HNO
+timestamp=2026-10-20T14:25:19.495Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=compaction mode=primary
+timestamp=2026-10-20T14:25:19.509Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:23.879Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:25:23.880Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932
+timestamp=2026-10-20T14:25:25.115Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:25:25.157Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3e87c001embVmYwpdKy154
+timestamp=2026-10-20T14:25:25.158Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:25.162Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:26.023Z level=INFO run=e44c681a message=evaluated permission=skill pattern=zephyr-ledger-audit action.permission=skill action.action=allow action.pattern=*
+timestamp=2026-10-20T14:25:26.137Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:25:26.266Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3ec7a001MRjciMsmiTUF1O
+timestamp=2026-10-20T14:25:26.266Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:26.275Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:27.745Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=2
+timestamp=2026-10-20T14:25:27.768Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b3f2c1001yr3Q5WZKJ6fTv7
+timestamp=2026-10-20T14:25:27.768Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:25:27.770Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:25:28.522Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=3
+timestamp=2026-10-20T14:25:28.523Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932
+timestamp=2026-10-20T14:26:30.550Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:26:30.563Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b4e822001zrKVjOpFBrQ4V2
+timestamp=2026-10-20T14:26:30.564Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=compaction mode=primary
+timestamp=2026-10-20T14:26:30.569Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:26:34.055Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:26:34.056Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932
+timestamp=2026-10-20T14:26:35.275Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=0
+timestamp=2026-10-20T14:26:35.295Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b4fa8c001N3cZDVy1on2vw2
+timestamp=2026-10-20T14:26:35.296Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:26:35.298Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:26:36.530Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=1
+timestamp=2026-10-20T14:26:36.548Z level=INFO run=e44c681a message=process session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 messageID=msg_159b4ff73001vfD3dkHzmCtsNd
+timestamp=2026-10-20T14:26:36.548Z level=INFO run=e44c681a message=stream providerID=openrouter modelID=minimax/minimax-m3.1-flash:free session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 small=false agent=build mode=subagent
+timestamp=2026-10-20T14:26:36.550Z level=INFO run=e44c681a message="llm runtime selected" llm.runtime=ai-sdk llm.provider=openrouter llm.model=minimax/minimax-m3.1-flash:free
+timestamp=2026-10-20T14:26:37.495Z level=INFO run=e44c681a message=loop session.id=ses_ea64c6bb6ffea0ArdZTlBBO932 step=2
+timestamp=2026-10-20T14:26:37.495Z level=INFO run=e44c681a message="exiting loop" session.id=ses_ea64c6bb6ffea0ArdZTlBBO932

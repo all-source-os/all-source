@@ -1,0 +1,442 @@
+[
+  {
+    "at": 1792538104268,
+    "path": "/global/health",
+    "status": 200
+  },
+  {
+    "at": 1792538108117,
+    "path": "/config",
+    "status": 200
+  },
+  {
+    "at": 1792538108265,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 0"
+    }
+  },
+  {
+    "at": 1792538112303,
+    "path": "/session/ses_ea4671eb9ffefEFCwpHo6IEd5U/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_91C9E0CBF5 receipt-0-6c353a3a49. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538112437,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 1"
+    }
+  },
+  {
+    "at": 1792538112906,
+    "path": "/session/ses_ea4670e56ffePbPz8MjepN0aJi/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_95A56FD1F9 receipt-1-cdb4ae4c8e. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538112931,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 2"
+    }
+  },
+  {
+    "at": 1792538113402,
+    "path": "/session/ses_ea4670c68ffeiyu62U73UPmse2/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_BFE08B6718 receipt-2-a541ad6e96. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538113454,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Zephyr source checkpoint 3"
+    }
+  },
+  {
+    "at": 1792538113858,
+    "path": "/session/ses_ea4670a57ffemKNS3WkRUY3yHX/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "noReply": true,
+      "parts": [
+        {
+          "type": "text",
+          "text": "ZEPHYR_9860DBBA77 receipt-3-05692bbc80. Synthetic ledger record."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538113929,
+    "path": "/session",
+    "status": 200,
+    "body": {
+      "title": "Matched ledger audit"
+    }
+  },
+  {
+    "at": 1792538113955,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538114035,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538114056,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538123593,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Available installed skills: zephyr-ledger-audit — verify ledger checkpoints; canvas-layout — arrange chart labels. Select the appropriate skill. Run Zephyr ledger audit checkpoint 0. source_session=ses_ea4671eb9ffefEFCwpHo6IEd5U. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538123629,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538126838,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/summarize",
+    "status": 200,
+    "body": {
+      "providerID": "openrouter",
+      "modelID": "minimax/minimax-m3.1-flash:free",
+      "auto": false
+    }
+  },
+  {
+    "at": 1792538126975,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538127178,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538127379,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538127486,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538127661,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538127731,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538128058,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538128173,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538128332,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538128383,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538128556,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538146695,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 1. source_session=ses_ea4670e56ffePbPz8MjepN0aJi. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538146723,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538154363,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/summarize",
+    "status": 200,
+    "body": {
+      "providerID": "openrouter",
+      "modelID": "minimax/minimax-m3.1-flash:free",
+      "auto": false
+    }
+  },
+  {
+    "at": 1792538154395,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538154486,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538154667,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538169026,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 2. source_session=ses_ea4670c68ffeiyu62U73UPmse2. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538169150,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538237343,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/summarize",
+    "status": 200,
+    "body": {
+      "providerID": "openrouter",
+      "modelID": "minimax/minimax-m3.1-flash:free",
+      "auto": false
+    }
+  },
+  {
+    "at": 1792538237379,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538237412,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538237541,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538237563,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538237681,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538237693,
+    "path": "/session/status",
+    "status": 200
+  },
+  {
+    "at": 1792538237719,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  },
+  {
+    "at": 1792538253682,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200,
+    "body": {
+      "agent": "build",
+      "model": {
+        "providerID": "openrouter",
+        "modelID": "minimax/minimax-m3.1-flash:free"
+      },
+      "tools": {
+        "skill": true,
+        "session_search": true,
+        "session_info": true,
+        "session_read": false,
+        "session_list": false,
+        "bash": false,
+        "read": false,
+        "write": false,
+        "edit": false,
+        "glob": false,
+        "grep": false,
+        "task": false,
+        "call_omo_agent": false,
+        "look_at": false,
+        "interactive_bash": false,
+        "skill_mcp": false
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 3. source_session=ses_ea4670a57ffemKNS3WkRUY3yHX. Return the verified receipt."
+        }
+      ]
+    }
+  },
+  {
+    "at": 1792538253696,
+    "path": "/session/ses_ea467088bffexKarygZ1h6pTA2/message",
+    "status": 200
+  }
+]

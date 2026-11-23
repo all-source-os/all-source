@@ -1,0 +1,37 @@
+[
+  {
+    "at": 1792497996216,
+    "path": "/global/health",
+    "status": 200
+  },
+  {
+    "at": 1792498002647,
+    "path": "/config",
+    "status": 200
+  },
+  {
+    "at": 1792498002700,
+    "path": "/agent",
+    "status": 200
+  },
+  {
+    "at": 1792498002712,
+    "path": "/session",
+    "status": 200
+  },
+  {
+    "at": 1792498003037,
+    "path": "/session/ses_ea6cb14ecffeSZJVwVM7875ofE/message",
+    "status": 200
+  },
+  {
+    "at": 1792498004561,
+    "path": "/session/ses_ea6cb14ecffeSZJVwVM7875ofE/summarize",
+    "status": 200
+  },
+  {
+    "at": 1792498006268,
+    "path": "/session/ses_ea6cb14ecffeSZJVwVM7875ofE/message",
+    "status": 200
+  }
+]

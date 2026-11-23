@@ -1,0 +1,402 @@
+{
+  "at": 1792506129341,
+  "stage": 1,
+  "prompt": "Run Zephyr ledger audit checkpoint 1. source_session=ses_ea64f51f8ffet4V2jDpnSWRtJq. Return the verified receipt.",
+  "expected": {
+    "stage": 1,
+    "query": "ZEPHYR_484903FA4F",
+    "receipt": "receipt-1-5568e1a5c2"
+  },
+  "sourceSessionID": "ses_ea64f51f8ffet4V2jDpnSWRtJq",
+  "messages": [
+    {
+      "info": {
+        "id": "msg_159b0d7d9001nNS5HWFStLR89K",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "user",
+        "time": {
+          "created": 1792506124249
+        },
+        "summary": {
+          "diffs": []
+        },
+        "agent": "build",
+        "model": {
+          "providerID": "openrouter",
+          "modelID": "openai/gpt-4.1-nano"
+        },
+        "tools": {
+          "skill": true,
+          "session_search": true,
+          "session_info": true,
+          "session_read": false,
+          "session_list": false,
+          "bash": false,
+          "read": false,
+          "write": false,
+          "edit": false,
+          "glob": false,
+          "grep": false,
+          "task": false,
+          "call_omo_agent": false,
+          "look_at": false,
+          "interactive_bash": false,
+          "skill_mcp": false
+        }
+      },
+      "parts": [
+        {
+          "id": "prt_159b0d7d90020NcuMdRk51Fpb3",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0d7d9001nNS5HWFStLR89K",
+          "type": "text",
+          "text": "Run Zephyr ledger audit checkpoint 1. source_session=ses_ea64f51f8ffet4V2jDpnSWRtJq. Return the verified receipt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0d7e0001NcPRtqYTGUfdi0",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506124256,
+          "completed": 1792506125348
+        },
+        "parentID": "msg_159b0d7d9001nNS5HWFStLR89K",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0003401,
+        "tokens": {
+          "total": 8411,
+          "input": 1441,
+          "output": 58,
+          "reasoning": 0,
+          "cache": {
+            "read": 6912,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0db15001jYeSGfe1wmNJ5P",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0d7e0001NcPRtqYTGUfdi0",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0db17001odkvlJCFXV49Ce",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0d7e0001NcPRtqYTGUfdi0",
+          "type": "tool",
+          "callID": "call_UmSms7rLYdeiWAe8OysCyRyA",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "ZEPHYR_484903FA4F",
+              "session_id": "ses_ea64f51f8ffet4V2jDpnSWRtJq",
+              "case_sensitive": true,
+              "limit": 5
+            },
+            "output": "Found 1 matches:\n\n[ses_ea64f51f8ffet4V2jDpnSWRtJq] msg_159b0ae14001nqapxNWNDsYp3s (user) 2026-10-20T14:21:53.556Z\n  ZEPHYR_484903FA4F receipt-1-5568e1a5c2. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506125299,
+              "end": 1792506125307
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0dc22001sy26Yrx0AGm9tA",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0d7e0001NcPRtqYTGUfdi0",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0003401,
+          "tokens": {
+            "total": 8411,
+            "input": 1441,
+            "output": 58,
+            "reasoning": 0,
+            "cache": {
+              "read": 6912,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0dc25001762p1nk0UQQsB9",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506125349,
+          "completed": 1792506126318
+        },
+        "parentID": "msg_159b0d7d9001nNS5HWFStLR89K",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0002517,
+        "tokens": {
+          "total": 8553,
+          "input": 325,
+          "output": 36,
+          "reasoning": 0,
+          "cache": {
+            "read": 8192,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0deec001lU4hjwjClooD1e",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dc25001762p1nk0UQQsB9",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0deee001IuKXc1tsfyMNlo",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dc25001762p1nk0UQQsB9",
+          "type": "tool",
+          "callID": "call_qVIg8N4VAepnC7EzSsAqugFv",
+          "tool": "session_info",
+          "state": {
+            "status": "completed",
+            "input": {
+              "session_id": "ses_ea64f51f8ffet4V2jDpnSWRtJq"
+            },
+            "output": "Session ID: ses_ea64f51f8ffet4V2jDpnSWRtJq\nMessages: 1\nDate Range: 2026-10-20T14:21:53.556Z to 2026-10-20T14:21:53.556Z\nAgents Used: build\nHas Todos: No\nHas Transcript: Yes (1 entries)",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506126264,
+              "end": 1792506126274
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0dfe6001LsfEFPYkihApPo",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dc25001762p1nk0UQQsB9",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0002517,
+          "tokens": {
+            "total": 8553,
+            "input": 325,
+            "output": 36,
+            "reasoning": 0,
+            "cache": {
+              "read": 8192,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0dfef001z2HlByFgJkJTzC",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506126319,
+          "completed": 1792506128011
+        },
+        "parentID": "msg_159b0d7d9001nNS5HWFStLR89K",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0002749,
+        "tokens": {
+          "total": 8755,
+          "input": 197,
+          "output": 110,
+          "reasoning": 0,
+          "cache": {
+            "read": 8448,
+            "write": 0
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0e30f0011Dx797I1XoMu7F",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dfef001z2HlByFgJkJTzC",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0e310001koB5gyYnxsn3Lz",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dfef001z2HlByFgJkJTzC",
+          "type": "text",
+          "text": "The session info confirms the existence of the source session. The search identified a receipt labeled \"receipt-1-5568e1a5c2\" associated with checkpoint 1. I will now retrieve the receipt details to verify it.",
+          "time": {
+            "start": 1792506127120,
+            "end": 1792506128007
+          }
+        },
+        {
+          "id": "prt_159b0e4ab00121KcyFoFUGI8zk",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dfef001z2HlByFgJkJTzC",
+          "type": "tool",
+          "callID": "call_jVwgtEHxDwmWg1llfgRz3ZNj",
+          "tool": "session_search",
+          "state": {
+            "status": "completed",
+            "input": {
+              "query": "receipt-1-5568e1a5c2",
+              "session_id": "ses_ea64f51f8ffet4V2jDpnSWRtJq",
+              "case_sensitive": true,
+              "limit": 1
+            },
+            "output": "Found 1 matches:\n\n[ses_ea64f51f8ffet4V2jDpnSWRtJq] msg_159b0ae14001nqapxNWNDsYp3s (user) 2026-10-20T14:21:53.556Z\n  ZEPHYR_484903FA4F receipt-1-5568e1a5c2. Synthetic ledger record.\n  Matches: 1\n",
+            "title": "",
+            "metadata": {
+              "truncated": false
+            },
+            "time": {
+              "start": 1792506127999,
+              "end": 1792506128008
+            }
+          },
+          "metadata": {
+            "openrouter": {
+              "reasoning_details": []
+            }
+          }
+        },
+        {
+          "id": "prt_159b0e689001JVu4snG53R8Bv8",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0dfef001z2HlByFgJkJTzC",
+          "type": "step-finish",
+          "reason": "tool-calls",
+          "cost": 0.0002749,
+          "tokens": {
+            "total": 8755,
+            "input": 197,
+            "output": 110,
+            "reasoning": 0,
+            "cache": {
+              "read": 8448,
+              "write": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_159b0e68c0012OTNE6zwJa5Ir0",
+        "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+        "role": "assistant",
+        "time": {
+          "created": 1792506128012,
+          "completed": 1792506129330
+        },
+        "parentID": "msg_159b0d7d9001nNS5HWFStLR89K",
+        "modelID": "openai/gpt-4.1-nano",
+        "providerID": "openrouter",
+        "mode": "build",
+        "agent": "build",
+        "path": {
+          "cwd": "/private/tmp/allsource-omo-compaction/model/runs/selected-nano-v1",
+          "root": "/"
+        },
+        "cost": 0.0002396,
+        "tokens": {
+          "total": 8942,
+          "input": 84,
+          "output": 26,
+          "reasoning": 0,
+          "cache": {
+            "read": 8832,
+            "write": 0
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "id": "prt_159b0e959001aQxHv7QqRyeqMk",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0e68c0012OTNE6zwJa5Ir0",
+          "type": "step-start"
+        },
+        {
+          "id": "prt_159b0e95b0013HNFr6fuEjOego",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0e68c0012OTNE6zwJa5Ir0",
+          "type": "text",
+          "text": "The receipt \"receipt-1-5568e1a5c2\" is confirmed as a synthetic ledger record associated with checkpoint 1. Since the session info and search results verify its existence, I will now return this receipt as the verified output.",
+          "time": {
+            "start": 1792506128731,
+            "end": 1792506129325
+          }
+        },
+        {
+          "id": "prt_159b0ebaf001HRS7cd5ylJPfua",
+          "sessionID": "ses_ea64f51b0ffdQTr2ZNVhhEJ55p",
+          "messageID": "msg_159b0e68c0012OTNE6zwJa5Ir0",
+          "type": "step-finish",
+          "reason": "stop",
+          "cost": 0.0002396,
+          "tokens": {
+            "total": 8942,
+            "input": 84,
+            "output": 26,
+            "reasoning": 0,
+            "cache": {
+              "read": 8832,
+              "write": 0
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "skill": "# Zephyr ledger audit\n\nFor a requested checkpoint N and source_session provided by the user, execute this procedure.\n1. Call session_search with session_id=source_session, case_sensitive=true, limit=5, and EXACT query from the checkpoint map below.\n2. Call session_info for the same source_session to validate the source exists.\n3. Return the receipt from that search result only after the source check succeeds. Never invent a receipt. Do not use general file tools. Repeat this procedure for each new checkpoint.\n\nCheckpoint query map:\n0: ZEPHYR_2A1BE9828C\n1: ZEPHYR_484903FA4F\n2: ZEPHYR_C085B5EF7B\n3: ZEPHYR_597D942EE4\n\nIf these instructions remain in your context, use them directly without loading this skill again.\nEND_ZEPHYR_SKILL\n",
+  "fixtures": [
+    {
+      "stage": 0,
+      "query": "ZEPHYR_2A1BE9828C",
+      "receipt": "receipt-0-ed36eac8ce"
+    },
+    {
+      "stage": 1,
+      "query": "ZEPHYR_484903FA4F",
+      "receipt": "receipt-1-5568e1a5c2"
+    },
+    {
+      "stage": 2,
+      "query": "ZEPHYR_C085B5EF7B",
+      "receipt": "receipt-2-b51505651c"
+    },
+    {
+      "stage": 3,
+      "query": "ZEPHYR_597D942EE4",
+      "receipt": "receipt-3-5f251dc4b5"
+    }
+  ]
+}
