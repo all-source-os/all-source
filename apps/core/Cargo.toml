@@ -152,7 +152,7 @@ fs4 = { workspace = true, optional = true }
 futures.workspace = true
 hex = "0.4"
 hmac = "0.12"
-hotpath = { version = "0.15", optional = true }
+hotpath = { version = "0.32", optional = true }
 http = { workspace = true, optional = true }
 instant-distance = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
