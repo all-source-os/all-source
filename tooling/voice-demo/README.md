@@ -41,10 +41,10 @@ Output is written to `RESULTS.md` (committed — it's the proof artifact).
 
 ## Honest finding
 
-`prime_recall` and `prime_stats` return the correct voice slice and counts. In
-`allsource-prime 0.21.4`, `prime_index` / `prime_context` report `0 nodes`
-because the `DomainIndexProjection`/`CrossDomainProjection` they read are not fed
-by the live MCP `prime_add_node` write path (re-tested across a data-dir reopen —
-still 0). The voice flow runs on `prime_recall` today; `/voice export` (the
-`prime_index` markdown bridge) lands once that projection is wired. See
-`docs/proposals/PRIME_VOICE_FILE.md` § "Convention vs. server gap" and `RESULTS.md`.
+`prime_recall` and `prime_stats` return the correct voice slice and counts.
+Fixed in `allsource-prime` 0.21.6 (commit `5083017`): `prime_index` returns the
+populated compressed voice file (12 nodes, 5 domains, 77 tokens), and
+`prime_context` L2 returns hybrid recall. `/voice export` (the `prime_index`
+markdown bridge) is documented in `plugin/mammoth/commands/voice.md`. See
+`docs/proposals/PRIME_VOICE_FILE.md` § "4. Convention vs. server (honest separation)"
+and `RESULTS.md`.

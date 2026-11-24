@@ -116,10 +116,10 @@ stream than this binary knows about. Rebuild.
 
 ## The other subcommands
 
-`geo probe` and `geo research` are declared but exit non-zero, each naming the
-slice that implements it. That is intentional: the CLI surface is fixed now so
-the layer slices can land without re-litigating the shape. `geo crawl` is
-implemented — see the layer 2 section below.
+`geo research` is declared but exits non-zero, naming the slice that implements
+it (prompt 027). The CLI surface is fixed so the layer slices can land without
+re-litigating the shape. `geo probe` (layer 3, prompt 025) and `geo crawl` (layer 2)
+are implemented.
 
 ## Emitting from a later slice
 
@@ -139,8 +139,8 @@ slices be built independently.
 **`ALLSOURCE_API_KEY is not set`** — expected when no key is exported. Export
 one, or use `--dry-run`.
 
-**Report shows zeros everywhere** — expected until a layer slice ships. There
-is nothing writing `geo.*` events yet.
+**Report shows zeros everywhere** — layers 1, 2 and 4 are live, so zeros mean no
+events in the window, or a key or tenant that does not match the writer.
 
 **`docs/contracts/geo-events/examples/… has drifted from geo-core`** — a
 payload type changed without regenerating the committed examples:
@@ -274,7 +274,7 @@ pre-existing onboarding UI rendering a copy-paste install command containing the
 ## Troubleshooting
 
 **Route returns 503 `GEO telemetry is not configured`** — `ALLSOURCE_API_KEY`
-is unset in the Vercel environment. The route logs `[geo] ALLSOURCE_API_KEY is
+is unset on the Fly app `allsource-web` (`fly secrets set --app allsource-web ALLSOURCE_API_KEY=...`). The route logs `[geo] ALLSOURCE_API_KEY is
 not set` and refuses; it deliberately does not pretend to succeed.
 
 **Route returns 204** — the arrival was not from a known AI surface. Normal:
@@ -373,15 +373,17 @@ Flags: `--since` (duration `7d`/`12h`/`4w` or RFC 3339), `--until`, `--days`
 
 ### Where the logs come from
 
-- **`--file`** is the workhorse and needs no credential. A **Vercel log drain**
-  writes exactly the NDJSON this parses. This is the only source that gives a
-  durable multi-week series, so stand the drain up.
+- **`--file`** is the workhorse and needs no credential. It parses the NDJSON
+  and Combined Log Format files you pass in. `tests/fixtures/vercel-log-drain.ndjson`
+  is a historical fixture.
 - **`--vercel-project`** shells out to `vercel logs <project> --json`. Retrieval
   only — every decision about the bytes is made in Rust. `vercel logs` serves a
-  short recent window, not history.
-- **`--fly-app`** shells out to `fly logs -a <app> --no-tail --json`, for
-  `api.all-source.xyz` (Control Plane). Its lines carry the access line inside
-  `message`, which the parser falls through to Combined Log Format for.
+  short recent window, not history. Web is on Fly, so this is not a source for
+  current web logs.
+- **`--fly-app`** shells out to `fly logs -a <app> --no-tail --json`. Use
+  `allsource-web` for web logs and `allsource-control-plane` for
+  `api.all-source.xyz`. Its lines carry the access line inside `message`, which
+  the parser falls through to Combined Log Format for.
 
 Both vendor CLIs need you to be logged in (`vercel login`, `fly auth login`).
 If a CLI is missing or unauthenticated the run fails loudly with the install
@@ -967,7 +969,7 @@ commit.
 
 ## Environment
 
-The web capture needs `ALLSOURCE_API_KEY` in the **Vercel** environment — the
+The web capture needs `ALLSOURCE_API_KEY` as a Fly secret on `allsource-web` — the
 same key layer 1 already uses, one env-var scheme for the whole programme. The
 route refuses with 503 and logs loudly when it is missing rather than
 pretending to succeed. It reads the tenant from the httpOnly `auth_token`
@@ -997,12 +999,12 @@ across every tenant that ever signed up. The join back to the signup is
 
 Deploying it: `fly deploy` for the Control Plane runs with build context
 `apps/control-plane`, **not** the repo root (Core is the one that builds from
-root). `apps/web` ships via Vercel and must never be `fly deploy`ed.
+root). `apps/web` deploys to Fly: `flyctl deploy . --config apps/web/fly.toml --remote-only --ha=false`.
 
 ## Troubleshooting
 
 **Layer 4 is empty but people are signing up** — check in this order: the
-route returns 503 (no `ALLSOURCE_API_KEY` in Vercel); the route returns 401
+route returns 503 (no `ALLSOURCE_API_KEY` secret on `allsource-web`); the route returns 401
 (the onboarding screen loaded without a session cookie); or nobody clicked. The
 report distinguishes none of these, so read the function logs.
 

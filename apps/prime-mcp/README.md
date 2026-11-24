@@ -46,7 +46,7 @@ Add to `~/.claude/claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. You now have 13 tools:
+Restart Claude Desktop. You now have 23 `prime_*` tools, including:
 
 | Tool | Description |
 |------|-------------|

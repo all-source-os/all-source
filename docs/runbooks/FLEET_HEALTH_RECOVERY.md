@@ -9,11 +9,13 @@ and the incident narratives live in
 [`PRICING_BILLING_CUTOVER.md`](./PRICING_BILLING_CUTOVER.md).
 
 **Status:** P0–P3 **shipped to `main`** (Control Plane API `a02667e`, admin UI `e233bee`,
-MCP tools `b6e3c88`). **Control Plane DEPLOYED** — Fly `allsource-control-plane` **v68**;
+MCP tools `b6e3c88`). **Control Plane DEPLOYED** — Fly `allsource-control-plane` **v87** (2026-06-27; the first
+fleet-API release was v68);
 `/api/v1/admin/fleet/*` + `/api/v1/admin/recovery/*` are live and admin-gated. **Admin UI
-DEPLOYED** — Vercel project `allsource-admin` — but **login is not wired cross-origin yet**
-(needs the admin custom domain + CORS + OAuth; see the checklist below and
-[`CONTROL_PLANE_CORS.md`](./CONTROL_PLANE_CORS.md)). Until that lands the admin pages fall
+DEPLOYED** — Fly app `allsource-admin`. Cross-origin login is **unverified** from the repo:
+`admin.all-source.xyz` is in `ALLOWED_FRONTEND_URLS` and `OAUTH_COOKIE_DOMAIN=.all-source.xyz`
+is set in `apps/control-plane/fly.toml`. Live login needs checking (see the checklist below and
+[`CONTROL_PLANE_CORS.md`](./CONTROL_PLANE_CORS.md)). Until it is confirmed the admin pages fall
 back to a clearly-marked **fixture**.
 
 **Central invariant (do not undercut it):** "a tenant reports empty data" is a
@@ -80,7 +82,7 @@ That is intentional pre-deploy scaffolding so the layout can be verified. **Do t
 order, then remove the fixture:**
 
 1. **Control Plane** (`apps/control-plane`) — ✅ **DONE.** Deployed to Fly `allsource-control-plane`
-   **v68** (`fly deploy apps/control-plane --app allsource-control-plane`). `/api/v1/admin/fleet/*`
+   **v87** (`fly deploy apps/control-plane --app allsource-control-plane`). `/api/v1/admin/fleet/*`
    + `/api/v1/admin/recovery/*` answer live (401 unauthenticated = wired + gated). Confirm a
    **new** Fly release on each redeploy (a `fly deploy` that creates no release is a no-op —
    data-visibility trap #4).
@@ -91,9 +93,10 @@ order, then remove the fixture:**
    mutations should be allowed (off by default).
 3. **Admin app** (`apps/admin`) — ✅ **deployed** to Fly app `allsource-admin`, with
    `NEXT_PUBLIC_API_URL=https://api.all-source.xyz` and private Control Plane routing through
-   `http://allsource-control-plane.internal:3901`. Cross-origin login requires: (a) custom domain
+   `http://allsource-control-plane.internal:3901`. Cross-origin login depends on: (a) custom domain
    **`admin.all-source.xyz`** on the Fly app so it shares `.all-source.xyz` with the API cookie;
-   (b) **CORS** — `admin.all-source.xyz` in Control Plane `ALLOWED_FRONTEND_URLS`; and (c) **OAuth** —
+   (b) **CORS** — `admin.all-source.xyz` in Control Plane `ALLOWED_FRONTEND_URLS`
+   (`apps/control-plane/fly.toml:26`); and (c) **OAuth** —
    admin domain in Google/GitHub authorized redirect URIs. See
    [`CONTROL_PLANE_CORS.md`](./CONTROL_PLANE_CORS.md) and [`FLY_FRONTENDS.md`](./FLY_FRONTENDS.md).
 4. **Verify live**, then **remove the fixture fallback** from `fleet/page.tsx` and

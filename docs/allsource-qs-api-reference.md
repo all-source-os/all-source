@@ -1,4 +1,4 @@
-# Allsource Query Service API Reference (v0.10.3)
+# Allsource Query Service API Reference (v0.30.0)
 
 Verified working endpoints for building the QueryServiceClient in apiV1.
 
@@ -145,7 +145,7 @@ Use for: get_user_indices (filter streams by prefix pattern).
 ## Health Check
 
 ```
-GET /api/health → {"status":"healthy","version":"0.10.3","checks":{"websocket":"healthy","backend":"healthy"}}
+GET /api/health → {"status":"healthy","version":"<running service version>","checks":{"websocket":"healthy","backend":"healthy"}}
 ```
 
 ## Error Format

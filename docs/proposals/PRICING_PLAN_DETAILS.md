@@ -6,27 +6,28 @@ Source of record for per-tier entitlements. **Two layers must always agree:**
 
 Change both together or they drift. Prices themselves are sourced live from LemonSqueezy (see `docs/runbooks/PRICING_BILLING_CUTOVER.md`).
 
-## Current tiers (as of 2026-06-07)
+## Current tiers
 
-| | Self-Host | Indie $19 | Studio $79 | Scale $299 | Enterprise |
+| | Self-Host | Indie £18.99 | Studio £78.99 | Scale £298.99 | Enterprise |
 |---|---|---|---|---|---|
 | **Events/mo** | unlimited (own hw) | 500K | 5M | 50M | negotiated (∞) |
 | **Queries/mo** | — | 50K | 500K | 5M | ∞ |
 | **x402 included** | — | 50K | 500K | 5M | ∞ |
 | **x402 overage** | — | $0.0001/call | $0.0001/call | $0.0001/call | negotiated |
-| **Retention** | forever | 14 days | 90 days | 365 days | unlimited |
+| **Retention** | forever | forever | forever | forever | forever |
+| **Outbound data/mo** | — | 25 GB | 150 GB | 750 GB | custom finite |
 | **Streams** | ∞ | 3 | ∞ | ∞ | ∞ |
 | **MCP** | full (self-host) | read | read + write | read + write + dedicated | dedicated cluster |
 | **Support** | GitHub community | email 48h | email 24h + Discord | priority + Slack | 24/7 + dedicated SE |
 
-Backend also has a legacy `free` tier (100K events, 7-day retention, 1 stream, no hosted MCP). Per product direction **no hosted tenant should sit on `free`** — see the early-adopter migration below.
+Backend also has a legacy `free` tier (100K events, forever retention, 1 stream, no hosted MCP). Per product direction **no hosted tenant should sit on `free`** — see the early-adopter migration below.
 
 ## Open questions (to revisit)
 
-Retention is the flagged one. Decisions still pending:
-- **Indie retention** — 14 days may be too short for the value; candidate bump to 30 days.
-- **Studio 90d / Scale 365d** — keep, or widen the gap to sharpen the upgrade reason.
-- **Headline differentiator** — retention vs events/mo: which leads the pitch?
+Retention is not a tier lever. `TierQuotaMap` sets `RetentionDays: -1` (forever) for every tier (`apps/control-plane/internal/domain/entities/subscription.go:265-281`), and the pricing FAQ states that data retention is not limited by plan tier (`apps/web/src/lib/config.ts:324`). No retention window per tier is pending.
+
+Decisions still pending:
+- **Headline differentiator** — events/mo, outbound data, or MCP scope: which leads the pitch?
 - **x402** — keep flat `$0.0001/call` overage across tiers, or scale it per tier?
 - **Streams** — is Indie's 3-stream cap right, or unlimited everywhere?
 

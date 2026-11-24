@@ -6,6 +6,18 @@ All notable changes to AllSource Chronos are documented here.
 
 ### Added
 
+- **Read-cost attribution**: reads are attributed to their source and the cost of
+  each read is reported.
+
+### Fixed
+
+- Embedded stores open without performing writes.
+
+## [0.29.0] - 2026-11-16
+
+### Added
+
+- **Scoped offline event erasure** in Core. Exact events can be redacted offline.
 - **Registered ES256 client keys** — a tenant client keeps a P-256 private key,
   an operator registers the public half
   (`POST/GET /api/v1/admin/tenants/:id/client-keys`,
@@ -27,6 +39,296 @@ All notable changes to AllSource Chronos are documented here.
 Guide: [Registered client keys](guides/REGISTERED_CLIENT_KEYS.md). Operator
 procedure: [CLIENT_KEY_ROTATION.md](runbooks/CLIENT_KEY_ROTATION.md). Decision:
 [2026-11-07](decisions/2026-11-07-tenant-clients-registered-es256-keys.md).
+
+### Changed
+
+- **Bounded Core memory**: a resident ledger and heap replay; checkpointed system
+  events are released from memory; memory risks cut and heap gauged ahead of 8 GB.
+
+### Fixed
+
+- Offline erasure redacts exact events.
+- Docker build and security scan restored on `main`.
+- `golang.org/x/net` bumped to v0.62.0.
+
+## [0.28.0] - 2026-11-06
+
+### Added
+
+- **Valid time** beside record time in Core.
+- **Typed writes and per-field provenance** in Prime.
+- Core restarts answer `not_ready`; gateways hold requests through a restart.
+- The system store boots from a checkpoint.
+
+### Changed
+
+- Prime warns by default, records the writer, and rebuilds its image.
+
+### Fixed
+
+- Egress ledger events are replayed in place at boot.
+- Rust SDK waits out Core restarts; CI Rust toolchain pinned.
+- `zstd` and `libz-sys` bumped past new RustSec advisories.
+- CI: release read gate baselined on the Alpine image family; embedded MCP image
+  NIF dependencies built in bounded phases.
+
+## [0.27.0] - 2026-10-30
+
+### Added
+
+- **Latest-state reads** and a consumer-access deploy gate.
+- **Tenant egress budgets and prepaid credits** (billing), served from a per-tenant
+  ledger lease.
+- **Shared incremental tenant read models** in Core.
+- Gzip responses for clients that request them.
+- Per-tenant byte metering; tenant metrics kept private.
+- Question-led ops dashboards, outage alerts, metric scraping, and a live
+  traffic and outage report.
+- Rust SDK honours rate-limit refusals and bounds session reads.
+
+### Fixed
+
+- Tenant event feeds and read models are served without decoding a tenant's full
+  history; large tenants are served bounded.
+- Retained event-prefix and entity archive reads are bounded.
+- Managed API key lifecycle authority enforced on both gateways.
+- Sign-in lookups bounded; busy 429 responses no longer block reads.
+- Prime rejects zero sync intervals before startup.
+- Go 1.26.9 and `x/net` v0.60.0 for 11 reachable CVEs.
+- Prime control values and TOON property keys preserved; Chronis TOON output escaped.
+
+## [0.26.1] - 2026-10-13
+
+### Fixed
+
+- Compaction is scheduled from its own last run; a paused sweep counts as due.
+- Conditional appends are no longer queued when they read no archive.
+- Archive output is bounded; retained repairs are recovered.
+- Control plane writes a heartbeat on state change, not on every probe.
+- Core release binaries are linked one at a time so the image build fits the builder.
+- Go 1.26.9 and `x/net` v0.60.0 for 11 reachable CVEs.
+
+## [0.26.0] - 2026-10-12
+
+### Added
+
+- Compaction runs on a schedule.
+
+### Fixed
+
+- A hydration that will not fit the memory budget is refused.
+- Retention test TTL built with `from_hours`.
+- The pinned Rust toolchain is used for builds (no `cargo +nightly`).
+- `act` pinned, so a failed install no longer skips the quality gates.
+
+## [0.25.4] - 2026-10-10
+
+### Fixed
+
+- Conditional writes resolve their version per entity and answer from a per-tenant
+  version manifest; verified archive versions are reused.
+- Incomplete version resolves name the limit that stopped them.
+- Ingest persists the entity version it reports.
+- Archive budget is charged for bytes decoded, not bytes Parquet declared.
+- Desktop extension receives the tenant key by environment, not argv.
+
+## [0.25.3] - 2026-10-05
+
+### Fixed
+
+- Conditional writes stop hydrating the tenant archive; the HTTP admission check
+  no longer hydrates it.
+- Entity versions are read from the archive instead of counting resident entities.
+
+### Added
+
+- `allsource-mcp` trace reads JSON held in strings and skips hub ids.
+
+## [0.25.2] - 2026-10-02
+
+### Added
+
+- Customer evidence and human review contract; scoped evidence sharing and
+  comparison reviews.
+- Durable canonical query quota admission in Core; query admission receipts.
+- Customer OAuth with single-use PKCE authorization; durable customer connection
+  consent and limits; durable team invitation authority.
+- `allsource-mcp` refreshes read-only stores and adds a cross-store trace.
+- Core bounds archive workers for deployment memory headroom.
+
+### Fixed
+
+- Strict archive work is bounded; conditional appends over unreadable archives are
+  rejected.
+- Customer review work is bounded and cancellable.
+
+## [0.25.1] - 2026-09-24
+
+### Fixed
+
+- Embedded boot no longer re-reads the archive per tenant; tenants are marked
+  loaded after hydration.
+- Prime drops the second full-archive hydrate on boot.
+- Core image built on Rust 1.94 for datafusion 55.
+- Durable production signup and trial provisioning restored.
+
+### Added
+
+- `better-auth-allsource` v0.14.13: tenant-scoped direct-to-Core client.
+- Opt-in Jev evaluation tooling; offline decision-history replay proof in Core.
+
+## [0.25.0] - 2026-09-16
+
+### Added
+
+- **WAL durability**: the WAL deletes only bytes that are durable elsewhere.
+- **S3 cold-tier archive** in Core, with a CI step that runs integration tests.
+- **Entity-prefix read scoping** at the single query choke point in Core.
+- Tenant-scoped recall in Prime.
+- `chronis`: `cn task reparent`; `cn release` hands a claimed task back to the pool.
+- Billing reports extraction overage.
+
+### Fixed
+
+- Compaction reclaims memory; it does not rewrite history.
+- Sync stops re-sending the cursor millisecond.
+- A read-only Prime replica no longer reports itself healthy.
+- Verified Lemon Squeezy prices persist across restarts.
+- `.chronis/config.toml`, which carried an API key, is no longer shipped.
+- Every Prime node converges on having a vector.
+
+## [0.24.0] - 2026-09-12
+
+### Added
+
+- **Embedding model shipped in the Desktop extension**, so `prime_recall` works offline.
+- **Tenant-safe Replay Studio**; replay impact analysis and SDK workflow.
+- AllSource LangGraph checkpointer.
+- Restart proof funnel on the marketing site.
+- Frontends moved to Fly.io.
+- Rust SDK: optimistic-concurrency ingest and projection-summary pagination.
+- Privacy-safe GA4 measurement.
+- Geo telemetry: `geo.*` event contract, AI referral attribution, verified bot crawl
+  ingest, layer-3 probe harness.
+
+### Fixed
+
+- `allsource-mcp` requires Core 0.24.0.
+- Prime aligned with the published Core API.
+- Prime recall degrades to lexical instead of returning an error.
+- Dependency audit advisories cleared (Rust, Elixir, Go).
+
+## [0.23.0] - 2026-08-11
+
+### Added
+
+- **Projection pagination and filters**: `limit`, `offset` and `entity_id_prefix` on
+  `GET /projections/{name}/state`; projection summary, bulk get and consumer poll in
+  the Rust SDK.
+- Tenant-scoped stats and entity state on the gateway.
+- Resend email provider behind the inbox connector seam.
+- 14-day trial replaces the free plan for new signups.
+
+### Changed
+
+- Billing: in-place plan change for existing subscribers; billing config checked at
+  boot and by an admin endpoint.
+
+### Fixed
+
+- `/events/query` applies `offset` so paginators terminate; `limit` bounds sorting
+  and cloning.
+- `since`, `until` and `as_of` are honoured on unindexed queries.
+- `/api/billing/status` gets a tenant context.
+- The stdio MCP server answers without replying to JSON-RPC notifications.
+- The Rust SDK sends the client API key on the ProjectionWorker event stream.
+
+## [0.22.0] - 2026-06-11
+
+### Added
+
+- **Stateless Prime over Core**: `HttpCore` (an `EventStore` backed by remote Core),
+  `HostedPrime` (tenant-scoped engine over remote Core), and hosted `/mcp` dispatch.
+  The hosted REST surface requires `PRIME_API_KEY`. The `/data` volume is dropped.
+- **5-tier pricing** with x402 allowance billing; public billing catalog endpoint;
+  live LemonSqueezy prices rendered on the web.
+- Self-serve billing checkout and portal for tenant owners.
+- Early-adopter migration off the free tier.
+
+### Fixed
+
+- Duplicate subscriptions are prevented.
+- Tenant metadata is serialised in GET and PUT tenant responses; PUT allows updates.
+- Prime writes are no longer double-applied on a cold-tenant write.
+- Stub for `allsource-prime-models` created before `cargo-chef cook` in the Core build.
+
+## [0.21.5] - 2026-05-23
+
+### Added
+
+- **Claude Desktop Extension (`.dxt`)** packaging `allsource-prime`.
+- `install.sh` downloads prebuilt binaries from the GitHub Releases tarballs.
+- `/connect` page for Claude Desktop setup, with deep-link parameters.
+
+### Fixed
+
+- The Option A `.dxt` download is gated until v0.21.5 is published.
+- Web: Next standalone output only for non-Vercel builds; localhost no longer leaks
+  into production share URLs.
+
+## [0.21.4] - 2026-05-22
+
+### Added
+
+- `allsource-prime` `--sync-to` and `--api-key` push events to a remote Core.
+- Tenant panel **Memory** tab: Prime stats and recent activity.
+- `/prime` landing page for MCP users.
+
+### Changed
+
+- `better-auth-allsource` round-trips `User.metadata` and blocks password storage there.
+
+## [0.21.3] - 2026-05-21
+
+### Added
+
+- `prime_embed` and `prime_recall` accept text-only input.
+
+### Fixed
+
+- Prime rebuilds projections from full Parquet history, not the WAL only.
+- Newline-delimited MCP stdio framing; optional TOON payloads.
+- `better-auth-allsource` sends the Core-compatible `payload_filter` shape.
+- Dependency audit advisories cleared.
+
+## [0.21.0] - 2026-05-16
+
+### Added
+
+- **Event and entity ordering**: `order` on `QueryEventsParams` in the Rust SDK;
+  `list_entities` ordering.
+- **Auto-pagination** in the Rust SDK (#178).
+- Standalone embedded MCP server image, built in CI (#129).
+
+### Fixed
+
+- Core replication integration tests are gated behind the `replication` feature.
+
+## [0.20.2] - 2026-05-15
+
+### Added
+
+- `order` parameter on `GET /api/v1/events/query` (`order=desc` returns newest first);
+  `better-auth-allsource` 0.14.7 passes it, so `limit=1` fetches the latest event.
+
+### Fixed
+
+- Control plane health handling uses the shared status constants.
+- `better-auth-allsource` field lookups are case-tolerant.
+- Prime clippy fixes in the hot-path benchmark.
+- Web: `date-fns` declared as a dependency; footer links wired; marketing layout
+  fixed on `/about`, `/sdks` and `/examples`.
+- CI uses the patched Go toolchain.
 
 ## [0.20.1] - 2026-04-30
 

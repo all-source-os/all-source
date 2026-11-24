@@ -1,7 +1,7 @@
 ---
 title: "allsource-mcp — Local MCP Server for AllSource Debugging"
 status: CURRENT
-last_updated: 2026-03-13
+last_updated: 2026-11-23
 category: guide
 ---
 
@@ -171,7 +171,7 @@ no registration record stops working at the gateway's `ALLSOURCE_LEGACY_KEY_SUNS
 
 ## Available Tools
 
-`allsource-mcp` exposes 13 read-only tools. LLMs call these automatically based on your natural language questions.
+`allsource-mcp` exposes 19 read-only tools. LLMs call these automatically based on your natural language questions.
 
 | Tool | What it reads |
 |---|---|
@@ -286,7 +286,7 @@ There are two MCP servers in the AllSource ecosystem. They serve different purpo
 | **Language** | Rust | Elixir |
 | **Transport** | stdio (local process) | stdio (local process) |
 | **Backend** | Embedded Core (reads files directly) | HTTP to running Core server |
-| **Tools** | 8 (read-only debugging) | 61 (full CRUD, analytics, schema, tenants) |
+| **Tools** | 19 (read-only debugging) | 61 (full CRUD, analytics, schema, tenants) |
 | **Use case** | Local debugging, offline analysis, dev workflows | Production AI interface, Claude Desktop with full stack |
 | **Dependencies** | None (single binary) | Running Core + Control Plane servers |
 | **Install** | `cargo install allsource-mcp` | `mix deps.get` in monorepo |
@@ -313,7 +313,7 @@ Common issues:
 
 ## Relationship to Embedded Core
 
-`allsource-mcp` is one of several applications built on the [Embedded Core library API](../proposals/EMBEDDED_CORE_AND_OFFLINE_FIRST.md):
+`allsource-mcp` is one of several applications built on the [Embedded Core library API](../proposals/archived/EMBEDDED_CORE_AND_OFFLINE_FIRST.md):
 
 - **[Chronis CLI](../../apps/chronis/)** — event-sourced task management for AI agents
 - **[Longhand](https://github.com/technical-leaders/longhand)** — offline-first Tauri desktop app
@@ -324,7 +324,7 @@ The Embedded Core API is documented in [ADR-001](../adr/001-embedded-core-librar
 
 ## Further Reading
 
-- [Embedded Core proposal (8 phases)](../proposals/EMBEDDED_CORE_AND_OFFLINE_FIRST.md) — full design and implementation history
+- [Embedded Core proposal (8 phases)](../proposals/archived/EMBEDDED_CORE_AND_OFFLINE_FIRST.md) — full design and implementation history
 - [ADR-001: Embedded Core Library API](../adr/001-embedded-core-library.md) — architecture decision record
 - [Elixir MCP Server setup](mcp-server/CLAUDE_DESKTOP_SETUP.md) — for the full 61-tool production MCP server
 - [allsource-mcp README](../../tooling/allsource-mcp/README.md) — quick reference

@@ -24,7 +24,7 @@ signup, works in Claude Code, Cursor, Cline, Windsurf, Codex, and Gemini.
   automatically, so you stop re-explaining your project every time.
 - **Local-first, zero signup** — durable on-disk store (WAL + Parquet), survives
   reboots, no account. Cross-machine/team sync is an opt-in upgrade.
-- **MCP-native** — one server, 13 `prime_*` tools, no per-agent shim. Claude Code
+- **MCP-native** — one server, 23 `prime_*` tools, no per-agent shim. Claude Code
   also gets a skill + `/remember` `/recall` `/memory-status` `/memory-sync`.
 
 ## Proof line (real, reproducible)

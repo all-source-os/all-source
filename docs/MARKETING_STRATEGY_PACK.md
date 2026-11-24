@@ -1,6 +1,9 @@
 # AllSource marketing strategy pack
 
 Status: active
+Last reviewed: 2026-11-24. Product facts checked against
+`apps/web/src/lib/config.ts` and
+`apps/control-plane/internal/domain/entities/subscription.go`.
 
 Source of truth: [BET.md](./BET.md). If this pack conflicts with the bet,
 `BET.md` wins.
@@ -40,7 +43,7 @@ the promotion gate.
   events and reproducible benchmark methodology.
 - Primary CTA: `Run the restart proof`.
 - Paid CTA: `Start hosted AllSource — 14-day trial, then from £18.99/month`.
-- Trust line: `Self-host under Apache-2.0. Hosted prices come from the live GBP catalog.`
+- Trust line: `Core is Apache-2.0; designated enterprise features use BSL 1.1. Hosted prices come from the live GBP catalog.`
 
 Avoid “perfect memory,” “revolutionary,” “seamless,” and blanket claims about
 competitors. Lead with buyer failure and proof. Architecture, tool count, and
@@ -53,8 +56,8 @@ benchmarks support the claim; they are not the headline.
 - Recurring hosted subscriptions through LemonSqueezy.
 - Indie is default first purchase; live workload determines upgrades to Studio
   or Scale.
-- Annual billing may improve cash flow only after monthly activation and
-  retention are measured.
+- Annual prices are set in `config.ts` (`yearlyPrice`). Promoting them waits
+  until monthly activation and retention are measured.
 - Enterprise remains sales-led and outside first promotion gate.
 - Report net revenue after refunds, chargebacks, taxes, LemonSqueezy fees,
   infrastructure cost, support cost, and partner commission.
@@ -95,7 +98,7 @@ full hosted value for free.
 
 Consider only after promotion gate passes:
 
-- annual hosted plans for activated customers;
+- annual plan promotion for activated customers;
 - paid implementation review with fixed scope;
 - framework-specific integration packs backed by repeated demand;
 - creator and consultant referrals selling hosted AllSource;
@@ -130,7 +133,7 @@ comment on resolved issues or submit unsolicited AI-generated PR reviews.
 
 First owned artifact:
 [`langgraph-checkpoint-allsource`](../integrations/langgraph-checkpoint-allsource/README.md),
-a LangGraph checkpoint adapter passing all 58 current base conformance tests.
+a LangGraph checkpoint adapter (alpha) passing all 58 tests in the current LangGraph conformance suite.
 External publication requires a live AllSource restart test and founder approval
 at action time.
 
@@ -275,6 +278,8 @@ qualified retention.
 
 ## Measurement contract
 
+Planned. None of the event names below is emitted by the code yet.
+
 ### Product and revenue events
 
 - `restart_proof_started`
@@ -349,7 +354,7 @@ Supporting metrics:
 Internal sources:
 
 - [AllSource bet](./BET.md)
-- [Current launch positioning and canonical facts](./marketing/launch-2026-07/00-LAUNCH-PLAN.md)
+- [Launch positioning, archived 2026-11-23](./archive/2026-11-23/marketing/launch-2026-07/00-LAUNCH-PLAN.md)
 - [Pricing and billing cutover](./runbooks/PRICING_BILLING_CUTOVER.md)
 - [Pricing plan details](./proposals/PRICING_PLAN_DETAILS.md)
 - [Draft `memcheck` specification](./marketing/free-tool-memcheck-spec.md)

@@ -1,10 +1,10 @@
 ---
 title: "AllSource Event Store - Comprehensive Features and Capabilities"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-24
 version: "1.0"
 related:
-  - "./CLEAN_ARCHITECTURE.md"
+  - "../archive/2026-11-23/current/CLEAN_ARCHITECTURE.md"
   - "./PERFORMANCE.md"
   - "./TENANT_ARCHITECTURE.md"
 ---
@@ -230,16 +230,13 @@ Snapshot {
 ```
 
 #### Operations
-- **Create Snapshot** (`POST /api/v1/snapshots`)
+- **Create Snapshot** (`POST /api/v1/operations/snapshots`, Control Plane)
   - Create snapshot for entity or all entities
   - Compresses state for storage efficiency
 
-- **List Snapshots** (`GET /api/v1/snapshots`)
+- **List Snapshots** (`GET /api/v1/operations/snapshots`, Control Plane)
   - Optional entity_id filter
   - Lists all snapshots with timestamps and metadata
-
-- **Get Latest Snapshot** (`GET /api/v1/snapshots/{entity_id}/latest`)
-  - Fast path for state reconstruction
 
 ### 4.2 Compaction
 
@@ -678,7 +675,7 @@ Lightweight orchestration layer above the Rust core providing:
 - `GET /api/v1/metrics/json` - JSON metrics format
 
 #### Operations
-- `POST /api/v1/operations/snapshot` - Coordinate snapshot creation
+- `POST /api/v1/operations/snapshots` - Coordinate snapshot creation
 - `POST /api/v1/operations/replay` - Coordinate replay operations
 
 #### Management (Future)
@@ -793,9 +790,8 @@ EventStoreConfig {
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/v1/snapshots` | Create snapshot |
-| GET | `/api/v1/snapshots` | List snapshots |
-| GET | `/api/v1/snapshots/{entity_id}/latest` | Get latest snapshot |
+| POST | `/api/v1/operations/snapshots` | Create snapshot (Control Plane) |
+| GET | `/api/v1/operations/snapshots` | List snapshots (Control Plane) |
 
 ### 16.4 Schema Operations
 
@@ -939,7 +935,7 @@ EventStoreConfig {
 ## Part 20: Technology Stack
 
 ### Core Service
-- **Language**: Rust 1.70+
+- **Language**: Rust 1.92+
 - **Framework**: Axum (async web)
 - **Storage**: Parquet files
 - **Serialization**: serde_json

@@ -1,6 +1,6 @@
 # Schema evolution example: SEO review
 
-**Status:** Prepared for review in the AllSource repository. Open [the local HTML preview](2026-11-09-schema-preview.html) in a browser; it shows the changed example, not the complete production page. Production release is unverified.
+**Status:** Prepared for review in the AllSource repository. Open [the local HTML preview](../archive/2026-11-23/seo/2026-11-09-schema-preview.html) in a browser (change on main at apps/web/src/lib/event-sourcing-patterns.ts:471); it shows the changed example, not the complete production page. Production release is unverified.
 
 ## Search intent and evidence
 

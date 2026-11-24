@@ -44,24 +44,24 @@ observation, or third-party response. Pending records do not prove completion.
 - Trigger: applicant flow, retention controls, message packet, and production configuration instructions are ready
 - Action: configure production anti-abuse credentials, send approved outreach, and operate applicant follow-up
 - Evidence to record: configuration receipt without secrets, sent-message IDs, applications, qualified integrations, retention deletions, and weekly-active partner windows
-- Agent follow-up after evidence exists: create repair beads for concrete flow or instrumentation defects
+- Agent follow-up after evidence exists: create repair tasks for concrete flow or instrumentation defects
 - Product/release impact: acquisition remains unproven until external operation produces evidence
 - Status: pending
 
 ## AS-EXT-005: Verify Sunday Club listing
 
-- Source bead: `t-d4ac6d`
+- Source task: `t-d4ac6d`
 - Owner: authorised Sunday Club account operator
 - Trigger: submission exists in founder account
 - Action: confirm receipt and public listing state in authenticated account
 - Evidence to record: submission ID, status, public URL or rejection, and date
-- Agent follow-up after evidence exists: update launch evidence; create repair bead only for rejected metadata or broken public route
+- Agent follow-up after evidence exists: update launch evidence; create repair task only for rejected metadata or broken public route
 - Product/release impact: prior submission claim remains unverified without receipt or listing evidence
 - Status: pending
 
 ## AS-EXT-006: Sign, device-test, and publish AllSource mobile apps
 
-- Source beads: `t-73fba7`, `t-4e28fb`
+- Source tasks: `t-73fba7`, `t-4e28fb`
 - Owner: authorised Apple Developer and Google Play account operator
 - Trigger: Android and iOS product journeys, entitlement lifecycle, website pages, internal QA packet, copy, privacy declarations, and support routes are release-ready
 - Action: create signed release-equivalent binaries, run physical-device accessibility and lifecycle checks, complete provider declarations and legal attestations, then submit releases

@@ -117,7 +117,7 @@ apps/web/src/app/(auth)/login/page.tsx
 ```
 
 Flow:
-1. Calls `POST {CONTROL_PLANE_URL}/api/v1/demo/start` — gets back `{ email, password }`
+1. Calls `POST /api/v1/demo/start` on the web app — gets back `{ email, password }`. The route proxies to `{AUTH_SERVICE_URL}/api/auth/demo/start` when `AUTH_SERVICE_URL` is set; otherwise it proxies to `{CONTROL_PLANE_INTERNAL_URL}/api/v1/demo/start`
 2. Fills the email login form with the returned credentials
 3. Calls `POST {CONTROL_PLANE_URL}/api/v1/auth/login` with those credentials (same as manual login)
 4. Redirects through `/api/auth/callback?token=...` (same as any login)
@@ -141,7 +141,7 @@ Only renders when `tenant.is_demo === true`. Not dismissible (unlike the early a
 | `DEMO_RESET_ENABLED` | Query Service | `false` | Set to `true` to enable the daily reset GenServer |
 | `DEMO_RESET_HOUR` | Query Service | `4` | UTC hour (0-23) when the daily reset runs |
 
-No env vars needed on Control Plane or Core — demo endpoints are always available.
+`DEMO_ENABLED=true` is required on Control Plane. Core needs no demo env var.
 
 ---
 
@@ -149,7 +149,7 @@ No env vars needed on Control Plane or Core — demo endpoints are always availa
 
 ### 1. Enable demo on Control Plane
 
-No action needed. `POST /api/v1/demo/start` is always available and unauthenticated. The auth middleware already skips `/api/v1/demo/` paths.
+Set `DEMO_ENABLED=true`. Without it, `POST /api/v1/demo/start` returns 403 `demo_disabled`. When enabled, the endpoint is unauthenticated. The auth middleware already skips `/api/v1/demo/` paths.
 
 ### 2. Enable daily reset on Query Service
 

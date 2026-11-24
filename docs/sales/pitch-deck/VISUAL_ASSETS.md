@@ -15,7 +15,7 @@ Light:      #f8fafc (Off-white - text on dark)
 
 ## 1. Performance Metrics Visualization
 
-### Throughput Comparison Chart (SVG)
+### Ingestion Throughput Chart (SVG)
 
 ```svg
 <svg viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
@@ -31,7 +31,7 @@ Light:      #f8fafc (Off-white - text on dark)
 
   <!-- Title -->
   <text x="300" y="35" text-anchor="middle" fill="#f8fafc" font-family="system-ui" font-size="20" font-weight="bold">
-    Event Throughput Comparison (events/sec)
+    AllSource ingestion throughput (events/sec)
   </text>
 
   <!-- Y-axis labels -->
@@ -54,28 +54,8 @@ Light:      #f8fafc (Off-white - text on dark)
   <rect x="80" y="77" width="80" height="273" fill="url(#allsourceGrad)" rx="4"/>
   <text x="120" y="68" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="14" font-weight="bold">469K</text>
 
-  <!-- EventStoreDB: ~100K -->
-  <rect x="190" y="290" width="80" height="60" fill="#666" rx="4"/>
-  <text x="230" y="282" text-anchor="middle" fill="#888" font-family="system-ui" font-size="12">~100K</text>
-
-  <!-- Kafka: ~200K -->
-  <rect x="300" y="230" width="80" height="120" fill="#666" rx="4"/>
-  <text x="340" y="222" text-anchor="middle" fill="#888" font-family="system-ui" font-size="12">~200K</text>
-
-  <!-- Marten: ~50K -->
-  <rect x="410" y="320" width="80" height="30" fill="#666" rx="4"/>
-  <text x="450" y="312" text-anchor="middle" fill="#888" font-family="system-ui" font-size="12">~50K</text>
-
-  <!-- Custom: varies -->
-  <rect x="520" y="290" width="50" height="60" fill="#444" rx="4"/>
-  <text x="545" y="282" text-anchor="middle" fill="#666" font-family="system-ui" font-size="10">varies</text>
-
   <!-- X-axis labels -->
   <text x="120" y="375" text-anchor="middle" fill="#f8fafc" font-family="system-ui" font-size="12" font-weight="bold">AllSource</text>
-  <text x="230" y="375" text-anchor="middle" fill="#888" font-family="system-ui" font-size="11">EventStoreDB</text>
-  <text x="340" y="375" text-anchor="middle" fill="#888" font-family="system-ui" font-size="11">Kafka</text>
-  <text x="450" y="375" text-anchor="middle" fill="#888" font-family="system-ui" font-size="11">Marten</text>
-  <text x="545" y="375" text-anchor="middle" fill="#666" font-family="system-ui" font-size="10">Custom</text>
 </svg>
 ```
 
@@ -89,24 +69,13 @@ Light:      #f8fafc (Off-white - text on dark)
     Query Latency p99 (microseconds)
   </text>
 
-  <!-- Latency bars (lower is better) -->
-  <!-- AllSource: 11.9us -->
+  <!-- AllSource: 11.9us p99 -->
   <rect x="80" y="80" width="100" height="40" fill="#4ecdc4" rx="4"/>
   <text x="200" y="105" fill="#f8fafc" font-family="system-ui" font-size="14" font-weight="bold">11.9 us - AllSource</text>
 
-  <!-- Others typically 100us-10ms -->
-  <rect x="80" y="140" width="350" height="30" fill="#666" rx="4"/>
-  <text x="450" y="160" fill="#888" font-family="system-ui" font-size="12">~100us - EventStoreDB</text>
-
-  <rect x="80" y="185" width="400" height="30" fill="#555" rx="4"/>
-  <text x="500" y="205" fill="#888" font-family="system-ui" font-size="12">~500us - Kafka</text>
-
-  <rect x="80" y="230" width="500" height="30" fill="#444" rx="4"/>
-  <text x="300" y="290" fill="#666" font-family="system-ui" font-size="12">1-10ms typical for SQL-based</text>
-
   <!-- Legend -->
   <text x="300" y="330" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="16">
-    AllSource: 8-40x faster than alternatives
+    AllSource p99 query latency: 11.9 us
   </text>
 </svg>
 ```
@@ -177,13 +146,13 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="640" y="325" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="16" font-weight="bold">
     MCP Server (Elixir)
   </text>
-  <text x="640" y="350" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="11">27 AI-Native Tools</text>
+  <text x="640" y="350" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="11">73 AI-Native Tools</text>
   <text x="640" y="370" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="11">Natural Language Queries</text>
 
   <!-- Storage Layer -->
   <rect x="50" y="420" width="700" height="60" fill="#1a1f36" rx="8" filter="url(#shadow)"/>
   <text x="400" y="455" text-anchor="middle" fill="#f8fafc" font-family="system-ui" font-size="14">
-    Parquet Storage | Write-Ahead Log | PostgreSQL | Redis
+    Parquet Storage | Write-Ahead Log | DashMap
   </text>
 
   <!-- Arrows to storage -->
@@ -212,10 +181,10 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="90" y="65" fill="#4ecdc4" font-family="system-ui" font-size="12">Model Context Protocol</text>
 
   <!-- Features list -->
-  <text x="30" y="100" fill="#f8fafc" font-family="system-ui" font-size="13">27 tools for Claude/GPT agents</text>
+  <text x="30" y="100" fill="#f8fafc" font-family="system-ui" font-size="13">73 tool definitions for Claude/GPT agents</text>
   <text x="30" y="125" fill="#f8fafc" font-family="system-ui" font-size="13">Natural language event queries</text>
   <text x="30" y="150" fill="#f8fafc" font-family="system-ui" font-size="13">Pattern detection & analysis</text>
-  <text x="30" y="175" fill="#f8fafc" font-family="system-ui" font-size="13">TOON format (50% fewer tokens)</text>
+  <text x="30" y="175" fill="#f8fafc" font-family="system-ui" font-size="13">TOON format (about 50% fewer tokens, tabular data)</text>
 
   <!-- Stat -->
   <text x="200" y="220" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="24" font-weight="bold">
@@ -240,11 +209,11 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="120" y="150" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="32" font-weight="bold">11.9us</text>
   <text x="120" y="175" text-anchor="middle" fill="#888" font-family="system-ui" font-size="12">p99 latency</text>
 
-  <text x="280" y="150" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="32" font-weight="bold">129MB</text>
-  <text x="280" y="175" text-anchor="middle" fill="#888" font-family="system-ui" font-size="12">total footprint</text>
+  <text x="280" y="150" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="32" font-weight="bold">73</text>
+  <text x="280" y="175" text-anchor="middle" fill="#888" font-family="system-ui" font-size="12">MCP tool definitions</text>
 
   <text x="200" y="220" text-anchor="middle" fill="#f8fafc" font-family="system-ui" font-size="14">
-    Rust-powered. Lock-free. SIMD-accelerated.
+    Rust-powered. Lock-free indexing.
   </text>
 </svg>
 ```
@@ -269,7 +238,7 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="105" y="160" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Zero-cost abstractions</text>
   <text x="105" y="180" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Memory safety</text>
   <text x="105" y="200" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Fearless concurrency</text>
-  <text x="105" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">15.7 MB</text>
+  <text x="105" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">Rust 1.92</text>
 
   <!-- Go -->
   <rect x="200" y="70" width="150" height="180" fill="#00ADD8" rx="8"/>
@@ -279,7 +248,7 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="275" y="160" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Fast compilation</text>
   <text x="275" y="180" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Built-in concurrency</text>
   <text x="275" y="200" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Ops-friendly</text>
-  <text x="275" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">27.9 MB</text>
+  <text x="275" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">Go 1.26.11</text>
 
   <!-- Elixir -->
   <rect x="370" y="70" width="150" height="180" fill="#4E2A8E" rx="8"/>
@@ -289,7 +258,7 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="445" y="160" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">BEAM reliability</text>
   <text x="445" y="180" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Real-time WebSocket</text>
   <text x="445" y="200" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Pattern matching</text>
-  <text x="445" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">35.1 MB</text>
+  <text x="445" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">Elixir 1.17</text>
 
   <!-- TypeScript -->
   <rect x="540" y="70" width="150" height="180" fill="#3178c6" rx="8"/>
@@ -299,11 +268,11 @@ Light:      #f8fafc (Off-white - text on dark)
   <text x="615" y="160" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">React 19 + Next.js</text>
   <text x="615" y="180" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Type safety</text>
   <text x="615" y="200" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="10">Modern DX</text>
-  <text x="615" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">~50 MB</text>
+  <text x="615" y="230" text-anchor="middle" fill="#fff" font-family="system-ui" font-size="12" font-weight="bold">Next.js 16</text>
 
   <!-- Total -->
   <text x="350" y="280" text-anchor="middle" fill="#4ecdc4" font-family="system-ui" font-size="16" font-weight="bold">
-    Total Footprint: ~129 MB (vs 500MB+ typical)
+    Runtimes: Rust 1.92, Go 1.26.11, Elixir 1.17, Next.js 16
   </text>
 </svg>
 ```
@@ -318,9 +287,9 @@ import plotly.express as px
 
 # Throughput comparison
 throughput_data = {
-    'System': ['AllSource', 'EventStoreDB', 'Kafka', 'Marten', 'Custom'],
-    'Events/sec': [469000, 100000, 200000, 50000, 75000],
-    'Color': ['#ce422b', '#666', '#666', '#666', '#444']
+    'System': ['AllSource'],
+    'Events/sec': [469000],
+    'Color': ['#ce422b']
 }
 
 fig = go.Figure(data=[
@@ -337,14 +306,14 @@ fig.write_image('throughput_comparison.png', scale=2)
 
 # Latency comparison
 latency_data = {
-    'System': ['AllSource', 'EventStoreDB', 'Kafka', 'PostgreSQL'],
-    'Latency_us': [11.9, 100, 500, 5000]
+    'System': ['AllSource'],
+    'Latency_us': [11.9]
 }
 
 fig2 = go.Figure(data=[
     go.Bar(x=latency_data['System'],
            y=latency_data['Latency_us'],
-           marker_color=['#4ecdc4', '#666', '#666', '#666'])
+           marker_color=['#4ecdc4'])
 ])
 fig2.update_layout(
     title='Query Latency (p99) - Lower is Better',
@@ -354,16 +323,6 @@ fig2.update_layout(
 )
 fig2.write_image('latency_comparison.png', scale=2)
 
-# Container sizes
-sizes = {
-    'Service': ['Rust Core', 'Go Control', 'Elixir Query', 'Web Dashboard'],
-    'Size_MB': [15.7, 27.9, 35.1, 50]
-}
-
-fig3 = px.pie(sizes, values='Size_MB', names='Service',
-              color_discrete_sequence=['#ce422b', '#00ADD8', '#4E2A8E', '#3178c6'])
-fig3.update_layout(title='Container Size Distribution (Total: 129MB)')
-fig3.write_image('container_sizes.png', scale=2)
 ```
 
 ---

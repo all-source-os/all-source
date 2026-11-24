@@ -55,8 +55,9 @@ real money here.
 
 ## Search Console — `GSC_SERVICE_ACCOUNT_JSON`
 
-The property is already verified: the google-site-verification token is in
-`apps/web/src/app/layout.tsx` and `robots.txt` carries the `Sitemap:` line. What
+Property verification is not in the repo: `apps/web` has no `google-site-verification`
+token, and `apps/web/src/app/layout.tsx` emits only `msvalidate.01` (Bing) when
+`NEXT_PUBLIC_BING_SITE_VERIFICATION` is set. `robots.txt` carries the `Sitemap:` line. What
 is missing is *API* access, which is a separate grant.
 
 1. In Google Cloud console, pick or create a project and enable the **Google

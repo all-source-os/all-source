@@ -11,24 +11,21 @@ graph TD
     Agent["AI Agent<br/><i>MCP client, SDK consumer</i>"]
     QS["Query Service<br/><i>Elixir/Phoenix API gateway<br/>Auth, billing, routing</i>"]
     Core["AllSource Core<br/><i>Rust event store<br/>WAL + Parquet + DashMap</i>"]
-    PG["PostgreSQL<br/><i>Operational metadata only<br/>Users, tenants, API keys</i>"]
     Prime["Prime<br/><i>Graph + Vector + Temporal<br/>agent memory engine</i>"]
 
     Agent -->|"HTTP / MCP"| QS
     QS -->|"HTTP :3900<br/>Reads & Writes"| Core
-    QS -->|"Ecto queries"| PG
     Core -.-|"subsystem"| Prime
 
     style Prime fill:#2d6a4f,stroke:#1b4332,color:#d8f3dc
     style Core fill:#264653,stroke:#2a9d8f,color:#e9f5db
     style QS fill:#457b9d,stroke:#1d3557,color:#f1faee
-    style PG fill:#6c757d,stroke:#495057,color:#f8f9fa
     style Agent fill:#e76f51,stroke:#d62828,color:#fff
 ```
 
 **Key points:**
 - Prime is a subsystem of Core, not a separate service. It uses Core's WAL, Parquet, and DashMap infrastructure.
-- Query Service routes all event operations to Core. PostgreSQL stores only operational metadata (users, tenants, API keys, billing) — never events.
+- Query Service routes all event operations to Core. Core is the only store for events and operational metadata; no PostgreSQL is used.
 - AI agents interact via the Query Service (HTTP/MCP) or embed Core directly via the Rust SDK.
 
 ## 2. Container Diagram

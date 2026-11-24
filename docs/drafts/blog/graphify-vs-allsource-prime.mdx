@@ -36,9 +36,9 @@ AllSource Prime sits at the other end of the same idea. It isn't a file you gene
 - **Retrieval is hybrid.** Prime embeds text (`all-MiniLM-L6-v2`, 384-dim) into an HNSW index and ranks recall by a blend of vector similarity, graph proximity, and recency — not topology alone.
 - **Every fact has provenance.** Full event history per entity, plus declarative projections that can answer "which event set this field, and when?" The graph is replayable and time-travellable, not just diff-able.
 - **It's multi-tenant and hosted.** A stateless engine serves many tenants over one Core, so a graph can be shared and live, not trapped on one laptop.
-- **It speaks MCP and REST.** The same 18-tool MCP surface an assistant uses is backed by a real HTTP API.
+- **It speaks MCP and REST.** The MCP surface an assistant uses (23 `prime_*` tools and 6 `hound_*` tools) is backed by a real HTTP API.
 
-Prime's trade-off is the mirror image of Graphify's: it's an engine, so it expects a backend. And — until now — it had **no codebase ingestion**. Prime could hold a beautiful graph; it couldn't build one from your repo.
+Prime's trade-off is the mirror image of Graphify's: it's an engine, so it expects a backend. Codebase ingestion is built in: `hound_ingest` walks a source tree with Tree-sitter (Rust in phase 1) and folds the result into the graph as `prime.node.created` and `prime.edge.created` events.
 
 ## The axis that actually matters
 
@@ -47,7 +47,7 @@ Forget "which is better." The real question is build-time file vs runtime engine
 | | Graphify | AllSource Prime |
 |---|---|---|
 | **Shape** | Build-time CLI → files | Runtime engine + API |
-| **Codebase → graph** | Tree-sitter, ~13 langs, `$0` local | Not yet — the gap |
+| **Codebase → graph** | Tree-sitter, ~13 langs, `$0` local | Tree-sitter via `hound_ingest` (Rust in phase 1) |
 | **Retrieval** | Topology + LLM re-rank (no vectors) | Hybrid: vectors + graph + recency |
 | **Freshness** | Snapshot; stale between commits | Live; event-sourced, incremental |
 | **State** | Per-machine files | Durable, multi-tenant, shared |
@@ -66,6 +66,6 @@ Here's the part we find interesting. Graphify proved the demand and the develope
 
 Put Graphify's ingestion on Prime's backend and you get a strict superset of the capabilities: the same on-device, `$0`, code-only build as the wedge — but the resulting graph is durable, queryable with real hybrid retrieval, shareable across a team, and replayable with full provenance. A snapshot becomes a living map.
 
-That's the direction we're taking Prime next, under the working name **Prime Hound**. It's a roadmap, not a release — but the thesis is simple, and Graphify is the reason it's clear: we're not copying a competitor, we're giving their best idea the backend it was missing.
+That is **Prime Hound**. Its ingestion is implemented: `hound-extract` walks a source tree with Tree-sitter, runs on-device with no network or LLM calls, and maps Rust functions, types, traits, modules and call references into durable graph events. `hound_ingest` builds the code graph and `hound_ingest_docs` builds a graph from documentation, both over MCP. Source extraction covers Rust only in v0.1.
 
-If you want the engine half today, Prime ships now — durable graph, vectors, and hybrid recall over MCP. The ingestion half is what's coming.
+The thesis is simple, and Graphify is the reason it's clear: we're not copying a competitor, we're giving their best idea the backend it was missing.

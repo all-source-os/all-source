@@ -3843,22 +3843,22 @@ Message (82 words):
 
 ## 2026-10-20: OMO model-selected skill/tool evaluation, unsent
 
-[Latest report, artifacts and replacement draft](./2026-10-20-omo-model-selected-evaluation.md). Matching skill selected over decoy; specialized native search/source-inspection calls and correct receipts at baseline plus three compactions. Skill reloaded after compaction 2; reuse without reload observed after 1 and 3. Earlier nano wrong-query/provider failure retained. Existing AceRothstein71/MoerAI ownership and prior project contact still control. No design-partner invitation or outbound action approved; no recipient added as contacted.
+[Superseded report](../archive/2026-11-23/outreach/2026-10-20-omo-model-selected-evaluation.md). Matching skill selected over decoy; specialized native search/source-inspection calls and correct receipts at baseline plus three compactions. Skill reloaded after compaction 2; reuse without reload observed after 1 and 3. Earlier nano wrong-query/provider failure retained. Existing AceRothstein71/MoerAI ownership and prior project contact still control. No design-partner invitation or outbound action approved; no recipient added as contacted.
 
 
 ## 2026-10-20: matched OMO no-reload evaluation, unsent
 
-[Latest matched report, artifacts and replacement draft](./2026-10-20-omo-matched-no-reload-evaluation.md). Both baselines passed. Recovery on passed 2/3 post-compaction checkpoints; off passed 0/3. Reload gate allowed exactly one initial native load per arm and blocked later attempts. Immediate second compaction still failed with recovery on; first/third succeeded. Whole-hook toggle, one pair and restricted fallback limits documented. Existing owner/reviewer and prior project contact still control. No design-partner invitation or outbound action approved; no recipient added as contacted.
+[Superseded report](../archive/2026-11-23/outreach/2026-10-20-omo-matched-no-reload-evaluation.md). Both baselines passed. Recovery on passed 2/3 post-compaction checkpoints; off passed 0/3. Reload gate allowed exactly one initial native load per arm and blocked later attempts. Immediate second compaction still failed with recovery on; first/third succeeded. Whole-hook toggle, one pair and restricted fallback limits documented. Existing owner/reviewer and prior project contact still control. No design-partner invitation or outbound action approved; no recipient added as contacted.
 
 
 ## 2026-10-20: counterbalanced OMO skill-only evaluation, unsent
 
-[Current report, control evidence and replacement draft](./2026-10-20-omo-skill-only-counterbalanced-evaluation.md). Skill text on passed 4/6 post-compaction workflows; off passed 0/6 across two opposite-order pairs. All baselines passed; reload stayed blocked. Agent/model/tools recovery and cooldown stayed active, and all 12 summary-injection outputs matched. Skill-off removes only the outgoing skill block after native recovery decisions; no whole-hook disable. Prior project contact must be coordinated before any approach. No message sent, external draft created or recipient marked contacted.
+[Superseded report](../archive/2026-11-23/outreach/2026-10-20-omo-skill-only-counterbalanced-evaluation.md). Superseded by the [provider-payload capture](./2026-10-21-omo-provider-payload-evaluation.md). Skill text on passed 4/6 post-compaction workflows; off passed 0/6 across two opposite-order pairs. All baselines passed; reload stayed blocked. Agent/model/tools recovery and cooldown stayed active, and all 12 summary-injection outputs matched. Skill-off removes only the outgoing skill block after native recovery decisions; no whole-hook disable. Prior project contact must be coordinated before any approach. No message sent, external draft created or recipient marked contacted.
 
 
 ## 2026-10-21: OMO readiness-barrier rerun, unsent
 
-[Current report, control evidence and replacement draft](./2026-10-21-omo-readiness-barrier-evaluation.md). Skill text on passed 4/6 post-compaction workflows; off passed 0/6 across two opposite-order pairs with readiness barriers. All four baselines passed. Reload remained blocked. All 16 barriers passed before tasks; eight eligible recoveries accepted and stored first; four immediate checkpoints confirmed cooldown suppression; zero late task-turn recoveries. Skill-only dispatch observer unchanged; agent/model/tools and summary injection preserved. Prior project contact still requires coordination. No external draft, message, send or contacted-state update.
+[Superseded report](../archive/2026-11-23/outreach/2026-10-21-omo-readiness-barrier-evaluation.md). Current: [provider-payload capture](./2026-10-21-omo-provider-payload-evaluation.md). Skill text on passed 4/6 post-compaction workflows; off passed 0/6 across two opposite-order pairs with readiness barriers. All four baselines passed. Reload remained blocked. All 16 barriers passed before tasks; eight eligible recoveries accepted and stored first; four immediate checkpoints confirmed cooldown suppression; zero late task-turn recoveries. Skill-only dispatch observer unchanged; agent/model/tools and summary injection preserved. Prior project contact still requires coordination. No external draft, message, send or contacted-state update.
 
 
 ## 2026-10-21: OMO provider-payload capture, unsent
@@ -3869,3 +3869,8 @@ Message (82 words):
 ## 2026-10-21: OMO outreach prepared for review, unsent
 
 [Final comment and sanitised evidence ZIP](./2026-10-21-omo-send-ready.md). Live PR remains open at tested head, authored by AceRothstein71. Direct comments and project-wide commenter search show existing MoerAI review and prior decebal contact only on #7764; no reply/pass observed. Connected sent-mail search has no matching thread. Public remote docs link is unavailable, so the package is local and ready for later attachment. No public comment, upload, email draft or send; no recipient marked contacted.
+
+
+## 2026-10-22: evidence comment posted on PR 7183
+
+Evidence comment posted by decebal on [oh-my-openagent PR #7183](https://github.com/code-yeongyu/oh-my-openagent/pull/7183#issuecomment-6346440630) at 2026-10-22T17:00:26Z. Evidence ZIP offered, not attached.

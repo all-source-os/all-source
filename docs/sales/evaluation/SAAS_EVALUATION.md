@@ -1,7 +1,7 @@
 # AllSource SaaS Evaluation Report
 
 **Date**: February 2026
-**Version**: 0.10.0
+**Version**: 0.30.0
 **Status**: Pre-Launch Assessment
 
 ---
@@ -14,7 +14,7 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
-| Technical Maturity | 8/10 | Production-ready core, comprehensive testing |
+| Technical Maturity | 8/10 | Durable event store (WAL, Parquet); tests per service |
 | Market Fit | 9/10 | Strong alignment with AI/ML infrastructure trends |
 | Differentiation | 9/10 | Unique AI-native + polyglot architecture |
 | Scalability | 8/10 | Cloud-native, K8s-ready |
@@ -28,12 +28,12 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 
 #### Primary Markets
 
-| Segment | Pain Point | AllSource Solution | Market Size |
-|---------|-----------|------------------|-------------|
-| **AI/ML Teams** | Training data pipelines, feature stores | MCP server, time-travel queries | $15B+ (growing 40% YoY) |
-| **Fintech** | Audit trails, transaction history | Immutable events, compliance | $120B+ market |
-| **IoT/Telemetry** | High-throughput sensor data | 469K events/sec, sub-ms queries | $500B+ by 2027 |
-| **E-commerce** | Order tracking, inventory events | Event sourcing, projections | $6T+ market |
+| Segment | Pain Point | AllSource Solution |
+|---------|-----------|------------------|
+| **AI/ML Teams** | Training data pipelines, feature stores | MCP server, time-travel queries |
+| **Fintech** | Audit trails, transaction history | Immutable events, compliance |
+| **IoT/Telemetry** | High-throughput sensor data | 469K events/sec, 11.9us p99 query latency |
+| **E-commerce** | Order tracking, inventory events | Event sourcing, projections |
 
 #### Secondary Markets
 
@@ -45,20 +45,20 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 
 | Competitor | Strengths | Weaknesses | AllSource Advantage |
 |------------|-----------|------------|-------------------|
-| **EventStoreDB** | Mature, community | No AI integration, single language | 27 MCP tools, polyglot |
+| **EventStoreDB** | Mature, community | No AI integration, single language | 73 MCP tool definitions, polyglot |
 | **Apache Kafka** | Ubiquitous, ecosystem | Not event-sourced, complex ops | Purpose-built, simple deploy |
 | **Axon Server** | Java ecosystem | Java-only, enterprise pricing | Polyglot, open-source first |
-| **Marten (PostgreSQL)** | Familiar stack | Limited performance | 469K vs ~50K events/sec |
+| **Marten (PostgreSQL)** | Familiar stack | Requires PostgreSQL | Core is the event store; no PostgreSQL dependency |
 | **Custom Solutions** | Tailored fit | Maintenance burden | Turnkey SaaS |
 
 ### Unique Value Propositions
 
-1. **AI-Native First**: Only event store with native MCP integration (27 tools)
+1. **AI-Native First**: Native MCP integration (73 tool definitions)
 2. **Performance**: 469K events/sec, 11.9us p99 latency
 3. **Polyglot Architecture**: Best-in-class languages (Rust + Go + Elixir)
-4. **Tiny Footprint**: ~129MB total Docker images
+4. **Self-host**: Apache-2.0 community edition, started with `docker compose up`
 5. **Time-Travel**: Query any point in history instantly
-6. **Open Source Core**: MIT licensed, no vendor lock-in
+6. **Open Source Core**: Apache-2.0 community edition; enterprise features under BSL 1.1
 
 ---
 
@@ -69,25 +69,21 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 ```
 Grade: A-
 
-+ Clean Architecture (100% domain/application coverage)
-+ Comprehensive testing (492+ tests across services)
++ Clean Architecture layering (domain, application, infrastructure)
 + Cloud-native design (K8s, Helm, Cloud Run ready)
-+ Modern tech stack (Rust 1.92, Go 1.24, Elixir 1.17)
++ Modern tech stack (Rust 1.92, Go 1.26.11, Elixir 1.17)
 + Security-first (RBAC, JWT, audit logging, multi-tenancy)
 
-- Need more infrastructure layer tests
-- Vector search not yet implemented
 - Horizontal scaling needs validation at >1M events/sec
 ```
 
 ### Performance Benchmarks
 
-| Metric | Current | Target SaaS Tier | Status |
-|--------|---------|------------------|--------|
-| Ingestion | 469K events/sec | 100K (starter), 500K (pro), 1M+ (enterprise) | Ready |
-| Query Latency (p99) | 11.9us | <50us (all tiers) | Exceeds |
-| Concurrent Writes | 7.98ms (8 threads) | <10ms | Ready |
-| Storage Efficiency | Parquet columnar | Compression ratio TBD | Ready |
+| Metric | Current (source) |
+|--------|------------------|
+| Ingestion | 469K events/sec (docs/current/PERFORMANCE.md) |
+| Query latency (p99) | 11.9us (docs/current/PERFORMANCE.md) |
+| Storage | Parquet columnar, Snappy compression |
 
 ### Security Checklist
 
@@ -105,19 +101,21 @@ Grade: A-
 
 ## 3. Pricing Model Recommendations
 
-### Recommended: Usage-Based + Tiers
+### Current tiers (apps/web/src/lib/config.ts)
+
+Live prices come from LemonSqueezy and override the config prices.
 
 ```
-                    STARTER         PRO             ENTERPRISE
-                    ---------       -----           ----------
-Monthly Base        $0              $99             $499+
-Events/month        100K included   10M included    100M included
-Overage             $0.10/1K        $0.05/1K        Custom
-Retention           7 days          90 days         Unlimited
-Tenants             1               5               Unlimited
-MCP Tools           Basic (10)      Full (27)       Full + Custom
-Support             Community       Email           24/7 + SLA
+                    SELF-HOST       INDIE           STUDIO          SCALE           ENTERPRISE
+                    ---------       -----           ------          -----           ----------
+Price (GBP/month)   Free            £18.99          £78.99          £298.99         Custom
+Events/month        unlimited       500K            5M              50M             negotiated
+Streams             unlimited       3               unlimited       unlimited       unlimited
+MCP access          full (self)     hosted read     read + write    read + write    dedicated cluster
+Support             GitHub          email (48h)     email + Discord email + Slack   24/7 + SLA
 ```
+
+No free hosted tier. Hosted trial: 14 days, 1,000 events, 1 GB outbound data.
 
 ### Alternative Models Considered
 
@@ -130,7 +128,7 @@ Support             Community       Email           24/7 + SLA
 
 ### Key Pricing Insights
 
-1. **Free tier essential** for developer adoption
+1. **Free tier**: the self-hosted Community edition is free; hosted plans have a 14-day trial and no free tier
 2. **Event volume** is natural scaling metric
 3. **MCP tools** are premium differentiator
 4. **Enterprise** needs custom pricing flexibility
@@ -182,14 +180,14 @@ Support             Community       Email           24/7 + SLA
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Scaling beyond 1M events/sec | Medium | High | Horizontal sharding design ready |
-| Data loss | Low | Critical | WAL + snapshots + replication |
+| Data loss | Low | Critical | WAL + Parquet persistence, crash recovery |
 | Security breach | Low | Critical | Audit logging, RBAC, penetration testing |
 
 ### Business Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Low adoption | Medium | High | Free tier, strong docs, community |
+| Low adoption | Medium | High | Self-host Community edition, docs, community |
 | Competitor response | Medium | Medium | Speed, AI-native differentiation |
 | Pricing wrong | Medium | Medium | A/B testing, customer feedback |
 
@@ -264,7 +262,7 @@ Support             Community       Email           24/7 + SLA
 ### Immediate Actions (Next 30 Days)
 
 1. **Create landing page** with clear value prop and signup
-2. **Set up Stripe** with usage-based billing
+2. **Confirm LemonSqueezy** plans and prices (billing is implemented in the control plane)
 3. **Launch beta program** with 50 hand-picked users
 4. **Prepare launch content** (blog, social, video)
 
@@ -333,11 +331,10 @@ Revenue:
 
 | Feature | AllSource | Others |
 |---------|---------|--------|
-| MCP Protocol | Native (27 tools) | None |
+| MCP Protocol | Native (73 tool definitions) | None |
 | Time-travel | Built-in | Limited |
 | Polyglot | Rust+Go+Elixir | Usually single |
-| Container size | 129MB total | Often 500MB+ |
-| Query latency | 11.9us | 100us-10ms |
+| Query latency (p99) | 11.9us | not measured in this repo |
 
 ---
 

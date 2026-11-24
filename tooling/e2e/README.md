@@ -16,24 +16,38 @@ This package provides comprehensive E2E testing using Playwright with clean arch
 ```
 tooling/e2e/
 ├── package.json              # Package configuration
-├── playwright.config.ts      # Playwright configuration
+├── playwright.config.ts      # Playwright configuration; projects map to tests/<name>
+├── playwright.analytics.config.ts
+├── playwright.seo.config.ts
+├── global-setup.ts
+│
+├── docs/
+│   └── E2E_TEST_STATUS.md
 │
 ├── page-objects/             # Page Object Models
 │   ├── BasePage.ts          # Base class with common functionality
 │   ├── UITestPage.ts        # UI test page interactions
 │   └── index.ts             # Exports
 │
-├── fixtures/                 # Custom Playwright fixtures
+├── fixtures/                 # Custom Playwright fixtures and auth helpers
+│   ├── api-auth.ts
+│   ├── api-helpers.ts
+│   ├── auth.ts
+│   ├── demo-auth.ts
 │   └── pages.ts             # Page object fixtures
 │
-├── helpers/                  # Test utilities
-│   └── test-data.ts         # Data builders and generators
+├── helpers/
+│   └── regex.ts
 │
-└── tests/                    # Test suites
-    ├── demo/                # Demo page tests
-    │   └── navigation.spec.ts
-    └── ui-components/       # UI component tests
-        └── components.spec.ts
+└── tests/                    # Spec files, one directory per Playwright project
+    ├── integration/
+    ├── e2e/
+    ├── smoke/
+    ├── ui/
+    ├── ui-components/
+    ├── analytics/            # playwright.analytics.config.ts
+    ├── seo/                  # playwright.seo.config.ts
+    └── local-only/
 ```
 
 ## Installation
@@ -51,23 +65,23 @@ bunx playwright install
 
 ```bash
 # Run all tests
-bun test
+bun run test
 
 # Run tests in headed mode
-bun test:headed
+bun run test:headed
 
 # Run tests with UI mode
-bun test:ui
+bun run test:ui
 
 # Run tests in debug mode
-bun test:debug
+bun run test:debug
 
 # Run specific test suite
-bun test:demo
-bun test:ui-components
+bun run test:smoke
+bun run test:ui-components
 
 # Show test report
-bun test:report
+bun run test:report
 ```
 
 ### Against a production web build
@@ -91,22 +105,11 @@ bunx playwright test --config playwright.analytics.config.ts
 ```typescript
 import { test, expect } from "../../fixtures/pages";
 
-test("should navigate to demo", async ({ demoPage }) => {
-  await demoPage.goto();
-  await demoPage.waitForPageLoad();
-  await demoPage.navigateToEvents();
+test("should click the primary button", async ({ uiTestPage }) => {
+  await uiTestPage.goto();
+  await uiTestPage.waitForPageLoad();
+  await uiTestPage.clickPrimaryButton();
   // ... test assertions
-});
-```
-
-### Using Test Data Builders
-
-```typescript
-import { createTestEvent, createEcommerceEvent } from "../../helpers/test-data";
-
-test("should create event", async ({ page }) => {
-  const event = createEcommerceEvent("OrderPlaced");
-  // ... use event data
 });
 ```
 
@@ -187,10 +190,10 @@ Tests are configured to run in CI with:
 
 ```bash
 # Debug mode with Playwright Inspector
-bun test:debug
+bun run test:debug
 
 # Interactive UI mode
-bun test:ui
+bun run test:ui
 
 # Generate code from browser interactions
 bun codegen http://localhost:3000

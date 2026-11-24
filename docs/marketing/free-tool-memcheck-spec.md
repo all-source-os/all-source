@@ -2,7 +2,7 @@
 title: "Free-tool spec — memcheck"
 status: DRAFT
 maps_to: "PRICING_EXPOSURE_PLAN.md §5 (free tool, memcheck recommended) + §6 Week 4 (pick next free tool)"
-last_updated: 2026-06-04
+last_updated: 2026-11-23
 ---
 
 # DRAFT — `memcheck` Free-Tool Spec
@@ -20,10 +20,9 @@ last_updated: 2026-06-04
 current agent-memory stack stacks up. You pick what you're using today
 (mem0 / Letta / Zep / a vector DB / a raw chat log / nothing), describe your
 agent's read pattern, and memcheck shows a side-by-side comparison against
-AllSource on the two things that actually hurt: **recall latency** and
-**cost per recall**. The output is a shareable scorecard ("your stack: ~300ms,
-$X per 1M recalls — AllSource: ~12μs, self-host free") with a one-click path to
-either self-host or start Indie at $19/mo. It's the §5 free-tool funnel: deliver
+AllSource on **cost per recall**. The output is a shareable scorecard ("your stack:
+$X per 1M recalls — AllSource: self-host free") with a one-click path to
+either self-host or start Indie at £18.99/mo. It's the §5 free-tool funnel: deliver
 a genuinely useful answer first, earn the click second.
 
 ---
@@ -38,13 +37,10 @@ a genuinely useful answer first, earn the click second.
    - Turns per month (volume)
    - Whether recall is on the hot path (every turn) or occasional.
 4. **Compute** → memcheck renders a comparison card:
-   - **Recall latency**: your stack's published/typical figure vs AllSource ~12μs.
    - **Monthly recall cost**: your stack's pricing math vs AllSource
      (self-host = $0 infra-only; hosted = Indie/Studio tier + x402 overage at
      $0.0001/call).
-   - **"Invisible recall" verdict**: at your turn count, is memory lookup
-     felt by the user? (latency × recalls-per-turn).
-5. **CTA**: "Self-host free (MIT)" or "Start Indie — $19" + a "Copy scorecard"
+5. **CTA**: "Self-host free (Apache-2.0 core)" or "Start Indie — £18.99" + a "Copy scorecard"
    button (shareable PNG / link for the build-in-public loop).
 
 ---
@@ -64,11 +60,8 @@ a genuinely useful answer first, earn the click second.
 
 | Field | Derived from |
 |---|---|
-| `yourLatencyMs` | lookup table of published/typical latencies per stack (sourced, cited) |
-| `allsourceLatencyUs` | constant: 11.9μs p99 (`siteConfig.stats[1]`) |
 | `yourMonthlyCost` | stack pricing × volume (cited per stack) |
-| `allsourceCost` | self-host $0 infra-only; hosted = Indie $19 / Studio $79 + x402 overage $0.0001/call |
-| `invisibleRecallVerdict` | boolean: `yourLatencyMs × recallsPerTurn` perceptible to user? |
+| `allsourceCost` | self-host $0 infra-only; hosted = Indie £18.99 / Studio £78.99 + x402 overage $0.0001/call |
 | `scorecardImage` | shareable PNG of the comparison |
 
 **Hard rule for the build:** every comparison number for a *competitor* must
@@ -84,8 +77,8 @@ eats publicly (plan §implementation note).
 - **Surface:** one static Next.js route under `apps/web` (`/memcheck`),
   client-side compute only — no backend, no DB, no auth. (Keeps it a pure funnel,
   no infra to run.)
-- **Data:** a single typed `comparisons.ts` table of competitor latency + pricing
-  figures, each with a `source` URL; AllSource numbers imported from `siteConfig`.
+- **Data:** a single typed `comparisons.ts` table of competitor pricing figures,
+  each with a `source` URL; AllSource numbers imported from `siteConfig`.
 - **UI:** stack picker + 3 inputs + a result card + "Copy scorecard" (render card
   to PNG via canvas). Reuse `packages/ui`.
 - **No data leaves the browser** — privacy is a selling point; nothing is sent,
@@ -94,8 +87,8 @@ eats publicly (plan §implementation note).
   creation, saving results server-side, the x402 playground (separate §5 tool).
 
 **Definition of done (future prompt):** a developer lands on `/memcheck`, picks
-their stack, gets a sourced side-by-side scorecard vs AllSource on latency + cost,
-and can copy it to share — with working CTAs to self-host and to Indie $19.
+their stack, gets a sourced side-by-side scorecard vs AllSource on cost,
+and can copy it to share — with working CTAs to self-host and to Indie £18.99.
 
 ---
 
@@ -103,9 +96,8 @@ and can copy it to share — with working CTAs to self-host and to Indie $19.
 
 | Claim | Source |
 |---|---|
-| ~12μs / 11.9μs p99 recall | `siteConfig.stats[1]` |
-| Self-host free, MIT | `siteConfig.pricing[self-host]`, CLAUDE.md |
-| Indie $19 / Studio $79 | `siteConfig.pricing[indie]`, `[studio]` |
+| Self-host free, Apache-2.0 core (`apps/core/LICENSE` says MIT; unresolved) | `siteConfig.pricing[self-host]`, `LICENSE` |
+| Indie £18.99 / Studio £78.99 | `siteConfig.pricing[indie]`, `[studio]` |
 | x402 overage $0.0001/call | `siteConfig.pricing[*].x402.overage` |
 | memcheck as recommended free tool | plan §5 ("free tool" list; memcheck recommended) |
 

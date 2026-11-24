@@ -1,7 +1,7 @@
 ---
 title: "Glossary of Terms"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-24
 category: reference
 ---
 
@@ -17,7 +17,7 @@ This glossary provides definitions for key terms used throughout the AllSource p
 The layer in Clean Architecture that contains use cases and orchestrates the flow of data between the domain and infrastructure layers. It implements business logic that coordinates domain entities without containing domain rules itself.
 
 **Clean Architecture**
-An architectural pattern that separates software into concentric layers with dependencies pointing inward. The core domain layer has no dependencies on outer layers (application, infrastructure), making the system testable, maintainable, and independent of frameworks. See [Architecture documentation](./ARCHITECTURE.md) for AllSource-specific implementation.
+An architectural pattern that separates software into concentric layers with dependencies pointing inward. The core domain layer has no dependencies on outer layers (application, infrastructure), making the system testable, maintainable, and independent of frameworks. See [Production Data-Flow (C4-style)](./current/PROD_DATA_FLOW_C4.md) for AllSource-specific implementation.
 
 **DDD (Domain-Driven Design)**
 A software design approach that focuses on modeling software to match the business domain. It emphasizes ubiquitous language, bounded contexts, and strategic design patterns. Example: The AllSource event store uses DDD concepts like aggregates and entities to model event streams.
@@ -41,19 +41,19 @@ Five design principles for object-oriented programming:
 ## AllSource-Specific Terms
 
 **Control Plane**
-The management layer in AllSource responsible for cluster coordination, configuration management, and administrative operations. It handles schema registration, node discovery, and system-wide settings.
+The management layer in AllSource, written in Go. It handles authentication, onboarding, billing, and administration, and persists through Core.
 
 **DashMap**
 A concurrent hash map implementation used in the Rust components of AllSource for high-performance, thread-safe key-value storage. It provides lock-free reads and fine-grained locking for writes, enabling efficient concurrent access to in-memory event data.
 
 **MCP (Model Context Protocol)**
-A protocol for communication between AI models and external tools/services. AllSource implements an MCP server to expose event store operations to AI assistants, enabling natural language interaction with event data. See [MCP Server documentation](./mcp-server/).
+A protocol for communication between AI models and external tools/services. AllSource implements an MCP server to expose event store operations to AI assistants, enabling natural language interaction with event data. See [MCP Server documentation](../apps/mcp-server-elixir/README.md).
 
 **Parquet**
 A columnar storage file format optimized for analytics workloads. AllSource uses Parquet for long-term event storage and efficient querying of historical data. Example: Events are periodically compacted from WAL into Parquet files for archival.
 
 **Query Service**
-The AllSource component responsible for handling read operations and projections. It provides APIs for querying events, retrieving entity state, and executing complex queries across event streams. See [Query Service documentation](./query-service/).
+The AllSource component responsible for handling read operations and projections. It provides APIs for querying events, retrieving entity state, and executing complex queries across event streams. See [Query Service documentation](../apps/query-service/README.md).
 
 **Schema Registry**
 A centralized service that manages event schemas and ensures schema compatibility across the system. It validates events against registered schemas and handles schema evolution. Example: When a new event type is introduced, its schema must be registered before events can be published.
@@ -81,10 +81,10 @@ A unique identifier that distinguishes one entity from another across the system
 An immutable record of something that happened in the system. Events are the source of truth in event sourcing and represent facts that cannot be changed or deleted. Example: `OrderPlaced { order_id: "123", customer_id: "456", total: 99.99 }`
 
 **Event Sourcing**
-An architectural pattern where application state is derived from a sequence of events rather than stored directly. Instead of updating records in place, all changes are captured as immutable events, enabling complete audit trails and temporal queries. See [Event Sourcing Guide](./guides/event-sourcing.md).
+An architectural pattern where application state is derived from a sequence of events rather than stored directly. Instead of updating records in place, all changes are captured as immutable events, enabling complete audit trails and temporal queries.
 
 **Event Store**
-A database optimized for storing and retrieving events. It provides append-only storage, stream-based access, and efficient replay capabilities. AllSource implements a distributed event store with WAL, in-memory indexing, and Parquet archival.
+A database optimized for storing and retrieving events. It provides append-only storage, stream-based access, and efficient replay capabilities. AllSource implements an event store with WAL, in-memory indexing, and Parquet archival.
 
 **Event Stream**
 An ordered sequence of events belonging to a specific entity or aggregate. Streams provide a complete history of an entity's state changes. Example: The stream for `order-123` contains all events that affected that order.
@@ -115,13 +115,12 @@ A standard protocol for transmitting telemetry data (traces, metrics, logs) betw
 A set of Erlang libraries and design principles for building concurrent, fault-tolerant systems. OTP provides supervision trees, behaviors (GenServer, Supervisor), and patterns for building reliable distributed applications. The Elixir components of AllSource are built on OTP.
 
 **RBAC (Role-Based Access Control)**
-A security model where permissions are assigned to roles, and users are assigned to roles. AllSource uses RBAC to control access to event streams and administrative operations. Example: A `reader` role might have permission to query events but not write them.
+A security model where permissions are assigned to roles, and users are assigned to roles. AllSource uses RBAC to control access to event streams and administrative operations. Roles in Core are `Admin`, `Developer`, `ReadOnly` and `ServiceAccount`. Example: A `ReadOnly` role can query events but not write them.
 
 ---
 
 ## See Also
 
-- [Architecture Overview](./ARCHITECTURE.md)
-- [Getting Started Guide](./guides/getting-started.md)
-- [API Reference](./api/)
-- [Contributing Guide](./CONTRIBUTING.md)
+- [Production Data-Flow (C4-style)](./current/PROD_DATA_FLOW_C4.md)
+- [Getting Started Guide](./QUICK_START.md)
+- [API Reference](./current/API_REFERENCE.md)

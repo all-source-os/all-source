@@ -1,10 +1,10 @@
 ---
 title: "Performance Optimization Guide"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-24
 version: "1.0"
 related:
-  - "./CLEAN_ARCHITECTURE.md"
+  - "../archive/2026-11-23/current/CLEAN_ARCHITECTURE.md"
 ---
 
 # Performance Optimization Guide
@@ -84,7 +84,7 @@ pub fn new_validated(...) -> Result<Self> {
 
 ### 4. Planned Optimizations
 
-#### simd-json (⏳ PLANNED)
+#### simd-json (✅ IMPLEMENTED)
 ```rust
 // Zero-copy deserialization with SIMD
 use simd_json;
@@ -139,7 +139,7 @@ cargo bench --bench performance_benchmarks
 - [x] Zero-cost field access (public fields)
 - [x] No validation in hot path
 - [x] Batch processing support in use cases
-- [ ] simd-json integration
+- [x] simd-json integration
 - [ ] Async I/O batching
 - [ ] SIMD for filtering operations
 
@@ -147,4 +147,4 @@ cargo bench --bench performance_benchmarks
 
 **Detailed benchmarks**: Run `cargo bench` and see `/target/criterion/report/index.html`
 
-**Implementation guide**: See [Phase 1.5 Progress](../roadmaps/2025-10-22_PHASE_1.5_PROGRESS.md)
+**Implementation guide**: See [Phase 1.5 Progress](../roadmaps/archive/2025-10-22_PHASE_1.5_PROGRESS.md)

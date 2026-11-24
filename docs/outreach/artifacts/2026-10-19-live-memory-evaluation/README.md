@@ -15,7 +15,7 @@ Date: 2026-10-19. [Report and updated drafts](../../2026-10-19-live-memory-evalu
 - [Scope archive/Dream trace](./nanobot/situational-preference-stays-scoped/consolidate.json), [fresh projection recall](./nanobot/situational-preference-stays-scoped/recall.json), [history-enabled diagnostic](./nanobot/situational-preference-stays-scoped/retrieval.json).
 - [Delivery archive/Dream trace](./nanobot/retain-complete-proposal-reference/consolidate.json), [fresh projection recall](./nanobot/retain-complete-proposal-reference/recall.json), [history-enabled diagnostic](./nanobot/retain-complete-proposal-reference/retrieval.json).
 - [Native original-session control](./nanobot/session-store-control.json): seeded originals read through nanobot's own engine.
-- Hermes [baseline](./hermes/baseline.json), [outage](./hermes/outage.json), [restore](./hermes/restore.json), [startup warning stdout](./hermes/outage-stdout.log).
+- Hermes [baseline](./hermes/baseline.json), [outage](./hermes/outage.json), [restore](./hermes/restore.json), startup warning stdout (not retained).
 
 Full traces contain synthetic messages, native prompts, tool requests/results and usage as returned by the runtime. No model key, production home, database, inbox or messaging credential is included. Corpus IDs are evaluation metadata; native session timestamps reflect fixture insertion.
 

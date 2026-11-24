@@ -28,7 +28,7 @@ so the four SDKs and Core agree on one set of bodies.
 
 | Rule | Detail |
 |---|---|
-| `ETag` | Strong, `"sha256:<first 32 hex of sha256(body)>"`, on `200` responses of every route in this document and on `GET /api/v1/events/query`. Built from the response body, never from a store-wide counter: `entity_versions` is keyed by entity id across tenants (`store.rs:177`), so a counter-based tag would leak another tenant's activity. |
+| `ETag` | Strong, `"sha256:<first 32 hex of sha256(body)>"`, on `200` responses of every route in this document and on `GET /api/v1/events/query`. Built from the response body, never from a store-wide counter: `entity_versions` is keyed by entity id across tenants (`store.rs:205-206`), so a counter-based tag would leak another tenant's activity. |
 | `If-None-Match` | When it equals the tag Core would send, Core answers `304 Not Modified` with the same `ETag` and no body. A list of tags and `*` are honoured per RFC 9110. |
 | Determinism | A body that carries a request-time field (for example a `queried_at`) must exclude it from the hash or drop it, otherwise a 304 can never happen. |
 | Gateway | Forwards `If-None-Match`, copies `ETag`, meters a `304` as zero bytes for every route here. |

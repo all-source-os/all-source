@@ -12,7 +12,7 @@ The initial qualification exposed revoked-key acceptance and an incorrect year-l
 
 - Public origin: `https://api.all-source.xyz`; actual health response identifies `allsource-control-plane`, version `0.26.1`, healthy Core, persistence `core`.
 - Source base: merged PR #361 at `54c26ea308f38b2adf6b68e3609d6f23b8c2e8af`, isolated from the unrelated dirty primary checkout. Deployed repair source: `f1ede26fedc7d3bc1d12c60938e9e317c25393fa`; all candidate CI passed before rollout.
-- Installed Allstack: `0.2.0`. Original native methods and [indexed acceptance request](../reference/hosted-prime-sync-request.md) guide the flow.
+- Installed Allstack: `0.2.0`. Original native methods and [indexed acceptance request](../archive/2026-11-23/reference/hosted-prime-sync-request.md) guide the flow.
 - Rebuilt Prime: Cargo reported `fresh:false`; test-target compilation rebuilt its final runtime executable. Executed Prime SHA-256: `46d77838ff4a103bf1f940e457f3f5cafea0c4030a273da241f7eceb46a0c787`.
 - Executed final hosted harness SHA-256: `c05534c6a45f3c848cb8bdf53ce3ab50d44dac62326edd3e5f275ee7ca6e4fd5`. The reader receipt binds the same bytes before and after execution.
 
@@ -58,7 +58,7 @@ During the initial qualification, the original revoked JWT still returned HTTP 2
 
 Managed JWT issuance now honors requested expiration and persists registration before returning a secret. Both gateways require current Core lifecycle authority and enforce registered scopes within signed roles. Revoke success requires Core acknowledgement. Unregistered long-lived API JWTs are rejected; human sessions and short-lived service delegation retain separate authority.
 
-The [accepted design](../plans/2026-10-26-api-key-lifecycle-repair.md) and [repair verification report](2026-10-26-managed-key-lifecycle-verification.md) record compatibility, real Core restart checks and the deployed images. Human dashboard access remained usable after rollout. Core remained private and was not deployed or restarted. No signing-key rotation or broad credential revocation was performed.
+The [accepted design](../archive/2026-11-23/plans/2026-10-26-api-key-lifecycle-repair.md) and [repair verification report](2026-10-26-managed-key-lifecycle-verification.md) record compatibility, real Core restart checks and the deployed images. Human dashboard access remained usable after rollout. Core remained private and was not deployed or restarted. No signing-key rotation or broad credential revocation was performed.
 
 ## Underlying services and limits
 

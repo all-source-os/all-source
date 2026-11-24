@@ -50,11 +50,11 @@ Or use the trigger phrases listed in each skill's description.
 
 ### chronos-data-flow
 
-Tests the Docker stack defined in `docker-compose.chronos.yml`. Runs `tooling/data-flow-test/test-data-flow.sh`.
+Tests the Docker stack defined in `docker-compose.yml`. Runs `tooling/data-flow-test/test-data-flow.sh`.
 
 ```bash
 # What it checks
-Container State    → Core (3280), Query Service (3283), MCP (3904), PostgreSQL (3284)
+Container State    → Core (3280), Query Service (3283), MCP (3904)
 Core Health        → /health, /api/v1/stats, events/query, projections, schemas, snapshots
 Query Service      → /api/health, /api/tenant, /api/events, /api/streams, /api/openapi
 MCP Server         → /health

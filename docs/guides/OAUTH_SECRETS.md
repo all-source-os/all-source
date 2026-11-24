@@ -6,7 +6,7 @@ How to configure Google and GitHub OAuth secrets for the AllSource stack.
 
 ## Required Secrets
 
-The Query Service reads these from environment variables at runtime (`config/runtime.exs:58-63`):
+The OAuth variables are read from the environment at runtime. The Control Plane reads the provider client IDs and secrets (`apps/control-plane/oauth.go`). The Query Service reads `SECRET_KEY_BASE` (`apps/query-service/config/runtime.exs:61-64`):
 
 | Secret | Env Var | Source |
 |--------|---------|--------|
@@ -86,51 +86,42 @@ When registering OAuth apps with Google and GitHub, set the authorized redirect 
 
 ### Google Cloud Console
 
-- **Production**: `https://allsource-query.fly.dev/api/auth/google/callback`
-- **Development**: `http://localhost:3902/api/auth/google/callback`
+- **Production**: `https://all-source.xyz/api/v1/auth/oauth/google/callback`
+- **Development**: `http://localhost:3000/api/v1/auth/oauth/google/callback`
 
 ### GitHub Developer Settings
 
-- **Production**: `https://allsource-query.fly.dev/api/auth/github/callback`
-- **Development**: `http://localhost:3902/api/auth/github/callback`
+- **Production**: `https://all-source.xyz/api/v1/auth/oauth/github/callback`
+- **Development**: `http://localhost:3000/api/v1/auth/oauth/github/callback`
 
-The callback URL base is controlled by `OAUTH_CALLBACK_BASE_URL` env var, falling back to `PHX_HOST` (see `oauth_controller.ex:378`).
+The callback base URL is the `FRONTEND_URL` env var (`getOAuthCallbackBaseURL` in `apps/control-plane/oauth.go`). The frontend proxies the callback to the Control Plane.
 
 ---
 
 ## How the OAuth Flow Works
 
 ```
-Browser                Query Service (3902)         Control Plane (3901)      Provider
-  |                         |                            |                      |
-  |-- GET /api/auth/google ->                            |                      |
-  |                         |-- redirect ---------------------------------------+
-  |                         |                            |                      |
-  |<-- redirect to Google --+                            |                      |
-  |                         |                            |                      |
-  |-- callback?code=... --->|                            |                      |
-  |                         |-- exchange code -----------+--------------------->|
-  |                         |<-- access_token -----------+---------------------+
-  |                         |-- fetch user info ---------+--------------------->|
-  |                         |<-- email, name, id --------+---------------------+
-  |                         |-- POST /api/v1/auth/oauth ->                      |
-  |                         |<-- JWT token + new_user ---+                      |
-  |<-- redirect to frontend/callback?token=JWT           |                      |
+Browser                Frontend (FRONTEND_URL)      Control Plane (3901)      Provider
+  |-- GET /api/v1/auth/oauth/google ----------------->|                      |
+  |<-- redirect to Google ---------------------------- |                      |
+  |-- callback?code=... -->|                          |                      |
+  |                        |-- proxy callback ------->|-- exchange code ---->|
+  |                        |                          |<-- access_token -----|
+  |                        |                          |-- fetch user info -->|
+  |<-- redirect to FRONTEND_URL/api/auth/callback?token=JWT
 ```
 
-1. `GET /api/auth/:provider` redirects to provider authorization page
-2. Provider redirects back to `/api/auth/:provider/callback?code=...`
-3. Query Service exchanges code for access token with provider
-4. Query Service fetches user info (email, name) from provider API
-5. Query Service calls Control Plane `POST /api/v1/auth/oauth` to find/create user
-6. Control Plane returns JWT (or Query Service signs one locally as fallback)
-7. Redirect to frontend with JWT in URL
+1. `GET /api/v1/auth/oauth/:provider` on the Control Plane redirects to the provider authorization page
+2. Provider redirects back to `/api/v1/auth/oauth/:provider/callback` on the frontend, which proxies it to the Control Plane
+3. Control Plane exchanges the code for an access token with the provider
+4. Control Plane fetches user info (email, name) from the provider API
+5. Control Plane issues a JWT and redirects to `FRONTEND_URL/api/auth/callback?token=JWT&new_user=...`
 
 ---
 
 ## Related Files
 
-- OAuth controller: `apps/query-service/lib/query_service_ex_web/controllers/oauth_controller.ex`
+- OAuth handlers: `apps/control-plane/oauth.go`
 - Runtime config: `apps/query-service/config/runtime.exs` (lines 58-63)
 - Control Plane handler: `apps/control-plane/auth.go` (line 211, `OAuthHandler`)
 - Fly.io config: `apps/query-service/fly.toml`

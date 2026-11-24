@@ -150,7 +150,7 @@ Each presence entry contains `{ user_id, tenant_id, online_at }`.
 
 ## Cross-Origin (CORS)
 
-The frontend (`www.all-source.xyz`) connects cross-origin to the Query Service (`allsource-query-service.fly.dev`). Both HTTP API calls and WebSocket upgrades require origin validation.
+The frontend (`www.all-source.xyz`) connects cross-origin to the Query Service (`allsource-query.fly.dev`). Both HTTP API calls and WebSocket upgrades require origin validation.
 
 The Query Service handles both through a single `ALLOWED_ORIGINS` env var:
 

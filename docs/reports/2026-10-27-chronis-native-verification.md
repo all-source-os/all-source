@@ -4,7 +4,7 @@
 
 TOON string values escape backslashes, pipes and line controls consistently. Non-final action fields also escape colon separators, preserving legacy IDs without changing stored values. An agent identity cannot insert a table column or a second status field. Literal backslash-n and a real newline remain distinct. Ordinary output and silent repeated completion retain their existing behavior.
 
-The [accepted plan](../plans/2026-10-27-chronis-toon-escaping.md), [application request](../reference/chronis-toon-request.md), and [Chronis-specific policy](../../workflows/chronis-native.toml) define acceptance. The existing Prime-only policy remains unchanged.
+The [accepted plan](../archive/2026-11-23/plans/2026-10-27-chronis-toon-escaping.md), [application request](../archive/2026-11-23/reference/chronis-toon-request.md), and Chronis-specific policy (`workflows/chronis-native.toml`) define acceptance. The existing Prime-only policy remains unchanged.
 
 ## Before and after
 

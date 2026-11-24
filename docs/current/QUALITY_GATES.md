@@ -1,17 +1,16 @@
 ---
 title: "Quality Gates - AllSource Core"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-24
 version: "1.0"
 related:
-  - "./CLEAN_ARCHITECTURE.md"
-  - "../guides/CONTRIBUTING.md"
+  - "../archive/2026-11-23/current/CLEAN_ARCHITECTURE.md"
   - "./CRITICAL_BUGS_FIXED.md"
 ---
 
 # Quality Gates - AllSource Core
 
-**MSRV**: Rust 1.70.0
+**MSRV**: Rust 1.92
 
 This document describes the quality gates enforced for AllSource Core to maintain code quality, consistency, and reliability.
 
@@ -72,7 +71,7 @@ make build
 Enforce consistent code style across the entire codebase using `rustfmt`.
 
 ### Configuration
-**File**: `apps/core/rustfmt.toml`
+**File**: `rustfmt.toml` (repo root)
 
 ```toml
 edition = "2021"
@@ -157,7 +156,7 @@ Catch common mistakes, anti-patterns, and performance issues using Rust's offici
 **File**: `apps/core/.clippy.toml`
 
 ```toml
-msrv = "1.70.0"
+msrv = "1.92"
 warn-on-all-wildcard-imports = true
 ```
 
@@ -337,7 +336,7 @@ cargo build --lib --release
 
 ### GitHub Actions Workflow
 
-**File**: `.github/workflows/rust-quality.yml`
+**Job**: `rust-quality` in `.github/workflows/ci.yml`
 
 **Triggers**:
 - Push to `main` or `develop` branches
@@ -354,7 +353,7 @@ cargo build --lib --release
    - Build verification (cargo build --lib --release)
 
 2. **msrv-check** - Minimum Supported Rust Version check
-   - Verifies compilation with Rust 1.70.0
+   - Verifies compilation with Rust 1.92
 
 ### CI Execution
 ```yaml
@@ -517,7 +516,7 @@ make check
 **Cause**: Feature flags or dependencies missing in CI
 
 **Fix**:
-- Check `.github/workflows/rust-quality.yml`
+- Check the `rust-quality` job in `.github/workflows/ci.yml`
 - Ensure all required dependencies in `Cargo.toml`
 - Verify feature flags are configured correctly
 
@@ -577,7 +576,7 @@ make format-sort
 ### Updating rustfmt Configuration
 ```bash
 # 1. Edit rustfmt.toml
-nano apps/core/rustfmt.toml
+nano rustfmt.toml
 
 # 2. Reformat all code
 make format
@@ -601,15 +600,15 @@ make lint
 ### Updating MSRV
 ```bash
 # 1. Edit .clippy.toml
-# msrv = "1.75.0"  # Update version
+# msrv = "1.92"  # Update version
 
 # 2. Update CI workflow
-# .github/workflows/rust-quality.yml
-# - uses: dtolnay/rust-toolchain@1.75.0
+# .github/workflows/ci.yml (job rust-quality)
+# - uses: dtolnay/rust-toolchain@1.92
 
 # 3. Test with new MSRV
-rustup install 1.75.0
-rustup default 1.75.0
+rustup install 1.92
+rustup default 1.92
 make check
 ```
 
@@ -617,8 +616,7 @@ make check
 
 ## Related Documentation
 
-- [Contributing Guide](../guides/CONTRIBUTING.md)
 - [Critical Bugs Fixed](CRITICAL_BUGS_FIXED.md)
-- [Architecture Guide](CLEAN_ARCHITECTURE.md)
+- [Architecture Guide](../archive/2026-11-23/current/CLEAN_ARCHITECTURE.md)
 - [Core README](../../apps/core/README.md)
 

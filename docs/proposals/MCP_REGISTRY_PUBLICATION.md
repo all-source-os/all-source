@@ -43,11 +43,11 @@
 
 The Elixir MCP server (`apps/mcp-server-elixir/`) is production-ready:
 
-- **43 tools** across 8 categories: core queries, search, AI-native, event management, operations, tenant management, schema governance, analytics
-- **TOON encoding** — 50% fewer tokens than JSON for tabular data
+- **47 to 73 tools**, depending on configuration. `list_tools/1` (`apps/mcp-server-elixir/lib/mcp_server_elixir/protocol/mcp_tools.ex`) gates 8 tools on `read_only`, 18 on `control_plane_enabled` and `system_admin`, and removes backend-specific tools via `unsupported_tools/0`. Range before backend removal: 47 (`read_only` on, control plane off) to 73 (all flags on)
+- **TOON encoding** — about 50% fewer tokens than JSON for tabular data
 - **OTP supervision** — fault tolerance and real-time WebSocket streaming
-- **429 tests** passing with Credo + Dialyzer
-- **Docker image** with multi-stage build, Alpine 3.23, non-root user, healthcheck
+- **704 ExUnit test blocks** under `apps/mcp-server-elixir/test`; Credo (`~> 1.7`) and Dialyzer (`dialyxir ~> 1.4`) in the dev and test dependencies
+- **Docker image** with multi-stage build, Alpine 3.23 (`ALPINE_VERSION`), non-root user, healthcheck
 - No MCP Resources defined (tools only — resources optional)
 
 ---
@@ -78,16 +78,16 @@ Place at `apps/mcp-server-elixir/server.json`:
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.all-source-os/chronos-mcp",
   "title": "AllSource Chronos",
-  "description": "AI-native event store MCP server with 43 tools: event queries, time-travel state reconstruction, pattern detection, schema governance, tenant management, and TOON token-optimized responses.",
+  "description": "AI-native event store MCP server with 47 to 73 tools depending on configuration: event queries, time-travel state reconstruction, pattern detection, schema governance, tenant management, and TOON token-optimized responses.",
   "repository": {
     "url": "https://github.com/all-source-os/all-source",
     "source": "github"
   },
-  "version": "0.10.0",
+  "version": "0.30.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/all-source-os/chronos-mcp:0.10.0",
+      "identifier": "ghcr.io/all-source-os/allsource-mcp-server:0.30.0",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         {
@@ -204,7 +204,7 @@ Deep analysis of 5 production MCP servers to inform AllSource's design.
 - **Multi-transport**: Supports stdio, HTTP, and SSE from the same binary via CLI flags.
 - **Naming**: Verb-noun (`list_topics`, `create_connector`, `get_schema`). No namespacing prefix.
 
-**Takeaway for AllSource**: Our 43 tools could benefit from conditional enablement (e.g., tenant management tools only when control plane is configured) and cross-tool workflow hints in descriptions.
+**Takeaway for AllSource**: Our 47 to 73 tools could benefit from conditional enablement (e.g., tenant management tools only when control plane is configured) and cross-tool workflow hints in descriptions.
 
 ### 2. ClickHouse MCP (3-4 tools)
 
@@ -216,7 +216,7 @@ Deep analysis of 5 production MCP servers to inform AllSource's design.
 - **Prompt engineering over tool constraints**: Heavy system prompts teach LLMs how to write ClickHouse SQL, rather than building many specialized tools.
 - **Cursor-based pagination**: Results have TTL-cached cursors for large datasets.
 
-**Takeaway for AllSource**: Our TOON encoding already achieves similar token savings. Consider whether some of our 43 tools could be consolidated into a "query" tool with rich prompts, like ClickHouse does. Read-only mode flag is valuable.
+**Takeaway for AllSource**: Our TOON encoding already achieves similar token savings. Consider whether some of our 47 to 73 tools could be consolidated into a "query" tool with rich prompts, like ClickHouse does. Read-only mode flag is valuable.
 
 ### 3. Elasticsearch MCP (5 tools, Rust)
 
@@ -274,6 +274,6 @@ Deep analysis of 5 production MCP servers to inform AllSource's design.
 | Pattern | Source | Why Skip |
 |---------|--------|----------|
 | Raw DSL passthrough | Elasticsearch | Our query API is simpler than ES DSL — purpose-built tools are better UX |
-| SQL-is-the-API (few tools) | ClickHouse | We already have 43 purpose-built tools — that's our strength |
+| SQL-is-the-API (few tools) | ClickHouse | We already have 47 to 73 purpose-built tools — that's our strength |
 | Full OAuth 2.1 | Apollo | API key auth is sufficient for MCP; OAuth adds complexity for CLI use |
 | Raw JSON output | Axiom | TOON already gives us 50% token savings — keep it |

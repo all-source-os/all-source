@@ -1,7 +1,7 @@
 # better-auth-allsource
 
 [![Crates.io](https://img.shields.io/crates/v/better-auth-allsource.svg)](https://crates.io/crates/better-auth-allsource)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../../LICENSE)
 
 Event-sourced authentication persistence for [better-auth-rs](https://crates.io/crates/better-auth-core), powered by [Allsource](https://github.com/all-source-os/all-source).
 
@@ -44,7 +44,7 @@ Against the hosted gateway, the adapter can sign every request with a P-256 key 
 
 ```toml
 [dependencies]
-allsource = { version = "0.29", features = ["es256-assertion"] }
+allsource = { version = "0.30", features = ["es256-assertion"] }
 better-auth-allsource = "0.14.15"
 ```
 
@@ -77,16 +77,16 @@ Each auth entity maps to an Allsource event stream:
 
 | Entity | Entity ID Pattern | Event Types |
 |---|---|---|
-| User | `auth-user:{id}` | `UserCreated`, `UserUpdated`, `UserDeleted` |
-| Session | `auth-session:{token}` | `SessionCreated`, `SessionDeleted` |
-| Account | `auth-account:{id}` | `AccountCreated`, `AccountUpdated`, `AccountDeleted` |
-| Verification | `auth-verification:{id}` | `VerificationCreated`, `VerificationDeleted` |
-| Organization | `auth-org:{id}` | `OrgCreated`, `OrgUpdated`, `OrgDeleted` |
-| Member | `auth-member:{id}` | `MemberCreated`, `MemberUpdated`, `MemberDeleted` |
-| Invitation | `auth-invitation:{id}` | `InvitationCreated`, `InvitationUpdated`, `InvitationDeleted` |
-| Two-Factor | `auth-2fa:{id}` | `TwoFactorCreated`, `TwoFactorUpdated`, `TwoFactorDeleted` |
-| API Key | `auth-apikey:{id}` | `ApiKeyCreated`, `ApiKeyUpdated`, `ApiKeyDeleted` |
-| Passkey | `auth-passkey:{id}` | `PasskeyCreated`, `PasskeyUpdated`, `PasskeyDeleted` |
+| User | `auth-user:{id}` | `auth.user.created`, `auth.user.updated`, `auth.user.deleted` |
+| Session | `auth-session:{token}` | `auth.session.created`, `auth.session.updated`, `auth.session.expiry_updated`, `auth.session.deleted` |
+| Account | `auth-account:{id}` | `auth.account.created`, `auth.account.updated`, `auth.account.deleted` |
+| Verification | `auth-verification:{id}` | `auth.verification.created`, `auth.verification.consumed`, `auth.verification.deleted` |
+| Organization | `auth-org:{id}` | `auth.org.created`, `auth.org.updated`, `auth.org.deleted` |
+| Member | `auth-member:{id}` | `auth.member.created`, `auth.member.updated`, `auth.member.deleted` |
+| Invitation | `auth-invitation:{id}` | `auth.invitation.created`, `auth.invitation.updated`, `auth.invitation.deleted` |
+| Two-Factor | `auth-2fa:{id}` | `auth.two_factor.created`, `auth.two_factor.updated`, `auth.two_factor.deleted` |
+| API Key | `auth-apikey:{id}` | `auth.api_key.created`, `auth.api_key.updated`, `auth.api_key.deleted` |
+| Passkey | `auth-passkey:{id}` | `auth.passkey.created`, `auth.passkey.updated`, `auth.passkey.deleted` |
 
 **Event pattern:**
 - **Create/Update** — appends a full-state snapshot as the event payload
@@ -167,15 +167,16 @@ If you are migrating off a `metadata.password_hash` pattern, copy the existing h
 
 ## Error Handling
 
-All methods return `AuthResult<T>` from `better-auth-core`. The adapter maps HTTP, JSON, and API errors into `AuthError::Database(DatabaseError::Query(...))`:
+All methods return `AuthResult<T>` from `better-auth-core`. The adapter maps HTTP, JSON, and API errors into `AuthError::Database(DatabaseError::Query(...))`, and `RateLimited` into `AuthError::RateLimited`:
 
 ```rust
 use better_auth_allsource::AllsourceAuthError;
 
-// The error type exposes three variants:
+// The error type exposes four variants:
 // AllsourceAuthError::Http(_)  — network/connection errors
 // AllsourceAuthError::Json(_)  — serialization errors
 // AllsourceAuthError::Api { status, message } — non-2xx responses from Allsource
+// AllsourceAuthError::RateLimited { retry_after, scope } — 429, or 503 with a refusal scope
 ```
 
 ## Requirements

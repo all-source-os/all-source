@@ -1,6 +1,6 @@
 # Readiness-barrier #7183 evidence
 
-[Report and current unsent draft](../../2026-10-21-omo-readiness-barrier-evaluation.md); results-summary.json contains recomputed scores and controls.
+[Superseded report](../../../archive/2026-11-23/outreach/2026-10-21-omo-readiness-barrier-evaluation.md); results-summary.json contains recomputed scores and controls.
 
 - b1a on, b1b off; b2a off, b2b on. Run serially in that order.
 - *-barrier-0/1/2/3.json: every poll, expected count/state, native hook/HTTP acceptance times, release time and stored message IDs.

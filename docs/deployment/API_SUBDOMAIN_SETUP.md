@@ -26,7 +26,7 @@ Plane has public DNS.
 - `allsource-control-plane` exists on Fly, owner `allsource`
 - Dedicated IPv6: `2a09:8280:1::d4:42b8:0`
 - Shared IPv4: `66.241.125.106`
-- `all-source.xyz` DNS is hosted on Vercel (`ns1/ns2.vercel-dns.com`)
+- `all-source.xyz` DNS is managed in Unstoppable Domains; its apex, `www`, `admin` and `api` records point at Fly
 - No existing Fly certs for this subdomain
 
 ## Step 1 — allocate the cert on Fly
@@ -49,25 +49,18 @@ CNAME    _acme-challenge.api.all-source.xyz   <fly-printed-target>
 Record the `_acme-challenge` target exactly as Fly prints it — it's
 unique per cert.
 
-## Step 2 — add records on Vercel
+## Step 2 — add records in Unstoppable Domains DNS
 
-Vercel dashboard → Domains → `all-source.xyz` → DNS tab. Add:
+Unstoppable Domains DNS console → `all-source.xyz`. Add:
 
 | Type  | Name                  | Value                                    |
 |-------|-----------------------|------------------------------------------|
 | CNAME | `api`                 | `allsource-control-plane.fly.dev`        |
 | CNAME | `_acme-challenge.api` | *(target printed by Fly in Step 1)*      |
 
-CLI equivalent (if `vercel` is logged in to the right team):
-
-```bash
-vercel dns add all-source.xyz api CNAME allsource-control-plane.fly.dev
-vercel dns add all-source.xyz _acme-challenge.api CNAME <fly-printed-target>
-```
-
 ## Step 3 — wait and verify
 
-Vercel DNS propagates within 1–2 minutes. Fly's LetsEncrypt issuance
+Propagation depends on Unstoppable Domains DNS. Fly's LetsEncrypt issuance
 fires automatically once the `_acme-challenge` CNAME resolves.
 
 ```bash
@@ -135,6 +128,6 @@ See epic `t-ce84`, beads `t-0ff8` (Core internal-only) and `t-a64e`
 ## Rollback
 
 - `fly certs remove api.all-source.xyz -a allsource-control-plane`
-- Delete the two DNS records in Vercel.
+- Delete the two DNS records in Unstoppable Domains DNS.
 - Clients revert to using `allsource-control-plane.fly.dev` directly.
 - No code changes required — chronis already accepts any `--remote` URL.

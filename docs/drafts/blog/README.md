@@ -1,14 +1,16 @@
 # Blog drafts (unpublished)
 
-These `.mdx` posts are **not** in the Vercel build path (`apps/web/content/`), so
-they do **not** appear on www.all-source.xyz. They are kept here for review.
+These `.mdx` posts are **not** in the content directory of the web app
+(`apps/web/content/`), which the Fly app `allsource-web` builds, so they do **not**
+appear on www.all-source.xyz. They are kept here for review.
 
 To publish one, move it back:
 
 ```bash
 git mv docs/drafts/blog/<slug>.mdx apps/web/content/<slug>.mdx
 git commit -m "content(blog): publish <slug>"
-git push origin main   # Vercel auto-builds
+git push origin main
+fly deploy . --config apps/web/fly.toml --remote-only --ha=false
 ```
 
 ## Current drafts — Prime Hound launch set

@@ -1,7 +1,7 @@
 # AllSource Launch Checklist
 
-**Last reviewed:** 2026-04-14
-**Current versions:** Core v0.18.2 · Query Service v0.18.2 · Web v0.18.2
+**Last reviewed:** 2026-11-24
+**Current versions:** Core 0.30.0 · latest release tag v0.30.0
 **Active branches:** `main` — x402 + agent registration are already merged. The `feat/agent-auth-x402` branch is historical.
 
 Single source of truth for what's left to launch. Supersedes the 6 archived docs under `docs/launch/archived/`. Pair with `docs/launch/CHRONIS_CLOUD_LAUNCH_PLAN.md` for the chronis cloud sync launch specifically.
@@ -12,31 +12,29 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/de
 
 ## Phase A — Infrastructure & Credentials
 
-- [x] Fly apps exist and running in region `iad`, all `started` with health checks passing: `allsource-core`, `allsource-query`, `allsource-control-plane`, `allsource-prime`, `allsource-auth`, `allsource-registry`.
+- [ ] Fly apps exist and running in region `iad`, all `started` with health checks passing: `allsource-core`, `allsource-query`, `allsource-control-plane`, `allsource-prime`, `allsource-auth`. Verify with `fly status -a <app>`.
   - Query Service app is named `allsource-query`, not `allsource-query-service`.
-  - **Web is on Vercel at `all-source.xyz`, never on Fly.** The legacy `allsource-web` Fly app was destroyed on 2026-04-15 — do not recreate it. Any `fly deploy` targeting the frontend is a mistake; redeploy the Vercel project instead.
+  - Web runs on Fly as `allsource-web` (`apps/web/fly.toml`), serving `all-source.xyz` and `www`.
 - [x] Google OAuth app registered; `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` saved
 - [x] GitHub OAuth app registered; `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` saved
 - [ ] LemonSqueezy: API key, store ID, webhook secret (needed for paid-tier upgrade flow)
 - [ ] Coinbase CDP server wallet on Base (mainnet for launch, Sepolia for staging) — for x402 payouts
 - [x] `SECRET_KEY_BASE` deployed on `allsource-query`, `ALLSOURCE_JWT_SECRET` deployed on `allsource-core` (verified via `fly secrets list` 2026-04-16)
-- [x] Custom domains live: `api.all-source.xyz` → `allsource-control-plane` (Fly, Let's Encrypt cert). DNS via Vercel. See `docs/runbooks/SLO_SLA.md` for record values.
-- [x] Status page lives at `https://www.all-source.xyz/status` (Vercel). Polls Control Plane's `/api/v1/status/services` JSON feed; the feed is backed by an in-process probe cache so the page stays up during a Core outage. The previous standalone status hostname (Vigil on Fly) was retired 2026-04-25 — no separate Fly app, no separate cert.
+- [x] Custom domains live: `api.all-source.xyz` → `allsource-control-plane` (Fly, Let's Encrypt cert). DNS via Unstoppable Domains. See `docs/runbooks/SLO_SLA.md` for record values.
+- [x] Status page lives at `https://www.all-source.xyz/status` (Fly, `allsource-web`). Polls Control Plane's `/api/v1/status/services` JSON feed; the feed is backed by an in-process probe cache so the page stays up during a Core outage. The previous standalone status hostname (Vigil on Fly) was retired 2026-04-25 — no separate Fly app, no separate cert.
 
 ## Phase B — Deploy core stack
 
-Backend on Fly, frontend on Vercel. All 6 backend apps on Fly are on **v0.18.2** as of 2026-04-15:
+Backend and frontend on Fly. Each backend app runs the v0.30.0 build:
 
-- [x] `allsource-core` — v0.18.2, healthy, persistent volume `allsource_data`
-- [x] `allsource-query` — v0.18.2, healthy 2/2
-- [x] `allsource-control-plane` — v0.18.2, ships `GET /x402/routes` from `bd8e97d`
-- [x] `allsource-prime` — v0.18.2
-- [x] `allsource-auth` — v0.18.2
-- [x] `allsource-registry` — v0.18.2
-- [x] Web frontend deployed on **Vercel** at `https://all-source.xyz` (auto-deploys on push to main — ships `/use-cases`, `/compare/eventstoredb`, live-metrics fix)
-- [x] Core autoscale `min_machines_running = 1` (`apps/core/fly.toml:22`)
+- [ ] `allsource-core` — v0.30.0, healthy, persistent volume `allsource_data`
+- [ ] `allsource-query` — v0.30.0, healthy 2/2
+- [ ] `allsource-control-plane` — v0.30.0, serves `GET /x402/routes`
+- [ ] `allsource-prime` — v0.30.0
+- [ ] `allsource-auth` — v0.30.0
+- [x] Web frontend deployed on Fly app `allsource-web` at `https://all-source.xyz`
+- [x] Core autoscale `min_machines_running = 1` (`apps/core/fly.toml:101`)
 - [x] Fly alerts on Core/Query `/health` failures configured in Fly dashboard
-- [x] Destroyed legacy `allsource-web` Fly app on 2026-04-15 — web has always been on Vercel
 
 ### Required secrets (reference)
 
@@ -63,7 +61,7 @@ Backend on Fly, frontend on Vercel. All 6 backend apps on Fly are on **v0.18.2**
 - `X402_FACILITATOR_URL=https://x402.coinbase.com`
 - `CDP_API_KEY_NAME`, `CDP_API_KEY_PRIVATE_KEY`
 
-**Web (Vercel)** — set in the Vercel project, not Fly
+**Web (`allsource-web`)** — public values are build arguments in `apps/web/fly.toml`
 - `NEXT_PUBLIC_API_URL=https://allsource-query.fly.dev`
 
 ## Phase C — x402 & agent auth
@@ -82,7 +80,7 @@ Backend on Fly, frontend on Vercel. All 6 backend apps on Fly are on **v0.18.2**
 - [ ] Confirm bootstrap key is stored in 1Password; rotate after first real tenant exists
 - [ ] Create team tenant + per-user API keys via `POST /api/v1/tenants` and `POST /api/v1/auth/api-keys`
 - [ ] Each team member: populate `.chronis/config.toml` (`mode = "remote"`, `remote_url`, `api_key`) — see `CHRONIS_CLOUD_LAUNCH_PLAN.md`
-- [ ] End-to-end: Alice `cn add` → Bob `cn sync` → Bob `cn list` shows it
+- [ ] End-to-end: Alice `cn task create` → Bob `cn sync` → Bob `cn list` shows it
 
 ## Phase E — Backend data integration
 
@@ -107,17 +105,12 @@ Backend on Fly, frontend on Vercel. All 6 backend apps on Fly are on **v0.18.2**
 
 - [x] Hero subtitle "Time-travel your data" with benchmarks (`hero.tsx:150-152`, `186-191`: 469K events/sec, 11.9μs)
 - [x] Benchmarks component on landing (`HeroStats()` in `hero.tsx`, count-up animation)
-- [x] MCP tools showcase (`hero.tsx:189` "27 MCP tools"; mentioned in `features.tsx`)
+- [x] MCP tools showcase: 73 tool definitions (`apps/mcp-server-elixir/lib/mcp_server_elixir/protocol/mcp_tools.ex`)
 - [x] "database" → "event store" audit: only one user-facing fix needed (`dashboard/demo/page.tsx` "your database" → "your event store"); rest of the copy already uses contrastive framing correctly
 - [x] Use cases page (`apps/web/src/app/(marketing)/use-cases/page.tsx` — audit trails, event replay, AI agent memory, financial history)
 - [x] AllSource vs EventStoreDB comparison page (`apps/web/src/app/(marketing)/compare/eventstoredb/page.tsx`)
-- [x] Pricing page review — resolved in `docs/marketing/PRICING_DECISION_2026-04.md` (Option 3 Hybrid). `config.ts` now ships 4 tiers: Developer (free) / **Pro $29** (x402 headline) / **Growth $79** (renamed from TEAM) / Enterprise. Downstream enforcement status:
-  - [ ] LemonSqueezy dashboard: create `pro_monthly` / `pro_yearly` variants — docs updated at `docs/launch/LEMONSQUEEZY_SETUP.md` but the SKUs still need to be created by Decebal in the LS dashboard, then added to `LEMON_SQUEEZY_VARIANT_MAP`
-  - [x] Query Service plan-limits config: `billing_controller.ex` `@tier_quotas` now has `pro` row (1M events/mo, 100K queries/mo); `tenant.ex` schema enum updated to `free/pro/growth/enterprise`. Note: per-minute rate limit tiers in `rate_limiter.ex` already had a `:pro` atom — not touched.
-  - [x] Control Plane x402 middleware tier gate: `quota_gate.go` now exposes `X402TierAllower` interface; `CoreQuotaChecker.AllowsX402()` reads `subscription.tier` from tenant metadata and allows `pro/growth/enterprise/team`; free tier returns 403 before quota/payment logic (`TestQuotaGate_FreeTier_Returns403`)
-  - [x] Auth service MCP read-only preset: `Role::mcp_readonly_preset()` on `apps/core/src/infrastructure/security/auth.rs` — returns `Role::ReadOnly` (Read + Metrics permissions only). Call this from the API-key provisioning path when a Pro tenant requests an MCP key.
-  - [x] Go `SubscriptionTier` entity (`apps/control-plane/internal/domain/entities/subscription.go`): added `TierGrowth` + `TierEnterprise` constants, `TierPro` quota bumped to 1M events/mo, `TierEnterprise` uses `-1` for unlimited. Tests updated and passing. Legacy `TierTeam` retained as alias.
-  - [x] Elixir tier sweep complete: `starter` → `growth/pro` across rate_limiter.ex, config.exs, team_store.ex, audit_log_controller.ex, and all test fixtures. Zero remaining `starter` references (commit `43a230c`).
+- [x] Pricing tiers in `apps/web/src/lib/config.ts` (`siteConfig.pricing`): Self-Host (free, self-run), Indie £18.99/mo, Studio £78.99/mo, Scale £298.99/mo, Enterprise (custom). Tier entitlements: `TierQuotaMap` in `apps/control-plane/internal/domain/entities/subscription.go`.
+  - [ ] LemonSqueezy: confirm the indie / studio / scale variants exist in the dashboard and are mapped in `LEMON_SQUEEZY_VARIANT_MAP`. Setup steps: `docs/launch/LEMONSQUEEZY_SETUP.md`.
 
 ## Phase H — Launch marketing assets
 
@@ -125,8 +118,8 @@ Backend on Fly, frontend on Vercel. All 6 backend apps on Fly are on **v0.18.2**
 - [x] Hero screenshot 2540×1520 (retina 2x): `apps/web/public/assets/hero-screenshot.png` + WebP. Used in hero, solution, how-it-works sections.
 - [x] 4 feature GIFs: event explorer, live stream, API key creation, onboarding — rendered as MP4 (150KB total), integrated in features section.
 - [x] 15 blog header images: unique per article, 1200×630 WebP (164KB total).
-- [x] Draft ProductHunt listing: `docs/marketing/PRODUCTHUNT_LISTING.md` — tagline, description, topics, maker comment.
-- [x] Draft X.com launch thread: `docs/marketing/TWITTER_LAUNCH_THREAD.md` — 8 tweets, each <280 chars.
+- [x] Draft ProductHunt listing: `docs/marketing/archive/pre-relaunch/PRODUCTHUNT_LISTING.md` — tagline, description, topics, maker comment.
+- [x] Draft X.com launch thread: `docs/marketing/archive/pre-relaunch/TWITTER_LAUNCH_THREAD.md` — 8 tweets, each <280 chars.
 - [ ] Draft Show HN post (after 2–3 testimonials collected)
 - [ ] Line up 5–10 upvoters for ProductHunt launch day
 

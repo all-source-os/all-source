@@ -8,7 +8,7 @@ Draft recommendation: in the schema-evolution guide, explain that an upcaster tr
 
 ## Status and evidence limits
 
-The proposed text is a draft; no product content was changed or published in this assessment. The prior correction and its [HTML preview](https://github.com/all-source-os/all-source/blob/main/docs/seo/2026-11-09-schema-preview.html) and [report](https://github.com/all-source-os/all-source/blob/main/docs/seo/2026-11-09-schema-review.md) landed in [PR #402](https://github.com/all-source-os/all-source/pull/402), merged November 9. Its preview matched the proposed example in the prior check; visual rendering and link navigation were not verified.
+The proposed text is a draft; no product content was changed or published in this assessment. The prior correction and its [HTML preview](https://github.com/all-source-os/all-source/blob/main/docs/archive/2026-11-23/seo/2026-11-09-schema-preview.html) and [report](https://github.com/all-source-os/all-source/blob/main/docs/seo/2026-11-09-schema-review.md) landed in [PR #402](https://github.com/all-source-os/all-source/pull/402), merged November 9. Its preview matched the proposed example in the prior check; visual rendering and link navigation were not verified.
 
 At 10:07 UTC, the web fetch tool returned internal errors for the production article, schema guide, and sitemap. Therefore current live content, canonical, sitemap inclusion and indexing are unverified. The [agent-memory article](https://www.all-source.xyz/blog/agent-memory-after-compaction) returned 404 on November 8; that observation does not establish its current status. Search Console data was unavailable.
 

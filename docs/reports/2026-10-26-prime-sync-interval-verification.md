@@ -4,7 +4,7 @@ Status: CURRENT
 
 ## Claim and accepted scope
 
-Prime must reject a zero sync interval before opening its store. Positive configurations must still serve actual MCP tools and deliver events through the existing worker. The [accepted plan](../plans/2026-10-25-prime-sync-interval-validation.md) uses native Allstack skills with authenticated Claude planning, Codex implementation, and independent Claude review and QA.
+Prime must reject a zero sync interval before opening its store. Positive configurations must still serve actual MCP tools and deliver events through the existing worker. The [accepted plan](../archive/2026-11-23/plans/2026-10-25-prime-sync-interval-validation.md) uses native Allstack skills with authenticated Claude planning, Codex implementation, and independent Claude review and QA.
 
 The repair belongs to the CLI argument declaration in `apps/prime-mcp/src/main.rs`. It retains `u64`, the default 1000 milliseconds, positive values, and CLI precedence over `PRIME_SYNC_INTERVAL_MS`; the parser adds a minimum of 1. Sync and email worker mechanics are unchanged.
 
@@ -53,7 +53,7 @@ The existing Prime CI job now includes `--tests`; its former `--bins` selection 
 
 Claude plan session `65266a08-99ef-464c-98e0-5f7440350d1d` expanded native `/allstack-plan`. Codex thread `01a17549-24a8-7252-9c98-8d49a1aebbfe` read the project plan through native recall and implemented the parser, README, and initial public-process tests. Claude's independent source review identified the missing positive synced-MCP test; that coverage was added and reviewed before runtime qualification.
 
-Installed Allstack 0.2.0 initialized the isolated project coordinator, preserving the tracked 127,146-byte `.chronis/sync/events.jsonl` export and project Prime context. The export SHA-256 remained `5b7825d06aff59801f9cc8cc24a526ff2d8e440e5fa378fba9f8eb11f719bc40`. Source-denied `init --check` returned ready with no changed generated files. Project verification policy is [versioned with the workflow](../../workflows/verification.toml).
+Installed Allstack 0.2.0 initialized the isolated project coordinator, preserving the tracked 127,146-byte `.chronis/sync/events.jsonl` export and project Prime context. The export SHA-256 remained `5b7825d06aff59801f9cc8cc24a526ff2d8e440e5fa378fba9f8eb11f719bc40`. Source-denied `init --check` returned ready with no changed generated files. Project verification policy is `workflows/verification.toml`.
 
 Native enrollment is AllSource run `b0142d4c-92d2-4e82-b3b2-ac6db49c8995`, epoch `1`, with Chronis task `t-a5105c` claimed by `allstack:b0142d4c-92d2-4e82-b3b2-ac6db49c8995:claude-code:1`. The project Prime plan write completed, and the coordinator retained the original task export unchanged.
 

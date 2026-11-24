@@ -64,7 +64,7 @@ container over `fly ssh` and signing an HS256 `role:"admin"` JWT — identical t
 | `/outreach` | `GET …/admin/notices` (+ `…/fleet/health`) | 200 | **EMPTY-correct** | `notices=0` — no notices posted yet. |
 | `/inbox` | `GET …/admin/inbox/connections` (+ `/messages`) | 200 | **WORKING** (was 401 on v75; fixed by CP **v76**) | `connections=0` — handler reached, auth OK. The v75→v76 deploy shipped the `e4b5b2c` inbox auth-group fix; the 401 is resolved. |
 
-**Summary (live, CP v76):** `task admin-health` exits **0** — **0 pages BROKEN**.
+**Summary (live, CP v87, deployed 2026-06-27):** `task admin-health` exits **0** — **0 pages BROKEN**.
 WORKING 8 · EMPTY-correct 8 (incl. inbox `connections=0`) ·
 counts (`/tenants`, `/tenants/:id`) + `/monitoring` summary render EMPTY today
 because their **Core/QS fixes are not yet deployed** (they are EMPTY, not BROKEN —
@@ -184,7 +184,7 @@ different names (verified live): `allsource_storage_events_total 13354`,
 `401 {"error":"unauthorized","message":"authentication required"}` with a valid
 admin token that works on every other `/api/v1/admin/*` route.
 
-**Root cause.** The 401 originates from `RequirePermission` (`auth.go:441`), which
+**Root cause.** The 401 originates from `RequirePermission` (`apps/control-plane/auth.go:547`), which
 reads the api-group `AuthMiddleware` context — **not** the `AdminAuthMiddleware`
 context the admin session uses. The deployed CP (Fly **v75**, 2026-06-25 09:45 BST)
 predates commit **`e4b5b2c`** (2026-06-25 17:33 BST) which moved the inbox admin

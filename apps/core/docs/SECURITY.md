@@ -182,7 +182,7 @@ let claims = auth.validate_api_key(&raw_key)?;
 
 ## Authorization (RBAC)
 
-AllSource Core implements Role-Based Access Control with three predefined roles:
+AllSource Core implements Role-Based Access Control with four predefined roles:
 
 ### Roles and Permissions
 
@@ -191,6 +191,7 @@ AllSource Core implements Role-Based Access Control with three predefined roles:
 | **Admin** | ✅ | ✅ | ✅ | ✅ |
 | **Developer** | ✅ | ✅ | ❌ | ❌ |
 | **ReadOnly** | ✅ | ❌ | ❌ | ❌ |
+| **ServiceAccount** | ✅ | ✅ | ❌ | ❌ |
 
 ### Permission Checking
 
@@ -1047,12 +1048,13 @@ When enabled, development mode:
 If you need authentication but want a quick setup, use the bootstrap API key instead of development mode:
 
 ```bash
-# Start the server normally (no dev mode)
+# Set the bootstrap key, then start the server normally (no dev mode)
+export ALLSOURCE_BOOTSTRAP_API_KEY="<your-bootstrap-key>"
 cargo run
 
 # Authenticate using bootstrap key
-curl -H "Authorization: ask_bootstrap_key_for_development" \
-  http://localhost:8080/api/v1/events
+curl -H "Authorization: Bearer $ALLSOURCE_BOOTSTRAP_API_KEY" \
+  http://localhost:3900/api/v1/events
 ```
 
 The bootstrap API key provides authenticated access while maintaining the full security stack.
@@ -1091,7 +1093,7 @@ cargo run --release
 Check if development mode is enabled via the `/health` endpoint:
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:3900/health
 # Response includes dev_mode: true/false
 ```
 
@@ -1121,14 +1123,12 @@ Or check the server logs on startup for the warning message.
 
 ## Additional Resources
 
-- [Authentication Guide](docs/authentication.md)
-- [RBAC Configuration](docs/rbac.md)
-- [Multi-Tenancy Architecture](docs/multi-tenancy.md)
-- [API Security](docs/api-security.md)
-- [Deployment Security](docs/deployment.md)
+- [Authentication Chain](../../../docs/current/AUTH_CHAIN.md)
+- [Multi-Tenancy Architecture](../../../docs/current/TENANT_ARCHITECTURE.md)
+- [Docker Deployment](../../../docs/deployment/DOCKER.md)
 
 ---
 
-**Last Updated**: 2026-02-03
-**Version**: 1.1.0
+**Last Updated**: 2026-11-23
+**Version**: 0.30.0
 **Maintained By**: AllSource Core Security Team

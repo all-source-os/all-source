@@ -50,7 +50,7 @@ qualification, fulfilment and refund requirements apply.
 - App discovery pages: https://www.all-source.xyz/apps, https://www.all-source.xyz/apps/ios, https://www.all-source.xyz/apps/android; required target routes, not claims of current availability.
 - Mobile release evidence: `docs/MOBILE_DELIVERY.md` and `docs/LAUNCH_READINESS.md` track Android and iOS independently through signed build, internal installation, physical-device proof, review and verified public store URLs.
 - Lesson coverage: 2026-09-21 ten-bet audit; Real onboarding must survive restart and create durable tenants. Paid renewal, not trial signup, is the commercial signal.
-- Missing-work queue: repository Chronis epic and dependent Android, iOS, commerce/offer, website, device and release beads listed in `docs/MOBILE_DELIVERY.md`.
+- Missing-work queue: repository Chronis epic and dependent Android, iOS, commerce/offer, website, device and release tasks listed in `docs/MOBILE_DELIVERY.md`.
 
 Decision and audit: [delivery amendment](decisions/2026-09-21-complete-mobile-delivery.md).
 

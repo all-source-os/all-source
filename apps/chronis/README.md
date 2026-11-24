@@ -35,8 +35,6 @@ cargo install chronis --features prime-full
 ```
 
 This adds:
-- **`cn related <id>`** — find tasks connected by dependencies, parent/child, and graph proximity
-- **`cn find "query"`** — semantic search across task titles and descriptions (requires embedding vectors)
 - **Task graph stats** — see node/edge counts for your task relationships
 
 The base `cn` stays lightweight (~5MB). `prime-full` adds graph + vector capabilities (~35MB).

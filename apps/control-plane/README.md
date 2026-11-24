@@ -1,40 +1,33 @@
 ---
 title: "Go Control Plane"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-24
 category: service
 port: 3901
 technology: Go
 ---
 
-# AllSource Control Plane v1.0
+# AllSource Control Plane v0.30.0
 
-> Enterprise-grade orchestration and management layer for AllSource event store
+> Auth, RBAC, policy, billing and operations service in front of the AllSource Core event store.
 
-[![Go](https://img.shields.io/badge/go-1.22-blue.svg)](https://golang.org/)
-[![Status](https://img.shields.io/badge/status-v1.0-green.svg)]()
+[![Go](https://img.shields.io/badge/go-1.26.11-blue.svg)](https://golang.org/)
+[![Status](https://img.shields.io/badge/status-v0.30.0-green.svg)]()
 [![Framework](https://img.shields.io/badge/framework-gin-orange.svg)](https://gin-gonic.com/)
 [![Auth](https://img.shields.io/badge/auth-JWT-red.svg)]()
 [![Tracing](https://img.shields.io/badge/tracing-OpenTelemetry-purple.svg)]()
 
-## 🎯 What's New in v1.0
+## Overview
 
-The AllSource Control Plane has been upgraded from **v0.1.0** to **v1.0** with enterprise features:
+The control plane sits between operators and Core. It issues and validates JWTs, enforces RBAC and policies, writes an audit log, exports OpenTelemetry traces, and proxies authenticated requests to Core.
 
-### 🆕 v1.0 Features
-- ✅ **JWT Authentication** - Validates tokens from Rust core
-- ✅ **Role-Based Access Control (RBAC)** - 4 roles, 7 permissions
-- ✅ **Audit Logging** - Complete audit trail of all operations
-- ✅ **OpenTelemetry Tracing** - Distributed tracing via OTLP (Jaeger, Tempo, etc.)
-- ✅ **Policy Enforcement** - 5 default policies, custom policy engine
-- ✅ **Permission-Based Routes** - Fine-grained access control
-- ✅ **Authenticated Proxying** - Secure forwarding to Rust core
-
-### 🔄 Upgraded from v0.1.0
-- ⬆️ **From**: Basic health checks and metrics
-- ⬆️ **To**: Full enterprise orchestration layer
-- ⬆️ **Added**: 5 new modules, 2,000 lines of code
-- ⬆️ **Security**: Now requires authentication for all endpoints
+- **JWT authentication** - HS256 tokens signed with `JWT_SECRET`, which must match Core and the Query Service
+- **Role-based access control** - 4 roles, 7 permissions (see [Permission System](#permission-system))
+- **Audit logging** - JSON lines appended to `AUDIT_LOG_PATH`
+- **OpenTelemetry tracing** - OTLP HTTP export, enabled by `OTEL_ENDPOINT`
+- **Policy enforcement** - 5 default policies plus policies created through `/api/v1/policies`
+- **Permission-based routes** - each route declares the permission it requires
+- **Authenticated proxying** - forwards events, queries and read models to Core
 
 ---
 
@@ -48,7 +41,7 @@ The AllSource Control Plane has been upgraded from **v0.1.0** to **v1.0** with e
                          │ HTTPS
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│       Go Control Plane v1.0 (Port 3901)             │
+│       Go Control Plane v0.30.0 (Port 3901)          │
 │  ┌───────────────────────────────────────────────┐  │
 │  │  🔐 JWT Authentication Middleware             │  │
 │  │  🛡️  RBAC & Permission Enforcement            │  │
@@ -61,7 +54,7 @@ The AllSource Control Plane has been upgraded from **v0.1.0** to **v1.0** with e
                          │ HTTP + Auth Token
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│      Rust Event Store Core v1.0 (Port 8080)        │
+│      Rust Event Store Core v0.30.0 (Port 3900)     │
 │  • Event Ingestion (469K events/sec)                │
 │  • Multi-Tenancy with Quotas                        │
 │  • Rate Limiting (Token Bucket)                     │
@@ -86,8 +79,7 @@ The AllSource Control Plane has been upgraded from **v0.1.0** to **v1.0** with e
 - **Structured Logging** - JSON format for easy parsing
 - **Event Types** - API requests, auth events, tenant events, operations
 - **Rich Metadata** - User ID, tenant ID, IP address, user agent, duration
-- **File-Based Storage** - Appends to `audit.log` file
-- **Configurable** - Enable/disable via `AUDIT_LOG_PATH` env var
+- **File-Based Storage** - Appends to the file at `AUDIT_LOG_PATH` (default `audit.log`)
 
 ### 📊 Distributed Tracing
 - **OpenTelemetry SDK** - Industry-standard tracing
@@ -105,7 +97,7 @@ The AllSource Control Plane has been upgraded from **v0.1.0** to **v1.0** with e
 - **Default Policies** - 5 security policies out-of-the-box
 - **Custom Policies** - Add your own policies dynamically
 
-### 🎯 Permission System
+### Permission System
 
 #### Roles
 - **Admin** - Full access to all features
@@ -126,47 +118,161 @@ The AllSource Control Plane has been upgraded from **v0.1.0** to **v1.0** with e
 
 ## 🔧 API Endpoints
 
-### Public (No Auth)
+Routes are listed from `main.go`. Every `/api/v1` route not listed under "Public" requires a Bearer token, and the permission column is the one the route enforces.
+
+### Public (no auth)
 ```
-GET  /health              Health check
-GET  /metrics             Prometheus metrics
+GET  /livez                          Liveness (used by the Fly machine check)
+GET  /health                         Health check
+GET  /metrics                        Prometheus metrics (public listener)
+GET  /docs, GET /openapi             API documentation and OpenAPI spec
+GET  /readyz/consumers               Consumer access probe
+GET  /api/v1/status/services         Service status
+GET  /api/v1/billing/catalog         Billing catalog
+GET  /api/v1/cluster/health          Cluster health
+GET  /api/v1/teams/invite/:token     Invite lookup
 ```
+
+Public handlers that accept a POST without a session: `/api/v1/auth/login`, `/api/v1/auth/register`, `/api/v1/auth/oauth/:provider` (GET), `/api/v1/onboard/start`, `/api/v1/design-partners/applications`, `/api/v1/changelog/subscriptions`, `/api/v1/changelog/unsubscribe`, `/api/v1/agents/anonymous-trial`, `/api/v1/demo/start`, `/x402/*`, `/api/v1/webhooks/*` (verified by provider signature), and `/api/v1/admin/*` (see the admin section; admin routes apply their own operator-session check).
 
 ### Authentication
 ```
-POST /api/v1/auth/register  Register new user (public)
-POST /api/v1/auth/login     User login (public)
-GET  /api/v1/auth/me        Current user info (requires auth)
+POST /api/v1/auth/register           Create account (name, email, password)
+POST /api/v1/auth/login              Log in (email or username, password)
+GET  /api/v1/auth/session            Current user and tenant (requires Bearer)
+GET  /api/v1/auth/oauth/:provider    Start OAuth login (github, google)
+GET  /api/v1/auth/oauth/:provider/callback
 ```
 
-### Cluster Management (Requires Auth)
+### Events, reads and projections (proxied to Core)
 ```
-GET  /api/v1/cluster/status       Cluster status
-GET  /api/v1/metrics/json         Aggregated metrics
-GET  /api/v1/health/core          Core service health
-```
-
-### Operations (Requires Admin Permission)
-```
-POST /api/v1/operations/snapshot  Create snapshot
-POST /api/v1/operations/replay    Trigger event replay
-POST /api/v1/operations/backup    Create backup
-```
-
-### Tenant Management (Admin Only)
-```
-GET    /api/v1/tenants         List all tenants
-GET    /api/v1/tenants/:id     Get tenant details
-POST   /api/v1/tenants         Create new tenant
-PUT    /api/v1/tenants/:id     Update tenant
-DELETE /api/v1/tenants/:id     Delete tenant
+POST /api/v1/events                  Ingest one event (permission: Write)
+POST /api/v1/events/batch            Ingest a batch (Write)
+GET  /api/v1/events/query            Query events (Read)
+GET  /api/v1/event-feed              Tenant event feed (Read)
+GET  /api/v1/read-models/:name       Read a read model (Read)
+PUT  /api/v1/read-models/:name       Write a read model (Write)
+GET  /api/v1/stats                   Stats (Read)
+GET  /api/v1/read-costs              Read cost attribution (Read)
+GET  /api/v1/streams                 Streams (Read)
+GET  /api/v1/entities/:entity_id/state     Entity state (Read)
+GET  /api/v1/entities/:entity_id/snapshot  Entity snapshot (Read)
+ANY  /api/v1/prime/*path             Prime proxy
+POST /api/v1/extraction/chat/completions   Extraction proxy (Write)
 ```
 
-### User Management (Admin Only)
+### Cluster and metrics
 ```
-GET    /api/v1/users           List all users
-DELETE /api/v1/users/:id       Delete user
+GET  /api/v1/cluster/status          Cluster status (Read)
+GET  /api/v1/metrics/json            Aggregated metrics (authenticated)
+GET  /api/v1/health/core             Core health (authenticated)
 ```
+
+### Operations
+```
+POST /api/v1/operations/snapshots          Create snapshot (Admin)
+GET  /api/v1/operations/snapshots          List snapshots (Read)
+POST /api/v1/operations/compaction         Trigger compaction (Admin)
+GET  /api/v1/operations/compaction/stats   Compaction stats (Read)
+POST /api/v1/operations/replay             Start replay (Admin)
+GET  /api/v1/operations/replay/:id         Replay progress (Read)
+POST /api/v1/operations/replay/:id/cancel  Cancel replay (Admin)
+GET  /api/v1/operations/history            Operation history (Read)
+POST /api/v1/operations/backup             Create backup (Admin)
+```
+
+### Tenants
+```
+GET    /api/v1/tenants                 List tenants (Read)
+GET    /api/v1/tenants/me/limits       Limits for the caller's tenant (Read)
+GET    /api/v1/tenants/:id             Tenant details (Read)
+POST   /api/v1/tenants                 Create tenant (ManageTenants; policy requires Admin)
+PUT    /api/v1/tenants/:id             Update tenant (ManageTenants)
+POST   /api/v1/tenants/:id/suspend     Suspend (Admin)
+POST   /api/v1/tenants/:id/activate    Activate (Admin)
+DELETE /api/v1/tenants/:id             Delete (Admin)
+GET    /api/v1/tenants/:id/stats       Tenant stats (Read)
+```
+
+### Teams
+```
+GET    /api/v1/teams/members           List members (Read)
+POST   /api/v1/teams/invite            Invite a member
+POST   /api/v1/teams/join              Join with an invite
+PUT    /api/v1/teams/members/:id       Change a member's role
+DELETE /api/v1/teams/members/:id       Remove a member
+POST   /api/v1/teams/agent-keys        Create agent key (Write)
+GET    /api/v1/teams/agent-keys        List agent keys (Read)
+DELETE /api/v1/teams/agent-keys/:name  Revoke agent key (Write)
+```
+
+### Users
+```
+GET    /api/v1/users                   List users (proxied to Core `/api/v1/auth/users`)
+DELETE /api/v1/users/:id               Delete user (self-deletion is refused by policy 3)
+```
+
+### Policies
+```
+GET    /api/v1/policies                List (Read)
+GET    /api/v1/policies/:id            Get (Read)
+POST   /api/v1/policies/evaluate       Evaluate a request against policies (Read)
+POST   /api/v1/policies                Create (Admin)
+PUT    /api/v1/policies/:id            Update (Admin)
+DELETE /api/v1/policies/:id            Delete (Admin)
+POST   /api/v1/policies/:id/enable     Enable (Admin)
+POST   /api/v1/policies/:id/disable    Disable (Admin)
+```
+
+### Schemas, config, notices, audit
+```
+GET  /api/v1/schemas                   List (Read)
+POST /api/v1/schemas                   Register (ManageSchemas)
+POST /api/v1/schemas/validate          Validate (Read)
+GET  /api/v1/config                    List config (Read)
+GET  /api/v1/config/:key               Get config (Read)
+POST /api/v1/config, PUT/DELETE /api/v1/config/:key   Admin
+GET  /api/v1/notices                   Tenant notices (Read)
+POST /api/v1/notices/:id/dismiss       Dismiss notice (Read)
+GET  /api/v1/audit                     Audit query (Read)
+```
+
+### Billing
+```
+GET  /api/v1/billing/egress                Egress usage (Read)
+POST /api/v1/billing/egress/checkout       Egress checkout (Write)
+POST /api/v1/billing/checkout              Checkout (Write)
+POST /api/v1/billing/change-plan           Change plan (Write)
+GET  /api/v1/billing/portal                Customer portal link (Write)
+GET  /api/v1/billing/overage               Overage status (Read)
+POST /api/v1/billing/overage/enable        Enable overage (ManageTenants)
+POST /api/v1/billing/overage/disable       Disable overage (ManageTenants)
+GET  /api/v1/billing/projected-charges     Projected charges (Read)
+POST /api/v1/webhooks/lemonsqueezy         LemonSqueezy webhook (signature-verified)
+```
+
+### Agents and x402
+```
+POST /api/v1/agents/register           Register agent
+POST /api/v1/agents/anonymous-trial    Anonymous trial key
+GET  /api/v1/agents/me/payments        Payment history (Read)
+POST /api/v1/agents/claim              Claim an agent (Read)
+POST /api/v1/agent-echo                Echo (Read)
+POST /x402/verify, POST /x402/settle, GET /x402/routes
+```
+
+### Admin (`/api/v1/admin`)
+Operator routes, gated by the admin middleware. They are registered in `main.go` (approximately lines 798-957) and `client_keys_admin.go`. Groups: tenant administration (`/tenants`, `/tenants/:id/usage`, `/tenants/:id/quotas`, suspend and unsuspend), fleet health, inbox, design partners, changelog subscribers, partnerships, recovery (`/recovery/:id/...`), notices and messages, metrics and client health, alerts, SLOs, IP rules, token audit, billing administration, and view-as impersonation.
+
+Client keys (operator session with the Admin role only):
+
+```
+POST   /api/v1/admin/tenants/:id/client-keys        Register a public P-256 JWK
+GET    /api/v1/admin/tenants/:id/client-keys        List a tenant's client keys
+DELETE /api/v1/admin/tenants/:id/client-keys/:kid   Revoke a client key
+```
+
+The admin middleware refuses every API credential, and tenants cannot register their own keys. The POST body is `{client_id, jwk, scopes}`: `jwk` is the public half only (a JWK with `d` is refused), and the response returns the `kid`, the RFC 7638 thumbprint the client puts in its token header. A registered client then authenticates with `Authorization: Bearer <ES256 JWT>` (`iss` = client id, `sub` = tenant, `aud`, `iat`, `exp` at most 60s after `iat`, `jti`); role and scopes come from the registration, not the token. Procedure: [`docs/runbooks/CLIENT_KEY_ROTATION.md`](../../docs/runbooks/CLIENT_KEY_ROTATION.md).
 
 ### Client Keys (Platform Operators Only)
 ```
@@ -182,57 +288,46 @@ These routes sit behind the admin middleware, which refuses every API credential
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Go 1.22 or higher
-- AllSource Rust Core v1.0 running on `localhost:3900`
-- (Optional) OTLP-compatible tracing backend (Jaeger, Tempo, etc.)
+- Go 1.26.11 (matches `apps/control-plane/Dockerfile`)
+- Core reachable at `CORE_SERVICE_URL` (default `http://localhost:3900`)
+- (Optional) OTLP HTTP endpoint such as Jaeger or Tempo, set with `OTEL_ENDPOINT`
 
 ### Installation
 
 ```bash
-# Clone repository
-cd services/control-plane
+# From the repository root
+cd apps/control-plane
 
-# Install dependencies (if Go is installed)
+# Download modules
 go mod download
 
 # Set environment variables
-export JWT_SECRET="your-jwt-secret-key"  # Must match Rust core
+export JWT_SECRET="your-jwt-secret-key"  # Must match Core and the Query Service
 export AUDIT_LOG_PATH="audit.log"
-export OTLP_ENDPOINT="localhost:4318"  # Optional, OTLP HTTP endpoint
-export GIN_MODE="release"  # For production
+export OTEL_ENDPOINT="localhost:4318"    # Optional, OTLP HTTP endpoint
+export GIN_MODE="release"                # Production
 ```
 
 ### Running
 
 #### Development Mode
 ```bash
-go run main_v1.go
+go run main.go
 ```
 
 #### Production Mode
 ```bash
 # Build optimized binary
-CGO_ENABLED=0 go build -ldflags="-s -w" -o control-plane main_v1.go
+CGO_ENABLED=0 go build -ldflags="-s -w" -o control-plane .
 
 # Run
 ./control-plane
 ```
 
-#### Docker (Example Dockerfile)
-```dockerfile
-FROM golang:1.26-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY *.go ./
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o control-plane main_v1.go
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/control-plane .
-EXPOSE 8081
-CMD ["./control-plane"]
+#### Docker
+```bash
+# Build context is apps/control-plane; the image is distroless (apps/control-plane/Dockerfile)
+docker build -t allsource-control-plane apps/control-plane
 ```
 
 ---
@@ -243,29 +338,58 @@ CMD ["./control-plane"]
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8081` | Port to listen on |
-| `JWT_SECRET` | `default-secret-change-in-production` | JWT secret (must match Rust core) |
-| `AUDIT_LOG_PATH` | `audit.log` | Path to audit log file |
-| `OTLP_ENDPOINT` | `` | OTLP HTTP endpoint (e.g., `localhost:4318` for Jaeger/Tempo) |
-| `ENVIRONMENT` | `development` | Environment name (development, staging, production) |
-| `GIN_MODE` | `debug` | Gin mode (`debug` or `release`) |
-| `METRICS_ADDR` | `:9091` | Private listener for tenant-labelled Prometheus metrics; never expose it publicly |
-| `ALLSOURCE_ADMISSION_MODE` | `shadow` | Per-tenant admission: `off`, `shadow` (count only, no response changes) or `enforce` |
-| `ALLSOURCE_ADMISSION_OVERRIDES` | `` | JSON object of per-tenant limit overrides; required (`{}` for none) when enforcing |
-| `ALLSOURCE_KEY_AUTHORITY_MODE` | `shadow` | Managed API-key authority: `off`, `shadow` (count and log would-be refusals in `control_plane_auth_denials_total{mode,reason,tenant}`, serve the request) or `enforce` (refuse; 503 when Core cannot answer). Enforce only once the shadow count is zero or every denied tenant has been reissued a registered key |
-| `ALLSOURCE_LEGACY_KEY_SUNSET` | `` | RFC 3339 instant. Before it, a managed onboarding key with no registration record is still served and its responses carry `Deprecation` (RFC 9745) and `Sunset` (RFC 8594) headers; from it on, that key is refused with 401 `reason: legacy_key_sunset`. Dashboard `ask_` keys and registered client keys are unaffected. Unset changes nothing. Has no effect while `ALLSOURCE_KEY_AUTHORITY_MODE=off` |
+| `PORT` | `3901` | HTTP listen port |
+| `JWT_SECRET` | `default-secret-change-in-production` | HS256 signing secret. Logs a warning when unset. Must match Core and the Query Service |
+| `CORE_SERVICE_URL` | `http://localhost:3900` | Core base URL |
+| `CORE_API_KEY` | `` | API key the typed Core client sends |
+| `QUERY_SERVICE_URL` | `http://allsource-query.internal:3902` | Query Service base URL (metrics passthrough and delegation) |
+| `QUERY_HEALTH_URL` | `<QUERY_SERVICE_URL>/health` | Query Service health URL used by fleet recovery |
+| `AUDIT_LOG_PATH` | `audit.log` | Audit log file, appended as JSON lines |
+| `OTEL_ENDPOINT` | `` | OTLP HTTP endpoint (for example `localhost:4318`). Empty disables tracing |
+| `ENVIRONMENT` | `development` | Value of the tracing `environment` attribute |
+| `GIN_MODE` | `debug` | `release` switches Gin to release mode. The Dockerfile sets `release` |
+| `METRICS_ADDR` | `:9091` | Private listener for tenant-labelled Prometheus metrics. Do not expose it publicly |
+| `ADMIN_EMAILS` | `` | Comma-separated emails granted the Admin role at login. All other users get Developer |
+| `ALLSOURCE_ADMISSION_MODE` | `shadow` | Per-tenant admission: `off`, `shadow` (count only) or `enforce` |
+| `ALLSOURCE_ADMISSION_OVERRIDES` | `` | JSON object of per-tenant limit overrides. Required when enforcing (`{}` for none) |
+| `ALLSOURCE_KEY_AUTHORITY_MODE` | `shadow` | Managed API-key authority: `off`, `shadow` (count and log would-be refusals in `control_plane_auth_denials_total`, serve the request) or `enforce` (refuse; 503 when Core cannot answer). Enforce once the shadow count is zero or every denied tenant has a registered key |
+| `ALLSOURCE_LEGACY_KEY_SUNSET` | `` | RFC 3339 instant. Before it, a managed onboarding key with no registration record is still served, with `Deprecation` (RFC 9745) and `Sunset` (RFC 8594) headers. From it on, that key is refused with 401 `reason: legacy_key_sunset`. Keys with a registration record are unaffected. Unset changes nothing. No effect while `ALLSOURCE_KEY_AUTHORITY_MODE=off` |
 | `ALLSOURCE_ASSERTION_AUDIENCE` | `https://api.all-source.xyz` | The `aud` an ES256 client assertion must carry |
 | `ALLSOURCE_METRICS_PROM_URL` | `https://api.fly.io/prometheus/allsource` | Prometheus API the admin client-health view reads |
-| `ALLSOURCE_METRICS_PROM_TOKEN` | `` | Read-only Fly token for that API; unset shows the client-health view as not configured |
+| `ALLSOURCE_METRICS_PROM_TOKEN` | `` | Read-only token for that API. Unset shows the client-health view as not configured |
+| `ALLSOURCE_CORE_BINARY` | `` | Test only. Points the `egressintegration` and `corerelease` tests at a Core binary |
+
+Optional integrations. Each is enabled only when its variable is set:
+
+| Variable | Effect when set |
+|----------|-----------------|
+| `LEMON_SQUEEZY_API_KEY`, `LEMON_SQUEEZY_STORE_ID`, `LEMON_SQUEEZY_WEBHOOK_SECRET`, `LEMON_SQUEEZY_VARIANT_MAP` | Enables the LemonSqueezy client, checkout and webhook verification |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | Enables the email client (usage warnings) |
+| `AUTH_SERVICE_URL` | Routes login and register to the external auth service instead of Core |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth provider |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth provider |
+| `FRONTEND_URL`, `ALLOWED_FRONTEND_URLS`, `OAUTH_COOKIE_DOMAIN` | OAuth redirect targets and cookie domain |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile check on browser sign-up (no-op when unset) |
+| `COINBASE_CDP_KEY_NAME`, `COINBASE_CDP_PRIVATE_KEY`, `COINBASE_CDP_NETWORK`, `BASE_RPC_URL` | Coinbase CDP client for x402 auto-pay |
+| `X402_ENABLED`, `X402_PRICING_CONFIG`, `X402_RECIPIENT_ADDRESS`, `X402_FACILITATOR_URL` | x402 payment routes. The pricing file defaults to `config/x402-pricing.json`, which ships with `enabled` false |
+| `PRIME_SERVICE_URL`, `PRIME_API_KEY` | Prime proxy |
+| `EXTRACTION_LLM_URL`, `EXTRACTION_LLM_API_KEY` | Extraction proxy upstream |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` | Anthropic LLM client (`internal/infrastructure/clients/llm`) |
+| `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | Resend email provider and its webhook |
+| `CONNECTOR_SECRET_KEY` | Key material read by `internal/infrastructure/secrets` |
+| `EGRESS_LEASE` | Enables the egress lease path (value parsed by `egressLeaseEnabled`) |
+| `CONTROL_PLANE_MULTI_INSTANCE` | Logs a warning that the x402 included-allowance counter is per instance |
+| `DEMO_ENABLED` | Switch read by the onboarding flow (`onboard.go`) |
+| `GEO_TENANT_ID` | Tenant for geo self-report |
 
 ### Example Configuration
 
 ```bash
 # Production configuration
-export PORT=8081
+export PORT=3901
 export JWT_SECRET="$(openssl rand -base64 32)"  # Generate secure secret
 export AUDIT_LOG_PATH="/var/log/allsource/audit.log"
-export OTLP_ENDPOINT="jaeger:4318"  # OTLP HTTP endpoint
+export OTEL_ENDPOINT="jaeger:4318"  # OTLP HTTP endpoint
 export ENVIRONMENT="production"
 export GIN_MODE="release"
 ```
@@ -274,7 +398,7 @@ export GIN_MODE="release"
 
 ## 📜 Default Policies
 
-The control-plane ships with 5 default security policies:
+The control plane ships with 5 default policies (`policy.go`, `addDefaultPolicies`). Higher priority is evaluated first:
 
 ### 1. Prevent Default Tenant Deletion
 - **Resource**: `tenant`
@@ -285,7 +409,7 @@ The control-plane ships with 5 default security policies:
 ### 2. Require Admin for Tenant Creation
 - **Resource**: `tenant`
 - **Action**: `deny`
-- **Conditions**: `operation == "create" AND role != "Admin"`
+- **Conditions**: `operation == "create" AND role != "admin"`
 - **Priority**: 90
 
 ### 3. Prevent Self-Deletion
@@ -312,33 +436,36 @@ The control-plane ships with 5 default security policies:
 
 ### 1. Register and Login
 
+Register takes `name`, `email` and `password`. It returns 201 with a token. The request body has no `role` field: the role comes from `ADMIN_EMAILS` at login (Admin when the email is listed, Developer otherwise).
+
 ```bash
-# Register a new admin user
+# Register a new user
 curl -X POST http://localhost:3901/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "admin",
+    "name": "Ada",
     "email": "admin@example.com",
-    "password": "secure_password_123",
-    "role": "Admin"
+    "password": "secure_password_123"
   }'
 
-# Login to get JWT token
+# Log in; email or username is accepted in the "email" or "username" field
 TOKEN=$(curl -s -X POST http://localhost:3901/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "admin",
+    "email": "admin@example.com",
     "password": "secure_password_123"
   }' | jq -r '.token')
 
 echo "Token: $TOKEN"
 ```
 
+Login and register verify credentials against Core (`/api/v1/auth/login` and `/api/v1/auth/register` on Core) unless `AUTH_SERVICE_URL` is set.
+
 ### 2. Access Protected Endpoints
 
 ```bash
-# Get current user info
-curl -X GET http://localhost:3901/api/v1/auth/me \
+# Current user and tenant
+curl -X GET http://localhost:3901/api/v1/auth/session \
   -H "Authorization: Bearer $TOKEN"
 
 # Get cluster status
@@ -349,14 +476,14 @@ curl -X GET http://localhost:3901/api/v1/cluster/status \
 ### 3. Manage Tenants (Admin Only)
 
 ```bash
-# Create a new tenant
+# Create a new tenant (id and name are required)
 curl -X POST http://localhost:3901/api/v1/tenants \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "acme",
     "name": "Acme Corporation",
-    "tier": "professional"
+    "description": "Pilot tenant"
   }'
 
 # List all tenants
@@ -372,16 +499,17 @@ curl -X GET http://localhost:3901/api/v1/tenants/acme \
 
 ```bash
 # Create snapshot
-curl -X POST http://localhost:3901/api/v1/operations/snapshot \
+curl -X POST http://localhost:3901/api/v1/operations/snapshots \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}'
 
-# Trigger event replay
+# Start a replay for one entity (tenant_id and entity_id are required)
 curl -X POST http://localhost:3901/api/v1/operations/replay \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "tenant_id": "acme",
     "entity_id": "user-123",
     "as_of": "2025-01-15T10:00:00Z"
   }'
@@ -404,30 +532,24 @@ jq 'select(.event_type == "api_request" and .path | contains("auth"))' audit.log
 
 ## 🧪 Testing
 
-### Integration Tests
-
-Run the comprehensive integration test suite:
+### Unit Tests
 
 ```bash
-# Make sure both services are running:
-# Terminal 1: cd services/core && cargo run
-# Terminal 2: cd services/control-plane && go run main_v1.go
-
-# Terminal 3: Run integration tests
-cd services
-chmod +x integration_test.sh
-./integration_test.sh
+cd apps/control-plane
+go test -v -race -covermode=atomic ./...   # same command as make quality-go
 ```
 
-The test suite includes:
-- ✅ Pre-flight checks (services running)
-- ✅ Authentication flow tests
-- ✅ Multi-tenancy tests
-- ✅ RBAC & permission tests
-- ✅ Core service integration
-- ✅ Audit & observability tests
-- ✅ Policy enforcement tests
-- ✅ Operation tests
+### Tests That Need a Core Binary
+
+Tests with the `egressintegration` build tag run `TestEgressRealCore*` against a real Core binary. They skip unless `ALLSOURCE_CORE_BINARY` is set:
+
+```bash
+cd apps/control-plane
+ALLSOURCE_CORE_BINARY=/path/to/allsource-core \
+  go test -tags egressintegration -run '^TestEgressRealCore' -count=1 .
+```
+
+The `corerelease` tag adds a read-performance comparison between a baseline and a candidate Core binary (`ALLSOURCE_CORE_BASELINE_BINARY`, `ALLSOURCE_CORE_BINARY`). The docker-build workflow runs it as `verify-core-release`.
 
 ---
 
@@ -444,15 +566,17 @@ control_plane_http_request_duration_seconds
 control_plane_http_requests_in_flight
 
 # Core health check metrics
-control_plane_core_health_checks_total
+control_plane_core_health_check_total
 control_plane_core_health_check_duration_seconds
 
 # Operation metrics
 control_plane_snapshot_operations_total
 control_plane_replay_operations_total
 
-# System metrics
-control_plane_uptime_seconds
+# Auth and cache metrics
+control_plane_auth_denials_total
+control_plane_cache_hits_total
+control_plane_cache_misses_total
 ```
 
 Series labelled with a tenant are served only by the private listener on
@@ -463,8 +587,8 @@ Series labelled with a tenant are served only by the private listener on
 control_plane_tenant_response_bytes_total{tenant,route,method,status_class}
 control_plane_tenant_request_bytes_total{tenant,route,method}
 control_plane_tenant_requests_total{tenant,route,method,status_class}
-control_plane_tenant_event_query_body_bytes_total{tenant,namespace,selector,...}
-control_plane_tenant_event_queries_total{tenant,namespace,selector,...}
+control_plane_tenant_event_query_body_bytes_total{tenant,namespace,...}
+control_plane_tenant_event_queries_total{tenant,namespace,...}
 control_plane_tenant_event_query_conditional_total{tenant,namespace}
 admission_would_refuse_total{lane,scope,tenant}
 admission_refused_total{lane,scope,tenant}
@@ -530,9 +654,7 @@ cat audit.log | jq -r '.path' | sort | uniq -c
 
 5. **Enable Rate Limiting** in Rust core
 
-6. **Use Strong Passwords**
-   - Minimum 12 characters
-   - Argon2 hashing in Rust core
+6. **Use strong passwords.** Password hashing happens in Core, not in the control plane.
 
 7. **Restrict Network Access**
    - Firewall rules
@@ -546,18 +668,19 @@ cat audit.log | jq -r '.path' | sort | uniq -c
 
 ```
 control-plane/
-├── main.go              # Original v0.1.0 (deprecated)
-├── main_v1.go           # New v1.0 application entry
+├── main.go              # Entry point
 ├── auth.go              # JWT authentication client
 ├── audit.go             # Audit logging system
 ├── tracing.go           # OpenTelemetry tracing
 ├── policy.go            # Policy enforcement engine
-├── metrics.go           # Prometheus metrics (v0.1.0)
-├── middleware.go        # Middleware (v0.1.0)
+├── metrics.go           # Prometheus metrics
+├── middleware.go        # Middleware
+├── internal/            # Clean-architecture packages (domain, application, infrastructure, interfaces)
+├── config/              # x402 pricing config (x402-pricing.json)
+├── docs/                # openapi.yaml and X402_SETUP.md
 ├── go.mod               # Dependencies
 ├── go.sum               # Checksums
-├── README.md            # Original README (v0.1.0)
-├── README_V1.md         # This file (v1.0)
+├── README.md            # This file
 └── package.json         # Metadata
 ```
 
@@ -576,42 +699,6 @@ go vet ./...
 
 ---
 
-## 🔄 Migration from v0.1.0
-
-### Breaking Changes
-1. **Authentication Required** - All endpoints (except `/health` and `/metrics`) now require authentication
-2. **New Main File** - Use `main_v1.go` instead of `main.go`
-3. **Environment Variables** - New env vars for JWT secret, audit log, OTLP tracing
-
-### Migration Steps
-
-1. **Update Dependencies**
-   ```bash
-   go mod tidy
-   ```
-
-2. **Set Environment Variables**
-   ```bash
-   export JWT_SECRET="your-secret"
-   export AUDIT_LOG_PATH="audit.log"
-   ```
-
-3. **Use New Main File**
-   ```bash
-   go run main_v1.go  # Instead of main.go
-   ```
-
-4. **Update Clients**
-   - Add `Authorization: Bearer <token>` header
-   - Obtain token via `/api/v1/auth/login`
-
-5. **Test Integration**
-   ```bash
-   ./integration_test.sh
-   ```
-
----
-
 ## 📖 Resources
 
 - [Gin Web Framework](https://gin-gonic.com/)
@@ -619,14 +706,14 @@ go vet ./...
 - [OpenTelemetry Go](https://opentelemetry.io/docs/instrumentation/go/)
 - [Jaeger Tracing](https://www.jaegertracing.io/)
 - [Prometheus Monitoring](https://prometheus.io/)
-- [AllSource Core v1.0](../core/V1_COMPLETE.md)
+- [AllSource Core](../core/README.md)
 
 ---
 
 ## 🤝 Contributing
 
 Contributions welcome! Areas of interest:
-- Unit tests for Go code (currently 0% coverage)
+- Unit tests for Go code
 - Additional default policies
 - Enhanced tracing context
 - Grafana dashboards
@@ -636,39 +723,24 @@ Contributions welcome! Areas of interest:
 
 ## 📄 License
 
-MIT License - see LICENSE file for details
+The control plane is part of the enterprise edition, licensed under the [Business Source License 1.1](../../LICENSE-BSL). See the edition table in the [root README](../../README.md).
 
 ---
 
-## 📊 Version History
+## 📊 Changelog
 
-### v1.0.0 (2025-10-21)
-- ✅ JWT authentication client
-- ✅ RBAC enforcement
-- ✅ Audit logging
-- ✅ OpenTelemetry tracing
-- ✅ Policy enforcement
-- ✅ Permission-based routes
-- ✅ 12 API endpoints
-- ✅ Integration test suite
-
-### v0.1.0 (2025-10-20)
-- ✅ Basic health checks
-- ✅ Prometheus metrics
-- ✅ Cluster status endpoint
-- ✅ Core health proxy
-- ✅ Snapshot/replay operations (demo mode)
+[apps/control-plane/CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 <div align="center">
 
-**AllSource Control Plane v1.0** - *Enterprise orchestration*
+**AllSource Control Plane v0.30.0** - *Enterprise orchestration*
 
-Built with 🐹 Go | v1.0.0
+Go service | v0.30.0
 
-Integrates with AllSource Core v1.0 (Rust)
+Integrates with AllSource Core (Rust)
 
-[Documentation](./README_V1.md) | [Integration Tests](../integration_test.sh) | [Core Service](../core/)
+[Documentation](./README.md) | [Core Service](../core/)
 
 </div>

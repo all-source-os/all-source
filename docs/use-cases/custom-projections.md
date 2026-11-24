@@ -1,6 +1,6 @@
 # Custom Projections with `ProjectionWorker`
 
-_Requires `allsource` Rust SDK v0.19 or later._
+_Requires the `allsource` Rust SDK 0.19.0 or later. The SDK version in `sdks/rust/Cargo.toml` is 0.30.0._
 
 ## When to use `ProjectionWorker` vs. other options
 
@@ -112,7 +112,7 @@ Metrics the operator should scrape:
 
 ## Migrating from polling `QueryClient`
 
-The common pre-v0.19 pattern:
+The polling pattern:
 
 ```rust
 // OLD: O(n) every cold start
@@ -132,7 +132,7 @@ async fn rebuild_state(query: &QueryClient) -> HashMap<String, AssetState> {
 // …then poll for new events every N seconds, track high-water mark yourself, etc.
 ```
 
-The v0.19 equivalent:
+The `ProjectionWorker` equivalent:
 
 ```rust
 // NEW: cursor-tracked, live updates, O(events-since-last-ack) on restart
@@ -152,17 +152,17 @@ Key differences:
 - Core tracks the cursor; no client-side offset bookkeeping.
 - Reconnection + dedup are handled for you.
 
-## Known limitations (v0.19)
+## Known limitations
 
 - **Single-instance only.** Two workers with the same `name` running concurrently will thrash Core's cursor. Use different names (`"assets-shard-0"`, `"assets-shard-1"`) if you need sharding — but that requires partition-aware reducers.
 - **No back-pressure to Core.** If your reducer is slower than the live event rate, the worker will fall behind. Core's broadcast channel will eventually lag, triggering replay on reconnect. The SDK doesn't currently slow Core down; scale the reducer or shard.
-- **Reducer is sync.** If you need async work per event (e.g. enrichment from an external service), do it via a channel outside the reducer, or batch it. A future release may add an async reducer variant.
-- **State push-back reads through Core.** `.state_flush_entities` upserts into the Core read model named after the worker (Rust SDK 0.26 and later). `ProjectionHandle::get_state` reads one row of it; other processes read it with `core.read_model(name).page(...)`. The worker name must be a valid read-model name (1..64 of `[A-Za-z0-9_-]`, not `view_*`).
-- **Api key on WebSocket.** The v0.19 WS client connects without auth. Core's `/events/stream` doesn't require a key today; when that changes, the worker will need to thread the API key through.
+- **Reducer is sync.** If you need async work per event (e.g. enrichment from an external service), do it via a channel outside the reducer, or batch it.
+- **State push-back goes through Core.** `.state_flush_entities` upserts the reduced state into the Core read model named after the worker. The worker name must be 1..64 characters of `[A-Za-z0-9_-]` and must not start with `view_`. `ProjectionHandle::get_state` reads one row; other processes read the model with `QueryClient::read_model(name).page(...)`.
+- **Credential on WebSocket.** `EventStreamClient` sends `Authorization: Bearer` on every connect, from a static key or a `CredentialProvider`. Core's `/api/v1/events/stream` is behind the auth middleware.
 
 ## Related docs
 
 - Working example: [`sdks/rust/examples/asset_projection.rs`](../../sdks/rust/examples/asset_projection.rs)
 - Original feature request: [issue #155](https://github.com/all-source-os/all-source/issues/155)
 - Core's durable-consumer protocol: implementation in `apps/core/src/infrastructure/web/websocket.rs` and `api.rs`
-- Built-in Query Service projections (for comparison): [`SERVER_SIDE_PROJECTIONS_USE_CASES.md`](./SERVER_SIDE_PROJECTIONS_USE_CASES.md)
+- Built-in Query Service projections (for comparison): [`SERVER_SIDE_PROJECTIONS_USE_CASES.md`](../archive/2026-11-23/use-cases/SERVER_SIDE_PROJECTIONS_USE_CASES.md)

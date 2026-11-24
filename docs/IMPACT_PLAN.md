@@ -157,7 +157,7 @@ unchanged unless founder changes customer, trigger, promise, gate, or kill rule.
 
 Founder-approved additional delivery assessment, activation **queued**. Strong later fit using existing MCP work, but no second active pilot. Preserve paid-use and renewal evidence requirements.
 
-Hypothesis: Authoritative event provenance, tenant-scoped retrieval and executable restart/replay evidence. Test the interaction described in [CHAT_DELIVERY.md](CHAT_DELIVERY.md) only when the existing portfolio activation gate permits it. Use synthetic samples until customer data, entitlement and host review gates pass. Record host interaction separately from qualified customer and payment evidence. Keep the current bottleneck, commercial gate, mobile work and permissioned source authoritative. Root Beads epic `t-ddf1c3`; amendment `t-f5a1f0`; Sponsor pilot `t-0d6ca5`.
+Hypothesis: Authoritative event provenance, tenant-scoped retrieval and executable restart/replay evidence. Test the interaction described in [CHAT_DELIVERY.md](CHAT_DELIVERY.md) only when the existing portfolio activation gate permits it. Use synthetic samples until customer data, entitlement and host review gates pass. Record host interaction separately from qualified customer and payment evidence. Keep the current bottleneck, commercial gate, mobile work and permissioned source authoritative. Root Chronis epic `t-ddf1c3`; amendment `t-f5a1f0`; Sponsor pilot `t-0d6ca5`.
 
 
 ## Evidence investigation — 24 September 2026

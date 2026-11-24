@@ -28,8 +28,7 @@ allsource-inspect events --data-dir <path> --limit 100000 --entity-id "workflow:
 
 # Step 3: Compare with projection state
 # (via allsource-mcp) Use get_snapshot for entity "workflow:abc-123"
-# (via allsource-mcp) Use reconstruct_state for entity "workflow:abc-123"
-# Compare the two outputs
+# Compare the snapshot with the events from Step 2
 ```
 
 **Common causes**:
@@ -142,7 +141,7 @@ After fixing a projection issue:
 | Find which data directory to read | `allsource-inspect stores --root <dir>` |
 | See all events for an entity | `query_events` / `allsource-inspect events --entity-id` |
 | See event type distribution | `quick_stats` / `allsource-inspect summary` |
-| Compare projection vs events | `get_snapshot` + `reconstruct_state` |
+| Compare projection vs events | `get_snapshot` |
 | Trace entity lifecycle | `event_timeline` / `explain_entity` |
 | Current state of many entities at once | `allsource-inspect lifecycle` |
 | Find changes in time window | `analyze_changes` |

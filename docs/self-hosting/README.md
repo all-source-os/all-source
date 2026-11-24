@@ -6,8 +6,8 @@ AllSource Chronos is a high-performance event store with full durability (WAL + 
 
 ```bash
 # Clone the repository
-git clone https://github.com/all-source-os/allsource-monorepo.git
-cd allsource-monorepo
+git clone https://github.com/all-source-os/all-source.git
+cd all-source
 
 # Start Core + Query Service
 docker compose -f docker-compose.community.yml up -d
@@ -19,10 +19,10 @@ curl http://localhost:3900/health
 # Ingest your first event
 curl -X POST http://localhost:3900/api/v1/events \
   -H "Content-Type: application/json" \
-  -d '{"stream_id":"user-123","event_type":"UserCreated","data":{"name":"Alice"}}'
+  -d '{"entity_id":"user-123","event_type":"UserCreated","payload":{"name":"Alice"}}'
 
 # Query it back
-curl "http://localhost:3900/api/v1/events/query?stream_id=user-123"
+curl "http://localhost:3900/api/v1/events/query?entity_id=user-123"
 ```
 
 ## Architecture
@@ -76,7 +76,7 @@ Data survives container restarts. Back up this directory for disaster recovery.
 |---------|-----------|------------|
 | Event store (WAL + Parquet) | Yes | Yes |
 | Full CRUD API | Yes | Yes |
-| Projections, snapshots, schemas | Yes | Yes |
+| Projections, schemas | Yes | Yes |
 | Analytics (EventQL) | Yes | Yes |
 | WebSocket streaming | Yes | Yes |
 | Webhooks | Yes | Yes |
@@ -104,11 +104,10 @@ Core API endpoints (all under `/api/v1/`):
 
 - `POST /api/v1/events` — Ingest an event
 - `POST /api/v1/events/batch` — Batch ingest
-- `GET /api/v1/events/query` — Query events (filter by stream, type, time range)
+- `GET /api/v1/events/query` — Query events (filter by entity_id, event_type, tenant_id, as_of/since/until, limit)
 - `GET /api/v1/events/{id}` — Get event by ID
 - `GET /api/v1/projections` — List projections
 - `GET /api/v1/schemas` — List schemas
-- `GET /api/v1/snapshots` — List snapshots
 - `GET /api/v1/stats` — Storage statistics
 - `GET /health` — Health check
 - `GET /metrics` — Prometheus metrics

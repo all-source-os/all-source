@@ -1,6 +1,6 @@
 # Counterbalanced skill-only #7183 evidence
 
-[Report and unsent draft](../../2026-10-20-omo-skill-only-counterbalanced-evaluation.md). results-summary.json contains recomputed scores and control checks.
+[Report and unsent draft](../../../archive/2026-11-23/outreach/2026-10-20-omo-skill-only-counterbalanced-evaluation.md). results-summary.json contains recomputed scores and control checks.
 
 - s1a: skill text on; s1b: off. Pair s2 reverses order: s2a off; s2b on.
 - *-hooks.jsonl: actual recovery-dispatch-control before/after bodies, native HTTP response status, summary-injection-control output and reload gate events.

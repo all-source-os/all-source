@@ -2,7 +2,7 @@
 
 Date: 2026-10-20. Status: full-plugin loader gap resolved; reported integration cases completed; outreach unsent.
 
-Current workflow qualification: [model-selected skill and specialized-tool results](./2026-10-20-omo-model-selected-evaluation.md) cover the prior programmatic-loading limit. Four checkpoints passed with a skill reload after the second compaction. Large-payload results below remain a separate experiment.
+Current workflow qualification: [provider-captured rerun](./2026-10-21-omo-provider-payload-evaluation.md). Earlier [model-selected skill and specialized-tool results](../archive/2026-11-23/outreach/2026-10-20-omo-model-selected-evaluation.md) cover the prior programmatic-loading limit. Four checkpoints passed with a skill reload after the second compaction. Large-payload results below remain a separate experiment.
 
 ## Findings and shortlist
 
@@ -64,7 +64,7 @@ The [October 19 ownership/contact audit](./2026-10-19-omo-compaction-evaluation.
 
 ## Current outreach draft: unsent
 
-Use the [replacement model-selected workflow draft](./2026-10-20-omo-model-selected-evaluation.md#current-outreach-draft-unsent). Existing ownership and prior-contact constraints still apply.
+Use the [current outreach draft](./2026-10-21-omo-send-ready.md#exact-comment). Existing ownership and prior-contact constraints still apply.
 
 ## Evidence and progress
 

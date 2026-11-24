@@ -84,7 +84,7 @@ The WAL uses **JSON Lines** (one JSON object per line):
 |---------|---------|-------------|
 | `max_file_size` | 64 MB | Rotate to new file at this size |
 | `sync_on_write` | `true` | `fsync()` after each write |
-| `max_wal_files` | 10 | Old files cleaned after this count |
+| `max_wal_files` | 10 | Exceeding this count logs a warning. Rotation never deletes segments; only a checkpoint retires them |
 | `compress` | `false` | Optional LZ4 compression |
 
 ### WAL Integrity

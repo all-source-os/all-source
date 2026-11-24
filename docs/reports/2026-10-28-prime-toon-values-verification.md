@@ -4,7 +4,7 @@
 
 Prime TOON responses preserve C0 string values through retained-memory reopen. Quoted values use TOON escapes, and every C0-containing value is quoted. Stored JSON, Unicode scalar sequences, existing key encoding and compact entity-ID behavior retain their prior contracts.
 
-The [accepted plan](../plans/2026-10-28-prime-toon-control-values.md) and [delivery request](../reference/prime-toon-values-request.md) define this change. The generic encoder in `apps/prime-mcp/src/toon.rs` owns the repair. Its existing key escape implementation now serves keys and values through one private helper; the value path no longer emits JSON-only short escapes.
+The [accepted plan](../archive/2026-11-23/plans/2026-10-28-prime-toon-control-values.md) and [delivery request](../archive/2026-11-23/reference/prime-toon-values-request.md) define this change. The generic encoder in `apps/prime-mcp/src/toon.rs` owns the repair. Its existing key escape implementation now serves keys and values through one private helper; the value path no longer emits JSON-only short escapes.
 
 ## Observed baseline and frozen regression
 

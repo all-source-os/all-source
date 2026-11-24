@@ -47,7 +47,10 @@ Fill these in before the first paid Growth customer. The numbers below are place
 
 ## Alerting — TODO
 
-None of this is wired up yet. Tracking items:
+Live: Prometheus rules `ControlPlaneServingFailures`, `ControlPlaneSuccessCollapsed`
+and the `*MetricsMissing` rules (`tooling/monitor-stack/rules/`). Bandwidth alerts run
+on Fly app `allsource-bandwidth-alerts`, with email delivery (`docs/runbooks/BANDWIDTH_ALERTS.md`).
+Open items:
 
 - [ ] Pick an alerting transport: PagerDuty (paid, proper on-call rotation) or Slack webhook (free, no escalation). For a solo operator, Slack is probably enough at launch — revisit when there's a second engineer.
 - [ ] Define alert rules in Prometheus (or Fly's built-in health check alerts as a stopgap):
@@ -73,6 +76,6 @@ Flesh out once alerting is in place. Skeleton:
 ## Cross-references
 
 - `docs/launch/LAUNCH_CHECKLIST.md` — Phase F references this runbook
-- `apps/core/fly.toml` — Core autoscale + health check config
+- `apps/core/fly.toml` — Core auto-stop/auto-start and health check config
 - `apps/query-service/fly.toml` — Query Service health check config
 - `apps/control-plane/fly.toml` — Control Plane health check config

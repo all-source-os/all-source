@@ -1,7 +1,7 @@
 ---
 title: "AllSource Lifecycle Email Trail"
 status: DRAFT — not sent
-last_updated: 2026-06-28
+last_updated: 2026-11-23
 owner: founder (@decebal)
 send_vehicle: control-plane proactive-comms (ADMIN_TENANT_POWER_TOOL.md §4 Pillar C — Phase 6)
 grounding:
@@ -39,13 +39,13 @@ These are emails to **paying (or about-to-pay) builders** on a developer
 event-store. The job of the trail is not to "nurture" — it's to close the gap
 between *what a tenant pays for* and *what they actually touch*. Most AllSource
 tenants ingest a handful of events and never reach the parts they're billed for:
-~12µs Prime recall, the 43 MCP tools, x402 pay-per-call, Hound code/doc graphs,
+11.9µs p99 Core indexed reads, the 55 MCP tools, x402 pay-per-call, Hound code/doc graphs,
 the multi-language SDKs. A linear blast can't fix that, because the right next
 email depends entirely on behavior — a tenant who hasn't ingested a single event
 needs a different push than one who is at 80% of a 5M-event Studio quota. So the
 trail **branches on real, event-sourced signals** (the same Core events and
-quota meters the product already emits) and **segments by tier** so a $19 Indie
-and a $299 Scale subscriber never get the same "what you bought" email. The
+quota meters the product already emits) and **segments by tier** so a £18.99 Indie
+and a £298.99 Scale subscriber never get the same "what you bought" email. The
 honest-founder voice and the hard grounding are not stylistic: over-promising to
 someone who already paid is the fastest way to churn them and generate support
 load, so accuracy beats cleverness on every line.
@@ -171,16 +171,16 @@ Send one event. That's the only homework.
 
 — Decebal
 
-You can self-host the whole thing for free (MIT) if you'd rather run it
+You can self-host the whole thing for free (Apache-2.0 core) if you'd rather run it
 yourself: github.com/all-source-os/all-source
 ```
 - **Metric:** activation event — first `events_used > 0` within 72h.
-- **Facts:** 11.9µs p99 / 469K/sec / 129MB (`siteConfig.stats`); MIT self-host (`siteConfig.pricing[self-host]`).
+- **Facts:** 11.9µs p99 / 469K/sec / 129MB (`siteConfig.stats`); Apache-2.0 core self-host (`siteConfig.pricing[self-host]`).
 
 #### S2 — Self-host welcome *(out-of-band — not sent by this system)*
 - **Segment:** self-host installer · **Trigger:** install (no CP record — see §3)
 - **Subject:** You're self-hosting AllSource — here's how to not get stuck
-- **Preheader:** MIT, yours forever. Two links so you don't hit the wall alone.
+- **Preheader:** Apache-2.0 core, yours forever. Two links so you don't hit the wall alone.
 
 ```
 You cloned AllSource and you're running it on your own hardware — unlimited
@@ -188,16 +188,16 @@ events, forever retention, full MCP, zero dollars. That's the deal, and it
 stays the deal.
 
 Two things that save people time:
-- The 43 MCP tools drop straight into Claude Desktop. Wiring guide: {{mcp_docs_url}}
+- The 55 MCP tools drop straight into Claude Desktop. Wiring guide: {{mcp_docs_url}}
 - Stuck? GitHub Discussions is where I actually answer: {{discussions_url}}
 
-If you outgrow a single box and want us to run it, hosted starts at $19/mo
+If you outgrow a single box and want us to run it, hosted starts at £18.99/mo
 (Indie). No pressure — self-host is a first-class tier, not a trial.
 
 — Decebal
 ```
 - **Metric:** GitHub star / Discussions join (tracked on GitHub, not comms).
-- **Facts:** unlimited/forever/full-MCP self-host + $19 Indie (`siteConfig.pricing`); 43 MCP tools (`siteConfig.stats[2]`).
+- **Facts:** unlimited/forever/full-MCP self-host + £18.99 Indie (`siteConfig.pricing`); 55 MCP tools (`siteConfig.stats[2]`).
 - **Note:** self-host tenants are unreachable by the CP comms system (no tenant email). Ships via README/release notes/Discussions.
 
 ---
@@ -240,7 +240,7 @@ If something blocked you, just reply to this email. It comes to me.
 - **Subject (A):** You've logged {{events_used}} events — now ask them a question
 - **Subject (B):** Your agent's memory is sitting there unread
 - **Subject (C):** Recall is the part you came for. You haven't run it yet.
-- **Preheader:** ~12µs to answer "what happened?" — try one query.
+- **Preheader:** 11.9µs p99 indexed read to answer "what happened?" — try one query.
 
 ```
 Hey {{first_name}},
@@ -265,12 +265,12 @@ is just there." Run one query and you'll feel it.
 — Decebal
 ```
 - **Metric:** activation — first `queries_used > 0` within 7d.
-- **Facts:** 11.9µs p99 / ~12µs (`siteConfig.stats[1]`); WAL+Parquet durability (`CLAUDE.md`); query API + `order=desc` latest-state (`CLAUDE.md` Core API).
+- **Facts:** 11.9µs p99 (`siteConfig.stats[1]`); WAL+Parquet durability (`CLAUDE.md`); query API + `order=desc` latest-state (`CLAUDE.md` Core API).
 
 #### A3 — MCP introduction
 - **Segment:** activated, no MCP read · **Trigger:** NEEDS NEW SIGNAL (first MCP read)
 - **Subject (A):** Let Claude read and write this memory directly
-- **Subject (B):** 43 MCP tools, 30-second install
+- **Subject (B):** 55 MCP tools, 30-second install
 - **Preheader:** Stop hand-rolling API calls — wire it into Claude Desktop.
 
 ```
@@ -279,7 +279,7 @@ Hey {{first_name}},
 You're ingesting and recalling over the API. The next jump is letting Claude
 do it for you.
 
-AllSource ships 43 MCP tools. Drop them into Claude Desktop and the agent
+AllSource ships 55 MCP tools. Drop them into Claude Desktop and the agent
 reads and writes its own memory — no glue code, no embedding API to stand up.
 Prime (our memory layer) installs in about 30 seconds.
 
@@ -294,14 +294,14 @@ decide last week?" just work.
 — Decebal
 ```
 - **Metric:** activation — first MCP read within 14d.
-- **Facts:** 43 MCP tools (`siteConfig.stats[2]`); Prime install-in-30s / no embedding API (`siteConfig.header` Prime entry); `allsource-prime` install (repurpose kit / blog).
+- **Facts:** 55 MCP tools (`siteConfig.stats[2]`); Prime install-in-30s / no embedding API (`siteConfig.header` Prime entry); `allsource-prime` install (repurpose kit / blog).
 
 ---
 
 ### Stage: Paid (post-purchase) — tier-specific "what you bought"
 
 #### P-Indie — Welcome to Indie — HIGH-IMPACT (A/B)
-- **Segment:** **Indie** ($19) · **Trigger:** REAL entry (webhook → `indie`); NEEDS emit
+- **Segment:** **Indie** (£18.99) · **Trigger:** REAL entry (webhook → `indie`); NEEDS emit
 - **Subject (A):** Welcome to Indie — here's exactly what you unlocked
 - **Subject (B):** Your Indie plan: 500K events, 50K agent payments, 1M Hound tokens
 - **Preheader:** The real ceilings, in plain numbers, so nothing surprises you.
@@ -310,19 +310,19 @@ decide last week?" just work.
 Hey {{first_name}},
 
 Thanks for going Indie — that's real money and I don't take it lightly. Here's
-precisely what $19/mo buys, no asterisks:
+precisely what £18.99/mo buys, no asterisks:
 
 - 500K events / month, 50K queries
 - 50K x402 calls included — your agent can pay per call; overage is
   $0.0001/call after that
 - 1M Hound extraction tokens — turn a repo or a pile of docs into a queryable
   graph
-- 14-day retention, 3 streams
+- Retention not limited by plan, 3 streams
 - Hosted MCP (read) so Claude can read your memory directly
 - Email support, 48h
 
 The one move that makes Indie pay for itself: wire your agent's recall through
-hosted MCP read. That's the 12µs "what happened?" lookup, running inside Claude
+hosted MCP read. That's the 11.9µs p99 indexed read "what happened?" lookup, running inside Claude
 instead of in your code.
 
 → {{mcp_read_setup_url}}
@@ -331,13 +331,13 @@ Reply any time — it reaches me.
 
 — Decebal
 
-(Annual is $15/mo if you'd rather pay yearly.)
+(Annual is £15.17/mo if you'd rather pay yearly.)
 ```
 - **Metric:** click → MCP-read setup; activation = first MCP read within 14d.
-- **Facts:** $19/$15 · 500K events / 50K queries · 50K x402 + $0.0001/call · 1M extraction tokens · 14-day retention · 3 streams · MCP read · 48h support — all `siteConfig.pricing[indie]` + `subscription.go TierIndie` + `HOSTED_EXTRACTION_METERING` (indie 1M).
+- **Facts:** £18.99/£15.17 · 500K events / 50K queries · 50K x402 + $0.0001/call · 1M extraction tokens · retention not limited by plan · 3 streams · MCP read · 48h support — all `siteConfig.pricing[indie]` + `subscription.go TierIndie` + `HOSTED_EXTRACTION_METERING` (indie 1M).
 
 #### P-Studio — Welcome to Studio — HIGH-IMPACT (A/B)
-- **Segment:** **Studio** ($79, "Popular") · **Trigger:** REAL entry (webhook → `studio`); NEEDS emit
+- **Segment:** **Studio** (£78.99, "Popular") · **Trigger:** REAL entry (webhook → `studio`); NEEDS emit
 - **Subject (A):** Welcome to Studio — write access is the upgrade
 - **Subject (B):** Studio: 5M events, MCP write-back, 10M Hound tokens
 - **Preheader:** The jump from Indie isn't just volume — it's MCP write.
@@ -353,7 +353,7 @@ it's the write verb. Here's the full set:
   memory back through MCP, no custom endpoint
 - 500K x402 calls included, $0.0001/call after
 - 10M Hound extraction tokens
-- 90-day retention, unlimited streams
+- Retention not limited by plan, unlimited streams
 - Email support 24h + Discord
 
 Do this first: turn on MCP write and let one agent record a decision back into
@@ -364,13 +364,13 @@ between sessions on its own.
 
 — Decebal
 
-(Annual is $63/mo.)
+(Annual is £63.17/mo.)
 ```
 - **Metric:** click → MCP-write setup; activation = first MCP write within 14d.
-- **Facts:** $79/$63 · 5M events / 500K queries · MCP read+write · 500K x402 · 10M extraction tokens · 90-day retention · unlimited streams · 24h+Discord — `siteConfig.pricing[studio]` + `subscription.go TierStudio` + `HOSTED_EXTRACTION_METERING` (studio 10M).
+- **Facts:** £78.99/£63.17 · 5M events / 500K queries · MCP read+write · 500K x402 · 10M extraction tokens · retention not limited by plan · unlimited streams · 24h+Discord — `siteConfig.pricing[studio]` + `subscription.go TierStudio` + `HOSTED_EXTRACTION_METERING` (studio 10M).
 
 #### P-Scale — Welcome to Scale — HIGH-IMPACT (A/B)
-- **Segment:** **Scale** ($299) · **Trigger:** REAL entry (webhook → `scale`); NEEDS emit
+- **Segment:** **Scale** (£298.99) · **Trigger:** REAL entry (webhook → `scale`); NEEDS emit
 - **Subject (A):** Welcome to Scale — dedicated MCP and 50M events
 - **Subject (B):** You're running a fleet. Here's the dedicated lane.
 - **Preheader:** 50M events, 5M agent payments, your own MCP capacity.
@@ -379,14 +379,14 @@ between sessions on its own.
 Hey {{first_name}},
 
 Scale is for when you've got 50+ agents leaning on the same memory and you
-can't have them fighting for it. What $299/mo gives you:
+can't have them fighting for it. What £298.99/mo gives you:
 
 - 50M events / month, 5M queries
 - Hosted MCP: read + write + DEDICATED — your own MCP capacity, not a shared
   pool, so a busy fleet doesn't get noisy-neighbored
 - 5M x402 calls included, $0.0001/call after
 - 100M Hound extraction tokens
-- 365-day retention (a full year of history), unlimited streams
+- Retention not limited by plan, unlimited streams
 - Priority support + Slack
 
 First thing worth doing: provision the dedicated MCP and point your busiest
@@ -397,10 +397,10 @@ Enterprise — negotiated volume, SLA, dedicated SE.
 
 — Decebal
 
-(Annual is $239/mo.)
+(Annual is £239.17/mo.)
 ```
 - **Metric:** click → dedicated-MCP provisioning; reply rate for Enterprise interest.
-- **Facts:** $299/$239 · 50M events / 5M queries · MCP read+write+dedicated · 5M x402 · 100M extraction tokens · 365-day retention · priority+Slack — `siteConfig.pricing[scale]` + `subscription.go TierScale` + `HOSTED_EXTRACTION_METERING` (scale 100M).
+- **Facts:** £298.99/£239.17 · 50M events / 5M queries · MCP read+write+dedicated · 5M x402 · 100M extraction tokens · retention not limited by plan · priority+Slack — `siteConfig.pricing[scale]` + `subscription.go TierScale` + `HOSTED_EXTRACTION_METERING` (scale 100M).
 
 #### P-Ent — Enterprise welcome *(SE-routed, no auto-CTA)*
 - **Segment:** **Enterprise** · **Trigger:** REAL entry (webhook → `enterprise`)
@@ -449,11 +449,11 @@ one click and prorated.
 — Decebal
 ```
 - **`{{tier_upgrade_block}}` (tier-specific):**
-  - **Indie →** `Studio ($79/mo) takes you from 500K to 5M events — 10x — plus MCP write and 90-day retention.`
-  - **Studio →** `Scale ($299/mo) takes you from 5M to 50M events, adds a dedicated MCP lane, and 365-day retention.`
+  - **Indie →** `Studio (£78.99/mo) takes you from 500K to 5M events — 10x — plus MCP write.`
+  - **Studio →** `Scale (£298.99/mo) takes you from 5M to 50M events and adds a dedicated MCP lane.`
   - **Scale →** `You can keep going on overage, or talk to us about Enterprise for negotiated volume and an SLA. Reply and we'll size it.`
 - **Metric:** click → billing; upgrade conversion within 7d.
-- **Facts:** quotas 500K/5M/50M and prices $79/$299 (`siteConfig.pricing`, `subscription.go`). **Replaces** the shipped retired-tier copy at `check_usage_warnings.go:239`.
+- **Facts:** quotas 500K/5M/50M and prices £78.99/£298.99 (`siteConfig.pricing`, `subscription.go`). **Replaces** the shipped retired-tier copy at `check_usage_warnings.go:239`.
 
 #### E2 — Events at 100% (operational)
 - **Segment:** Indie/Studio/Scale · **Trigger:** REAL — `billing.usage_warning.sent` @ 100%
@@ -470,7 +470,7 @@ options:
 1. Upgrade now (prorated) — {{tier_upgrade_block}} New capacity is live
    immediately.
 2. Sit tight — your quota resets at {{period_reset_date}}. Your data is safe;
-   retention on {{tier}} is {{retention_days}} days regardless.
+   retention is not limited by plan.
 
 → {{billing_url}}
 
@@ -480,7 +480,7 @@ look.
 — Decebal
 ```
 - **Metric:** upgrade conversion within 48h; reply rate (surprise-overage signal).
-- **Facts:** retention 14/90/365 by tier (`siteConfig`/`subscription.go`); same upgrade ladder as E1.
+- **Facts:** retention not limited by tier (`subscription.go` `TierQuotaMap`, `RetentionDays: -1` on every tier); same upgrade ladder as E1.
 - **Note:** operational severity — exempt from the weekly marketing cap, still deduped per period.
 
 #### E3 — x402 allowance at 80%
@@ -562,12 +562,12 @@ genuinely.
 — Decebal
 ```
 - **`{{unused_feature_block}}` variants (pick the one matching the gap, one CTA each):**
-  - **Recall unused** (`queries_used≈0`): `You've logged events but never queried them. The whole point is the ~12µs recall — here's a 2-line query to try.`
+  - **Recall unused** (`queries_used≈0`): `You've logged events but never queried them. The whole point is the 11.9µs p99 indexed read — here's a 2-line query to try.`
   - **Hound unused** (`extraction_tokens_used==0`): `Your plan includes {{extraction_quota}} Hound extraction tokens. Point Hound at one repo and get a queryable code-graph back.`
   - **x402 unused** (`x402_used==0`): `Your agents have never made an x402 call. If they pay per read, you only pay for memory they actually use.`
   - **SDK gap** (raw HTTP only): `You're hitting the API by hand — there are first-class SDKs for Rust, Go, Python, and TypeScript that do the auth and retries for you.`
 - **Metric:** first-use of the named feature within 14d.
-- **Facts:** ~12µs recall (`siteConfig.stats[1]`); extraction tokens by tier (`HOSTED_EXTRACTION_METERING`); 4 SDKs (`sdks/`: go, python-client, rust, typescript); x402 pay-per-read (`siteConfig`).
+- **Facts:** 11.9µs p99 indexed read (`siteConfig.stats[1]`); extraction tokens by tier (`HOSTED_EXTRACTION_METERING`); 4 SDKs (`sdks/`: go, python-client, rust, typescript); x402 pay-per-read (`siteConfig`).
 
 ---
 
@@ -589,16 +589,12 @@ in the pipeline broke and you haven't noticed.
 If it broke, the fastest check is to re-run that first append and confirm it
 lands. If you wound it down on purpose, no worries at all.
 
-One thing worth knowing on {{tier}}: retention is {{retention_days}} days, so
-your oldest events will start aging out — if there's history you want to keep,
-now's the time.
-
 → {{dashboard_url}}
 
 — Decebal
 ```
 - **Metric:** re-activation — any new event within 7d.
-- **Facts:** `last_event_age` / fleet At-Risk (`signals.go`); retention 14/90/365 by tier (`siteConfig`).
+- **Facts:** `last_event_age` / fleet At-Risk (`signals.go`); retention not limited by tier (`subscription.go`).
 
 #### D2 — Still here?
 - **Segment:** silent ~30d · **Trigger:** REAL — `last_event_age` → fleet `critical`
@@ -613,7 +609,7 @@ did AllSource not click, or did life get in the way?
 
 I'm not going to send you a sequence pretending I didn't notice. If something
 was confusing or missing, reply and tell me — it genuinely shapes what I build
-next. If you want to step back to self-hosting (free, MIT, yours forever),
+next. If you want to step back to self-hosting (free, Apache-2.0 core, yours forever),
 that's a fine outcome too and I'll point you at the export.
 
 If you'd rather just talk it through: {{calendar_url}} — 15 minutes, me, no
@@ -622,7 +618,7 @@ sales pitch.
 — Decebal
 ```
 - **Metric:** reply rate / call booked; re-activation within 14d.
-- **Facts:** self-host free/MIT off-ramp (`siteConfig.pricing[self-host]`). No fake scarcity — honest by design.
+- **Facts:** self-host free (Apache-2.0 core) off-ramp (`siteConfig.pricing[self-host]`). No fake scarcity — honest by design.
 
 #### D3 — Paid but dormant (pre-renewal, operational)
 - **Segment:** paid + dormant + renewal ≤14d · **Trigger:** REAL — fleet tier + renewal date (+ dunning)
@@ -639,7 +635,7 @@ capacity you're not touching — that's how people end up resenting a tool.
 So, plainly:
 - If you want back in, here's the 2-minute path to your first event again, and
   I'm on the other end of a reply if something's blocking you.
-- If now's not the time, you can downgrade or move to self-host (free, MIT)
+- If now's not the time, you can downgrade or move to self-host (free, Apache-2.0 core)
   before the renewal — no hard feelings, no retention dark-patterns.
 
 → {{billing_url}}
@@ -686,7 +682,7 @@ warning sends today.)
 **Variables** the comms system fills from real reads: `{{first_name}}`,
 `{{tenant_name}}`, `{{tier}}`, `{{price}}`, `{{events_used}}`,
 `{{events_quota}}`, `{{x402_used}}`, `{{x402_allowance}}`,
-`{{extraction_used}}`, `{{extraction_quota}}`, `{{retention_days}}`,
+`{{extraction_used}}`, `{{extraction_quota}}`,
 `{{days_silent}}`, `{{renewal_date}}`, `{{period_reset_date}}`, `{{api_key}}` —
 all sourced from `GET /api/v1/tenants/{id}/stats`, the tenant detail/subscription,
 and `GET /api/v1/admin/fleet/health/:id`.
@@ -745,7 +741,7 @@ blast-radius-capped as above.
 ## 7. Open questions / assumptions
 
 - **Free/trial entitlement.** I grounded the free/trial state on the backend
-  `TierFree` quota (100K events/mo, 10K queries, 7-day retention, 1 stream, 0
+  `TierFree` quota (100K events/mo, 10K queries, retention -1 (no plan expiry), 1 stream, 0
   x402, 0 hosted extraction = BYO — `subscription.go:261`). `PRICING_EXPOSURE_PLAN.md`
   proposes a "14-day trial, 50K events" instead. **Confirm which is live** before
   S1/A1 quote any free-tier number — I deliberately avoided stating a free-tier
@@ -773,6 +769,6 @@ blast-radius-capped as above.
   suppress on. Either add one or approximate from recent inbound `email.received`.
 - **A2's "~1K events" milestone is a chosen threshold,** not a product constant —
   set it wherever "enough history to be worth querying" lands for your data.
-- **Annual prices** ($15/$63/$239 — `siteConfig.*.yearlyPrice`) appear in the
+- **Annual prices** (£15.17 / £63.17 / £239.17 per month — `siteConfig.*.yearlyPrice`) appear in the
   paid-welcome copy; drop them if checkout already states billing cadence.
 ```
