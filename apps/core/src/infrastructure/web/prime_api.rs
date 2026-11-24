@@ -285,7 +285,8 @@ pub fn prime_routes() -> Vec<PrimeRoute> {
             "required": ["vector"],
             "properties": {
                 "vector": {"type": "array", "items": {"type": "number"}},
-                "top_k": {"type": "integer"}
+                "top_k": {"type": "integer"},
+                "id_prefix": {"type": "string"}
             }
         })),
         PrimeRoute::new(
@@ -444,6 +445,8 @@ struct StoreVectorReq {
 struct VectorSearchReq {
     vector: Vec<f32>,
     top_k: Option<usize>,
+    /// Exact search over vector ids starting with this prefix only.
+    id_prefix: Option<String>,
 }
 
 #[cfg(feature = "prime-vectors")]
@@ -708,9 +711,11 @@ async fn search_vectors(
     State(state): State<Arc<PrimeState>>,
     Json(req): Json<VectorSearchReq>,
 ) -> impl IntoResponse {
-    let results = state
-        .prime
-        .vector_search(&req.vector, req.top_k.unwrap_or(10));
+    let top_k = req.top_k.unwrap_or(10);
+    let results = match req.id_prefix.as_deref() {
+        Some(prefix) => state.prime.vector_search_prefix(&req.vector, top_k, prefix),
+        None => state.prime.vector_search(&req.vector, top_k),
+    };
     let results_json: Vec<Value> = results
         .iter()
         .map(|r| json!({"id": r.id, "score": r.score, "text": r.text}))

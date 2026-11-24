@@ -354,6 +354,44 @@ pub(super) async fn rest_request(
 }
 
 #[tokio::test]
+async fn rest_vector_search_with_id_prefix_returns_only_that_subset() {
+    let app = rest_router(test_state().await);
+    for (id, vector) in [
+        ("output:1", [1.0, 0.0]),
+        ("output:2", [1.0, 0.0]),
+        ("tool:far", [0.0, 1.0]),
+        ("tool:near", [0.6, 0.4]),
+    ] {
+        let (status, _) = rest_request(
+            &app,
+            "POST",
+            "/api/v1/prime/vectors",
+            None,
+            Some(json!({ "id": id, "vector": vector })),
+        )
+        .await;
+        assert!(status.is_success(), "store {id}: {status}");
+    }
+
+    let (status, body) = rest_request(
+        &app,
+        "POST",
+        "/api/v1/prime/vectors/search",
+        None,
+        Some(json!({ "vector": [1.0, 0.0], "top_k": 2, "id_prefix": "tool:" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<&str> = body["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["vec:tool:near", "vec:tool:far"]);
+}
+
+#[tokio::test]
 async fn rest_hosted_create_then_get_node() {
     let server = MockServer::start().await;
     let app = rest_router(hosted_state_stateful(&server).await);

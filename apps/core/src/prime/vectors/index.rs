@@ -2,9 +2,10 @@
 //!
 //! Uses `instant-distance` for pure-Rust HNSW (ADR-015). Since the crate is
 //! batch-only (no incremental insert), vectors are accumulated in a `DashMap`
-//! and the HNSW index is rebuilt after mutations by one builder at a time.
-//! Only a search with no index yet waits for it; the rest keep using the last
-//! build and brute-force whatever was written since.
+//! and the HNSW index is rebuilt after mutations by one background builder at
+//! a time. No search waits for a build: a search uses the last build and
+//! brute-forces whatever was written since, or brute-forces everything when no
+//! build exists yet.
 //!
 //! ## Key design decisions (ADR-015)
 //!
@@ -97,8 +98,8 @@ pub struct SearchHit {
 
 /// HNSW-indexed vector projection with generation-based staleness tracking.
 ///
-/// Vectors are stored in a `DashMap` as events arrive. The HNSW index is
-/// rebuilt lazily when a search is performed and the generation has advanced.
+/// Vectors are stored in a `DashMap` as events arrive. A search that finds the
+/// generation advanced starts a background rebuild of the HNSW index.
 pub struct VectorIndexProjection {
     name: String,
     /// entity_id -> VectorRecord (live vectors only — deletions remove entries)
@@ -109,9 +110,10 @@ pub struct VectorIndexProjection {
     generation: Arc<AtomicU64>,
     /// Generation at which the index was last built.
     built_generation: Arc<AtomicU64>,
-    /// Held for the whole of a build, so at most one runs.
-    build_lock: Arc<Mutex<()>>,
-    /// A background rebuild is queued or running.
+    /// Serializes writers, so two cannot stamp the same `written_at` and a
+    /// build that misses a record always sees its generation as newer.
+    write_lock: Arc<Mutex<()>>,
+    /// A background rebuild is queued or running; at most one runs.
     rebuilding: Arc<AtomicBool>,
     /// Completed builds.
     builds: Arc<AtomicU64>,
@@ -148,7 +150,7 @@ impl VectorIndexProjection {
             index: Arc::new(RwLock::new(None)),
             generation: Arc::new(AtomicU64::new(0)),
             built_generation: Arc::new(AtomicU64::new(0)),
-            build_lock: Arc::new(Mutex::new(())),
+            write_lock: Arc::new(Mutex::new(())),
             rebuilding: Arc::new(AtomicBool::new(false)),
             builds: Arc::new(AtomicU64::new(0)),
             config,
@@ -193,28 +195,35 @@ impl VectorIndexProjection {
         // Read before the index, which a build publishes first: a record newer
         // than this counter is then always scanned, even if the index has it.
         let built_gen = self.built_generation.load(Ordering::Acquire);
-        let mut hits: Vec<SearchHit> = Vec::new();
 
-        if let Some(hnsw) = self.index.read().as_ref() {
-            let query_point = VecPoint(query.to_vec());
-            let mut search = Search::default();
-            hits.extend(
-                hnsw.search(&query_point, &mut search)
-                    .filter_map(|item| {
-                        let record = self.vectors.get(item.value)?;
-                        (record.written_at <= built_gen).then(|| SearchHit {
-                            entity_id: item.value.clone(),
-                            distance: item.distance,
-                            text: record.text.clone(),
-                            metadata: record.metadata.clone(),
-                        })
-                    })
-                    .take(top_k),
-            );
-        }
+        let index = self.index.read();
+        let Some(hnsw) = index.as_ref() else {
+            drop(index);
+            return self.scan(query, top_k, |_| true);
+        };
+        let query_point = VecPoint(query.to_vec());
+        let mut search = Search::default();
+        let mut hits: Vec<SearchHit> = hnsw
+            .search(&query_point, &mut search)
+            .filter_map(|item| {
+                let record = self.vectors.get(item.value)?;
+                (record.written_at <= built_gen).then(|| SearchHit {
+                    entity_id: item.value.clone(),
+                    distance: item.distance,
+                    text: record.text.clone(),
+                    metadata: record.metadata.clone(),
+                })
+            })
+            .take(top_k)
+            .collect();
+        drop(index);
 
         if self.generation.load(Ordering::Acquire) != built_gen {
-            hits.extend(self.scan(query, |record| record.written_at > built_gen));
+            let newer = self.scan(query, top_k, |record| record.written_at > built_gen);
+            // A record rewritten after the index pass appears in both; the
+            // scan holds the current version.
+            hits.retain(|hit| !newer.iter().any(|n| n.entity_id == hit.entity_id));
+            hits.extend(newer);
             Self::keep_nearest(&mut hits, top_k);
         }
         hits
@@ -230,25 +239,51 @@ impl VectorIndexProjection {
         top_k: usize,
         entity_prefix: &str,
     ) -> Vec<SearchHit> {
-        let mut hits = self.scan(query, |record| record.entity_id.starts_with(entity_prefix));
-        Self::keep_nearest(&mut hits, top_k);
-        hits
+        self.scan(query, top_k, |record| {
+            record.entity_id.starts_with(entity_prefix)
+        })
     }
 
-    fn scan(&self, query: &[f32], keep: impl Fn(&VectorRecord) -> bool) -> Vec<SearchHit> {
-        self.vectors
+    /// Exact `top_k` over the records `keep` accepts, nearest first. Text and
+    /// metadata are cloned for the winners only.
+    fn scan(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        keep: impl Fn(&VectorRecord) -> bool,
+    ) -> Vec<SearchHit> {
+        let mut ranked: Vec<(f32, String)> = self
+            .vectors
             .iter()
             .filter(|entry| keep(entry.value()))
             .map(|entry| {
-                let record = entry.value();
-                SearchHit {
-                    entity_id: record.entity_id.clone(),
+                (
+                    cosine_distance(query, &entry.value().vector),
+                    entry.key().clone(),
+                )
+            })
+            .collect();
+        if ranked.len() > top_k {
+            ranked.select_nth_unstable_by(top_k, |a, b| a.0.total_cmp(&b.0));
+            ranked.truncate(top_k);
+        }
+
+        // A winner deleted or rewritten since it was ranked is dropped or
+        // re-scored, never served with stale contents.
+        let mut hits: Vec<SearchHit> = ranked
+            .into_iter()
+            .filter_map(|(_, entity_id)| {
+                let record = self.vectors.get(&entity_id)?;
+                Some(SearchHit {
                     distance: cosine_distance(query, &record.vector),
                     text: record.text.clone(),
                     metadata: record.metadata.clone(),
-                }
+                    entity_id,
+                })
             })
-            .collect()
+            .collect();
+        Self::keep_nearest(&mut hits, top_k);
+        hits
     }
 
     fn keep_nearest(hits: &mut Vec<SearchHit>, top_k: usize) {
@@ -256,19 +291,10 @@ impl VectorIndexProjection {
         hits.truncate(top_k);
     }
 
-    /// Bring the index up to date, or start that happening.
+    /// Start a background rebuild when the index is behind.
     fn ensure_index(&self) {
-        if self.is_current() {
-            return;
-        }
-        if self.index.read().is_some() {
+        if !self.is_current() {
             self.spawn_rebuild();
-            return;
-        }
-
-        let _build = self.build_lock.lock();
-        if self.index.read().is_none() && !self.is_current() {
-            self.rebuild();
         }
     }
 
@@ -286,7 +312,6 @@ impl VectorIndexProjection {
             .name("prime-vector-rebuild".to_string())
             .spawn(move || {
                 let _flag = flag;
-                let _build = worker.build_lock.lock();
                 worker.rebuild();
             });
         if let Err(error) = spawned {
@@ -301,7 +326,7 @@ impl VectorIndexProjection {
             index: Arc::clone(&self.index),
             generation: Arc::clone(&self.generation),
             built_generation: Arc::clone(&self.built_generation),
-            build_lock: Arc::clone(&self.build_lock),
+            write_lock: Arc::clone(&self.write_lock),
             rebuilding: Arc::clone(&self.rebuilding),
             builds: Arc::clone(&self.builds),
             config: self.config.clone(),
@@ -309,7 +334,7 @@ impl VectorIndexProjection {
         }
     }
 
-    /// Caller holds `build_lock`.
+    /// Caller holds the `rebuilding` flag.
     fn rebuild(&self) {
         // Read before collecting: a write landing mid-collect leaves
         // `built_generation` behind `generation`, so it is picked up again.
@@ -369,6 +394,7 @@ impl Projection for VectorIndexProjection {
                     .map(String::from);
 
                 let metadata = payload.get("metadata").cloned();
+                let _write = self.write_lock.lock();
                 let written_at = self.generation.load(Ordering::Acquire) + 1;
 
                 self.store(VectorRecord {
@@ -381,6 +407,7 @@ impl Projection for VectorIndexProjection {
                 self.generation.fetch_add(1, Ordering::Release);
             }
             vec_events::VECTOR_DELETED => {
+                let _write = self.write_lock.lock();
                 if let Some((_, record)) = self.vectors.remove(&entity_id) {
                     self.charge
                         .sub(charge::entry::<String, VectorRecord>(record_bytes(&record)));
@@ -400,6 +427,7 @@ impl Projection for VectorIndexProjection {
     }
 
     fn clear(&self) {
+        let _write = self.write_lock.lock();
         self.vectors.clear();
         self.charge.take();
         *self.index.write() = None;
@@ -414,12 +442,15 @@ impl Projection for VectorIndexProjection {
     fn restore(&self, snapshot: &Value) -> Result<()> {
         let records: Vec<VectorRecord> = serde_json::from_value(snapshot.clone())
             .map_err(|e| crate::error::AllSourceError::StorageError(e.to_string()))?;
+        let _write = self.write_lock.lock();
         self.vectors.clear();
         self.charge.take();
-        for record in records {
+        // Newer than any build, so one already in flight cannot hide them.
+        let written_at = self.generation.load(Ordering::Acquire) + 1;
+        for mut record in records {
+            record.written_at = written_at;
             self.store(record);
         }
-        // Restored records carry no generation, so the old build cannot serve them.
         *self.index.write() = None;
         self.generation.fetch_add(1, Ordering::Release);
         Ok(())
@@ -669,6 +700,7 @@ mod tests {
         };
 
         search_from_many_threads(&proj);
+        wait_until_current(&proj);
         assert_eq!(proj.builds.load(Ordering::Relaxed), 1);
 
         proj.process(&make_vector_event("vec:late", &[1.0, 1.0, 1.0], None))
@@ -676,6 +708,54 @@ mod tests {
         search_from_many_threads(&proj);
         wait_until_current(&proj);
         assert_eq!(proj.builds.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn a_search_before_any_build_is_exact_and_leaves_the_build_to_the_background() {
+        let proj = VectorIndexProjection::new("vec_idx");
+        for i in 0..300 {
+            let angle = i as f32 / 300.0;
+            proj.process(&make_vector_event(
+                &format!("vec:{i}"),
+                &[angle.cos(), angle.sin()],
+                None,
+            ))
+            .unwrap();
+        }
+        assert!(proj.index.read().is_none());
+
+        let hits = proj.search(&[1.0, 0.0], 3);
+
+        let ids: Vec<_> = hits.iter().map(|hit| hit.entity_id.as_str()).collect();
+        assert_eq!(ids, ["vec:0", "vec:1", "vec:2"]);
+        wait_until_current(&proj);
+        assert_eq!(proj.builds.load(Ordering::Relaxed), 1);
+        assert!(proj.index.read().is_some());
+    }
+
+    #[test]
+    fn restored_vectors_are_found_while_an_older_build_is_still_published() {
+        let proj = VectorIndexProjection::new("vec_idx");
+        proj.process(&make_vector_event("vec:old", &[0.0, 1.0], None))
+            .unwrap();
+        let before_restore = proj.generation.load(Ordering::Acquire);
+
+        let snap = serde_json::json!([
+            { "entity_id": "vec:restored", "vector": [1.0, 0.0], "text": null, "metadata": null }
+        ]);
+        proj.restore(&snap).unwrap();
+        // What a background build that collected before the restore publishes.
+        let stale =
+            Builder::default().build(vec![VecPoint(vec![0.0, 1.0])], vec!["vec:old".to_string()]);
+        *proj.index.write() = Some(stale);
+        proj.built_generation
+            .store(before_restore, Ordering::Release);
+        // Holding the flag keeps a real rebuild from replacing the stale build.
+        proj.rebuilding.store(true, Ordering::Release);
+
+        let hits = proj.search(&[1.0, 0.0], 1);
+        assert_eq!(hits[0].entity_id, "vec:restored");
+        assert_eq!(proj.builds.load(Ordering::Relaxed), 0);
     }
 
     #[test]
