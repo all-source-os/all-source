@@ -1,6 +1,6 @@
 # AllSource C4 Architecture Diagrams (Mermaid)
 
-> **Updated 2026-02-16**: Corrected for v0.10.3. Removed PostgreSQL and Redis (not used in current architecture). Fixed MCP Server tool count (61, not 27). Query Service is stateless.
+> Core 0.30.0. Current architecture: Core stores events in WAL + Parquet, with DashMap in-memory maps. No PostgreSQL or Redis store; Core's optional RESP3 listener (`ALLSOURCE_RESP_PORT`) speaks the Redis wire protocol only. Query Service is stateless.
 
 These diagrams follow the C4 model for visualizing software architecture.
 Render in any Mermaid-compatible tool (GitHub, Notion, VS Code, etc.)
@@ -20,12 +20,12 @@ C4Context
     Person(aiEngineer, "AI/ML Engineer", "Builds AI agents and LLM applications")
     Person(operator, "Platform Operator", "Manages infrastructure and security")
 
-    System(allsource, "AllSource Platform", "AI-native event sourcing platform for temporal data intelligence. 469K events/sec, sub-microsecond queries.")
+    System(allsource, "AllSource Platform", "AI-native event sourcing platform for temporal data intelligence. 469K events/sec, 11.9μs p99 query latency.")
 
     System_Ext(clientApps, "Client Applications", "Web, mobile, backend services consuming events")
     System_Ext(llmAgents, "LLM/AI Agents", "Claude, GPT, custom agents via MCP protocol")
     System_Ext(monitoring, "Monitoring Stack", "Prometheus, Grafana, Jaeger")
-    System_Ext(authProvider, "Identity Provider", "OAuth, LDAP, SAML for enterprise SSO")
+    System_Ext(authProvider, "Identity Provider", "OAuth providers (Google, GitHub)")
 
     Rel(developer, allsource, "Ingests events, queries history")
     Rel(dataEngineer, allsource, "Creates projections, exports data")
@@ -55,11 +55,11 @@ C4Container
 
     System_Boundary(allsource, "AllSource Platform") {
         Container(web, "Web Dashboard", "Next.js 16, React 19", "Real-time event visualization, management UI, OAuth login, billing UI")
-        Container(controlPlane, "Control Plane", "Go 1.24, Gin", "Authentication, RBAC, audit logging, billing webhooks")
+        Container(controlPlane, "Control Plane", "Go 1.26.11, Gin v1.12.0", "Authentication, RBAC, audit logging, billing webhooks")
         Container(authService, "Auth Service", "Rust, better-auth", "OAuth, sessions, user management (event-sourced)")
         Container(core, "Event Store Core", "Rust 1.92, Axum", "High-performance event storage, indexing, schemas, projections")
         Container(queryService, "Query Service", "Elixir 1.17, Phoenix", "Advanced queries, real-time subscriptions, billing state")
-        Container(mcpServer, "MCP Server", "Elixir, JSON-RPC", "61 AI-native tools for natural language interaction")
+        Container(mcpServer, "MCP Server", "Elixir, JSON-RPC", "73 MCP tool definitions for natural language interaction")
 
         ContainerDb(storage, "Event Storage", "Parquet + WAL", "Columnar storage with write-ahead log for durability")
     }
@@ -99,7 +99,7 @@ C4Component
 
     Container_Boundary(core, "Event Store Core (Rust)") {
 
-        Component_Ext(api, "REST API Layer", "Axum", "38 HTTP endpoints for event operations")
+        Component_Ext(api, "REST API Layer", "Axum", "HTTP endpoints for event operations")
 
         Boundary(app, "Application Layer") {
             Component(ingestUC, "IngestEvent", "Use Case", "Validates and stores new events")
@@ -118,7 +118,7 @@ C4Component
         }
 
         Boundary(infra, "Infrastructure Layer") {
-            Component(storage, "ParquetStorage", "Infrastructure", "Columnar file storage with SIMD")
+            Component(storage, "ParquetStorage", "Infrastructure", "Columnar file storage")
             Component(wal, "WriteAheadLog", "Infrastructure", "Durability guarantee via WAL")
             Component(index, "DashMapIndex", "Infrastructure", "Lock-free O(1) lookups")
             Component(auth, "JWTAuth", "Infrastructure", "Token validation and RBAC")
@@ -172,10 +172,10 @@ C4Component
         Component(policyEngine, "Policy Engine", "Service", "5 default + custom policies")
     }
 
-    Rel(router, authHandler, "Routes /auth/*")
-    Rel(router, clusterHandler, "Routes /cluster/*")
-    Rel(router, tenantHandler, "Routes /tenants/*")
-    Rel(router, opsHandler, "Routes /operations/*")
+    Rel(router, authHandler, "Routes /api/v1/auth/*")
+    Rel(router, clusterHandler, "Routes /api/v1/status/services")
+    Rel(router, tenantHandler, "Routes /api/v1/tenants/*")
+    Rel(router, opsHandler, "Routes /api/v1/operations/*")
 
     Rel(authHandler, jwtService, "Uses")
     Rel(router, rbacService, "Checks permissions")
@@ -212,9 +212,9 @@ C4Component
         Component(broadwayProd, "Broadway Producer", "Infrastructure", "High-throughput processing")
     }
 
-    Rel(phoenix, eventCtrl, "Routes /events")
-    Rel(phoenix, queryCtrl, "Routes /query")
-    Rel(phoenix, projCtrl, "Routes /projections")
+    Rel(phoenix, eventCtrl, "Routes /api/v1 event endpoints")
+    Rel(phoenix, queryCtrl, "Routes /api/v1 query endpoints")
+    Rel(phoenix, projCtrl, "Routes projection endpoints")
 
     Rel(queryCtrl, queryDSL, "Builds queries with")
     Rel(projCtrl, projServer, "Manages")
@@ -240,26 +240,26 @@ C4Component
 
         Component(jsonrpc, "JSON-RPC Handler", "Protocol", "JSON-RPC 2.0 over stdio")
 
-        Boundary(coreTools, "Core Query Tools (11)") {
+        Boundary(coreTools, "Core Query Tools") {
             Component(queryEvents, "query_events", "Tool", "Event retrieval with filters")
             Component(reconstruct, "reconstruct_state", "Tool", "Point-in-time entity state")
             Component(analyze, "analyze_changes", "Tool", "Change detection and diffs")
             Component(patterns, "find_patterns", "Tool", "Pattern recognition")
         }
 
-        Boundary(searchTools, "Search Tools (2)") {
-            Component(semantic, "semantic_search", "Tool", "Vector similarity search")
+        Boundary(searchTools, "Search Tools") {
+            Component(semantic, "semantic_search_events", "Tool", "Semantic search over events")
             Component(hybrid, "hybrid_search", "Tool", "Combined text + semantic")
         }
 
-        Boundary(mgmtTools, "Management Tools (8)") {
-            Component(deleteEvt, "delete_events", "Tool", "Soft delete with audit")
+        Boundary(mgmtTools, "Management Tools") {
+            Component(deleteEvt, "delete_events", "Tool", "Delete events")
             Component(archiveEvt, "archive_events", "Tool", "Cold storage migration")
-            Component(exportEvt, "export_events", "Tool", "JSON/CSV/Parquet export")
+            Component(exportEvt, "export_events", "Tool", "JSON, JSONL, CSV, Parquet export")
             Component(importEvt, "import_events", "Tool", "Bulk import with dedup")
         }
 
-        Component(toonFormat, "TOON Formatter", "Service", "50% token reduction format")
+        Component(toonFormat, "TOON Formatter", "Service", "About 50% fewer tokens than JSON for tabular data")
         Component(sessionMgr, "Session Manager", "Service", "Context and state tracking")
     }
 
@@ -300,7 +300,7 @@ sequenceDiagram
     Core->>Storage: Batch to Parquet
     Core->>WS: Broadcast to subscribers
 
-    Core-->>ControlPlane: 201 Created + event_id
+    Core-->>ControlPlane: 200 OK + event_id
     ControlPlane-->>Client: Response
 ```
 
@@ -310,39 +310,33 @@ sequenceDiagram
 
 ```mermaid
 C4Deployment
-    title AllSource Deployment - Kubernetes
+    title AllSource Deployment - Fly.io
 
-    Deployment_Node(k8s, "Kubernetes Cluster", "EKS/GKE/AKS") {
+    Deployment_Node(fly, "Fly.io", "allsource organization") {
 
-        Deployment_Node(ingress, "Ingress Layer") {
-            Container(nginx, "NGINX Ingress", "Load Balancer", "TLS termination, routing")
+        Deployment_Node(frontends, "Frontends") {
+            Container(webApp, "allsource-web", "Next.js", "all-source.xyz and www")
+            Container(adminApp, "allsource-admin", "Next.js", "admin.all-source.xyz")
         }
 
-        Deployment_Node(appNs, "allsource namespace") {
-            Container(webPod, "Web Dashboard", "2 replicas", "Next.js, 50MB")
-            Container(cpPod, "Control Plane", "3 replicas", "Go, 28MB")
-            Container(corePod, "Event Store Core", "3 replicas", "Rust, 16MB")
-            Container(qsPod, "Query Service", "2 replicas", "Elixir, 35MB")
-            Container(mcpPod, "MCP Server", "2 replicas", "Elixir, 35MB")
+        Deployment_Node(services, "Services") {
+            Container(cpApp, "allsource-control-plane", "Go", "api.all-source.xyz: auth, onboarding, billing")
+            Container(authApp, "allsource-auth", "Rust, better-auth", "OAuth, sessions")
+            Container(qsApp, "allsource-query", "Elixir, Phoenix", "Query Service")
+            Container(primeApp, "allsource-prime", "Rust", "Prime MCP server")
         }
 
-        Deployment_Node(dataNs, "data namespace") {
-            ContainerDb(pvcs, "Persistent Volumes", "SSD", "Event storage (WAL + Parquet)")
-        }
-
-        Deployment_Node(monitorNs, "monitoring namespace") {
-            Container(promPod, "Prometheus", "1 replica", "Metrics collection")
-            Container(grafanaPod, "Grafana", "1 replica", "Dashboards")
-            Container(jaegerPod, "Jaeger", "1 replica", "Distributed tracing")
+        Deployment_Node(coreNode, "Event Store") {
+            ContainerDb(coreApp, "allsource-core", "Rust", "Event store, volume allsource_data (WAL + Parquet)")
         }
     }
 
-    Rel(nginx, webPod, "Routes /")
-    Rel(nginx, cpPod, "Routes /api")
-    Rel(cpPod, corePod, "Internal")
-    Rel(cpPod, qsPod, "Internal")
-    Rel(mcpPod, corePod, "Internal")
-    Rel(corePod, pvcs, "Reads/Writes")
+    Rel(webApp, authApp, "Auth flows")
+    Rel(webApp, qsApp, "API calls, billing status")
+    Rel(webApp, cpApp, "Checkout, portal")
+    Rel(authApp, coreApp, "Writes auth events")
+    Rel(cpApp, coreApp, "Writes billing events")
+    Rel(qsApp, coreApp, "Reads events")
 ```
 
 ---

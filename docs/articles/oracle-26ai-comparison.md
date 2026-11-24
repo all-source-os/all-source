@@ -42,10 +42,10 @@ For organizations already running Oracle, this is genuinely powerful. It replace
 AllSource is a purpose-built event store and AI memory layer. One engine, three modalities:
 
 1. **Events.** Every state change is an immutable, timestamped event in a durable WAL + Parquet store. Append-only. Nothing is ever silently overwritten. The event log *is* the source of truth — projections, snapshots, and indexes are derived views.
-2. **Projections.** Materialized views computed incrementally from the event stream. Entity state, counters, timelines, snapshots, knowledge graphs, vector indexes — all are projections. Rebuildable from events. Queryable in ~12 microseconds.
+2. **Projections.** Materialized views computed incrementally from the event stream. Entity state, counters, timelines, snapshots, knowledge graphs, vector indexes — all are projections. Rebuildable from events. Core indexed reads measure 11.9 μs p99 (benchmark of indexed reads, not vector or graph recall).
 3. **Vectors + Graph + Recall (Prime).** Semantic search via fastembed, indexed as a projection over the event stream. Temporal graph relationships with validity windows. Agent memory designed for the workload of an LLM repeatedly asking "what do I know about X, and when did I know it?"
 
-**Stack:** Rust Core (469K events/sec ingest, 11.9μs queries, WAL with CRC32 checksums, Parquet with Snappy compression, DashMap for hot reads). Elixir Query Service as API gateway (auth, tenancy, billing). SDKs in Rust, Go, Python, TypeScript. Apache 2.0. Self-hostable. Embedded or service mode from the same binary.
+**Stack:** Rust Core (469K events/sec ingest, 11.9μs queries, WAL with CRC32 checksums, Parquet with Snappy compression, DashMap for hot reads). Elixir Query Service as API gateway (auth, tenancy, billing). SDKs in Rust, Go, Python, TypeScript. Core is Apache 2.0; designated enterprise features use BSL 1.1. Self-hostable. Embedded or service mode from the same binary.
 
 ---
 
@@ -91,7 +91,7 @@ If you have a billing system, a CRM, and an inventory database that all need to 
 | **Agent memory workload** | Generic vector + SQL | Purpose-built recall API (Prime) |
 | **Ingest throughput** | OLTP-tuned, not throughput-tuned | 469K events/sec sustained |
 | **Query latency (hot path)** | Sub-ms with Exadata flash cache | 11.9μs DashMap reads |
-| **License + cost model** | Proprietary, per-core licensing | Apache 2.0, self-host or managed |
+| **License + cost model** | Proprietary, per-core licensing | Core Apache 2.0, self-host or hosted |
 | **Operational footprint** | Heavy — full DBA story | Single Rust binary, embedded or service |
 | **Developer ergonomics** | SQL + PL/SQL | Event SDK in 4 languages |
 | **Embedded mode** | No | Yes — same binary runs in-process |
@@ -126,10 +126,10 @@ A real comparison has to include cost:
 
 | | Oracle 26ai | AllSource |
 |---|---|---|
-| License | Per-core, commercial | Apache 2.0 |
+| License | Per-core, commercial | Core Apache 2.0; enterprise features BSL 1.1 |
 | Minimum viable deployment | Oracle Database server + license | One Rust binary |
 | Operational team needed | DBA + Oracle expertise | Standard Rust ops |
-| Managed offering | Oracle Cloud / Autonomous | Roadmap (self-host today) |
+| Managed offering | Oracle Cloud / Autonomous | Hosted AllSource live: Indie £18.99/mo, Studio £78.99, Scale £298.99 |
 | Lock-in profile | High (SQL dialect, PL/SQL, Oracle-specific features) | Low (events are portable, SDKs are open) |
 
 For an enterprise that already pays Oracle's bill, 26ai is "more value from the existing line item." For a greenfield AI-native team, AllSource is "the right primitive without the enterprise tax."
@@ -153,7 +153,7 @@ For an enterprise that already pays Oracle's bill, 26ai is "more value from the 
 - You're building AI agents that need durable, temporal, provable memory.
 - You want event-sourcing as the primitive, with projections derived from the log.
 - You want to embed the database in your binary or run it as a service from the same code.
-- Apache 2.0 and self-hosting matter to your business model.
+- Core Apache 2.0 and self-hosting matter to your business model.
 
 **Run them side by side if:**
 
@@ -178,9 +178,9 @@ We're not trying to close all of these. Some of them are tradeoffs that come fro
 ## What We Have That Oracle Doesn't (And Won't)
 
 1. **Event sourcing as the foundation.** Not bolted on. The log is the data.
-2. **Sub-15μs query latency on hot reads** without specialized hardware.
+2. **11.9μs p99 indexed reads** from Core's DashMap-backed index (see the README benchmarks).
 3. **Embedded mode.** Same binary, in-process. No network hop. Critical for agent toolchains.
-4. **Apache 2.0 + self-hostable.** No per-core license, no vendor lock-in.
+4. **Core Apache 2.0 + self-hostable.** No per-core license, no vendor lock-in.
 5. **Prime.** A recall API designed for LLM agents — compressed index + vectors + temporal graph, all derived from events. Not a generic vector column. A purpose-built memory layer.
 6. **CRDT sync for offline agents.** Multi-agent, multi-device, eventual consistency that converges deterministically.
 
@@ -200,4 +200,4 @@ The "vector search" overlap in the marketing materials hides a much deeper diffe
 
 ---
 
-*Sources: [Oracle Database 26ai](https://www.oracle.com/database/) | [AllSource Core](https://github.com/all-source-os/chronos-core) | [AllSource Prime Proposal](../proposals/ALLSOURCE_PRIME.md) | [Core Replication Design](../proposals/CORE_REPLICATION_DESIGN.md)*
+*Sources: [Oracle Database 26ai](https://www.oracle.com/database/) | [AllSource Core](https://github.com/all-source-os/all-source) | [AllSource Prime Proposal](../proposals/archived/ALLSOURCE_PRIME.md) | [Core Replication Design](../proposals/archived/CORE_REPLICATION_DESIGN.md)*

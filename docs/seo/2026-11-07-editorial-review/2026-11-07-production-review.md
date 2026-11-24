@@ -4,13 +4,13 @@ Reviewed 2026-11-07 in the in-app browser. The rendered [introductory article](h
 
 ## Ready for owner review
 
-1. **[Kafka comparison](2026-11-06-kafka-comparison.md):** The introductory page still calls Kafka a transport and asserts a sub-millisecond query limitation without a benchmark. The proposed replacement correctly distinguishes streaming, retention and query responsibilities. Apache describes [durable event storage](https://kafka.apache.org/intro/) and [queryable Kafka Streams state stores](https://kafka.apache.org/documentation/streams/developer-guide/interactive-queries.html); Microsoft discusses [event-store and broker differences](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing). Owner can review the replacement as a factual correction.
+1. **[Kafka comparison](../../archive/2026-11-23/seo/2026-11-07-editorial-review/2026-11-06-kafka-comparison.md):** The introductory page still calls Kafka a transport and asserts a sub-millisecond query limitation without a benchmark. The proposed replacement correctly distinguishes streaming, retention and query responsibilities. Apache describes [durable event storage](https://kafka.apache.org/intro/) and [queryable Kafka Streams state stores](https://kafka.apache.org/documentation/streams/developer-guide/interactive-queries.html); Microsoft discusses [event-store and broker differences](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing). Owner can review the replacement as a factual correction.
 2. **[CQRS internal link](2026-11-07-cqrs-link.md):** The introductory article's rendered body has no link to the comparison. The target loads and contains the stated worked subscription example. The proposed link after “Getting Started” is suitable for editorial review. The canonical tag and search index status were not checked.
 
 ## Revised recommendations
 
-3. **[Database versioning comparison](2026-11-05-version-control-comparison.md):** Revised replacement addresses the edge-database prompt and acknowledges that retained detail varies by system. Ready for owner review.
-4. **[Replay recommendation](2026-11-04-event-replay.md):** Use a short link to the existing replay validation checklist. The target loaded in the browser on 2026-11-07 and supplies practical steps; the introduction and CQRS article already cover replay and projections. Ready for owner review.
+3. **[Database versioning comparison](../../archive/2026-11-23/seo/2026-11-07-editorial-review/2026-11-05-version-control-comparison.md):** Revised replacement addresses the edge-database prompt and acknowledges that retained detail varies by system. Ready for owner review.
+4. **[Replay recommendation](../../archive/2026-11-23/seo/2026-11-07-editorial-review/2026-11-04-event-replay.md):** Use a short link to the existing replay validation checklist. The target loaded in the browser on 2026-11-07 and supplies practical steps; the introduction and CQRS article already cover replay and projections. Ready for owner review.
 
 ## Boundaries
 

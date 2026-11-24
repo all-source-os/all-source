@@ -122,7 +122,7 @@ let response = client.query_events(params).await?;
 | Simple equality on 1-3 fields | Server-side `payload_filter` |
 | Complex predicates (ranges, nested fields, regex) | Client-side after fetching |
 | High-cardinality filtering with small result set | Server-side to reduce transfer |
-| Aggregation across all events | EventQL (`/api/v1/eventql`) |
+| Aggregation across all events | Client-side after fetching (no EventQL route is registered) |
 
 ---
 

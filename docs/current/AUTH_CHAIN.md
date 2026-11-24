@@ -142,7 +142,7 @@ to leave set; it's idempotent).
 
 ## Dev mode behavior
 
-When `ALLSOURCE_DEV_MODE=true`:
+Core reads `ALLSOURCE_DEV_MODE`. The Query Service dev bypass is `AUTH_DISABLED=true|1` and is ignored in production. The Core behavior below applies when `ALLSOURCE_DEV_MODE=true`:
 
 - **Auth on provisioning endpoints is skipped** — you can create keys without
   an existing key
@@ -160,5 +160,5 @@ the QS auth chain — as long as the provisioned keys are persisted (requires
 
 - **API keys**: `ask_` prefix, validated by hash lookup in Core's AuthManager
 - **JWTs**: Bearer tokens, validated by shared `JWT_SECRET`
-- **Header precedence**: `Authorization` header checked first, `X-API-Key` as
-  fallback (legacy)
+- **Header precedence (Query Service)**: `X-API-Key` is checked first, then
+  `Authorization: Bearer`. With `AUTH_DISABLED=true` or `1` both checks are skipped.

@@ -1,23 +1,22 @@
 ---
 title: "MCP Server"
 status: CURRENT
-version: 0.10.3
-last_updated: 2026-02-15
+version: 0.30.0
+last_updated: 2026-11-23
 category: service
-port: 4000
 technology: Elixir
 ---
 
 # AllSource MCP Server
 
-> Turn your event store into an AI-queryable knowledge base. 61 tools for natural language event exploration, time-travel analysis, and real-time insights — all via Model Context Protocol.
+> Turn your event store into an AI-queryable knowledge base. 73 tools for natural language event exploration, time-travel analysis, and real-time insights — all via Model Context Protocol.
 
 [![CI](https://github.com/all-source-os/all-source/actions/workflows/ci.yml/badge.svg)](https://github.com/all-source-os/all-source/actions/workflows/ci.yml)
 [![Elixir](https://img.shields.io/badge/elixir-1.17%2B-purple.svg)](https://elixir-lang.org/)
-[![Tools](https://img.shields.io/badge/MCP%20tools-61-orange.svg)]()
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+[![Tools](https://img.shields.io/badge/MCP%20tools-73-orange.svg)]()
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../../LICENSE)
 
-**Current Version**: v0.10.3
+**Current Version**: v0.30.0
 
 ## What Can It Do?
 
@@ -84,7 +83,7 @@ Or with a compiled release:
 }
 ```
 
-## 61 Tools Across 11 Categories
+## 73 Tools Across 11 Categories
 
 Tools follow a guided workflow from discovery to deep analysis. Each phase builds on the previous one.
 
@@ -331,7 +330,7 @@ Tools are gated by configuration to prevent unintended modifications:
 │      MCP Server (Elixir/OTP)              │
 │                                            │
 │  • JSON-RPC Handler (pattern matching)    │
-│  • Tool Router (61 tools)                 │
+│  • Tool Router (73 tools)                 │
 │  • Session Manager (multi-turn context)   │
 │  • TOON Formatter (token optimization)    │
 │  • OTP Supervision (fault tolerance)      │
@@ -465,13 +464,13 @@ logs — and check that no library you added writes to stdout.
 
 ## License
 
-[MIT](../../LICENSE)
+[Apache-2.0](../../LICENSE)
 
 ---
 
 <div align="center">
 
-**AllSource MCP Server** — 61 AI-native tools for your event store
+**AllSource MCP Server** — 73 AI-native tools for your event store
 
 Query, analyze, and manage temporal data through natural language
 

@@ -53,26 +53,3 @@ A second process reads the persisted history and reconstructs the same eight
 units. Stop replay after event two and stock is seven. This example uses a
 graceful restart and an application-owned projection; it is not a crash test.”
 
-## Developer discussion draft
-
-An event-store example should let readers discard derived state and rebuild it.
-This AllSource Rust example appends three inventory events, folds them into a
-stock balance, exits, then queries and replays them in a second process.
-
-The checks cover event count, application sequence, final stock and historical
-stock. Scope is deliberately small: graceful restart, one writer, local storage.
-Runnable source: `apps/core/examples/event_store_restart_proof.rs`.
-
-Which recovery case would make this useful for your workload?
-
-Before publication: add the actual source URL at the pushed commit; disclose
-the publisher's AllSource affiliation; check community rules and approve the
-exact destination. A recording script is not a recorded video.
-
-## Acquisition experiment
-
-Change: replace a generic product pitch with this reproducible proof.
-Observe: qualified developer runs proof, identifies a real workload, completes
-its restart/history circuit, and later meets existing hosted payment/renewal
-gate. Repository views and successful synthetic runs are diagnostics only.
-Publication, developer participation and commercial results remain unverified.

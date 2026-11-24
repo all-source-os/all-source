@@ -26,8 +26,8 @@ Set the `CORE_WS_URL` environment variable pointing to your Core instance:
 # Docker Compose / Local
 export CORE_WS_URL=ws://allsource-core:3900
 
-# Kubernetes (port differs)
-export CORE_WS_URL=ws://allsource-core:3901
+# Kubernetes
+export CORE_WS_URL=ws://allsource-core:3900
 ```
 
 ---
@@ -45,10 +45,9 @@ export CORE_WS_URL=ws://allsource-core:3901
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CORE_WS_ENABLED` | `true` | Enable/disable WebSocket client |
-| `CORE_WS_MAX_RECONNECT_ATTEMPTS` | `10` | Max reconnection attempts before degraded mode |
-| `CORE_WS_INITIAL_BACKOFF_MS` | `1000` | Initial reconnection backoff (ms) |
-| `CORE_WS_MAX_BACKOFF_MS` | `30000` | Maximum backoff between retries (ms) |
 | `CORE_API_KEY` | - | API key for authentication header |
+
+Reconnect attempts and backoff are set in application config, not environment variables.
 
 ---
 
@@ -68,11 +67,9 @@ services:
     environment:
       CORE_WS_URL: ws://core:3900          # Use service name
       CORE_WS_ENABLED: "true"
-      DATABASE_URL: ecto://user:pass@postgres/allsource
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
     depends_on:
       - core
-      - postgres
 ```
 
 ### Docker Run
@@ -88,7 +85,6 @@ docker run -d --name allsource-query-service \
   -p 3902:3902 \
   -e CORE_WS_URL=ws://allsource-core:3900 \
   -e CORE_WS_ENABLED=true \
-  -e DATABASE_URL=ecto://user:pass@postgres/allsource \
   -e SECRET_KEY_BASE=$(openssl rand -hex 64) \
   --link allsource-core \
   ghcr.io/allsource/allsource-query-service:latest
@@ -109,11 +105,9 @@ spec:
           image: ghcr.io/allsource/allsource-query-service:latest
           env:
             - name: CORE_WS_URL
-              value: "ws://allsource-core:3901"  # Note: port 3901 in K8s
+              value: "ws://allsource-core:3900"
             - name: CORE_WS_ENABLED
               value: "true"
-            - name: CORE_WS_MAX_RECONNECT_ATTEMPTS
-              value: "15"  # More retries in K8s
 ```
 
 ### Helm
@@ -124,7 +118,7 @@ The Helm chart auto-configures WebSocket from values:
 # values.yaml
 core:
   service:
-    wsPort: 3901
+    wsPort: 3900
 
 queryService:
   config:
@@ -184,18 +178,18 @@ When connected, events are broadcast to these Phoenix PubSub topics:
 
 | Topic | Description |
 |-------|-------------|
-| `events:all` | All events from Core |
-| `events:{entity_id}` | Events for a specific entity |
-| `events:type:{event_type}` | Events of a specific type |
+| `events:{tenant}:all` | All events from Core for a tenant |
+| `events:{tenant}:{entity_id}` | Events for a specific entity of a tenant |
+| `events:{tenant}:type:{event_type}` | Events of a specific type for a tenant |
 
 ### Subscribing in Elixir
 
 ```elixir
-# Subscribe to all events
-Phoenix.PubSub.subscribe(QueryServiceEx.PubSub, "events:all")
+# Subscribe to all events for a tenant
+Phoenix.PubSub.subscribe(QueryServiceEx.PubSub, "events:tenant-abc:all")
 
-# Subscribe to specific entity
-Phoenix.PubSub.subscribe(QueryServiceEx.PubSub, "events:user-123")
+# Subscribe to a specific entity of a tenant
+Phoenix.PubSub.subscribe(QueryServiceEx.PubSub, "events:tenant-abc:user-123")
 
 # Handle incoming events
 def handle_info({:event, event}, socket) do
@@ -257,9 +251,9 @@ docker restart allsource-query-service
 | Environment | HTTP Port | WebSocket Port |
 |-------------|-----------|----------------|
 | Docker Compose | 3900 | 3900 |
-| Kubernetes | 3900 | 3901 |
+| Kubernetes | 3900 | 3900 |
 
-Kubernetes separates ports for better service routing. Check your deployment target.
+Core serves WebSocket on its HTTP port in every environment.
 
 ### Protocol mismatch
 
@@ -293,9 +287,8 @@ Response includes:
 {
   "status": "healthy",
   "components": {
-    "database": "connected",
-    "core_websocket": "connected",
-    "core_http": "connected"
+    "backend": "connected",
+    "websocket": "connected"
   }
 }
 ```
@@ -305,9 +298,8 @@ If WebSocket is disconnected:
 {
   "status": "degraded",
   "components": {
-    "database": "connected",
-    "core_websocket": "disconnected",
-    "core_http": "connected"
+    "backend": "connected",
+    "websocket": "disconnected"
   }
 }
 ```

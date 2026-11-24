@@ -1,6 +1,6 @@
 # ADR-014: Facade Decomposition into Sub-API Modules
 
-**Status:** Accepted
+**Status:** Accepted, not implemented
 **Date:** 2026-03-20
 **Deciders:** Architecture Review
 
@@ -22,7 +22,7 @@ The `Prime` struct itself is well-designed — it holds `Arc` references to proj
 
 ## Decision
 
-Split the facade into sub-API modules using the borrowed sub-API pattern:
+Split the facade into sub-API modules using the borrowed sub-API pattern. The tree below is the target layout and is not implemented: `prime/` holds one `facade.rs` (166.4K), and no `graph()`, `vectors()` or `temporal()` accessors exist.
 
 ```
 prime/

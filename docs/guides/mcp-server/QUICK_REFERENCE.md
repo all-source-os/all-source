@@ -1,7 +1,7 @@
 ---
 title: "AllSource MCP Tools - Quick Reference Card"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-23
 category: guide
 ---
 
@@ -9,11 +9,13 @@ category: guide
 
 > Print this and keep it handy during your demo!
 >
-> **Lightweight alternative:** For local debugging without running servers, see [`allsource-mcp`](../ALLSOURCE_MCP.md) — `cargo install allsource-mcp`, 8 read-only tools, reads data files directly.
+> **Lightweight alternative:** For local debugging without running servers, see [`allsource-mcp`](../ALLSOURCE_MCP.md) — `cargo install allsource-mcp`, 19 read-only tools, reads data files directly.
 
 ---
 
-## 🛠️ The 11 MCP Tools
+## 🛠️ 11 Featured MCP Tools
+
+This card covers 11 of the tools the Elixir MCP server exposes. The full list is in [`apps/mcp-server-elixir/README.md`](../../../apps/mcp-server-elixir/README.md).
 
 ### 1️⃣ `query_events` - Basic Event Query
 **What:** Get events with filters

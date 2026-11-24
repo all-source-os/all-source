@@ -6,9 +6,9 @@ Typed Rust client for the [AllSource](https://github.com/all-source-os/all-sourc
 
 ```toml
 [dependencies]
-allsource = "0.29"
+allsource = "0.30"
 # With registered client keys (ES256 assertions):
-# allsource = { version = "0.29", features = ["es256-assertion"] }
+# allsource = { version = "0.30", features = ["es256-assertion"] }
 ```
 
 ## Which client do I want?
@@ -299,7 +299,7 @@ See the runnable [`examples/asset_projection.rs`](examples/asset_projection.rs) 
 To build without WebSocket support (smaller dep tree):
 
 ```toml
-allsource = { version = "0.29", default-features = false, features = ["rustls"] }
+allsource = { version = "0.30", default-features = false, features = ["rustls"] }
 ```
 
 For a deeper guide on projection design, operational concerns, and migration from polling, see [`docs/use-cases/custom-projections.md`](../../docs/use-cases/custom-projections.md).

@@ -1,7 +1,7 @@
 ---
 title: "Troubleshooting Guide"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-24
 category: guide
 ---
 
@@ -46,7 +46,7 @@ lsof -i :3900
 
 # Check Rust version
 rustc --version
-# Expected: 1.70.0 or higher
+# Expected: 1.92 or higher
 
 # Verify dependencies
 cd apps/core
@@ -77,7 +77,7 @@ cargo build --release 2>&1 | head -50
 rustup update stable
 rustup default stable
 
-# Verify version meets requirement (1.70.0+)
+# Verify version meets requirement (1.92+)
 rustc --version
 ```
 
@@ -349,39 +349,43 @@ Operator-side detail: [CLIENT_KEY_ROTATION.md](../runbooks/CLIENT_KEY_ROTATION.m
 ### RBAC Permission Denied
 
 **Symptoms:**
-- "permission denied" for valid users
-- Roles not being applied correctly
-- Admin operations failing
+- `403` with `{"error":"forbidden","message":"permission denied: <Permission> required"}`
+- Admin-only routes return `403` for a user who should be an admin
+
+**Roles** (Control Plane `apps/control-plane/internal/domain/entities/roles.go`; Core `apps/core/src/infrastructure/security/auth.rs`):
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | All |
+| `developer` | Read, Write, Metrics, ManageSchemas, ManagePipelines |
+| `readonly` | Read, Metrics |
+| `serviceaccount` | Read, Write |
+
+Control Plane permission mapping is `RoleHasPermission` in `apps/control-plane/auth.go`. It is static code: there is no policy cache to refresh.
 
 **Diagnostic Commands:**
 ```bash
-# Check user roles
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3901/api/v1/users/me | jq '.roles'
+# Read the role claim from a JWT access token (not an ask_ API key)
+echo "$TOKEN" | jq -R 'split(".")[1] | @base64d | fromjson | {role, tenant_id}'
 
-# List available permissions
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3901/api/v1/rbac/permissions | jq
+# Admin-only: list users (requires role admin)
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:3901/api/v1/users | jq
 ```
+
+The 403 `message` names the permission the route requires. Compare it with the table above.
 
 **Solutions:**
 
-**Missing role assignment:**
+**Team role:** `PUT /api/v1/teams/members/{id}` sets a team member's team role. The body takes `"admin"` or `"member"` (`apps/control-plane/teams.go`). This is not the system role in the table above.
 ```bash
-# Assign admin role to user
-curl -X POST http://localhost:3901/api/v1/users/{user_id}/roles \
+curl -X PUT http://localhost:3901/api/v1/teams/members/{member_id} \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"role": "admin"}'
 ```
 
-**RBAC policy cache stale:**
-```bash
-# Restart Control Plane to reload policies
-# Or trigger policy refresh via API
-curl -X POST http://localhost:3901/api/v1/rbac/refresh \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
-```
+**Stale token:** the Control Plane reads the role from the JWT claims on each request (`apps/control-plane/auth.go`). A token issued before a role change keeps its old role. Sign in again to get a new token.
 
 ---
 
@@ -484,7 +488,7 @@ go run main.go
 **Diagnostic Commands:**
 ```bash
 # Check health endpoint for WebSocket status
-curl http://localhost:3902/api/health | jq '.components.core_websocket'
+curl http://localhost:3902/api/health | jq '.components.websocket'
 
 # Verify CORE_WS_URL is set
 docker exec allsource-query-service printenv | grep CORE_WS
@@ -527,8 +531,8 @@ CORE_WS_URL=wss://allsource-core.example.com:443
 # Docker Compose uses port 3900
 CORE_WS_URL=ws://core:3900
 
-# Kubernetes uses port 3901
-CORE_WS_URL=ws://allsource-core:3901
+# Kubernetes uses the same port (Core serves WebSocket on its HTTP port)
+CORE_WS_URL=ws://allsource-core:3900
 ```
 
 **Core service unreachable:**
@@ -681,7 +685,7 @@ lsof -i :3902
 curl -v http://localhost:3902/health
 
 # Check WebSocket endpoint
-websocat ws://localhost:3902/socket/websocket
+websocat ws://localhost:3902/ws/websocket
 ```
 
 **Solutions:**
@@ -705,7 +709,7 @@ plug Corsica,
 **WebSocket path mismatch:**
 ```javascript
 // Frontend should connect to correct path
-const socket = new Phoenix.Socket("/socket", {
+const socket = new Phoenix.Socket("/ws", {
   params: {token: authToken}
 });
 ```
@@ -968,7 +972,7 @@ pkill -f "allsource\|allsource"
 ALLSOURCE_PORT=3910 cargo run --release
 
 # Control Plane
-CONTROL_PLANE_PORT=3911 go run main.go
+PORT=3911 go run main.go
 
 # Query Service
 PORT=3912 mix phx.server
@@ -1176,7 +1180,7 @@ tar -czf allsource-diag.tar.gz /tmp/allsource-diag
 - [Quick Start Guide](./QUICK_START.md) - Initial setup
 - [Quality Gates](../current/QUALITY_GATES.md) - CI/CD troubleshooting
 - [Claude Desktop Setup](./mcp-server/CLAUDE_DESKTOP_SETUP.md) - MCP configuration
-- [Architecture Overview](../current/CLEAN_ARCHITECTURE.md) - System design
+- [Architecture Overview](../archive/2026-11-23/current/CLEAN_ARCHITECTURE.md) - System design
 
 ### Reporting Issues
 

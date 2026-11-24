@@ -2,9 +2,8 @@
 
 Manual setup steps to take chronis from embedded mode to syncing against a hosted AllSource Core, with x402 micropayments and agent registration enabled.
 
-**Branch:** `feat/agent-auth-x402` (x402 + agent endpoints live here; not yet on `main`)
-**Target versions:** Core v0.17.2, Query Service v0.17.2, Control Plane latest on branch
-**Estimated time:** ~2 hours end-to-end, assuming Fly/Coinbase accounts already exist
+**Branch:** `main` (x402 + agent registration are merged)
+**Target versions:** Core 0.30.0 (tag `v0.30.0`), Control Plane from `main`
 
 ---
 
@@ -13,7 +12,7 @@ Manual setup steps to take chronis from embedded mode to syncing against a hoste
 1. **Accounts**
    - Fly.io account with payment method attached (`fly auth login`)
    - Coinbase Developer Platform (CDP) account → create a **server wallet** on Base mainnet (or Base Sepolia for staging). Save the wallet address and API key.
-   - GitHub access to `all-source-os/chronos-monorepo`
+   - GitHub access to `all-source-os/all-source`
 
 2. **Local tooling**
    - `flyctl` installed and authenticated
@@ -23,7 +22,7 @@ Manual setup steps to take chronis from embedded mode to syncing against a hoste
 3. **Branch check out**
    ```bash
    git fetch origin
-   git checkout feat/agent-auth-x402
+   git checkout main
    git pull
    ```
    Confirm these paths exist:
@@ -33,16 +32,16 @@ Manual setup steps to take chronis from embedded mode to syncing against a hoste
 
 ---
 
-## Phase 1 — Core is deployed (verify + optionally redeploy to v0.18.2)
+## Phase 1 — Core is deployed (verify version, redeploy to v0.30.0 if it differs)
 
-Hosted app `allsource-core` is already running on Fly (region `iad`) with volume `allsource_data`. WAL + Parquet survive deploys. The current deployment is from Mar 29 2026 and is **stale vs v0.18.2** — redeploy before launch for version parity.
+Hosted app `allsource-core` runs on Fly (region `iad`) with volume `allsource_data`. WAL + Parquet survive deploys. The running image must match v0.30.0 before launch.
 
 ```bash
 # Verify current health
 fly status -a allsource-core
 curl https://allsource-core.fly.dev/health
 
-# Redeploy to v0.18.2 (from monorepo root)
+# Redeploy to v0.30.0 (from repo root)
 fly deploy --config apps/core/fly.toml --dockerfile apps/core/Dockerfile
 ```
 
@@ -52,9 +51,9 @@ fly deploy --config apps/core/fly.toml --dockerfile apps/core/Dockerfile
 
 ---
 
-## Phase 2 — Query Service is deployed (verify + optionally redeploy)
+## Phase 2 — Query Service is deployed (verify version, redeploy if it differs)
 
-Hosted app is `allsource-query` (not `allsource-query-service`). Running on Fly iad, 2/2 health checks green. Last deploy Mar 26 — **stale vs v0.18.2**.
+Hosted app is `allsource-query` (not `allsource-query-service`). Runs on Fly iad. Confirm the running version matches v0.30.0 before launch.
 
 ```bash
 fly status -a allsource-query
@@ -64,7 +63,6 @@ cd apps/query-service && fly deploy
 **Required env vars** (set via `fly secrets set -a allsource-query`):
 - `CORE_URL=http://allsource-core.internal:3900` (use Fly internal DNS, not public)
 - `CORE_WS_URL=ws://allsource-core.internal:3900/api/v1/events/stream`
-- `DATABASE_URL=postgres://...` (Postgres for users/tenants/API keys — **not** events)
 - `SECRET_KEY_BASE=<phx.gen.secret output>`
 
 **Verification:** `/health` returns 200; a test `GET /api/v1/events/query` with a valid API key returns `{"events":[],"count":0}` on an empty tenant.
@@ -210,7 +208,7 @@ cn sync
 
 # Sanity check
 cn list
-cn add "verify cloud sync works"
+cn task create "verify cloud sync works"
 cn list   # new task should appear
 ```
 
@@ -225,10 +223,10 @@ Add `.chronis/config.toml` to `.gitignore` — it contains a secret.
 1. **Core health:** `curl https://allsource-core.fly.dev/health` → 200
 2. **Query Service health:** `curl https://<qs>.fly.dev/health` → 200
 3. **Control Plane x402 discovery:** `curl $CP/x402/routes` → priced routes listed
-4. **Free-tier request:** chronis `cn add` + `cn sync` succeeds without payment
+4. **Free-tier request:** chronis `cn task create` + `cn sync` succeeds without payment
 5. **402 path:** hit `/api/v1/events/query` on Control Plane without auth → 402 with payment instructions
 6. **Agent auto-pay (staging):** point an agent at Base Sepolia, blow past the free tier, verify `/agents/me/payments` shows a settled payment
-7. **Dashboard:** open the Vercel web dashboard, sign in, confirm events from your tenant are visible (tenant isolation working — Gap 1 fix)
+7. **Dashboard:** open the web dashboard (Fly app `allsource-web`), sign in, confirm events from your tenant are visible (tenant isolation working — Gap 1 fix)
 
 ---
 
@@ -247,12 +245,10 @@ These are **not** blockers for a controlled team launch, but you should know the
 
 ## Operational checklist after launch
 
-- [ ] Set Fly autoscale min=1 on Core (cold starts corrupt chronis sync UX)
+- [x] Fly autoscale min=1 on Core (`min_machines_running = 1` in `apps/core/fly.toml:101`; cold starts corrupt chronis sync UX)
 - [ ] Configure Fly alerts on Core `/health` failures
-- [ ] Back up the Postgres used by Query Service (users/tenants/keys — losing this is painful)
 - [ ] Rotate `ALLSOURCE_BOOTSTRAP_API_KEY` and store in 1Password
 - [ ] Document the Control Plane app name + region in `docs/current/` so the next operator isn't guessing
-- [ ] Open PRs to land `feat/agent-auth-x402` → `main` once smoke tests pass in production
 
 ---
 

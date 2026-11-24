@@ -1,7 +1,7 @@
 ---
 title: "Quality Gates Setup Complete"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-23
 category: guide
 ---
 
@@ -21,7 +21,7 @@ This document summarizes the quality gates setup for AllSource Core.
 ### 1. Configuration Files
 
 **`.clippy.toml`** - Clippy linter configuration
-- MSRV: Rust 1.70.0
+- MSRV: Rust 1.92
 - Enforces: No wildcard imports
 - Located: `apps/core/.clippy.toml`
 
@@ -55,7 +55,7 @@ make clean        # Clean artifacts
 
 ### 3. GitHub Actions CI Workflow
 
-**File**: `.github/workflows/rust-quality.yml`
+**Job**: `rust-quality` in `.github/workflows/ci.yml`
 
 **Triggers**:
 - Push to `main` or `develop` branches
@@ -71,7 +71,7 @@ make clean        # Clean artifacts
    - Build verification (release mode)
 
 2. **msrv-check** - Minimum Supported Rust Version
-   - Verifies compilation with Rust 1.70.0
+   - Verifies compilation with Rust 1.92
 
 ### 4. Comprehensive Documentation
 
@@ -163,7 +163,7 @@ make ci  # Full verification
 ### ✅ Build Verification
 - Release build must succeed
 - All features must compile
-- MSRV check (Rust 1.70.0)
+- MSRV check (Rust 1.92)
 
 ---
 
@@ -171,8 +171,8 @@ make ci  # Full verification
 
 ### New Files Created
 1. `apps/core/Makefile` - Development commands
-2. `apps/core/QUALITY_GATES.md` - Complete documentation
-3. `.github/workflows/rust-quality.yml` - CI workflow
+2. `docs/current/QUALITY_GATES.md` - Complete documentation
+3. `.github/workflows/ci.yml` (job `rust-quality`) - CI workflow
 4. `QUALITY_GATES_SETUP.md` - This file
 
 ### Files Modified
@@ -180,7 +180,7 @@ make ci  # Full verification
 
 ### Existing Configuration Files (Used)
 1. `apps/core/.clippy.toml` - Already existed
-2. `apps/core/rustfmt.toml` - Already existed  
+2. `rustfmt.toml` (repo root) - Already existed  
 3. `apps/core/cargo-sort.toml` - Already existed
 
 ---
@@ -283,14 +283,14 @@ make check
 **To update MSRV**:
 ```bash
 # 1. Edit .clippy.toml
-# msrv = "1.75.0"
+# msrv = "1.92"
 
-# 2. Edit .github/workflows/rust-quality.yml
-# uses: dtolnay/rust-toolchain@1.75.0
+# 2. Edit the rust-quality job in .github/workflows/ci.yml
+# uses: dtolnay/rust-toolchain@1.92
 
 # 3. Test
-rustup install 1.75.0
-rustup default 1.75.0
+rustup install 1.92
+rustup default 1.92
 make check
 ```
 
@@ -356,7 +356,6 @@ make check
 - [QUALITY_GATES.md](../current/QUALITY_GATES.md) - Complete quality gates guide
 - [CRITICAL_BUGS_FIXED.md](../current/CRITICAL_BUGS_FIXED.md) - Recent bug fixes
 - [Core README](../../apps/core/README.md) - Core service documentation
-- [Contributing Guide](CONTRIBUTING.md) - How to contribute
 
 ---
 

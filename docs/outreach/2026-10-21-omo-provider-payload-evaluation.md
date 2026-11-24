@@ -6,7 +6,7 @@ Date: 2026-10-21. Status: two counterbalanced matched pairs completed; outreach 
 
 **Provider-captured rerun: skill text on passed 4/6 post-compaction workflows; off passed 0/6. All four baselines passed; reload stayed blocked.** Full skill body reached the first provider-bound continuation request at **4/4** fresh-recovery skill-on checkpoints, **0/2** cooldown skill-on checkpoints and **0/6** skill-off checkpoints. The exact current query appeared anywhere in those request bodies at **4/4**, **0/2** and **0/6** respectively.
 
-All **73** captured HTTPS request bodies correspond to native model steps and received HTTP 200. Coverage includes all checkpoint calls, later calls after tool results, and all 12 compaction calls. Capture verifies actual **provider-bound content** beyond the [previous storage-readiness evidence](./2026-10-21-omo-readiness-barrier-evaluation.md). Provider-internal prompt construction and model attention remain unobserved.
+All **73** captured HTTPS request bodies correspond to native model steps and received HTTP 200. Coverage includes all checkpoint calls, later calls after tool results, and all 12 compaction calls. Capture verifies actual **provider-bound content** beyond the [previous storage-readiness evidence](../archive/2026-11-23/outreach/2026-10-21-omo-readiness-barrier-evaluation.md). Provider-internal prompt construction and model attention remain unobserved.
 
 Disposition remains **native regression contribution; AllSource design-partner demand unqualified**. These traces support the existing owner's native work and establish no requirement for another service.
 

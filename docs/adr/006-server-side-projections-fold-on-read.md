@@ -1,6 +1,6 @@
 # ADR-006: Server-Side Projections with Fold-on-Read
 
-**Status:** Accepted
+**Status:** Accepted; partially superseded by [ADR-021](021-views-folded-by-query-service.md) Decision 7 (route retired)
 **Date:** 2026-02-17
 **Release:** v0.10.5
 
@@ -15,7 +15,7 @@ Clients querying AllSource needed to fold raw events into projected state client
 
 Add server-side projections to the Query Service with two modes:
 
-### 1. Fold-on-Read (`POST /api/query/projected`)
+### 1. Fold-on-Read (`POST /api/query/projected`, removed from Query Service)
 - Snapshot-aware: checks Core for existing snapshots before folding
 - When a snapshot exists, uses it as initial accumulator and only folds events after the snapshot timestamp
 - Reduces fold cost from N events to a delta

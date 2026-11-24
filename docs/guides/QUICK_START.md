@@ -1,7 +1,7 @@
 ---
 title: "AllSource - Quick Start Guide"
 status: CURRENT
-last_updated: 2026-02-02
+last_updated: 2026-11-23
 category: guide
 ---
 
@@ -12,7 +12,7 @@ category: guide
 The fastest way to get started is adding `allsource-core` to your Rust project:
 
 ```bash
-cargo add allsource-core@0.2
+cargo add allsource-core@0.30
 ```
 
 Or add to your `Cargo.toml` (pin to minor version for stability):
@@ -21,10 +21,10 @@ Or add to your `Cargo.toml` (pin to minor version for stability):
 [dependencies]
 # allsource-core: High-performance event store
 # Pin to minor version - allows patch updates only
-allsource-core = "0.2"
+allsource-core = "0.30"
 ```
 
-> **Version Pinning**: We recommend pinning to `"0.2"` (minor version) rather than `"0.2.0"` (exact) or `"0"` (major only). This allows automatic patch updates for bug fixes while avoiding breaking changes. See our [Dependency Management Guide](https://github.com/all-source-os/all-frame/blob/main/docs/DEPENDENCY_MANAGEMENT.md) for best practices.
+> **Version Pinning**: We recommend pinning to `"0.30"` (minor version) rather than `"0.30.0"` (exact) or `"0"` (major only). This allows automatic patch updates for bug fixes while avoiding breaking changes. See our [Dependency Management Guide](https://github.com/all-source-os/all-frame/blob/main/docs/DEPENDENCY_MANAGEMENT.md) for best practices.
 
 **Links**: [crates.io](https://crates.io/crates/allsource-core) · [docs.rs](https://docs.rs/allsource-core) · [GitHub](https://github.com/all-source-os/allsource-monorepo)
 
@@ -51,21 +51,21 @@ cd apps/control-plane && go mod download && cd ../..
 ```bash
 cd apps/core
 cargo run --release
-# Wait for: "🚀 AllSource Core listening on 0.0.0.0:3900"
+# Wait for: "🚦 Listening on 0.0.0.0:3900; answering not_ready until the bootstrap finishes"
 ```
 
 **Terminal 2 - Control Plane:**
 ```bash
 cd apps/control-plane
 go run main.go
-# Wait for: "🚀 Control Plane listening on port 3901"
+# Wait for: "Control Plane v0.30.0 listening on port 3901"
 ```
 
 **Terminal 3 - Web UI:**
 ```bash
 cd apps/web
 bun dev
-# Wait for: "▲ Next.js 14.1.0 - Local: http://localhost:3000"
+# Wait for: "▲ Next.js 16.3.5 - Local: http://localhost:3000"
 ```
 
 ### Step 3: Open Dashboard
@@ -148,8 +148,8 @@ make dev
 # Clean all builds
 make clean
 
-# Run demo script (after services are running)
-./demo-script.sh
+# Start the demo web dashboard
+make demo
 
 # Format code
 bun format
@@ -171,9 +171,8 @@ bun format
 ## 📚 Next Steps
 
 1. **Read the full README:** `README.md`
-2. **Understand the architecture:** `ARCHITECTURE.md`
-3. **Prepare for demo:** `DEMO.md`
-4. **Try the demo script:** `./demo-script.sh`
+2. **Understand the architecture:** `docs/current/`
+3. **Try the demo:** `make demo`
 
 ---
 
@@ -181,8 +180,7 @@ bun format
 
 Check these files:
 - `README.md` - Full documentation
-- `DEMO.md` - Presentation guide
-- `ARCHITECTURE.md` - Technical deep-dive
+- `docs/current/` - Current architecture docs
 
 Or create an issue describing your problem!
 

@@ -1,7 +1,7 @@
 # Installing mammoth across agents
 
 mammoth's core capability is one MCP server — `allsource-prime`. Any MCP-capable
-agent gets all 13 `prime_*` memory tools natively by adding one server stanza. No
+agent gets all 23 `prime_*` memory tools natively by adding one server stanza. No
 per-agent shim for the core capability.
 
 ## Prerequisite (all agents)
@@ -44,7 +44,7 @@ to cross-machine/team memory, add `"--sync-to", "<core-url>", "--api-key", "<key
 | **Windsurf** | `~/.codeium/windsurf/mcp_config.json` | Native MCP. Uses the same `mcpServers` shape. |
 | **Codex** | Codex MCP config (`config.toml` `[mcp_servers]` / JSON per your version) | Verify the tool-call surface on first run before relying on it. |
 | **Gemini CLI** | `~/.gemini/settings.json` → `mcpServers` | Native MCP. Verify the `prime://auto-context` resource is honored. |
-| **Any other MCP agent** | Its `mcpServers` config | One stanza, all 13 tools. |
+| **Any other MCP agent** | Its `mcpServers` config | One stanza, all 23 `prime_*` tools (plus `inbox_*` and `hound_*`). |
 | **Agents without MCP** | Use `chronis` (`cn`) for episodic/task memory at the shell level | Only place a per-agent path is needed; keep it minimal. |
 
 ### Verification (any agent)

@@ -102,9 +102,9 @@ Reality: graph edges only connect sequential chunks within the same scenario (th
 
 **Expected impact:** 5-10% recall improvement from better semantic matching alone. The gap between our chunk embeddings and short answer embeddings would shrink.
 
-**Cost:** Larger model = slower ingestion (10-50ms per embedding instead of 3ms). Full 500-question run would take 2-4 hours instead of 30 minutes.
+**Cost:** Larger model means slower ingestion per embedding. Not measured for these models.
 
-**How to implement:** Change `EmbeddingModel::AllMiniLML6V2` to the larger model in `Embedder::new()`. No other code changes needed — fastembed supports multiple models.
+**How to implement:** Add a match arm for the new model in `Embedder::with_model()` (`tooling/recall-bench/src/evaluate.rs:32`). `Embedder::new()` calls `with_model("mini")`, and `--model` defaults to `mini` (`tooling/recall-bench/src/main.rs:66`). `--model large` already selects `BGELargeENV15` (`evaluate.rs:38-40`). No other code changes needed — fastembed supports multiple models.
 
 #### B. Entity-Based Cross-Session Edges
 
@@ -194,19 +194,19 @@ This is how LongMemEval is designed to be evaluated — the paper uses GPT-4o as
 ```bash
 cd tooling/recall-bench
 
-# Quick test (10 questions, ~1 minute)
+# Quick test (10 questions)
 cargo run --release -- --dataset longmemeval --limit 10 --data-dir .recall-bench-data
 
-# Medium test (100 questions, ~8 minutes)
+# Medium test (100 questions)
 cargo run --release -- --dataset longmemeval --limit 100 --data-dir .recall-bench-data
 
-# Full suite (500 questions, ~30 minutes)
+# Full suite (500 questions)
 cargo run --release -- --dataset longmemeval --data-dir .recall-bench-data
 
 # Vector-only baseline
 cargo run --release -- --dataset longmemeval --baseline vector-only --data-dir .recall-bench-data
 
-# Cross-reference benchmark (custom, ~30 seconds)
+# Cross-reference benchmark (custom dataset)
 cargo run --release -- --dataset cross-ref
 ```
 
@@ -214,7 +214,9 @@ Dataset auto-downloads from HuggingFace on first run (~15MB).
 
 ---
 
-## Current Best Numbers (v0.17.0)
+## Best Numbers (v0.17.0, run 2026-03-23)
+
+Measured on v0.17.0 on 2026-03-23 and not re-run. The current Core/Prime version is 0.30.0.
 
 | Type | Count | Recall | Pass@0.75 |
 |------|-------|--------|-----------|
@@ -259,7 +261,7 @@ Switched from MiniLM-L6-v2 (384-dim, 30MB) to BGE-Base-EN-v1.5 (768-dim, ~100MB)
 
 **+10% recall, pass rate more than doubled.** The biggest single improvement since sentence chunking. Higher-dimensional embeddings produce better semantic matching between short answer phrases and sentence chunks.
 
-**Trade-off:** ~3x slower embedding (10ms vs 3ms per text). Full 500-question run takes ~2 hours instead of ~30 minutes.
+**Trade-off:** ~3x slower embedding (10ms vs 3ms per text).
 
 **Usage:** `cargo run --release -- --dataset longmemeval --model base`
 

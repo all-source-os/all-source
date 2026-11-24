@@ -380,7 +380,7 @@ AllFrame can now:
 ## Related Documentation
 
 - [Tenant Architecture](TENANT_ARCHITECTURE.md) - Multi-tenancy design
-- [Architecture Optimization](ARCHITECTURE_OPTIMIZATION.md) - Overall architecture
+- [Architecture Optimization](../archive/2026-11-23/current/ARCHITECTURE_OPTIMIZATION.md) - Overall architecture
 - [Performance Guide](PERFORMANCE.md) - Performance characteristics
 
 ---

@@ -6,7 +6,7 @@ author: "all.source team"
 category: "product"
 ---
 
-> **Where this stands:** Prime Hound is the roadmap for Prime's next chapter, not a shipped feature. AllSource Prime — the durable graph, vector, and recall engine described below — runs today. Hound is the ingestion and developer-experience layer we're building on top of it. We're sharing the plan early because the shape is clear.
+> **Where this stands:** Phase 1 of Prime Hound, codebase ingest (`hound_ingest`), is implemented in the Prime MCP server (`apps/prime-mcp`). Phases 2 to 4 are planned. AllSource Prime — the durable graph, vector, and recall engine described below — runs today.
 
 A knowledge graph of your codebase is the right context to hand an AI assistant. It's cheaper than reading raw files, it's structured, and it answers "what connects the login form to the users table?" in one hop instead of a dozen greps. Tools like [Graphify](https://graphify.net) proved that demand convincingly.
 
@@ -36,7 +36,7 @@ Everything Hound adds over a generated file comes straight from Prime's architec
 
 We're building Hound the way the demand was proven: a free local wedge first, then the engine's advantages on top.
 
-- **Phase 1 — Hound Code.** Tree-sitter extraction of a repo into a local, embedded Prime graph. On-device, `$0`, private — parity with the local tools — but durable and syncable from day one.
+- **Phase 1 — Hound Code (implemented).** Tree-sitter extraction of a repo (Rust in phase 1) into a local, embedded Prime graph. On-device, `$0`, private — parity with the local tools — and durable; the graph syncs to an AllSource tenant when sync is enabled.
 - **Phase 2 — Semantic & multi-modal.** An LLM extraction pass for docs and other sources that emits *vectors*, turning Prime's hybrid retrieval into the visible edge over topology-only graphs.
 - **Phase 3 — Analytics, viz, impact.** Community detection, centrality, "god-node" surfacing, an interactive web viewer with no node ceiling, and PR-impact analysis from graph diffs.
 - **Phase 4 — Distribution & collaboration.** Skill installers for the major AI assistants, an incremental git hook, team-shared hosted graphs, and the usual exports (wiki, Obsidian, GraphML, Cypher, Mermaid).

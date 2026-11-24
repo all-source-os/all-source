@@ -1,6 +1,6 @@
 # Matched #7183 recovery/no-reload evidence
 
-[Report and current unsent draft](../../2026-10-20-omo-matched-no-reload-evaluation.md) contain findings and limits. results-summary.json recomputes native workflow scores and includes complete summaries and recovery hashes. match-manifest.json proves fixture/config matching and names the single treatment toggle. a1 is recovery off; b1 is recovery on.
+[Superseded report](../../../archive/2026-11-23/outreach/2026-10-20-omo-matched-no-reload-evaluation.md) contain findings and limits. results-summary.json recomputes native workflow scores and includes complete summaries and recovery hashes. match-manifest.json proves fixture/config matching and names the single treatment toggle. a1 is recovery off; b1 is recovery on.
 
 - shared-fixture.json: identical skill/query/receipt data used by both arms.
 - *-stage-*.json: native completed/error tool parts and actual model answers.

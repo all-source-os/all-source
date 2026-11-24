@@ -44,7 +44,7 @@
 │  │   Databases      │  │      Own         │  │   Event Stores   │ │
 │  ├──────────────────┤  ├──────────────────┤  ├──────────────────┤ │
 │  │                  │  │                  │  │                  │ │
-│  │  - Slow queries  │  │  - 6-12 months   │  │  - No AI support │ │
+│  │  - Slow queries  │  │  - Custom build  │  │  - No AI support │ │
 │  │  - No time-travel│  │  - Maintenance   │  │  - Single lang   │ │
 │  │  - Schema fights │  │  - Security debt │  │  - Complex ops   │ │
 │  │                  │  │                  │  │                  │ │
@@ -83,7 +83,7 @@
 │           ║                                   ║                    │
 │           ╚═══════════════════════════════════╝                    │
 │                                                                    │
-│         469K events/sec  |  11.9μs latency  |  27 MCP tools       │
+│         469K events/sec  |  11.9μs latency  |  73 MCP tools       │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -106,15 +106,11 @@
 │     │                                                        │    │
 │     │  Throughput                                            │    │
 │     │  ═══════════════════════════════════════════ 469K     │    │
-│     │  ══════════════════ 200K (Kafka)                       │    │
-│     │  ══════════ 100K (EventStoreDB)                        │    │
-│     │  ═════ 50K (Marten)                                    │    │
 │     │                                                        │    │
 │     └────────────────────────────────────────────────────────┘    │
 │                                                                    │
-│     Query Latency (p99):     11.9 μs  (8-40x faster)              │
-│     Container Footprint:     129 MB   (vs 500MB+ typical)         │
-│     Concurrent Writes:       7.98 ms  (8 threads)                 │
+│     Query Latency (p99):     11.9 μs                              │
+│     Ingestion:               469K events/sec (baseline)           │
 │                                                                    │
 │                     Built with Rust for speed                      │
 │                                                                    │
@@ -124,7 +120,7 @@
 **Speaker Notes:**
 - "These aren't marketing numbers - they're from our benchmark suite"
 - "Rust gives us zero-cost abstractions and memory safety"
-- "The small footprint means lower infrastructure costs"
+- "Rust keeps the per-event cost of the hot path low"
 
 ---
 
@@ -140,15 +136,15 @@
 │  │    Claude     │ ◄──────► │         AllSource MCP Server        │ │
 │  │    GPT-4      │  JSON    │                                   │ │
 │  │    Custom     │  RPC     │  ┌─────────────────────────────┐  │ │
-│  │    Agents     │          │  │     27 Native Tools         │  │ │
+│  │    Agents     │          │  │     73 Tool Definitions     │  │ │
 │  │               │          │  │                             │  │ │
 │  └───────────────┘          │  │  • query_events             │  │ │
 │                             │  │  • reconstruct_state        │  │ │
 │                             │  │  • find_patterns            │  │ │
 │                             │  │  • analyze_changes          │  │ │
-│                             │  │  • export/import            │  │ │
-│                             │  │  • semantic_search          │  │ │
-│                             │  │  • + 21 more...             │  │ │
+│                             │  │  • export_events            │  │ │
+│                             │  │  • semantic_search_events   │  │ │
+│                             │  │  • + more...                │  │ │
 │                             │  │                             │  │ │
 │                             │  └─────────────────────────────┘  │ │
 │                             └───────────────────────────────────┘ │
@@ -161,7 +157,7 @@
 **Speaker Notes:**
 - "MCP is the standard for connecting AI to tools - we're the first event store to support it"
 - "Your AI agents can query event history in natural language"
-- "50% token reduction with our TOON format"
+- "TOON output: about 50% fewer tokens than JSON for tabular data"
 
 ---
 
@@ -182,7 +178,7 @@
 │                     └──────────────────┘                          │
 │                                                                    │
 │                                                                    │
-│                    1. Spin up AllSource (30 sec)                    │
+│                    1. Spin up AllSource (docker compose up -d)      │
 │                    2. Ingest 10K events                           │
 │                    3. Query with REST API                         │
 │                    4. Ask Claude about the events                  │
@@ -219,13 +215,9 @@
 │  │   Rust     │  │  Elixir    │  │      Elixir        │           │
 │  │   Core     │  │  Query     │  │    MCP Server      │           │
 │  │            │  │  Service   │  │                    │           │
-│  │  469K/sec  │  │ Real-time  │  │    27 AI Tools     │           │
+│  │  469K/sec  │  │ Real-time  │  │  73 tool defs      │           │
 │  │  11.9μs    │  │ WebSocket  │  │    TOON format     │           │
 │  └────────────┘  └────────────┘  └────────────────────┘           │
-│                                                                    │
-│       15.7 MB       35.1 MB          35.1 MB                      │
-│                                                                    │
-│                   Total: 129 MB (cloud-optimized)                  │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -250,8 +242,8 @@
 │  │                 │  │                 │  │                 │   │
 │  │  Repository-    │  │  4 Roles        │  │  JSON-format    │   │
 │  │  level          │  │  7 Permissions  │  │  Every action   │   │
-│  │  isolation      │  │  Policy engine  │  │  PostgreSQL     │   │
-│  │                 │  │                 │  │  backed         │   │
+│  │  isolation      │  │  Policy engine  │  │  Auth & billing │   │
+│  │                 │  │                 │  │  events in Core │   │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
 │                                                                    │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
@@ -318,16 +310,8 @@
 │                   What Developers Are Saying                       │
 │                                                                    │
 │                                                                    │
-│   "The MCP integration changed how we build AI features.           │
-│    Our agents can finally understand our event history."           │
-│                                        - [Name], [Company]         │
-│                                                                    │
-│   ────────────────────────────────────────────────────────────    │
-│                                                                    │
-│   "We replaced Kafka + custom code with AllSource.                   │
-│    Half the infrastructure, 5x the performance."                   │
-│                                        - [Name], [Company]         │
-│                                                                    │
+│   [Customer quotes: add only quotes approved for use,              │
+│    with name and company.]                                         │
 │   ────────────────────────────────────────────────────────────    │
 │                                                                    │
 │                        [GitHub Stars Badge]                        │
@@ -351,28 +335,28 @@
 │                      Simple, Scalable Pricing                      │
 │                                                                    │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
-│  │    STARTER      │  │      PRO        │  │   ENTERPRISE    │   │
+│  │   SELF-HOST     │  │     HOSTED      │  │   ENTERPRISE    │   │
 │  │                 │  │                 │  │                 │   │
-│  │     FREE        │  │    $99/mo       │  │    Custom       │   │
+│  │     FREE        │  │  from £18.99    │  │    Custom       │   │
 │  │                 │  │                 │  │                 │   │
-│  │  100K events    │  │  10M events     │  │  Unlimited      │   │
-│  │  7-day retain   │  │  90-day retain  │  │  Custom retain  │   │
-│  │  1 tenant       │  │  5 tenants      │  │  Unlimited      │   │
-│  │  10 MCP tools   │  │  27 MCP tools   │  │  27 + custom    │   │
-│  │  Community      │  │  Email support  │  │  24/7 + SLA     │   │
+│  │  unlimited      │  │  500K-50M/mo    │  │  negotiated     │   │
+│  │  unlimited      │  │  3 to unlimited │  │  unlimited      │   │
+│  │  unlimited      │  │  unlimited      │  │  unlimited      │   │
+│  │  full (self)    │  │  read to r+w+ded│  │  dedicated MCP  │   │
+│  │  GitHub         │  │  email to Slack │  │  24/7 + SLA     │   │
 │  │                 │  │                 │  │                 │   │
-│  │  [Start Free]   │  │  [Try Pro]      │  │  [Contact Us]   │   │
+│  │  [Self-host]    │  │  [Start trial]  │  │  [Contact Us]   │   │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
 │                                                                    │
-│           All plans include: Full API, WebSocket, Dashboard        │
+│           Hosted trial: 14 days, 1,000 events, 1 GB outbound data        │
 │                                                                    │
-│                     Open Source: Self-host free forever            │
+│                     Community edition: Apache-2.0, self-hosted. Enterprise: BSL 1.1            │
 │                                                                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
 **Speaker Notes:**
-- "Start free, scale as you grow"
+- "Start with the 14-day trial, then pick a tier"
 - "Open source means no lock-in"
 - Be ready to discuss enterprise pricing flexibility
 
@@ -383,12 +367,12 @@
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │                                                                    │
-│                   Get Started in 5 Minutes                         │
+│                   Get Started                                      │
 │                                                                    │
 │                                                                    │
 │     1. Clone & Run                                                 │
 │        ┌─────────────────────────────────────────────────────┐    │
-│        │  $ git clone https://github.com/[org]/allsource       │    │
+│        │  $ git clone https://github.com/all-source-os/all-source.git       │    │
 │        │  $ docker compose up -d                              │    │
 │        └─────────────────────────────────────────────────────┘    │
 │                                                                    │
@@ -496,59 +480,26 @@
 ```
 Performance Details:
 
-Throughput Benchmark:
-- Test: 1M events, 8 concurrent writers
-- Result: 469,147 events/sec sustained
-- Hardware: 8-core, 32GB RAM
+Source: apps/core/benches/performance_benchmarks.rs; baseline in docs/current/PERFORMANCE.md
 
-Query Latency:
-- p50: 5.2 μs
-- p95: 9.8 μs
-- p99: 11.9 μs
-- p999: 18.4 μs
+Ingestion throughput (groups ingestion_throughput): 469,000 events/sec
+Query latency (p99): 11.9 μs
 
-Concurrent Access:
-- 8 threads: 7.98ms total
-- Lock-free DashMap indexing
-- Zero contention on reads
+Indexing: DashMap (sharded, lock-free reads)
 ```
 
 ### A2: Migration Path
 
 ```
-From EventStoreDB:
-- Similar event model
-- Migration script available
-- Parallel run supported
+Import: import_events accepts JSON, JSONL and CSV, with validation, deduplication and entity ID mapping.
 
-From Kafka:
-- Consumer group compatible
-- Event replay for backfill
-- Gradual migration possible
-
-From Custom Solution:
-- Import API for bulk events
-- Schema validation on import
-- Deduplication built-in
+No EventStoreDB or Kafka migration tooling is part of this repository.
 ```
 
 ### A3: Roadmap
 
 ```
-Q1 2024:
-- Vector search (semantic queries)
-- Copy-on-write event forks
-- 1M+ events/sec target
-
-Q2 2024:
-- GraphQL API
-- SOC 2 certification
-- Managed cloud (beta)
-
-Q3 2024:
-- Mobile SDK
-- Multi-region replication
-- Managed cloud (GA)
+See docs/roadmaps/2026-02-15_CONSOLIDATED_ROADMAP.md.
 ```
 
 ---
@@ -580,5 +531,5 @@ Q3 2024:
 | "We already use X" | "AllSource integrates with X, and adds AI-native capabilities" |
 | "Seems complex" | "One Docker command to start. We handle the complexity." |
 | "Security concerns" | Walk through enterprise security slide in detail |
-| "Pricing" | Start free, scale with usage. Open source = no lock-in |
+| "Pricing" | No free hosted tier. The Apache-2.0 community edition is self-hosted with no license fee |
 | "Support?" | Community + paid support tiers. Enterprise SLA available |

@@ -1,7 +1,7 @@
 # AllSource SaaS Evaluation Summary
 
 **Date**: February 11, 2026
-**Version**: 0.10.0
+**Version**: 0.30.0
 **Status**: Ready for Beta Launch
 
 ---
@@ -14,7 +14,7 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 
 | Criterion | Score | Notes |
 |-----------|-------|-------|
-| Technical Maturity | 8/10 | Production-ready core, 492+ tests |
+| Technical Maturity | 8/10 | Durable event store (WAL, Parquet); tests per service |
 | Market Fit | 9/10 | Strong alignment with AI/ML trends |
 | Differentiation | 9/10 | Only event store with native MCP |
 | Scalability | 8/10 | Cloud-native, K8s-ready |
@@ -26,10 +26,10 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 
 | Message | Data |
 |---------|------|
-| AI-Native First | 27 MCP tools, only event store with native support |
+| AI-Native First | 73 MCP tool definitions (55 by default), native MCP server |
 | Performance | 469K events/sec, 11.9μs p99 latency |
 | Polyglot Architecture | Rust + Go + Elixir (best tool for each job) |
-| Tiny Footprint | 129MB total Docker images |
+| Self-Host | Apache-2.0 community edition, `docker compose up` |
 | Enterprise Security | Multi-tenancy, RBAC, JWT, audit logging |
 | Time-Travel | Query any point in history instantly |
 
@@ -38,10 +38,10 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 ## Target Markets
 
 ### Primary
-- **AI/ML Teams** - Training pipelines, feature stores ($15B+ market)
-- **Fintech** - Audit trails, compliance ($120B+ market)
-- **IoT/Telemetry** - High-throughput sensor data ($500B+ by 2027)
-- **E-commerce** - Order tracking, inventory events ($6T+ market)
+- **AI/ML Teams** - Training pipelines, feature stores
+- **Fintech** - Audit trails, compliance
+- **IoT/Telemetry** - High-throughput sensor data
+- **E-commerce** - Order tracking, inventory events
 
 ### Secondary
 - Gaming (player history, anti-cheat)
@@ -54,26 +54,29 @@ AllSource is an **AI-native event sourcing platform** positioned for the emergin
 
 | Competitor | AllSource Advantage |
 |------------|-------------------|
-| EventStoreDB | 27 MCP tools, polyglot architecture |
+| EventStoreDB | 73 MCP tool definitions, polyglot architecture |
 | Kafka | Purpose-built for events, simpler ops |
-| Marten | 10x performance (469K vs ~50K/sec) |
+| Marten | Core is the event store; no PostgreSQL dependency |
 | Custom Solutions | Turnkey SaaS, no maintenance |
 
 ---
 
-## Recommended Pricing Model
+## Pricing (current)
+
+Source: `apps/web/src/lib/config.ts` (`siteConfig.pricing`). Live prices come from LemonSqueezy and override the config prices.
 
 ```
-STARTER          PRO              ENTERPRISE
-────────         ────             ──────────
-$0/mo            $99/mo           Custom
-
-100K events      10M events       Unlimited
-7-day retention  90-day           Unlimited
-1 tenant         5 tenants        Unlimited
-10 MCP tools     27 MCP tools     27 + Custom
-Community        Email support    24/7 + SLA
+Tier        Price (GBP/month)   Events/month   Streams    MCP access
+Self-Host   Free (own infra)    unlimited      unlimited  full (self-host)
+Indie       £18.99              500K           3          hosted read
+Studio      £78.99              5M             unlimited  hosted read + write
+Scale       £298.99             50M            unlimited  hosted read + write + dedicated
+Enterprise  Custom              negotiated     unlimited  dedicated MCP cluster
 ```
+
+- No free hosted tier. Hosted trial: 14 days, 1,000 events, 1 GB outbound data.
+- Yearly prices: Indie £15.17/mo, Studio £63.17/mo, Scale £239.17/mo.
+- Support: Indie email (48h); Studio email (24h) and Discord; Scale priority and Slack; Enterprise 24/7 with dedicated SE and SLA.
 
 ---
 
@@ -111,7 +114,7 @@ Community        Email support    24/7 + SLA
 
 ### P0 (Must Have)
 - [ ] Self-service signup flow
-- [ ] Usage metering and billing (Stripe)
+- [ ] Usage metering and billing (LemonSqueezy)
 - [ ] SLA monitoring and alerting
 - [ ] Customer dashboard for metrics
 - [ ] Privacy policy and ToS
@@ -146,7 +149,7 @@ Community        Email support    24/7 + SLA
 ## Next Steps
 
 1. Review P0 requirements and prioritize implementation
-2. Set up billing infrastructure (Stripe)
+2. Confirm the LemonSqueezy catalog and plan prices
 3. Create landing page with signup flow
 4. Record demo videos using provided scripts
 5. Launch beta program with 50 hand-picked users

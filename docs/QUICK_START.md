@@ -179,7 +179,7 @@ curl -s "$ALLSOURCE_URL/api/v1/projections" \
 ### Get a specific projection
 
 ```bash
-curl -s "$ALLSOURCE_URL/api/v1/projections/order_summary" \
+curl -s "$ALLSOURCE_URL/api/v1/projections/order_summary/state" \
   -H "Authorization: Bearer $ALLSOURCE_API_KEY" | jq
 ```
 

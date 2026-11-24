@@ -1,7 +1,7 @@
 ---
 title: "Branch Protection Settings"
 status: REFERENCE
-last_updated: 2026-04-14
+last_updated: 2026-11-24
 category: guide
 ---
 
@@ -436,9 +436,9 @@ This catches issues before CI runs, reducing feedback loops.
 
 - [Quality Gates](../current/QUALITY_GATES.md) - Detailed quality gate documentation
 - [Quality Gates Setup](QUALITY_GATES_SETUP.md) - Initial setup guide
-- [CI Workflow](.github/workflows/ci.yml) - Main CI workflow
-- [Container CI Workflow](.github/workflows/container-ci.yml) - Container testing
-- [Security Workflow](.github/workflows/security.yml) - Security scanning
+- [CI Workflow](../../.github/workflows/ci.yml) - Main CI workflow
+- [Container CI Workflow](../../.github/workflows/container-ci.yml) - Container testing
+- [Security Workflow](../../.github/workflows/security.yml) - Security scanning
 
 ---
 

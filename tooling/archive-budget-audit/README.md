@@ -13,11 +13,12 @@ cargo run --manifest-path tooling/archive-budget-audit/Cargo.toml -- /path/to/st
 docker buildx build --platform linux/amd64 --output type=local,dest=/tmp/archive-audit-binary tooling/archive-budget-audit
 ```
 
-The standalone workspace has its own lockfile and no Core dependency. Five of
+The standalone workspace has its own lockfile and no Core dependency. Four of
 its six input dimensions match Core `ArchiveReadLimits`: 100,000 entries,
-50,000 files, 32 MiB per file, 256 MiB compressed total, 250,000 row-group
-rows. Counters use checked arithmetic; a tenant exceeding a policy cap appears
-in the report. Keep these aligned when changing Core's policy.
+50,000 files, 32 MiB per file, 256 MiB compressed total. Two differ from Core:
+rows (Core `max_rows` 600_000, this tool 250_000) and uncompressed bytes (see
+below). Counters use checked arithmetic; a tenant exceeding a policy cap appears
+in the report.
 
 **The uncompressed-bytes dimension no longer corresponds to Core's.** This tool
 reads footers and reports Parquet's *declared* uncompressed row-group bytes

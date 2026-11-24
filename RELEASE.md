@@ -2,7 +2,7 @@
 
 **Release Date**: 2026-02-08
 **Codename**: Clean Architecture
-**Status**: RELEASED
+**Status**: RELEASED (historical; current version 0.30.0)
 
 ---
 
@@ -15,7 +15,7 @@ This release represents a **major milestone** for the AllSource Event Store plat
 | Metric | Value |
 |--------|-------|
 | User Stories Completed | **79/79 (100%)** |
-| Beads Closed | **107/110 (97%)** |
+| Tasks Closed | **107/110 (97%)** |
 | New Lines of Code | ~47,000 |
 | Rust Tests Passing | **1,221** |
 | Elixir Tests Passing | **508** (281 Query + 227 MCP) |
@@ -65,7 +65,6 @@ Real-time integration with Core via WebSocket and Broadway:
 
 **v0.2.0 Quality Improvements**:
 - **Race Condition Fix**: Fixed `ProjectionSync` test flakiness by using synchronous call after async cast for proper GenServer message ordering
-- **Testcontainers Integration**: PostgreSQL containers for reliable integration testing
 
 ### MCP Server v0.2.0
 
@@ -184,7 +183,6 @@ Tools designed specifically for AI agent interaction:
 - Core test coverage audit
 - Query service test quality audit
 - Performance benchmark verification
-- PostgreSQL integration testing
 
 ### SaaS MVP (100%)
 
@@ -249,7 +247,7 @@ None. This release is fully backward compatible.
 
 ---
 
-## Beads Summary
+## Task Summary
 
 ```
 📊 Issue Database Status
@@ -267,18 +265,17 @@ All roadmap items complete!
 ## Contributors
 
 - AI-assisted development with Claude
-- Beads issue tracking for task management
+- Chronis (`cn`) task tracking
 
 ---
 
 ## Links
 
-- **Roadmap**: `docs/roadmaps/2026-02-02_CONSOLIDATED_ROADMAP.md`
-- **Core Changelog**: `apps/core/docs/CHANGELOG.md`
+- **Roadmap**: `docs/roadmaps/2026-02-15_CONSOLIDATED_ROADMAP.md`
+- **Core Changelog**: `docs/CHANGELOG.md`
 - **Query Service Changelog**: `apps/query-service/CHANGELOG.md`
 - **MCP Server Changelog**: `apps/mcp-server-elixir/CHANGELOG.md`
 - **Control Plane Changelog**: `apps/control-plane/CHANGELOG.md`
-- **Beads Issues**: `.beads/issues.jsonl`
 
 ---
 

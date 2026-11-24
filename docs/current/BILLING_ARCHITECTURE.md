@@ -6,7 +6,7 @@
 
 Billing in AllSource follows the platform's event-sourcing philosophy: subscription lifecycle events are written to Core as durable events, and downstream services derive current state from projections over those events.
 
-**Billing provider:** LemonSqueezy (with Stripe webhook handler also wired).
+**Billing provider:** LemonSqueezy.
 
 ---
 
@@ -54,8 +54,8 @@ sequenceDiagram
     participant LS as LemonSqueezy
     participant C as Core
 
-    U->>W: Click "Upgrade to Growth"
-    W->>CP: POST /api/v1/billing/checkout<br/>{tier: "growth", period: "monthly"}
+    U->>W: Click "Upgrade to Studio"
+    W->>CP: POST /api/v1/billing/checkout<br/>{tier: "studio", period: "monthly"}
     CP->>CP: Resolve variant ID from<br/>LEMON_SQUEEZY_VARIANT_MAP
     CP->>LS: Create checkout session<br/>(variant_id, custom_data: {tenant_id})
     LS-->>CP: checkout_url
@@ -73,8 +73,8 @@ sequenceDiagram
     W->>QS: GET /api/billing/status
     QS->>C: GET /api/v1/events/query<br/>{entity_id: tenant_id, event_type: "billing.*"}
     C-->>QS: Latest billing events
-    QS-->>W: {tier: "growth", status: "active", ...}
-    W->>U: Shows Growth plan badge
+    QS-->>W: {tier: "studio", status: "active", ...}
+    W->>U: Shows Studio plan badge
 ```
 
 ### Webhook Processing Flow
@@ -162,16 +162,18 @@ The frontend calls:
 Tiers are resolved at write time by the Control Plane. The mapping is configurable via `LEMON_SQUEEZY_VARIANT_MAP`:
 
 ```json
-{"growth": "<variant_id>", "enterprise": "<variant_id>"}
+{"studio": "<variant_id>", "enterprise": "<variant_id>"}
 ```
 
 Each tier has associated quotas (defined in the Control Plane):
 
-| Tier | Events/mo | Queries/mo | Team Seats |
-|------|-----------|------------|------------|
-| Free | 10,000 | 1,000 | 1 |
-| Growth | 100,000 | 10,000 | 5 |
-| Enterprise | Custom | Custom | Custom |
+| Tier | Events/mo | Queries/mo |
+|------|-----------|------------|
+| Free | 100,000 | 10,000 |
+| Indie | 500,000 | 50,000 |
+| Studio | 5,000,000 | 500,000 |
+| Scale | 50,000,000 | 5,000,000 |
+| Enterprise | Custom | Custom |
 
 ---
 
@@ -186,11 +188,11 @@ Billing events follow the standard AllSource event format:
   "payload": {
     "subscription_id": "sub_12345",
     "customer_id": "cus_67890",
-    "tier": "growth",
+    "tier": "studio",
     "status": "active",
     "payment_provider": "lemonsqueezy",
     "variant_id": 12345,
-    "variant_name": "Growth Monthly",
+    "variant_name": "Studio Monthly",
     "billing_period": "monthly",
     "amount_cents": 9900,
     "currency": "USD"

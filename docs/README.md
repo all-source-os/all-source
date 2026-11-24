@@ -1,354 +1,463 @@
 ---
 title: "AllSource Documentation"
 status: CURRENT
-last_updated: 2026-02-08
+last_updated: 2026-11-24
 ---
 
-# AllSource Documentation Hub
+# AllSource Documentation
 
-Welcome to the AllSource documentation. This hub provides comprehensive guides, architecture documentation, and operational resources for the AllSource event sourcing platform.
+Index of the live documents under `docs/`. Archived material is listed in [ARCHIVE_INDEX.md](ARCHIVE_INDEX.md) and is not indexed here.
 
----
+## Conventions
 
-## Quick Navigation
-
-- [Scoped local event erasure](./reports/2026-11-13-scoped-erasure.md): offline rewrite boundary, synthetic verification and remaining account-deletion coverage.
-
-- [Event sourcing AWS reference review (2026-11-11)](./seo/2026-11-11-aws-reference-review.md): corrected reference destination, search evidence and verification limits.
-
-- [Prime against HASH: gap status (2026-11-06)](./reports/2026-11-06-prime-hash-gap-status.md): the seven gaps with HASH re-verified on its source, what is deployed, the Prime image build fix, `warn` by default, server-stamped `recorded_by`, the extraction contract, and what is still open.
-
-- [Core memory bound brief (2026-11-11)](plans/2026-11-11-core-memory-bound-brief.md): why Core needs 16 GB today (budget counts the wrong unit, 1.88 GB unowned heap, whole-tenant hydration) and the staged path to the 8 GB machine.
-- [Core memory bound design (2026-11-12)](plans/2026-11-12-core-memory-bound-design.md): S0 heap attribution; an S1 ledger that counts every resident byte without changing eviction; `entity_snapshots` out of server mode; the geospatial tenant-scope fix; the deterministic replay harness; and the audit list for a separate routine-eviction spec. The twenty review rounds and the hand approval are summarised in the [review record](plans/2026-11-12-core-memory-bound-design-review.md).
-- [Core memory bound plan (2026-11-12)](plans/2026-11-12-core-memory-bound-plan.md): quality gates, testing trophy and the twelve stories from manifest commits through the S1 autoresearch run.
-- [Core heap attribution (2026-11-13)](reports/2026-11-13-core-heap-attribution.md): S0 jemalloc profile of the replay fixture attributed to S1 owners (96.7% of live heap, two owners missing from the table), the 8 GB projection term by term, and the fixture against production's 33.7% unattributed share.
-- [Core memory S1 run ledger (2026-11-13)](reports/2026-11-13-core-memory-s1-run-ledger.md): the S1 autoresearch run on the US-011 baseline. Two candidates, both tied on `peak_live_bytes` and discarded, none kept.
-- [Core memory S1 report (2026-11-14)](reports/2026-11-14-core-memory-s1-report.md): Acceptance 4 records for S1 and the `f4b53930` overlay (digests, eviction sequence, five cold-load runs per set, production peak, timings). The cold-load band rule fails for both sets, so the run stops; the overlay recipe is [patch](reports/2026-11-14-core-memory-s1-overlay.patch).
-- [Fly cost reduction (2026-11-08)](plans/2026-11-08-fly-cost-reduction.md): $144.87/month (about $122–126 at list after step 1, 2026-11-15) serves four tenants, all ours; the steps from Core memory work to fewer apps that bring it to about $47, with post-deploy Core memory, evidence, constraints and open questions.
-- [Two time axes: valid time and record time](plans/2026-11-04-bitemporal-time-axes.md): every `as_of` path, the bitemporal model, and the slices that add it.
-
-- [Core restarts without refused clients](plans/2026-11-01-core-zero-downtime-restart.md): why a Core deploy refuses clients for minutes, and the phased fix.
-
-- [Native delivery CI prerequisites](plans/2026-10-28-native-ci-prerequisites.md)
-
-- [Prime typed writes and provenance request](./reference/prime-typed-provenance-request.md): typed node and edge kinds, the assertion write contract, search reachability, stub tools, hosted tenant scope and Prime OpenAPI.
-
-- [Prime TOON control-value integrity (2026-10-28)](./plans/2026-10-28-prime-toon-control-values.md): accepted encoder repair, retained-memory reproduction and native Codex/Claude acceptance.
-- [Prime control-value native verification](./reports/2026-10-28-prime-toon-values-verification.md): frozen baseline/candidate execution, independent real-host QA and retained-memory compatibility.
-- [Prime control-value delivery request](./reference/prime-toon-values-request.md): accepted application job, compatibility boundary and publication authority.
-
-- [Prime TOON native workflow qualification](./reports/2026-10-27-prime-toon-native-verification.md): current-source failures, retained-memory interoperability, real Codex/Claude calls and durable native ownership.
-
-- [Prime TOON key integrity plan](./plans/2026-10-27-prime-toon-key-quoting.md) and [native application request](./reference/prime-toon-keys-request.md): preserve retained memory property names through independently decoded MCP responses.
-
-- [Latest-state views and consumer-access gate, run end to end (2026-10-27)](./evidence/2026-10-27-latest-state-views/README.md): PR #366 on local Core, Query Service and gateway: view fold, conditional reads, sync, tenant isolation, restart, the consumer gate, and the TypeScript and Go SDK gateway 401 with its fix.
-
-- [Chronis native workflow qualification](./reports/2026-10-27-chronis-native-verification.md): rebuilt baseline failures, candidate CLI lifecycle success, actual Codex/Claude calls and installed-toolkit provenance.
-
-- [Chronis TOON integrity plan](./plans/2026-10-27-chronis-toon-escaping.md) and [native application request](./reference/chronis-toon-request.md): preserve exact task data while escaping structural output, qualified through real Codex and Claude.
-
-- [Legacy registered key authority compatibility](./plans/2026-10-26-legacy-key-authority-compatibility.md): admit retained version-one prefixes while preserving completeness and terminal revocation.
-
-- [Prime sync interval validation](./plans/2026-10-25-prime-sync-interval-validation.md): reject zero before store startup and qualify actual native-host MCP delivery.
-
-- [Tenant polling defence](./plans/2026-10-24-tenant-polling-defense.md): per-tenant admission, conditional reads, change detection and caches on both sides, phased so Longhand is never starved.
-- [Bounded event-prefix reads](./plans/2026-10-24-bounded-prefix-auth-reads.md): authentication lookups without whole-tenant hydration.
-- [Shared tenant read model](./plans/2026-10-24-shared-tenant-read-model.md): bounded feeds, atomic checkpoints, conditional reads and rollout requirements.
-- [Event feed without whole-tenant history](./plans/2026-10-25-feed-without-whole-history.md): narrow feed index, then a durable per-tenant feed log, so feed and read-model commit cost stops growing with history.
-
-- [Bounded retained entity reads](./plans/2026-10-24-bounded-retained-entity.md): memory-bounded archive reads and verification requirements.
-- [JWT crypto backend](./plans/2026-10-24-jwt-crypto-backend.md): remove the vulnerable transitive dependency while preserving token compatibility.
-
-- [AllSource LinkedIn company page](./brand/LINKEDIN_COMPANY_PAGE.md)
-- [AllSource and WolvenTech keyword demand (2026-10-01)](./seo/2026-10-01-allsource-wolventech-keyword-demand.md): treg/DataForSEO volumes, related keywords, intent exclusions and targeting priorities.
-- [Search-content implementation (2026-10-01)](./seo/2026-10-01-search-content-implementation.md): page intent, content changes, technical verification and measurement limits for both sites.
-- [AllSource editorial review (2026-11-07)](./seo/2026-11-07-editorial-review/README.md): factual corrections and contextual links for product-owner review.
-- [Agent memory after compaction search evidence (2026-11-07)](./seo/2026-11-07-compaction-search-evidence.md): search intent, sources, and trend-data limits.
-- [AllSource SEO strategy (2026-11-08)](./seo/2026-11-08-allsource-seo-strategy.md): delivery, topic priorities, evidence and measurement.
-- [Schema evolution example evidence (2026-11-08)](./seo/2026-11-08-schema-evolution-evidence.md): replay example, source evidence, and release limits.
-- [Schema evolution SEO review (2026-11-09)](./seo/2026-11-09-schema-review.md): proposed correction and local HTML preview.
-- [Directory and registry listings (2026-10-21)](./outreach/2026-10-21-directory-listings.md): product facts for listings, MCP registry and ClawHub routes, curated directories and the submission log.
-- [Manual and external actions](./manual-and-external-actions.md): actions that need account authority, publication or third-party response, with the evidence each one must leave.
-- [AllSource SEO assessment (2026-11-10)](./seo/2026-11-10-seo-assessment.md): observed search intent and proposed content improvements.
-- [Fintech AI decision-context discovery review (2026-11-12)](./outreach/2026-11-12-fintech-discovery-review.md): sourced prospects, messages sent after approval, contact-history limits and exclusions.
-- [Outreach skill verification (2026-11-11)](./outreach/2026-11-11-outreach-skill-verification.md): synthetic walkthrough, page checks and outstanding verification.
-- [AllSource outreach skill presentation](./outreach/allsource-outreach-skill.html): skill package ([source](../skills/allsource-outreach/SKILL.md), [zip](./outreach/allsource-outreach.zip)), workflow and example prompt.
-- [AllSource outreach comparison (2026-11-11)](./plans/2026-11-11-outreach-comparison.md): proposed GojiBerry and AllSource workflows, review controls and measurement.
-- [OMO send-ready package (2026-10-21)](./outreach/2026-10-21-omo-send-ready.md): refreshed ownership/contact checks, final PR comment and sanitised evidence ZIP.
-- [OMO provider-payload evaluation (2026-10-21)](./outreach/2026-10-21-omo-provider-payload-evaluation.md): captured model inputs, summary/continuation distinction and counterbalanced controls.
-- [OMO readiness-barrier evaluation (2026-10-21)](./outreach/2026-10-21-omo-readiness-barrier-evaluation.md): counterbalanced skill-only rerun, pre-task settlement proof and cooldown controls.
-- [OMO counterbalanced skill-only evaluation (2026-10-20)](./outreach/2026-10-20-omo-skill-only-counterbalanced-evaluation.md): dispatch-only control, matched summary injection and blocked reload.
-- [OMO matched recovery/no-reload evaluation (2026-10-20)](./outreach/2026-10-20-omo-matched-no-reload-evaluation.md): recovery on 2/3 vs off 0/3, cooldown gap and enforced reload block.
-- [OMO model-selected skill/tool evaluation (2026-10-20)](./outreach/2026-10-20-omo-model-selected-evaluation.md): four checkpoint workflows, middle reload and counter-evidence.
-- [Full OMO #7183 plugin evaluation (2026-10-20)](./outreach/2026-10-20-omo-full-plugin-evaluation.md): loader fix and native compaction/payload matrix.
-- [Oh-my-openagent #7183 real compaction evaluation (2026-10-19)](./outreach/2026-10-19-omo-compaction-evaluation.md): repeated recovery, payload bounds and ownership checks.
-- [Live nanobot/Hermes memory evaluation (2026-10-19)](./outreach/2026-10-19-live-memory-evaluation.md): real-provider results, isolated outage behaviour and revised shortlist.
-- [Current memory fixes and artifact-led drafts (2026-10-19)](./outreach/2026-10-19-memory-fix-audit-and-drafts.md): released fixes, remaining gaps, runnable measurement and conditional outreach copy.
-- [Memory-failure design-partner research (2026-10-19)](./research/2026-10-19-memory-failure-design-partners.md): public evidence for 30 projects, qualification and prior-contact checks.
-
-| | Link | Description |
-|---|------|-------------|
-| 🚀 | [Quick Start](./guides/QUICK_START.md) | Get up and running in minutes |
-| 📖 | [Architecture](./current/CLEAN_ARCHITECTURE.md) | Clean architecture principles |
-| ⚡ | [Performance](./current/PERFORMANCE.md) | Optimization strategies |
-| 🔒 | [Security](./current/TENANT_ARCHITECTURE.md) | Multi-tenant security model |
-| 🛠️ | [Quality Gates](./current/QUALITY_GATES.md) | CI/CD quality standards |
-| 🗺️ | [Roadmap](./roadmaps/) | Future plans and progress |
+- **Dated documents** use `YYYY-MM-DD-slug.md` under `plans/`, `reports/` and `research/`. Decision records under `decisions/` use the same form.
+- **Reference documents** under `current/`, `guides/`, `runbooks/` and `contracts/` keep a descriptive name without a date and are updated in place.
+- **ADRs** are `adr/NNN-slug.md`, numbered in sequence. `adr/README.md` is the index.
+- **Evidence** is kept in `evidence/<YYYY-MM-DD>-<slug>/` with a `README.md` and the raw outputs it cites. Reports link to the bundle.
+- **Archive**: a superseded or completed document moves to `archive/<YYYY-MM-DD>/` and keeps its original path below that directory. `ARCHIVE_INDEX.md` records the reason and the successor for each move.
+- **Status** is stated in each document, in frontmatter `status:` or a `Status:` line.
+- **Links** are relative. Each link must resolve to a file in the repository.
 
 ---
 
-## What's New
+## Getting started
 
-**February 2026**
-- Updated documentation hub with modern navigation
-- Consolidated quality gates documentation
-
-**November 2025**
-- Added multi-tenant architecture security documentation
-- Quality gates implementation and enforcement
-- Critical bug fixes documented
-
-**October 2025**
-- Clean Architecture refactoring complete (Phase 1.5)
-- Performance optimization guide published
-- Query Service roadmap established
-
----
-
-## Status Legend
-
-| Marker | Status | Meaning |
-|--------|--------|---------|
-| ✅ | CURRENT | Active, up-to-date documentation |
-| ⚠️ | NEEDS_REVIEW | May be outdated, review before use |
-| 📦 | ARCHIVED | Historical reference, superseded by newer docs |
+- [Quick Start](QUICK_START.md): get started with AllSource in under five minutes using curl.
+- [Quick Start guide](guides/QUICK_START.md): add `allsource-core` to a Rust project and run a first store.
+- [Glossary](GLOSSARY.md): definitions of the terms used across the project.
+- [Vision](VISION.md): product vision, version 1.0.
+- [Monorepo structure](MONOREPO_STRUCTURE.md): the authoritative layout rules for `apps/`, `crates/`, `sdks/`, `packages/` and `docs/`.
+- [Self-hosting](self-hosting/README.md): running the Community Edition as a single-node event store with an API gateway.
+- [Changelog](CHANGELOG.md): release notes for AllSource Chronos.
+- [Embedded Prime integration](guides/EMBEDDED_PRIME_INTEGRATION.md): using Prime as an embedded library with graph, vectors and tiered recall.
+- [allsource-mcp](guides/ALLSOURCE_MCP.md): local MCP server that reads Core WAL and Parquet files for debugging.
+- [Claude Code skills](guides/CLAUDE_CODE_SKILLS.md): repository skills for testing, release and diagnostics.
+- [Claude Desktop setup](guides/mcp-server/CLAUDE_DESKTOP_SETUP.md): connecting the Elixir MCP server to Claude Desktop.
+- [MCP tools quick reference](guides/mcp-server/QUICK_REFERENCE.md): the MCP tools on one card.
+- [Prime agent prompt](guides/PRIME_AGENT_PROMPT.md): system prompt text that teaches an agent to use Prime as persistent memory.
+- [Registered client keys](guides/REGISTERED_CLIENT_KEYS.md): generating a P-256 key, computing the `kid`, registering it, and configuring SDKs and allsource-mcp.
+- [Demos](demos/README.md): Prime agent memory in 60 seconds, without Docker.
+- [Recording the chronis demo](demos/RECORDING.md): steps to record the chronis demo.
+- [Decision-history restart proof](demos/decision-history-proof.md): an offline event-sourcing example.
+- [Event-store restart proof](demos/event-store-restart-proof.md): rebuilding inventory from events after a restart, on a synthetic workload.
+- [Demo accounts](demo/DEMO_ACCOUNTS.md): how demo tenants work end to end and how the daily reset runs.
+- Demo scripts: [prime-mcp-test.sh](demos/prime-mcp-test.sh) and [tui-demo.sh](demos/tui-demo.sh).
 
 ---
 
-## Documentation by Audience
+## Architecture and decisions
 
-### Getting Started
+### Architecture Decision Records
 
-For new users looking to understand and run AllSource.
+- [ADR index](adr/README.md): all 21 ADRs.
+- [ADR-001](adr/001-embedded-core-library.md): embedded Core library API (accepted).
+- [ADR-002](adr/002-crash-safe-compaction.md): crash-safe token compaction.
+- [ADR-003](adr/003-batch-ingestion-single-lock.md): batch ingestion with a single lock acquisition.
+- [ADR-004](adr/004-projection-backfill.md): projection backfill on registration.
+- [ADR-005](adr/005-postgresql-removal-event-sourced-metadata.md): PostgreSQL removal and event-sourced metadata.
+- [ADR-006](adr/006-server-side-projections-fold-on-read.md): server-side projections with fold-on-read (partly superseded by ADR-021).
+- [ADR-007](adr/007-domain-value-objects.md): domain value objects for type safety.
+- [ADR-008](adr/008-vector-search-fastembed.md): vector search with fastembed, pure Rust.
+- [ADR-009](adr/009-simd-json-zero-copy-deserialization.md): simd-json zero-copy deserialization.
+- [ADR-010](adr/010-native-arm64-ci.md): native ARM64 CI runners.
+- [ADR-011](adr/011-prime-entity-id-enum.md): typed `EntityId` enum for Prime.
+- [ADR-012](adr/012-prime-directed-adjacency.md): unified `DirectedAdjacencyProjection`.
+- [ADR-013](adr/013-prime-atomic-deletion.md): atomic node deletion via batch ingestion.
+- [ADR-014](adr/014-prime-facade-decomposition.md): Prime facade decomposition into sub-API modules (accepted, not implemented).
+- [ADR-015](adr/015-prime-vector-index-generation.md): generation counter for `VectorIndexProjection`.
+- [ADR-016](adr/016-prime-eventual-consistency.md): eventual consistency model for Prime.
+- [ADR-017](adr/017-chronis-prime-integration.md): Chronis and Prime integration.
+- [ADR-018](adr/018-embedded-eager-parquet-hydration.md): eager Parquet hydration on embedded boot.
+- [ADR-019](adr/019-compile-time-edition-gating.md): edition gating at compile time, not at runtime.
+- [ADR-020](adr/020-prime-stateless-over-core.md): Prime as a stateless engine over Core.
+- [ADR-021](adr/021-views-folded-by-query-service.md): views folded by the Query Service and stored in Core.
 
-| Document | Description | Status |
-|----------|-------------|--------|
-| [Quick Start](./guides/QUICK_START.md) | Installation and first run | ✅ |
-| [Demo Walkthrough](./guides/DEMO.md) | Hands-on demonstration | ✅ |
-| [MCP Server Setup](./guides/mcp-server/CLAUDE_DESKTOP_SETUP.md) | Claude Desktop integration | ✅ |
+### Decisions
 
----
+- [Complete Android and iOS delivery](decisions/2026-09-21-complete-mobile-delivery.md): the decision date and scope of complete mobile delivery.
+- [Chat delivery amendment](decisions/2026-09-22-chat-delivery.md): prioritises OpenAI/ChatGPT and Claude integrations, customers first.
+- [Tenant clients use registered ES256 keys](decisions/2026-11-07-tenant-clients-registered-es256-keys.md): accepted; clients sign 60-second assertions with a key registered on `clientkey:<tenant>`.
 
-### Core Concepts
+### Current architecture
 
-For understanding the system architecture and design decisions.
-
-| Document | Description | Status |
-|----------|-------------|--------|
-| [Clean Architecture](./current/CLEAN_ARCHITECTURE.md) | Layered architecture guide | ✅ |
-| [SOLID Principles](./current/SOLID_PRINCIPLES.md) | Design principles applied | ✅ |
-| [Tenant Architecture](./current/TENANT_ARCHITECTURE.md) | Multi-tenancy and isolation | ✅ |
-| [Tenant egress and prepaid credits](./plans/2026-10-22-tenant-egress-prepaid-design.md) | Proposed allowances, durable hard stops, payment verification and activation requirements | Local implementation |
-| [Event Store Features](./current/EVENT_STORE_FEATURES.md) | Core event sourcing capabilities | ✅ |
-| [Architecture Optimization](./current/ARCHITECTURE_OPTIMIZATION.md) | System-level optimizations | ✅ |
-| [OCC version index](./research/2026-10-04-occ-version-index.md) | Why entity versions must be read, never counted; the eviction and memory defects that follow | ✅ |
-| [Strict hydration and version-index reuse](./research/2026-10-08-strict-hydration-version-index.md) | Reuse complete archive validation before conditional writes; failure and eviction checks | ✅ |
-| [Latest-state reads](./research/2026-10-27-latest-state-reads.md) | Why consumers pull history to get current state through every SDK, the gateway, Query Service and MCP; snapshot-plus-tail views as the target | ✅ |
-| [ADR-021: views folded by the Query Service](./adr/021-views-folded-by-query-service.md) | The Query Service folds declarative views from the event feed into Core read-model rows; Core validates, stores and serves them and never applies a reducer | Accepted |
-| [Decision: tenant clients authenticate with registered ES256 keys](./decisions/2026-11-07-tenant-clients-registered-es256-keys.md) | Clients register a P-256 public key on `clientkey:<tenant>` and sign 60 s assertions; legacy unregistered keys stop 30 days after the deploy; rejected alternatives and the four Longhand silent-failure risks | Accepted |
-| [Latest-state read contract](./contracts/latest-state/README.md) | Wire contract for entity state without history, ETag/304, event feed and read models, view definitions, latest, latestMany and changes | ✅ |
-| [Read-cost contract](./contracts/read-cost.md) | Caller and read-id headers, the stream-class rule, per-page facts, `/api/v1/read-costs` and `/api/v1/streams?with_bytes` with JSON Schemas, Core and gateway series, threshold and overflow logs, the three MCP cost tools | ✅ |
-| [SEO evidence baseline](./reports/2026-10-20-seo-evidence-baseline.md) | Pages score 100/100 and take 2 organic clicks a month: DA 2, 3 referring domains, 12 ranked keywords | ✅ |
-
----
-
-### Guides
-
-How-to documentation for common tasks.
-
-| Document | Description | Status |
-|----------|-------------|--------|
-| [WebSocket Configuration](./guides/WEBSOCKET_CONFIGURATION.md) | Real-time event streaming setup | ✅ |
-| [Release Guide](./guides/RELEASE.md) | Create releases with `make release` | ✅ |
-| [Quality Gates Setup](./guides/QUALITY_GATES_SETUP.md) | Configure CI/CD quality checks | ✅ |
-| [Branch Protection](./guides/BRANCH_PROTECTION.md) | Git workflow protection | ✅ |
-| [MCP Demo Script](./guides/mcp-server/DEMO_SCRIPT.md) | MCP demonstration walkthrough | ✅ |
-| [MCP Quick Reference](./guides/mcp-server/QUICK_REFERENCE.md) | MCP tool reference card | ✅ |
-| [Claude Code Skills](./guides/CLAUDE_CODE_SKILLS.md) | Automated testing, release, and diagnostics skills | ✅ |
-| [Embedded Prime Integration](./guides/EMBEDDED_PRIME_INTEGRATION.md) | Use Prime as an embedded library in Tauri / Rust apps — graph, HNSW vectors, tiered recall | ✅ |
+- [Tenant architecture](current/TENANT_ARCHITECTURE.md): tenant management on event-sourced system streams in Core, with a stateless Query Service.
+- [Billing architecture](current/BILLING_ARCHITECTURE.md): billing state, current as of 2026-03-26, with the planned event-sourced migration.
+- [Production data flow (C4)](current/PROD_DATA_FLOW_C4.md): production data flow across the services.
+- [Prime C4 architecture](current/prime-c4-architecture.md): Prime architecture diagrams in Mermaid.
+- [Storage format](current/STORAGE_FORMAT.md): how events move from ingest to durable storage and how to read the files.
 
 ---
 
-### API Reference
+## Contracts and reference
 
-Developer documentation for service integration.
+### API reference
 
-| Service | README | Details |
-|---------|--------|---------|
-| Rust Core | [apps/core](../apps/core/README.md) | Event sourcing engine |
-| Control Plane | [apps/control-plane](../apps/control-plane/README.md) | Cluster management (Go) |
-| Query Service | [apps/query-service](../apps/query-service/README.md) | Read-side queries (Elixir) |
-| MCP Server | [apps/mcp-server](../apps/mcp-server/README.md) | Model Context Protocol |
-| Web App | [apps/web](../apps/web/README.md) | Web interface |
+| Component | Path | Role |
+|-----------|------|------|
+| Core | [apps/core](../apps/core/README.md) | Rust event store: WAL, Parquet and DashMap, with the Prime graph, vector and recall modules |
+| Query Service | [apps/query-service](../apps/query-service/README.md) | Elixir/Phoenix read plane and API gateway, stateless over Core |
+| Control Plane | [apps/control-plane](../apps/control-plane/README.md) | Go service for auth, onboarding, billing and administration |
+| Auth | [apps/auth](../apps/auth/) | Rust auth service (better-auth adapter for AllSource) |
+| Prime MCP | [apps/prime-mcp](../apps/prime-mcp/README.md) | Rust MCP server for Prime, over stdio and HTTP |
+| MCP server | [apps/mcp-server-elixir](../apps/mcp-server-elixir/README.md) | Elixir MCP server |
+| Web | [apps/web](../apps/web/README.md) | Next.js marketing site and customer dashboard |
+| Admin | [apps/admin](../apps/admin/) | Next.js admin console |
+| Chronis | [apps/chronis](../apps/chronis/README.md) | Event-sourced task CLI (`cn`) |
 
----
+Client SDKs live under `sdks/`: [Rust](../sdks/rust/README.md), Go (`sdks/go/`), Python (`sdks/python-client/`), TypeScript (`sdks/typescript/`) and the shared `sdks/contract/`.
 
-### Operations
+### Wire contracts
 
-For DevOps and platform engineers.
+- [Latest-state read contract](contracts/latest-state/README.md): entity state without history, ETag and 304, event feed, read models, views, latest and changes.
+- [Read-cost contract](contracts/read-cost.md): caller and read-id headers, stream classes, the `/api/v1/read-costs` and `/api/v1/streams?with_bytes` endpoints, and the MCP cost tools.
+- [Email event contract](contracts/email-events/README.md): the durable `email.*` Core events, with examples and JSON schemas in the same folder.
+- [GEO event contract](contracts/geo-events/README.md): the durable `geo.*` Core events, with `discovery-sources.json`, examples and schemas.
 
-| Document | Description | Status |
-|----------|-------------|--------|
-| [Alerts](./operations/ALERTS.md) | Repo-defined alarms, their thresholds and escalation | ✅ |
-| [Bandwidth alerts](./runbooks/BANDWIDTH_ALERTS.md) | Production edge-output thresholds, private email delivery, and operator checks | Active; firing and recovery verified |
-| [Business dashboards](./runbooks/BUSINESS_DASHBOARD.md) | Business questions, availability, engineering detail, egress attribution and the traffic & outage report on fly-metrics.net: tenant cost vs plan, failed reads, deployment fit, which caller sends the bytes, outage signals, event markers, and the alerts behind them | ✅ |
-| [Production traffic report (2026-10-24)](./reports/2026-10-24-production-traffic.html) | Measured bandwidth by app, region and tenant; animated system diagram; six bottlenecks with charts from raw Fly and service metrics; the 2026-10-24/25 outage (12 h of failed reads) with timeline, cause and what is still open | ✅ |
-| [Control-plane egress root cause (2026-10-24)](./reports/2026-10-24-control-plane-egress-rca.md) | 66 GB/day alert: Longhand control-plane polling over the public edge, egress-guard throttling since 15:40Z, fix sites | ✅ |
-| [Control-plane tenant outage (2026-10-25)](./reports/2026-10-25-control-plane-tenant-outage.html) | Measured 11:53–12:25Z: ~9% of Longhand reads refused with 429 and sign-in failing intermittently; full outage fixed; #355 not slower (gzip skews the release check); `team_queue.snapshot.chunk` is 81% of the tenant's history | ✅ |
-| [Client access outage (2026-10-26)](./reports/2026-10-26-client-access-outage.html) | Longhand's key refused for 2 h 29 m (18:56–21:25Z) and again for 8 m (22:44–22:52Z) by the API-key enforcement deploys; Core unreachable 6 m during a redeploy; timeline, cause, state, actions | ✅ |
-| [Why a deploy denied clients (2026-10-26)](./reports/2026-10-26-auth-deploy-denial-diagnosis.html) | The auth path that refused unregistered keys, which credentials it refuses, why no signal showed it, how to diagnose a denial spike, and ranked safeguards so no deploy denies a client without a named rule | ✅ |
-| [Deploying Core](./runbooks/CORE_DEPLOY.md) | Core is one machine on one volume: measured boot costs per image, what each client sees during the window, the preflight, the `fly deploy` window with its checkpoint verify, and rollback | Operator runbook |
-| [Fly image promotion](./runbooks/FLY_IMAGE_PROMOTION.md) | Copy tested private CI images into app-scoped Fly registries before deployment | Operator runbook |
-| [System checkpoints](./runbooks/SYSTEM_CHECKPOINTS.md) | Core boots from a crc-sealed checkpoint of the system store and replays only the WAL after it; switches, rollout with the background verify, rollback, and why the WAL stays the source of truth | Operator runbook |
-| [Consumer access gate](./runbooks/CONSUMER_ACCESS_GATE.md) | Gateways deploy bluegreen and take traffic only after one canary of every credential kind customers hold reads through the new machine; asserted canaries; the post-deploy config read-back | Operator runbook |
-| [Client keys and the legacy sunset](./runbooks/CLIENT_KEY_ROTATION.md) | Registering, rotating and revoking a tenant client's ES256 key with the operator routes, reading assertion denials, and setting `ALLSOURCE_LEGACY_KEY_SUNSET` | Operator runbook |
-| [Gateway config strip outage (2026-11-06)](./reports/2026-11-06-gateway-config-strip-outage.md) | `api.all-source.xyz` served nothing for 32.5 min (23:31:29Z–00:03:56Z) after a 0-byte `fly.toml` from `git show --output` replaced the only machine's config; missed signals and the read-back rule | ✅ |
-| [Infra costs status (2026-11-08)](./reports/2026-11-08-infra-costs-status.html) | Fly machines and volumes by app ($144.87/month, Core 70%), hourly and daily gateway egress against the alert thresholds, the largest reads, Actions run time by workflow, plan allowances against Fly's egress cost, and the actions that cut cost | ✅ |
-| [Ritual-full flow adoption (2026-11-11)](./reports/2026-11-11-ritual-full-adoption.md) | Vendored ritual skills, planning rules in CLAUDE.md and AGENTS.md, AllStack skills and workflows removed, text-only checks and what was not checked | ✅ |
-| [Read cost](./runbooks/READ_COST.md) | Finding the costliest callers and largest streams with `read_costs`, `stream_sizes` and `cap_check`; the `ALLSOURCE_READ_COST` and admin switch; reaching Core through `fly proxy`; reading `read_cost_threshold`, `read_label_overflow` and `read_header_invalid` | Operator runbook |
-| [Latest-state views](./runbooks/LATEST_STATE_VIEWS.md) | Turning views on (`ALLSOURCE_VIEWS`, admin `CORE_API_KEY` for the Query Service folder, optional `ALLSOURCE_FEED_DURABLE_LOG`), defining the ops-status view, folder counters and the gateway changes lane | Operator runbook |
-| [Cold tier](./operations/COLD_TIER.md) | Archiving events past retention to S3/R2, env vars and IAM policy | ✅ |
-| [Core memory and compaction](./runbooks/CORE_MEMORY_AND_COMPACTION.md) | Checking compaction and retention actually run, reading the two hydration refusals, memory tunables | ✅ |
-| [Bounded archive repack](./runbooks/BOUNDED_ARCHIVE_REPACK.md) | Finalized output bounds, preserved originals, crash recovery and rollback commands | ✅ |
-| [Revoking legacy Core keys](./runbooks/REVOKE_LEGACY_CORE_KEYS.md) | Classifying, rotating and purging old API keys | ✅ |
-| [Prime multi-tenant ingest](./runbooks/PRIME_MULTI_TENANT_INGEST.md) | One writer, many readers; spotting an accidental second writer | ✅ |
-| [Prime sync interval verification (2026-10-26)](./reports/2026-10-26-prime-sync-interval-verification.md) | A zero sync interval is refused before the store opens; positive intervals still serve MCP tools and deliver events | ✅ |
-| [SEO evidence setup](./runbooks/SEO_EVIDENCE_SETUP.md) | Every measurement source behind `tooling/seo-evidence`, and the exact condition that unblocks each | ⚠️ |
-| [Docker Deployment](./deployment/DOCKER.md) | Container images and configuration | ✅ |
-| [Quality Gates](./current/QUALITY_GATES.md) | CI/CD enforcement standards | ✅ |
-| [Performance Guide](./current/PERFORMANCE.md) | Optimization and tuning | ✅ |
-| [Docker Images](./docker-images.md) | Container configuration | ✅ |
-| [Registered client keys](./guides/REGISTERED_CLIENT_KEYS.md) | Generate a P-256 key, compute the kid, get it registered, configure each SDK and allsource-mcp, rotate, read refusals | ✅ |
-| [Troubleshooting](./guides/TROUBLESHOOTING.md) | Common issues and solutions | ✅ |
-| [Test Coverage Plan](./testing/control-plane-coverage-plan.md) | Control plane testing | ✅ |
+### Reference
+
+- [API reference](current/API_REFERENCE.md): the three core services, their ports and endpoints.
+- [Query Service API reference](allsource-qs-api-reference.md): endpoints verified for building `QueryServiceClient`, version 0.30.0.
+- [Authentication chain](current/AUTH_CHAIN.md): `X-API-Key` authentication across Core, the Query Service and clients.
+- [Event store features](current/EVENT_STORE_FEATURES.md): the event store's capabilities.
+- [Query patterns](current/QUERY_PATTERNS.md): common query patterns, saga orchestration and entity deduplication for consumers.
+- [Real-time streaming](current/websocket-streaming.md): event streaming over Phoenix Channels.
+- [Glossary](GLOSSARY.md) and [monorepo structure](MONOREPO_STRUCTURE.md) are listed under Getting started.
+
+### Use cases
+
+- [Custom projections with `ProjectionWorker`](use-cases/custom-projections.md): long-lived read models fed by live events through Core's durable-consumer protocol.
+- [Agent persistence use cases](use-cases/AGENT_PERSISTENCE_USE_CASES.md): AllSource as the database for agents.
+- [AI agents syncing tasks to a team tenant](use-cases/AGENT_TEAM_AUTH.md): agent authentication for a team tenant.
 
 ---
 
-## Roadmaps & Planning
+## Operations and runbooks
 
-| Document | Description | Status |
-|----------|-------------|--------|
-| [Comprehensive Roadmap](./roadmaps/2025-10-22_COMPREHENSIVE_ROADMAP.md) | v1.0 to v2.0 vision | ✅ |
-| [Query Service Roadmap](./roadmaps/query-service-roadmap.md) | Query service evolution | ✅ |
-| [MCP v2 Enhancements](./roadmaps/mcp-v2-enhancements.md) | MCP protocol improvements | ✅ |
-| [Vector Embedding Design](./roadmaps/FUTURE_VECTOR_EMBEDDING_DESIGN.md) | Future AI/ML integration | ✅ |
-| [LanceDB Comparison](./roadmaps/ALLSOURCE_VS_LANCEDB_COMPARISON.md) | Technology comparison | ✅ |
+### Deployment and releases
 
----
+- [Docker images](docker-images.md): the official images for the AllSource services.
+- [Docker deployment](deployment/DOCKER.md): container images and configuration.
+- [`api.all-source.xyz` subdomain setup](deployment/API_SUBDOMAIN_SETUP.md): pointing the public API subdomain at the gateway.
+- [Release guide](guides/RELEASE.md): the release workflow for the monorepo.
+- [Release procedure](guides/RELEASE_PROCEDURE.md): cutting a new release of the monorepo.
+- [Branch protection](guides/BRANCH_PROTECTION.md): branch protection settings.
+- [Quality gates setup](guides/QUALITY_GATES_SETUP.md): the quality gates configured for CI and pre-push.
+- [Quality gates](current/QUALITY_GATES.md): the CI and quality enforcement standards for Core.
+- [Performance guide](current/PERFORMANCE.md): optimisation and tuning.
+- [Dependency audit](current/DEPENDENCY_AUDIT.md): the compile-time baseline and dependency audit.
+- [Storage layout migration](migrations/STORAGE_LAYOUT_FLAT_TO_TENANT.md): flat to tenant-partitioned Parquet layout, ready since 2026-04-26.
+- [Manual and external actions](manual-and-external-actions.md): actions that need account authority, publication or a third-party response, with the evidence each one must leave.
 
-## Archive Index
+### Configuration and access
 
-Historical documentation preserved for reference. Each archived document notes what superseded it.
+- [OAuth and secrets](guides/OAUTH_SECRETS.md): configuring the Google and GitHub OAuth secrets for the stack.
+- [WebSocket configuration](guides/WEBSOCKET_CONFIGURATION.md): real-time event streaming between services.
+- [Troubleshooting](guides/TROUBLESHOOTING.md): common issues, with diagnostic commands and steps.
+- [Projection debugging](current/PROJECTION_DEBUGGING.md): verifying projection state against raw events and fixing stale projections.
+- [Analytics accuracy](ANALYTICS_ACCURACY.md): how the web analytics loads and what it sends.
 
-### Supersession Reference
+### Monitoring and cost
 
-| Archived Document | Superseded By | Date |
-|-------------------|---------------|------|
-| `archive/2025-10-22_CLEAN_ARCHITECTURE_FULL.md` | [current/CLEAN_ARCHITECTURE.md](./current/CLEAN_ARCHITECTURE.md) | 2025-10-22 |
-| `archive/2025-10-22_SOLID_PRINCIPLES_FULL.md` | [current/SOLID_PRINCIPLES.md](./current/SOLID_PRINCIPLES.md) | 2025-10-22 |
-| `archive/2025-10-22_PERFORMANCE_FULL.md` | [current/PERFORMANCE.md](./current/PERFORMANCE.md) | 2025-10-22 |
-| `archive/2025-11-04/ARCHITECTURE_OPTIMIZATION_v1.md` | [current/ARCHITECTURE_OPTIMIZATION.md](./current/ARCHITECTURE_OPTIMIZATION.md) | 2025-11-04 |
-| `archive/2025-11-04/QUERY_SERVICE_ROADMAP_v1.md` | [roadmaps/query-service-roadmap.md](./roadmaps/query-service-roadmap.md) | 2025-11-04 |
-| `archive/2025-10-21_ROADMAP.md` | [roadmaps/2025-10-22_COMPREHENSIVE_ROADMAP.md](./roadmaps/2025-10-22_COMPREHENSIVE_ROADMAP.md) | 2025-10-22 |
+- [Alerts](operations/ALERTS.md): the alerts defined in the repository, their thresholds and escalation.
+- [Cold tier](operations/COLD_TIER.md): archiving events past retention to S3 or R2, with the environment variables and IAM policy.
+- [Business dashboards](runbooks/BUSINESS_DASHBOARD.md): the five dashboards in Fly's managed Grafana.
+- [Bandwidth alerts](runbooks/BANDWIDTH_ALERTS.md): control-plane edge-output thresholds and private email delivery.
+- [Read cost](runbooks/READ_COST.md): finding the costliest callers and streams with `read_costs`, `stream_sizes` and `cap_check`.
+- [SLO and SLA](runbooks/SLO_SLA.md): a stub; targets and alerting are still to be written.
+- [PostHog analytics](runbooks/POSTHOG_ANALYTICS.md): web acquisition and product-UX analytics on PostHog Cloud EU.
+- [Dashboard data audit](checklists/dashboard-data-audit.md): audit of the hosted dashboard data for one tenant.
+- [Admin console health](runbooks/ADMIN_HEALTH.md): verifying that every admin page returns real data.
+- [Fleet health and recovery](runbooks/FLEET_HEALTH_RECOVERY.md): the operator surface catalogue for fleet health and recovery.
+- [Diagnosing pipeline data visibility](runbooks/DIAGNOSING_PIPELINE_DATA_VISIBILITY.md): when stored data does not show in a downstream surface.
+- [Partnerships workspace](runbooks/PARTNERSHIPS.md): the admin workspace for commercial channels.
+- [Proactive-comms efficiency engine](runbooks/COMMS_EFFICIENCY_ENGINE.md): the control-plane and admin comms engine.
 
-### Archive Directories
+### Core
 
-| Directory | Contents |
-|-----------|----------|
-| [archive/apps-core-phases/](./archive/apps-core-phases/) | Core app refactoring phases (Phase 1-5) |
-| [archive/2025-11-04/](./archive/2025-11-04/) | November 2025 refactoring documentation |
-| [archive/2025-11-03-marketing/](./archive/2025-11-03-marketing/) | Marketing materials drafts |
-| [archive/2024-11-03/](./archive/2024-11-03/) | Migration documentation |
+- [Deploying Core](runbooks/CORE_DEPLOY.md): one machine on one volume; preflight, deploy window, checkpoint verify and rollback.
+- [System checkpoints](runbooks/SYSTEM_CHECKPOINTS.md): Core boots from a CRC-sealed checkpoint of the system store and replays the WAL after it.
+- [Core memory and compaction](runbooks/CORE_MEMORY_AND_COMPACTION.md): how Core bounds its memory, what refuses work, and the memory tunables.
+- [Bounded archive output and recovery](runbooks/BOUNDED_ARCHIVE_REPACK.md): finalised output bounds, preserved originals, crash recovery and rollback.
+- [Latest-state views](runbooks/LATEST_STATE_VIEWS.md): turning views on, folder counters and the gateway changes lane.
+- [Consumer access gate](runbooks/CONSUMER_ACCESS_GATE.md): gateways deploy blue-green and take traffic after a canary of each credential kind.
+- [Control-plane CORS](runbooks/CONTROL_PLANE_CORS.md): CORS for the Go control plane on Fly app `allsource-control-plane`.
+- [Fly image promotion](runbooks/FLY_IMAGE_PROMOTION.md): copying tested CI images into app-scoped Fly registries.
+- [Fly frontends](runbooks/FLY_FRONTENDS.md): deploying the web and admin Next.js containers to Fly.
+- [Prime multi-tenant ingest](runbooks/PRIME_MULTI_TENANT_INGEST.md): one writer and many readers, and how to spot a second writer.
+- [Hosted Prime sync](runbooks/HOSTED_PRIME_SYNC.md): verifying hosted Prime sync with the native skills.
 
----
+### Keys, plans and metering
 
-## Directory Structure
+- [Client keys and the legacy sunset](runbooks/CLIENT_KEY_ROTATION.md): registering, rotating and revoking a tenant client's ES256 key.
+- [Revoking legacy Core keys](runbooks/REVOKE_LEGACY_CORE_KEYS.md): classifying, rotating and purging old API keys.
+- [Customer remote connections](runbooks/CUSTOMER_REMOTE_CONNECTIONS.md): configuration for remote customer connections, disabled pending host and rollout gates.
+- [Customer replay approval](runbooks/CUSTOMER_REPLAY_APPROVAL.md): the default-off replay approval gate.
+- [Hosted extraction metering](runbooks/HOSTED_EXTRACTION_METERING.md): metering and hard gate for hosted Hound extraction; code-complete, parked, not live.
+- [Pricing and billing cutover](runbooks/PRICING_BILLING_CUTOVER.md): cutover from the legacy four-tier model.
+- [Retire the free plan](runbooks/RETIRE_FREE_PLAN.md): the operator procedure for migrating existing free tenants.
+- [SEO evidence setup](runbooks/SEO_EVIDENCE_SETUP.md): every measurement source behind `tooling/seo-evidence` and what unblocks each one.
+- [GEO measurement](runbooks/GEO_MEASUREMENT.md): the four built layers of GEO measurement.
 
-```
-docs/
-├── current/           # ✅ Active documentation
-├── archive/           # 📦 Historical documents
-├── guides/            # How-to guides
-│   └── mcp-server/   # MCP-specific guides
-├── roadmaps/          # Planning and vision
-├── operations/        # Operational guides
-├── testing/           # Test plans and coverage
-├── marketing/         # Marketing materials
-└── x402/              # X402 protocol documentation
-```
+### Self-hosting
 
----
-
-## Documentation Conventions
-
-### File Naming
-- Timestamped: `YYYY-MM-DD_FILENAME.md`
-- Current: Descriptive name without timestamp
-
-### Status Markers
-All documents should include a status in their frontmatter or header:
-- `status: CURRENT` - Actively maintained
-- `status: NEEDS_REVIEW` - May need updates
-- `status: ARCHIVED` - Historical only
-
-### Linking
-Use relative paths for internal links:
-```markdown
-[Architecture Guide](./current/CLEAN_ARCHITECTURE.md)
-[Core README](../apps/core/README.md)
-```
+- [Self-hosting Community Edition](self-hosting/README.md): single-node event store, Apache 2.0.
 
 ---
 
-## Contributing
+## Plans in progress
 
-1. **Creating**: Place new docs in the appropriate directory and update this index
-2. **Updating**: Update the `last_updated` date in frontmatter
-3. **Archiving**: Move to `archive/` with timestamp, update supersession reference above
-4. **Questions**: Create an issue with `[docs]` prefix
+### Strategy and delivery plans
+
+- [AllSource bet](BET.md): the active bet, its contract and shape versions, and the chat delivery gate.
+- [Impact plan](IMPACT_PLAN.md): the outcome plan toward the BET gate of three qualifying hosted customers.
+- [Value delivery plan](VALUE_DELIVERY_PLAN.md): internal accountability plan; customer value not yet reconciled.
+- [Consolidated roadmap](roadmaps/2026-02-15_CONSOLIDATED_ROADMAP.md): the product roadmap, updated 2026-11-23.
+
+### Plans
+
+- [Prime as a Folk and Notion replacement](plans/2026-06-10-prime-workspace-crm-design.md): design for a Prime workspace CRM.
+- [Dashboard route-family improvement](plans/2026-08-13-dashboard-autoresearch-design.md): one operational question and one next action per dashboard route.
+- [Dashboard and onboarding UX](plans/2026-08-13-dashboard-onboarding-ux.md): moving a signed-in user from an empty tenant to one verified event.
+- [Projection workspace redesign](plans/2026-08-13-projections-workspace-design.md): the projections page and its empty state.
+- [Public-page clarity autoresearch](plans/2026-08-13-public-pages-autoresearch-design.md): homepage, platform and comparison page clarity.
+- [Replay Studio design](plans/2026-08-13-replay-studio-design.md): the Replay Studio feature.
+- [Replay Studio analysis and SDK](plans/2026-08-14-replay-studio-analysis-sdk-design.md): analysis and SDK design for Replay Studio.
+- [Design partner acquisition campaign](plans/2026-08-27-design-partner-campaign-design.md): recruiting five AI-agent builders who need durable memory (approved).
+- [Public SEO remediation](plans/2026-08-27-public-seo-remediation-autoresearch-design.md): code-addressable findings from the 27 August 2026 SEO audit.
+- [Website brand-system migration](plans/2026-08-27-website-brand-system-design.md): the brand-system change for the website.
+- [Homepage reliability autoresearch](plans/2026-09-02-homepage-reliability-autoresearch-design.md): homepage reliability loop.
+- [Event-store SEO design](plans/2026-09-10-allsource-event-store-seo-design.md): SEO design for the event-store pages.
+- [GitHub contribution motion](plans/2026-09-11-github-contribution-motion-design.md): contribution motion design.
+- [Agent-run evidence and replay](plans/2026-09-14-agent-run-evidence-design.md): an evidence layer over existing Core events, with SDK and MCP capture first.
+- [Optional decision intelligence](plans/2026-09-23-jev-decision-intelligence-design.md): offline proof, optional Choice adapter and stored-label filtering prototype.
+- [Customer investigation and review contract v1](plans/2026-09-26-customer-agent-contract.md): the customer-agent contract. It adds no route or MCP tool.
+- [Customer connection grants](plans/2026-09-26-customer-agent-grants.md): persistence and verification of grants; access not yet completed.
+- [Plug and Play referral offer](plans/2026-09-26-plug-and-play-offer-design.md): a referral offer of 12 paid months.
+- [Agent-run evidence capture and read](plans/2026-09-27-agent-run-evidence-contract.md): internal capture and read implementation under an existing epic.
+- [Restricted evidence transport](plans/2026-09-27-customer-evidence-bindings.md): binding the comparison workflow to the Query Service.
+- [Customer source references and pending reviews](plans/2026-09-27-customer-evidence-reviews.md): source references and pending comparison reviews.
+- [Remote customer connection authorization](plans/2026-09-27-customer-remote-oauth-design.md): authorization design for remote customer connections.
+- [Customer review work bounds](plans/2026-09-27-customer-review-work-bounds-design.md): bounds on customer review work.
+- [Durable review query admission](plans/2026-09-27-durable-review-query-admission-design.md): admission for durable review queries.
+- [Metered customer evidence workflow](plans/2026-09-27-metered-evidence-workflow-design.md): source sharing and pending reviews under metering.
+- [Partnerships workspace](plans/2026-09-27-partnerships-design.md): the admin workspace for commercial channel exploration.
+- [Product evidence selection and review](plans/2026-09-27-product-evidence-review-design.md): evidence consent and review in the agent connections settings.
+- [Product-only approval of a rebuild plan](plans/2026-09-27-product-replay-approval-design.md): approval of a tenant projection rebuild plan.
+- [Query Service query-admission client](plans/2026-09-27-query-admission-client.md): the canonical query-admission client.
+- [Bounded cache warming](plans/2026-09-27-shared-archive-warmup-design.md): cache warming for strict HTTP operations.
+- [Strict archive work](plans/2026-09-27-strict-archive-read-design.md): bounded input and HTTP isolation for strict archive reads.
+- [Durable identity for projection replay](plans/2026-09-27-tracked-replay-design.md): a minimal execution journal for tenant projection replay.
+- [Tenant egress allowances](plans/2026-10-22-tenant-egress-prepaid-design.md): allowances, prepaid overage and hard stops; implemented locally, values proposed for owner review.
+- [Tenant polling defense](plans/2026-10-24-tenant-polling-defense.md): per-tenant admission, conditional reads and caches on both sides.
+- [Event feed without whole-tenant history](plans/2026-10-25-feed-without-whole-history.md): a narrow feed index and a durable per-tenant feed log.
+- [Native delivery CI prerequisites](plans/2026-10-28-native-ci-prerequisites.md): accepted CI prerequisites for native delivery.
+- [Core restarts without refused clients](plans/2026-11-01-core-zero-downtime-restart.md): phased fix for Core deploys that refuse clients; proposed.
+- [Bitemporal time axes](plans/2026-11-04-bitemporal-time-axes.md): a second time axis (valid time) next to record time; accepted 2026-11-04.
+- [Fly cost reduction](plans/2026-11-08-fly-cost-reduction.md): steps to reduce the Fly org's monthly cost, justified by measured activity.
+- [Core memory bound: brief](plans/2026-11-11-core-memory-bound-brief.md): why Core needs 16 GB today and the staged path to 8 GB.
+- [AllSource outreach comparison](plans/2026-11-11-outreach-comparison.md): proposed outreach workflows, review controls and measurement.
+- [Core memory bound: design](plans/2026-11-12-core-memory-bound-design.md): S0 heap attribution, the S1 ledger, and the measurement harness.
+- [Core memory bound: design review record](plans/2026-11-12-core-memory-bound-design-review.md): the twenty fresh-context review rounds and their outcome.
+- [Core memory bound: review round 1](plans/2026-11-12-core-memory-bound-design-review-r1.md): review round record.
+- [Core memory bound: review round 10](plans/2026-11-12-core-memory-bound-design-review-r10.md): review round record.
+- [Core memory bound: review round 11 delta](plans/2026-11-12-core-memory-bound-design-review-r11-delta.md): review delta record.
+- [Core memory bound: review round 16 delta](plans/2026-11-12-core-memory-bound-design-review-r16-delta.md): review delta record.
+- [Core memory bound: review round 17](plans/2026-11-12-core-memory-bound-design-review-r17.md): review round record.
+- [Core memory bound: plan](plans/2026-11-12-core-memory-bound-plan.md): quality gates, the testing approach and the stories from manifest commits through the S1 run.
+
+### Proposals
+
+- [Admin tenant power tool](proposals/ADMIN_TENANT_POWER_TOOL.md): design and phased build plan for active tenant help; no code yet.
+- [Agent-driven Prime onboarding](proposals/AGENT_DRIVEN_PRIME_ONBOARDING.md): the onboarding gaps, which shipped, and why the remainder stopped.
+- [AI inbox on AllSource](proposals/AI_INBOX_ON_ALLSOURCE.md): not planned since 2026-09-16; the P0 email wedge stays code-complete.
+- [Agent memory ecosystem](proposals/ALLSOURCE_AGENT_MEMORY_ECOSYSTEM.md): strategy and blueprint, dated 2026-05-29.
+- [Control-plane tenant health and recovery](proposals/CONTROL_PLANE_TENANT_HEALTH_RECOVERY.md): fleet-wide health and recovery; P0 to P3 on main.
+- [Hosted tier pricing options](proposals/MAMMOTH_HOSTED_PRICING_OPTIONS.md): pricing and abuse-control options; decided 2026-05-31.
+- [MCP registry publication](proposals/MCP_REGISTRY_PUBLICATION.md): publication plan for the Elixir MCP server.
+- [Neotoma parity completion plan](proposals/NEOTOMA_PARITY_COMPLETION_PLAN.md): the plan to reach parity with Neotoma.
+- [Per-tenant projections](proposals/PER_TENANT_PROJECTIONS.md): the design for per-tenant projections, epic `t-822210`.
+- [Pluggable embedder for Prime](proposals/PLUGGABLE_EMBEDDER_DESIGN.md): implemented as v1 behind the `prime-remote-embed` feature.
+- [Pricing and exposure plan](proposals/PRICING_EXPOSURE_PLAN.md): pricing and exposure plan for the developer infrastructure product.
+- [Pricing plan details](proposals/PRICING_PLAN_DETAILS.md): the source of record for per-tier entitlements.
+- [Hosted Prime MCP server](proposals/PRIME_HOSTED_MCP_DESIGN.md): design for a hosted Prime MCP server.
+- [Prime Hound and Graphify](proposals/PRIME_HOUND_GRAPHIFY_ANALYSIS.md): analysis of offering Graphify's capabilities as a Prime extension; not yet scheduled.
+- [Prime as a stateless engine over Core](proposals/PRIME_STATELESS_OVER_CORE.md): the design for Prime without its own state.
+- [Prime voice file](proposals/PRIME_VOICE_FILE.md): a durable, queryable identity index; a proposal with a shipped thin layer.
+- [Regional independence](proposals/REGIONAL_INDEPENDENCE.md): steps 1 and 2 of the proposal; steps 3 to 5 not planned.
+- [Self-service onboarding gap analysis](proposals/SELF_SERVICE_ONBOARDING.md): gaps in self-service onboarding, dated 2026-03-27.
+- [Sustainable data strategy](proposals/SUSTAINABLE_DATA_STRATEGY.md): draft proposal, 2026-04-26.
+- [Team sync setup](proposals/TEAM_SYNC_SETUP.md): priority assessment for sharing chronis tasks through the hosted instance.
+- [Unified auth, teams and roles](proposals/UNIFIED_AUTH_TEAMS.md): OAuth bridge, teams, and agent and human roles.
+- [PRD: agent auth and x402 payments](proposals/prd-agent-auth-x402.md): agent self-registration and x402 payments in the control plane.
+- [PRD: agent-run evidence and replay](proposals/prd-agent-run-evidence-and-replay.md): evidence and replay comparison for agent runs.
+- [PRD: read-only Core against a foreign data directory](proposals/prd-core-read-only-foreign-data.md): replaying existing WAL and Parquet files from a foreign directory (issue #130).
+- [PRD: event-sourced billing](proposals/prd-event-sourced-billing.md): billing state as events in Core.
+- [PRD: `rust-perf` skill templates](proposals/prd-rust-perf-templates-and-validation.md): runnable templates and validation for the rust-perf skill.
 
 ---
 
-**Navigation**: [Repository Home](../README.md) | [Current Docs](./current/) | [Guides](./guides/) | [Roadmaps](./roadmaps/) | [Archive](./archive/)
+## Reports and evidence
 
-- [Hosted Prime native sync verification](plans/2026-10-26-hosted-prime-sync-verification.md)
+### Incident and verification reports
 
-- [Hosted Prime sync verification report](reports/2026-10-26-hosted-prime-sync-verification.md)
+- [Control-plane egress root cause (2026-10-24)](reports/2026-10-24-control-plane-egress-rca.md): the 66 GB/day alert caused by control-plane polling over the public edge.
+- [Production traffic report (2026-10-24)](reports/2026-10-24-production-traffic.html): measured bandwidth by app, region and tenant, the bottlenecks, and the 2026-10-24/25 outage.
+- [Control-plane tenant outage (2026-10-25)](reports/2026-10-25-control-plane-tenant-outage.html): measured refusals of Longhand reads with 429, the timeline and the fix.
+- [Client access outage (2026-10-26)](reports/2026-10-26-client-access-outage.html): the key refusals caused by API-key enforcement deploys, with timeline, cause and actions.
+- [Deploy denial diagnosis (2026-10-26)](reports/2026-10-26-auth-deploy-denial-diagnosis.html): the auth path that refused unregistered keys and ranked safeguards.
+- [Gateway config strip outage (2026-11-06)](reports/2026-11-06-gateway-config-strip-outage.md): `api.all-source.xyz` served nothing for 32.5 minutes after a config file was replaced by an empty one.
+- [Infrastructure costs status (2026-11-08)](reports/2026-11-08-infra-costs-status.html): Fly machines, volumes, gateway egress and the actions that cut cost.
 
-- [Hosted Prime sync acceptance request](reference/hosted-prime-sync-request.md)
+### Verification reports
 
-- [Hosted Prime sync verification runbook](runbooks/HOSTED_PRIME_SYNC.md)
+- [Hosted Prime sync verification](reports/2026-10-26-hosted-prime-sync-verification.md): synthetic sync observations bound to runtime source `f1ede26f`.
+- [Managed API key lifecycle verification](reports/2026-10-26-managed-key-lifecycle-verification.md): deployed gateways, legacy-key compatibility and production readback.
+- [Prime sync interval verification](reports/2026-10-26-prime-sync-interval-verification.md): a zero interval is refused before the store opens; positive intervals deliver events.
+- [Chronis TOON native qualification](reports/2026-10-27-chronis-native-verification.md): TOON escaping for Chronis, qualified through real Codex and Claude calls.
+- [Prime TOON key integrity](reports/2026-10-27-prime-toon-native-verification.md): retained-memory property names through independently decoded MCP responses.
+- [Prime TOON control-value integrity](reports/2026-10-28-prime-toon-values-verification.md): C0 control values through retained-memory reopen.
+- [Prime against HASH: gap status (2026-11-06)](reports/2026-11-06-prime-hash-gap-status.md): the seven gaps against HASH, what is deployed, and what is still open.
+- [Scoped local event erasure (2026-11-13)](reports/2026-11-13-scoped-erasure.md): offline rewrite boundary, synthetic verification and the remaining account-deletion coverage.
+- [Ritual-full flow adoption (2026-11-11)](reports/2026-11-11-ritual-full-adoption.md): vendored ritual skills, planning rules and what was not checked.
+- [Core heap attribution (2026-11-13)](reports/2026-11-13-core-heap-attribution.md): S0 jemalloc profile of the replay fixture, attributed to S1 owners.
+- [Core memory S1 run ledger (2026-11-13)](reports/2026-11-13-core-memory-s1-run-ledger.md): the S1 autoresearch run on the US-011 baseline; two candidates, neither kept.
+- [Core memory S1 report (2026-11-14)](reports/2026-11-14-core-memory-s1-report.md): Acceptance 4 records for S1; the cold-load band rule failed for both sets.
+- [Core memory S1 overlay (2026-11-14)](reports/2026-11-14-core-memory-s1-overlay.patch): the overlay recipe referenced by the S1 report.
+- [Critical bugs fixed](current/CRITICAL_BUGS_FIXED.md): bugs fixed in AllSource Core, with the notes on feature-gated backends.
+- [Evidence-led investigation audit (2026-09-23)](EVIDENCE_LED_AUDIT_2026-09-23.md): the audit of the evidence-led investigation.
+- [Evidence-led investigation queue (2026-09-23)](EVIDENCE_LED_BEADS_2026-09-23.md): the queue of investigations; creating it is not completing them.
+- [Chat delivery readiness](CHAT_DELIVERY.md): readiness of chat delivery, contract v3, activation queued.
+- [Mobile delivery](MOBILE_DELIVERY.md): complete Android and iOS delivery, decided 2026-09-21.
+- [Customer agent delivery](CUSTOMER_AGENT_DELIVERY.md): customer agent contract and runtime evidence status.
+- [SEO evidence baseline (2026-10-20)](reports/2026-10-20-seo-evidence-baseline.md): pages score 100/100 and receive 2 organic clicks a month.
 
-- [Dashboard API key lifecycle repair](plans/2026-10-26-api-key-lifecycle-repair.md)
-- [Managed API key lifecycle verification](reports/2026-10-26-managed-key-lifecycle-verification.md)
+### Ledgers and benchmarks
 
-- [Allstack delivery plan 568bfc54-0b16-4b1a-8043-af1d3d3a5a9e](plans/allstack-568bfc54-0b16-4b1a-8043-af1d3d3a5a9e.md)
+- [Dashboard JS weight ledger](ledger/dashboard-bundle.md): autoresearch loop over the customer dashboard client JavaScript.
+- [Dashboard route-family ledger](ledger/dashboard-pages-autoresearch.md): autoresearch ledger for the dashboard routes.
+- [Homepage reliability ledger](ledger/homepage-reliability-autoresearch.md): autoresearch ledger for the homepage.
+- [Monorepo focus audit](ledger/monorepo-focus-audit.md): unused code, dormant features and focus, dated 2026-08-11.
+- [Public page clarity ledger](ledger/public-pages-autoresearch.md): autoresearch ledger for public page clarity.
+- [Public SEO remediation ledger](ledger/public-seo-remediation-autoresearch.md): autoresearch ledger for SEO remediation; external evidence gates are recorded as unknown until observed.
+- [Replay Studio ledger](ledger/replay-studio-autoresearch.md): autoresearch ledger for Replay Studio.
+- [Benchmark improvement guide](benchmarks/BENCHMARK_IMPROVEMENT_GUIDE.md): the optimisations tried for Prime recall, with the results and open opportunities.
+- [Recall benchmark results (2026-03-23)](benchmarks/RECALL_BENCHMARK_RESULTS.md): Prime recall benchmark results.
 
+### Evidence bundles
 
-- [Allstack delivery plan 2432f3f6-c468-46ca-99ba-45fa6185deba](plans/allstack-2432f3f6-c468-46ca-99ba-45fa6185deba.md)
+- [docs/evidence/](evidence/): one bundle per run, each with a `README.md`. Bundles from 2026-09-20 to 2026-09-24: search baseline, signup repair, evidence-led investigation, experiment and SEO worksheets. Bundles from 2026-09-26: customer-agent contract, grant isolation, grants, live access. Bundles from 2026-09-27: agent-run capture and evidence, archive budget audit, archive cache residency, archive worker setting, compaction input integrity, conditional archive integrity, core foundation deploy, customer connections, customer evidence bindings and reviews, customer remote HTTP, customer review work bounds, customer workspace ownership, durable query admission, isolated archive capacity, local customer connection, metered evidence workflow, product evidence workspace, product replay approval, query admission client, remote customer authorization, shared archive warmup, strict archive work, strict retained read, strict timestamp stability, team membership, tracked replay. Bundle from 2026-10-27: latest-state views.
+- [Latest-state views evidence (2026-10-27)](evidence/2026-10-27-latest-state-views/README.md): view fold, conditional reads, sync, tenant isolation, restart and the consumer gate, end to end.
+- Supporting data for reports: `reports/baselines/`, `reports/data/`, `reports/evidence/` and `reports/images/`.
 
-- [Allstack delivery plan b67f2a72-0d88-40b5-bf4d-efdc492f4f99](plans/allstack-b67f2a72-0d88-40b5-bf4d-efdc492f4f99.md)
+---
 
-- [Allstack delivery plan d8404323-55a8-4137-8e69-639179e39202](plans/allstack-d8404323-55a8-4137-8e69-639179e39202.md)
+## Research
 
-- [Allstack delivery plan 66712413-6a19-4587-a359-387994e20530](plans/allstack-66712413-6a19-4587-a359-387994e20530.md)
+- [Stoolap vs AllSource](research/stoolap-vs-allsource.md): research dossier, citable comparison material.
+- [Sea of Demand](SEA_OF_DEMAND.md): demand research for hosted agent-event durability; research complete, no outreach performed.
+- [Replay-debugging guide autoresearch (2026-08-25)](research/2026-08-25-organic-page-autoresearch.md): the replay-debugging guide page.
+- [Design-partner page autoresearch (2026-08-27)](research/2026-08-27-design-partner-page-autoresearch.md): the design-partner page report.
+- [Design-partner page simplification (2026-08-27)](research/2026-08-27-design-partner-page-simplification.md): verification of the simplified page.
+- [Agent workflow feedback (2026-09-14)](research/2026-09-14-agent-workflow-feedback-report.md): feedback from a public thread and the opportunity it shows.
+- [Optimistic concurrency without loading history (2026-10-04)](research/2026-10-04-occ-version-index.md): why entity versions must be read, not counted.
+- [Reuse verified archive hydration (2026-10-08)](research/2026-10-08-strict-hydration-version-index.md): conditional writes after a strict archive read.
+- [Memory-failure design-partner research (2026-10-19)](research/2026-10-19-memory-failure-design-partners.md): public evidence for 30 projects, qualification and prior-contact checks.
+- [Latest-state reads (2026-10-27)](research/2026-10-27-latest-state-reads.md): why consumers pull history for current state, and the snapshot-plus-tail target.
 
-- [Allstack delivery plan d408c686-a3db-46f1-96a5-c5264bdd1a6d](plans/allstack-d408c686-a3db-46f1-96a5-c5264bdd1a6d.md)
+---
 
-- [Allstack delivery plan c6e1b5d6-e63d-4ed1-b90e-337b9bb904e5](plans/allstack-c6e1b5d6-e63d-4ed1-b90e-337b9bb904e5.md)
+## SEO
 
-- [Allstack delivery plan d3f36c01-447b-4640-904c-13571a14aaa7](plans/allstack-d3f36c01-447b-4640-904c-13571a14aaa7.md)
+- [SEO assessment (2026-11-10)](seo/2026-11-10-seo-assessment.md): observed search intent and proposed content changes.
+- [SEO strategy (2026-11-08)](seo/2026-11-08-allsource-seo-strategy.md): delivery, topic priorities, evidence and measurement.
+- [Keyword demand with WolvenTech (2026-10-01)](seo/2026-10-01-allsource-wolventech-keyword-demand.md): measured keyword volumes, intent exclusions and targeting priorities. Data: `seo/2026-10-01-keyword-demand.csv` and `seo/2026-10-01-keyword-demand-evidence.json`.
+- [Search-content implementation (2026-10-01)](seo/2026-10-01-search-content-implementation.md): page intent, content changes and verification for both sites.
+- [Agent memory after compaction (2026-11-07)](seo/2026-11-07-compaction-search-evidence.md): search intent, sources and trend-data limits.
+- [Editorial review (2026-11-07)](seo/2026-11-07-editorial-review/README.md): factual corrections and contextual links for product-owner review.
+- [CQRS internal link draft (2026-11-07)](seo/2026-11-07-editorial-review/2026-11-07-cqrs-link.md): a local link recommendation.
+- [Production review and owner handoff (2026-11-07)](seo/2026-11-07-editorial-review/2026-11-07-production-review.md): the production review of the introductory and comparison articles.
+- [Schema evolution evidence (2026-11-08)](seo/2026-11-08-schema-evolution-evidence.md): replay example, source evidence and release limits.
+- [Schema evolution SEO review (2026-11-09)](seo/2026-11-09-schema-review.md): proposed correction and its local HTML preview.
+- [Event sourcing reference correction (2026-11-11)](seo/2026-11-11-aws-reference-review.md): the corrected reference destination and verification limits.
+- [SEO audit (2026-08-29)](seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/VERIFIED-AUDIT-REPORT.md): verified audit of www.all-source.xyz. The raw pipeline's performance score came from a heuristic fallback and is replaced here.
+- [Verified SEO action plan (2026-08-29)](seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/VERIFIED-ACTION-PLAN.md): action plan built on the verified audit.
+- [Sitemap validation (2026-08-29)](seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/SITEMAP-VALIDATION-REPORT.md): Search Console sitemap check.
+- SEO audit data: `seo/2026-08-29-allsource-audit/www-all-source-xyz-audit-20260829-015519/` holds the JSON results, the Lighthouse output and the screenshots.
 
-- [Allstack delivery plan eb5af30a-ba11-49c9-b3be-328a66a6f7af](plans/allstack-eb5af30a-ba11-49c9-b3be-328a66a6f7af.md)
+---
 
-- [Allstack delivery plan 1a9c09ae-98ab-4120-bbe0-72342e530296](plans/allstack-1a9c09ae-98ab-4120-bbe0-72342e530296.md)
+## Outreach and marketing
+
+### Outreach
+
+- [Outreach skill verification (2026-11-11)](outreach/2026-11-11-outreach-skill-verification.md): synthetic walkthrough and page checks; no external message sent.
+- [Outreach skill presentation](outreach/allsource-outreach-skill.html): the outreach skill's workflow and example prompt. Source: [SKILL.md](../skills/allsource-outreach/SKILL.md); package: [allsource-outreach.zip](outreach/allsource-outreach.zip).
+- [Fintech AI decision-context discovery (2026-11-12)](outreach/2026-11-12-fintech-discovery-review.md): sourced prospects, messages sent after approval, and exclusions.
+- [Qualified builder outreach ledger](outreach/qualified-builder-outreach.md): the record that prevents duplicate founder outreach.
+- [Directory and registry listings (2026-10-21)](outreach/2026-10-21-directory-listings.md): product facts and submission routes for listings.
+- [Live nanobot and Hermes memory evaluation (2026-10-19)](outreach/2026-10-19-live-memory-evaluation.md): real-provider results and an isolated outage check; nothing sent.
+- [Memory fixes and artifact-led drafts (2026-10-19)](outreach/2026-10-19-memory-fix-audit-and-drafts.md): released fixes, remaining gaps and unsent drafts.
+- [Oh-my-openagent #7183 compaction evaluation (2026-10-19)](outreach/2026-10-19-omo-compaction-evaluation.md): repeated recovery, payload bounds and ownership checks.
+- [Oh-my-openagent #7183 full-plugin evaluation (2026-10-20)](outreach/2026-10-20-omo-full-plugin-evaluation.md): the loader fix and the native compaction matrix.
+- [Oh-my-openagent #7183 provider-payload capture (2026-10-21)](outreach/2026-10-21-omo-provider-payload-evaluation.md): captured model inputs and counterbalanced controls.
+- [Oh-my-openagent #7183 send-ready package (2026-10-21)](outreach/2026-10-21-omo-send-ready.md): the package prepared for review; no send authorised.
+- [Evaluation artifacts](outreach/artifacts/): the raw outputs, configs and scripts behind the outreach evaluations.
+
+### Marketing
+
+- [Marketing index](marketing/README.md): the marketing folder's index.
+- [Marketing strategy pack](MARKETING_STRATEGY_PACK.md): the strategy pack; `BET.md` takes precedence on conflict.
+- [Design partner launch kit (2026-08-27)](marketing/design-partner-launch-kit.md): launch kit for the design-partner campaign.
+- [Qualified builder outreach (2026-08-28)](marketing/2026-08-28-qualified-builder-outreach.md): outreach campaign `design_partners_2026`.
+- [GEO and AEO answer-engine checklist](marketing/GEO_AEO_ENGINE_QUESTION_CHECKLIST.md): questions to put to the answer engines.
+- [Answer-engine sweep (2026-08-14)](marketing/geo-answer-engine-sweep-2026-08-14.md): results immediately after deploy.
+- [GEO content experiment (2026-08-14)](marketing/geo-content-experiment-2026-08-14.md): evidence before expansion.
+- [GEO baseline template](marketing/geo-baseline-TEMPLATE.md): template for the layer-3 baseline; awaiting the first live run.
+- [Observed model vocabulary](marketing/geo-key-terms.md): the terms the engines use; awaiting the first live run.
+- [GEO remediation backlog](marketing/geo-remediation-backlog.md): wrong claims the engines make; awaiting the first live run.
+- [Free-tool spec: memcheck](marketing/free-tool-memcheck-spec.md): draft spec for a future free tool; not an implementation.
+- [Lifecycle email trail](marketing/lifecycle-email-trail.md): draft lifecycle emails for human review; nothing sent.
+
+### Social and articles
+
+- [Embedded Core complete (2026-02-28)](social/2026-02-28-embedded-core-complete.md): thread announcing the embedded Core API.
+- [Chronis cold-parquet incident (2026-05-30)](social/2026-05-30-chronis-cold-parquet-incident.md): draft postmortem thread.
+- [mammoth launch thread](social/mammoth-launch-x-thread.md): draft X and Show HN launch thread.
+- [Prime voice file campaign](social/prime-voice-file-campaign.md): draft X, LinkedIn and Show HN campaign.
+- [Twitter thread, v0.10.4](social/twitter-v0.10.4.md): published release thread.
+- [Twitter thread, v0.10.5](social/twitter-v0.10.5.md): published release thread.
+- [Twitter thread, v0.10.6](social/twitter-v0.10.6.md): published release thread on SDK distribution.
+- [Neotoma vs AllSource (2026-05-23)](articles/neotoma-comparison.md): two designs for agent memory.
+- [Oracle 26ai vs AllSource (2026-05)](articles/oracle-26ai-comparison.md): a converged database compared with a purpose-built event spine.
+- [Blog drafts](drafts/blog/README.md): unpublished `.mdx` drafts, not in the web app's content directory. Drafts: [graphify-vs-allsource-prime.mdx](drafts/blog/graphify-vs-allsource-prime.mdx), [one-graph-for-code-and-agent-memory.mdx](drafts/blog/one-graph-for-code-and-agent-memory.mdx) and [prime-hound-living-knowledge-graph.mdx](drafts/blog/prime-hound-living-knowledge-graph.mdx).
+
+---
+
+## Sales and launch
+
+- [Launch readiness](LAUNCH_READINESS.md): operational readiness record; the Sunday Club submission was reported on 2026-09-14, receipt not verified.
+- [Launch checklist](launch/LAUNCH_CHECKLIST.md): the launch checklist, last reviewed 2026-11-24.
+- [Chronis Cloud launch plan](launch/CHRONIS_CLOUD_LAUNCH_PLAN.md): manual steps to move chronis from embedded mode to hosted sync with x402 and agent registration.
+- [LemonSqueezy setup](launch/LEMONSQUEEZY_SETUP.md): product and variant setup for the subscription tiers.
+- [mammoth launch runbook](launch/MAMMOTH_LAUNCH_RUNBOOK.md): sequencing for the mammoth launch assets.
+- [Prime voice file launch runbook](launch/PRIME_VOICE_FILE_LAUNCH.md): sequencing for the Prime voice file launch assets.
+- [Sales README](sales/README.md): index of the sales and marketing artefacts.
+- [SaaS evaluation summary](sales/SUMMARY.md): summary of the SaaS evaluation, dated February 2026.
+- [SaaS evaluation report](sales/evaluation/SAAS_EVALUATION.md): full SaaS evaluation, dated February 2026.
+- [Sales pitch deck](sales/pitch-deck/SALES_PITCH_DECK.md): a 15 to 20 minute pitch with Q&A.
+- [Visual assets for sales](sales/pitch-deck/VISUAL_ASSETS.md): the visual assets for the pitch deck.
+- [Video scripts](sales/videos/VIDEO_SCRIPTS.md): scripts, storyboards and recording guides for demo videos.
+- [C4 architecture diagrams (Mermaid)](sales/diagrams/C4_ARCHITECTURE_MERMAID.md): C4 diagrams for Core 0.30.0. Structurizr source: [allsource.dsl](sales/diagrams/allsource.dsl).
+- [Static voice file compared with Prime voice](sales/voice-file-comparison.md): a draft comparison for the `/compare` surface.
+- [Brand guide](brand/BRAND_GUIDE.md): the visual and written brand rules.
+- [LinkedIn company page](brand/LINKEDIN_COMPANY_PAGE.md): the company page published 2026-09-30.
+
+---
+
+## Archive
+
+Superseded, completed and expired documents are in `archive/`. [ARCHIVE_INDEX.md](ARCHIVE_INDEX.md) lists each archived document with its successor and the other archive folders. The main archive is `archive/2026-11-23/`, which mirrors the original paths.
+
+---
+
+*Navigation: [Repository home](../README.md) | [Archive index](ARCHIVE_INDEX.md) | [ADRs](adr/README.md)*

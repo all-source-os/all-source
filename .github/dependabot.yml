@@ -64,6 +64,11 @@ updates:
         versions: [">=58.0.0"]
       - dependency-name: "datafusion"
         versions: [">=52.0.0"]
+      # RustCrypto 0.11 breaks the hmac, Digest-hex and aead::OsRng call sites; adopt as a deliberate migration
+      - dependency-name: "sha2"
+        versions: [">=0.11.0"]
+      - dependency-name: "aes-gcm"
+        versions: [">=0.11.0"]
     groups:
       rust-minor-patch:
         patterns:

@@ -53,7 +53,7 @@ git tag -l "vX.Y.Z" # Must return empty (tag must not exist)
 make set-version VERSION=X.Y.Z
 ```
 
-This updates 8 files automatically:
+This updates 13 files automatically:
 | File | What |
 |------|------|
 | `apps/core/Cargo.toml` | Rust crate version |
@@ -64,14 +64,16 @@ This updates 8 files automatically:
 | `deploy/k8s/core.yaml` | Docker image tag |
 | `deploy/k8s/query-service.yaml` | Docker image tag |
 | `README.md` | Displayed version |
+| `apps/prime-mcp/Cargo.toml` | Prime MCP version and `allsource-core` dependency |
+| `tooling/recall-bench/Cargo.toml` | `allsource-core` dependency |
+| `apps/chronis/Cargo.toml` | `allsource-core` dependency |
+| `tooling/allsource-mcp/Cargo.toml` | `allsource-core` dependency |
+| `apps/control-plane/docs/openapi.yaml` | OpenAPI `info.version` |
 
 **Also update manually** (not covered by `set-version`):
 ```bash
 # Lock file
 cd apps/core && cargo update --workspace && cd ../..
-
-# OpenAPI spec
-# Edit apps/control-plane/docs/openapi.yaml → info.version
 ```
 
 ### 4. Run CI

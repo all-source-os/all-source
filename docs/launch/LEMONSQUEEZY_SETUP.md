@@ -6,37 +6,41 @@
 |---|---|
 | `LEMON_SQUEEZY_API_KEY` | API key from LemonSqueezy dashboard |
 | `LEMON_SQUEEZY_STORE_ID` | Store ID from LemonSqueezy dashboard |
-| `LEMON_SQUEEZY_VARIANT_MAP` | JSON mapping tier names to variant IDs, e.g. `{"pro":"<variant_id>","growth":"<variant_id>"}` |
+| `LEMON_SQUEEZY_VARIANT_MAP` | JSON mapping `<tier>:<period>` keys to variant IDs, e.g. `{"indie:monthly":"<variant_id>","indie:annual":"<variant_id>"}` |
 | `LEMON_SQUEEZY_WEBHOOK_SECRET` | HMAC signing secret from LemonSqueezy webhook config |
 
 ## LemonSqueezy Dashboard Setup
 
 ### 1. Product & Variants
 
-Create one product (e.g. "AllSource Subscription") with the following variants. **Numbers come from `docs/marketing/PRICING_DECISION_2026-04.md` (April 2026 pricing decision).** All three paid-tier variants must exist before the website's pricing page will convert — the Control Plane reads `LEMON_SQUEEZY_VARIANT_MAP` and will fail checkout for any tier whose variant isn't mapped.
+Create one product (e.g. "AllSource Subscription") with the following variants. Prices and quotas come from `apps/web/src/lib/config.ts` (`siteConfig.pricing`) and `TierQuotaMap` in `apps/control-plane/internal/domain/entities/subscription.go`. Each paid tier needs a monthly and an annual variant. The Control Plane resolves checkout and webhook tiers through `LEMON_SQUEEZY_VARIANT_MAP`, and fails checkout for any tier whose variant is not mapped.
 
-| Variant | Monthly | Yearly | Events quota | Notes |
+| Variant | Monthly | Yearly (per month) | Events quota | Notes |
 |---|---|---|---|---|
-| **Pro** | $29/mo | $24/mo billed yearly | 1,000,000/mo | Unlocks x402 agent endpoints. Headline differentiator vs Developer. |
-| **Growth** | $99/mo | $79/mo billed yearly | 10,000,000/mo | Renamed from TEAM on 2026-04-16. Existing variant IDs can be reused — the tier name changed, not the SKU. |
-| **Enterprise** | Custom | Custom | Unlimited | Sales-led, no self-serve checkout; no LemonSqueezy variant required. |
+| **Indie** | £18.99 | £15.17 billed yearly | 500,000/mo | 50K x402 calls included. 3 streams. |
+| **Studio** | £78.99 | £63.17 billed yearly | 5,000,000/mo | 500K x402 calls included. Unlimited streams. |
+| **Scale** | £298.99 | £239.17 billed yearly | 50,000,000/mo | 5M x402 calls included. Dedicated MCP. |
+| **Enterprise** | Custom | Custom | Negotiated | Sales-led, no self-serve checkout; no LemonSqueezy variant required. |
 
-- No "free" variant needed — free is the default tier with no subscription.
-- For each new variant in LemonSqueezy, note the numeric variant ID — you'll paste them into `LEMON_SQUEEZY_VARIANT_MAP` below.
-- **Action required (launch blocker):** create `pro_monthly` and `pro_yearly` variants in the LemonSqueezy dashboard. These do not exist yet as of 2026-04-16.
+- No "free" variant needed. Self-Host is not sold through LemonSqueezy.
+- For each new variant in LemonSqueezy, note the numeric variant ID for the map in section 2.
 
 ### 2. Variant Map
 
-Set `LEMON_SQUEEZY_VARIANT_MAP` as JSON on the Control Plane. Both `pro` and `growth` keys must be present for the pricing page to work end-to-end:
+Set `LEMON_SQUEEZY_VARIANT_MAP` as JSON on the Control Plane. Keys are `<tier>:<period>`, with period `monthly` or `annual`. The Control Plane strips the period suffix and maps each variant ID to its bare tier:
 
 ```json
 {
-  "pro": "<variant_id_for_pro_plan>",
-  "growth": "<variant_id_for_growth_plan>"
+  "indie:monthly": "<variant_id_indie_monthly>",
+  "indie:annual": "<variant_id_indie_annual>",
+  "studio:monthly": "<variant_id_studio_monthly>",
+  "studio:annual": "<variant_id_studio_annual>",
+  "scale:monthly": "<variant_id_scale_monthly>",
+  "scale:annual": "<variant_id_scale_annual>"
 }
 ```
 
-Deploy with `fly secrets set LEMON_SQUEEZY_VARIANT_MAP='{"pro":"...","growth":"..."}' -a allsource-control-plane`.
+Deploy with `fly secrets set LEMON_SQUEEZY_VARIANT_MAP='{...}' -a allsource-control-plane`.
 
 ### 3. Webhook
 

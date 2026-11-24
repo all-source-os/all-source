@@ -1,7 +1,7 @@
 ---
 title: "AllSource Docker Images"
 status: CURRENT
-last_updated: 2026-07-25
+last_updated: 2026-11-24
 category: operations
 ---
 
@@ -47,7 +47,7 @@ Images are tagged with multiple identifiers:
 
 - `latest` - Latest build from main branch (moving)
 - `main` - Latest build from main branch (moving)
-- `0.22.0` - Specific version, **unprefixed** semver (a `v0.22.0` tag does not exist)
+- `0.22.0` - Specific version, **unprefixed** semver (the git tag for the same release is `v0.22.0`)
 - `0.22` - Major.minor version
 - `0` - Major version
 - `sha-abc1234` - Git commit SHA
@@ -182,9 +182,7 @@ docker run -d \
 
 ## Multi-Architecture Support
 
-All images are built for:
-- `linux/amd64` (x86_64)
-- `linux/arm64` (Apple Silicon, ARM servers)
+All images are built for `linux/amd64` (x86_64). CI does not build `linux/arm64` images.
 
 ## Health Checks
 
@@ -247,4 +245,4 @@ before then, use the community edition or obtain a commercial licence.
 
 ## Changelog
 
-See [CHANGELOG.md](../CHANGELOG.md) for version history.
+See [CHANGELOG.md](CHANGELOG.md) for version history.

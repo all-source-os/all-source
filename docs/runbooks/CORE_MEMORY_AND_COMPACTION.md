@@ -161,9 +161,9 @@ a cold load of a known-size tenant and put the number in a commit message.
 
 ### Machine size
 
-`shared-cpu-2x` caps at 4 GiB. 8 GiB needs `shared-cpu-4x` — the CPU bump is
-a requirement of the memory, not a separate choice. `apps/core/fly.toml` must
-match the running machine, or the next deploy silently downsizes it.
+Prod Core runs `cpu_kind = "shared"`, `cpus = 8`, `memory_mb = 16384` (16 GiB),
+i.e. `shared-cpu-8x`. `apps/core/fly.toml` must match the running machine, or
+the next deploy silently downsizes it.
 
 ## Sweep behaviour worth knowing before you watch one
 

@@ -25,7 +25,7 @@ That's it. No Docker. No API keys. No databases. Your agent now has persistent, 
 
 ## What Your Agent Gets
 
-**14 tools** — the agent sees these and uses them automatically:
+**31 tools** — the agent sees these and uses them automatically:
 
 | Tool | When to use |
 |------|------------|
@@ -42,6 +42,24 @@ That's it. No Docker. No API keys. No databases. Your agent now has persistent, 
 | `prime_recall` | Hybrid search (vectors + graph + time) |
 | `prime_index` | Compressed knowledge summary |
 | `prime_context` | Full context retrieval with index |
+| `prime_update_node` | A fact about a known entity changes or is corrected |
+| `prime_define_type` | Register a node or edge kind with typed properties |
+| `prime_list_types` | See registered kinds before extending one |
+| `prime_set_enforcement` | Choose `open`, `warn` or `strict` enforcement of kinds |
+| `prime_define_projection` | Define how a node's history folds into a snapshot |
+| `prime_list_projections` | See the projection definitions already registered |
+| `prime_project_node` | Compute a node's current snapshot |
+| `prime_node_provenance` | Find where a field's value came from |
+| `prime_list_templates` | Browse the bundled entity-type templates |
+| `prime_load_template` | Read one template's schema |
+| `inbox_recall_thread` | Ground a reply in a thread's interactions and their neighbors |
+| `inbox_draft` | Persist a reviewed reply draft as an `email.drafted` event (never sends). Requires sync |
+| `hound_ingest` | Extract a codebase into the graph with Tree-sitter (Rust in phase 1). Runs on-device |
+| `hound_ingest_docs` | Extract a graph from markdown or text docs. Requires `PRIME_LLM_ENDPOINT` |
+| `hound_impact` | Blast radius of a function: transitive callers |
+| `hound_report` | Structural summary of the code graph and its hub symbols |
+| `hound_pr_impact` | Rank a PR's changed symbols by how many callers depend on them |
+| `hound_export` | Export the code graph as cypher, graphml, mermaid, obsidian or wiki |
 
 ## Example Agent Session
 

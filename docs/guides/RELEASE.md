@@ -231,6 +231,11 @@ All files that contain version numbers and must be updated for each release:
 | `apps/mcp-server-elixir/mix.exs` | `version: "X.Y.Z"` | MCP Server Elixir version |
 | `deploy/k8s/core.yaml` | `image: allsource/core:X.Y.Z` | K8s Core image tag |
 | `deploy/k8s/query-service.yaml` | `image: allsource/query-service:X.Y.Z` | K8s Query Service image tag |
+| `apps/prime-mcp/Cargo.toml` | `version = "X.Y.Z"`, `allsource-core` dependency | Prime MCP server |
+| `tooling/recall-bench/Cargo.toml` | `allsource-core` dependency | Recall benchmark |
+| `apps/chronis/Cargo.toml` | `allsource-core` dependency | Chronis CLI |
+| `tooling/allsource-mcp/Cargo.toml` | `allsource-core` dependency | allsource-mcp server |
+| `apps/control-plane/docs/openapi.yaml` | `info.version` | Control Plane OpenAPI spec |
 
 ### Documentation and UI (manual update)
 
@@ -255,6 +260,8 @@ grep -rn "0\.9\.0\|0\.9\.1" --include="*.md" --include="*.tsx" --include="*.go" 
 ```
 
 ## Version History
+
+Current crate and service version: 0.30.0 (`apps/core/Cargo.toml:3`).
 
 | Version | Date | Highlights |
 |---------|------|------------|

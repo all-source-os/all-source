@@ -26,10 +26,10 @@ Prime makes that join cheap. Retrieval is hybrid — vector similarity, graph pr
 
 ## How it comes together
 
-Prime's memory side ships today — agents already use it over MCP to store and recall durable, graph-aware context. The code-graph side is what we're building next, under the working name **Prime Hound**: Tree-sitter extraction of a repo into the same Prime graph, on-device and `$0` for code, with docs and other sources embedded alongside.
+Prime's memory side ships today — agents already use it over MCP to store and recall durable, graph-aware context. The code-graph side ships as the **Prime Hound** module (`hound_ingest`, Rust in phase 1): Tree-sitter extraction of a repo into the same Prime graph, on-device and `$0` for code, with docs ingested alongside through `hound_ingest_docs`.
 
 When both land in one store, the payoff isn't "a code tool plus a memory tool." It's the edges *between* them — the part that only exists when your agent's structural knowledge and its working memory are the same graph.
 
 Two graphs, one store. That's where an agent stops losing the plot.
 
-> Prime's graph, vector, and recall engine is available now over MCP and REST. Prime Hound — codebase ingestion into the same graph — is on the roadmap; see [Prime Hound: a living knowledge graph for AI coding assistants](/blog/prime-hound-living-knowledge-graph).
+> Prime's graph, vector, and recall engine is available now over MCP and REST. Prime Hound — codebase ingestion into the same graph — is implemented as the `hound_ingest` tools; see [Prime Hound: a living knowledge graph for AI coding assistants](/blog/prime-hound-living-knowledge-graph).

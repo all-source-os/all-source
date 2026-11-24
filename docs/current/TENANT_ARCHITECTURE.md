@@ -1,11 +1,11 @@
 ---
 title: "Tenant Management Architecture"
 status: CURRENT
-last_updated: 2026-03-01
+last_updated: 2026-11-24
 version: "2.0"
 related:
-  - "./ARCHITECTURE_OPTIMIZATION.md"
-  - "./CLEAN_ARCHITECTURE.md"
+  - "../archive/2026-11-23/current/ARCHITECTURE_OPTIMIZATION.md"
+  - "../archive/2026-11-23/current/CLEAN_ARCHITECTURE.md"
   - "../adr/005-postgresql-removal-event-sourced-metadata.md"
 ---
 
@@ -114,7 +114,7 @@ QS has **no database**. It fetches tenant data from Core on demand:
 
 ## Scaling Path
 
-For multi-region or high-availability tenant management, the scaling strategy is Core leader-follower replication (see `docs/proposals/CORE_REPLICATION_DESIGN.md`). Writes go to the Core leader, reads distributed across followers. No PostgreSQL needed.
+For multi-region or high-availability tenant management, the scaling strategy is Core leader-follower replication. Writes go to the Core leader, reads distributed across followers. No PostgreSQL needed.
 
 ---
 

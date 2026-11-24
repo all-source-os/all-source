@@ -55,7 +55,7 @@ Connected Gmail searches covered project names and `AceRothstein71`, `sghng`, `D
 
 ## Current outreach draft: unsent
 
-Use the [replacement full-plugin draft](./2026-10-20-omo-full-plugin-evaluation.md#exact-outreach-draft-unsent). Existing ownership and prior-contact restrictions still apply.
+Use the [replacement full-plugin draft](./2026-10-20-omo-full-plugin-evaluation.md#current-outreach-draft-unsent). Existing ownership and prior-contact restrictions still apply.
 
 ## Verification and artifacts
 

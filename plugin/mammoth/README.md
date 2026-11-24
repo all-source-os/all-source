@@ -33,7 +33,7 @@ session it was never in. That's the whole product.
   [`docs/proposals/PRIME_VOICE_FILE.md`](../../docs/proposals/PRIME_VOICE_FILE.md)
   and the proof in [`tooling/voice-demo/`](../../tooling/voice-demo/).
 - `/remember`, `/recall`, `/memory-status` slash commands (explicit escape hatches).
-- The Prime MCP server wired via `.mcp.json` — **13 `prime_*` tools**
+- The Prime MCP server wired via `.mcp.json` — **23 `prime_*` tools**
   (`prime_recall`, `prime_context`, `prime_add_node`, `prime_embed`,
   `prime_stats`, …) plus the `prime://auto-context` resource: a compressed
   knowledge index auto-injected into every conversation.
@@ -69,8 +69,8 @@ config. `--print` to preview, `--help` for flags. Windows: `install.ps1`.
 
 ### Install matrix
 
-mammoth's core capability is one MCP server — any MCP agent gets all 13 tools by
-adding one stanza. See [INSTALL.md](./INSTALL.md) for per-agent placement.
+mammoth's core capability is one MCP server — any MCP agent gets all 23 `prime_*`
+tools (plus `inbox_*` and `hound_*`) by adding one stanza. See [INSTALL.md](./INSTALL.md) for per-agent placement.
 
 | Agent | Path |
 |-------|------|

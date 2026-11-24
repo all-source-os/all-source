@@ -22,16 +22,16 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
         clientApps = softwareSystem "Client Applications" "Web, mobile, and backend services that consume events" "External"
         llmAgents = softwareSystem "LLM/AI Agents" "Claude, GPT, and custom AI agents interacting via MCP protocol" "External"
         monitoringStack = softwareSystem "Monitoring Stack" "Prometheus, Grafana, Jaeger for observability" "External"
-        identityProvider = softwareSystem "Identity Provider" "OAuth, LDAP, SAML for enterprise SSO" "External"
+        identityProvider = softwareSystem "Identity Provider" "OAuth providers (Google, GitHub)" "External"
 
         # ==================== AllSource System ====================
-        allsource = softwareSystem "AllSource Platform" "AI-native event sourcing platform. 469K events/sec, 11.9us p99 latency, 27 MCP tools." {
+        allsource = softwareSystem "AllSource Platform" "AI-native event sourcing platform. 469K events/sec, 11.9us p99 latency, 73 MCP tool definitions." {
 
             # --- Web Dashboard ---
             webDashboard = container "Web Dashboard" "Real-time event visualization, management UI, OAuth login" "Next.js 16, React 19, Tailwind CSS" "Web Browser"
 
             # --- Control Plane ---
-            controlPlane = container "Control Plane" "Authentication, authorization, audit logging, request routing" "Go 1.24, Gin Framework" "Service" {
+            controlPlane = container "Control Plane" "Authentication, authorization, audit logging, request routing" "Go 1.26.11, Gin v1.12.0" "Service" {
                 ginRouter = component "Gin Router" "HTTP request routing and middleware chain" "Gin"
                 authHandler = component "Auth Handler" "Login, register, token refresh, user management" "Handler"
                 clusterHandler = component "Cluster Handler" "Health checks, cluster status, metrics export" "Handler"
@@ -47,7 +47,7 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
 
             # --- Event Store Core ---
             eventStoreCore = container "Event Store Core" "High-performance event storage with Clean Architecture" "Rust 1.92, Axum, Tokio" "Service" {
-                restApi = component "REST API" "38 HTTP endpoints for all event operations" "Axum"
+                restApi = component "REST API" "HTTP endpoints for all event operations" "Axum"
 
                 # Application Layer
                 ingestEventUC = component "IngestEvent Use Case" "Validates schema, writes to WAL, updates indexes" "Use Case"
@@ -64,7 +64,7 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
                 tenantEntity = component "Tenant Entity" "Multi-tenancy configuration and quotas" "Entity"
 
                 # Infrastructure Layer
-                parquetStorage = component "Parquet Storage" "Columnar storage with SIMD acceleration" "Infrastructure"
+                parquetStorage = component "Parquet Storage" "Columnar storage" "Infrastructure"
                 writeAheadLog = component "Write-Ahead Log" "Durability guarantee with segment rotation" "Infrastructure"
                 dashMapIndex = component "DashMap Index" "Lock-free O(1) entity and type lookups" "Infrastructure"
                 jwtAuth = component "JWT Auth" "Token validation and RBAC enforcement" "Infrastructure"
@@ -86,7 +86,7 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
             }
 
             # --- MCP Server ---
-            mcpServer = container "MCP Server" "27 AI-native tools for natural language interaction with events" "Elixir, JSON-RPC 2.0" "Service" {
+            mcpServer = container "MCP Server" "73 AI-native tool definitions for natural language interaction with events" "Elixir, JSON-RPC 2.0" "Service" {
                 jsonRpcHandler = component "JSON-RPC Handler" "JSON-RPC 2.0 protocol over stdio" "Protocol"
 
                 # Core Query Tools
@@ -97,7 +97,7 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
                 eventTimelineTool = component "event_timeline" "Chronological event visualization" "Tool"
 
                 # Search Tools
-                semanticSearchTool = component "semantic_search" "Vector similarity search (planned)" "Tool"
+                semanticSearchTool = component "semantic_search_events" "Semantic search over events" "Tool"
                 hybridSearchTool = component "hybrid_search" "Combined text and semantic search" "Tool"
 
                 # Management Tools
@@ -108,14 +108,12 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
                 cloneEntityTool = component "clone_entity" "Deep copy of entity event history" "Tool"
                 mergeEntitiesTool = component "merge_entities" "Combine multiple entity streams" "Tool"
 
-                toonFormatter = component "TOON Formatter" "Token-optimized output format (50% reduction)" "Service"
+                toonFormatter = component "TOON Formatter" "Token-optimized output format (about 50% fewer tokens than JSON for tabular data)" "Service"
                 sessionManager = component "Session Manager" "Context and conversation state tracking" "Service"
             }
 
             # --- Data Stores ---
             eventStorage = container "Event Storage" "Parquet columnar files with write-ahead log segments" "Parquet + WAL" "Database"
-            postgresDb = container "PostgreSQL" "Audit logs, user accounts, projection metadata" "PostgreSQL 15" "Database"
-            redisCache = container "Redis" "Query result caching, session storage" "Redis 7" "Database"
         }
 
         # ==================== Relationships ====================
@@ -144,13 +142,10 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
         mcpServer -> queryService "Executes queries via HTTP"
 
         eventStoreCore -> eventStorage "Persists events"
-        controlPlane -> postgresDb "Stores audit logs"
-        queryService -> postgresDb "Stores projection metadata"
-        queryService -> redisCache "Caches query results"
 
         # Control Plane Components
         ginRouter -> authHandler "Routes /api/v1/auth/*"
-        ginRouter -> clusterHandler "Routes /api/v1/cluster/*"
+        ginRouter -> clusterHandler "Routes /api/v1/status/services"
         ginRouter -> tenantHandler "Routes /api/v1/tenants/*"
         ginRouter -> operationsHandler "Routes /api/v1/operations/*"
         authHandler -> jwtService "Generates and validates tokens"
@@ -180,9 +175,9 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
         restApi -> jwtAuth "Authenticates requests"
 
         # Query Service Components
-        phoenixRouter -> eventController "Routes /api/events"
-        phoenixRouter -> queryController "Routes /api/query"
-        phoenixRouter -> projectionController "Routes /api/projections"
+        phoenixRouter -> eventController "Routes /api/v1 event endpoints"
+        phoenixRouter -> queryController "Routes /api/v1 query endpoints"
+        phoenixRouter -> projectionController "Routes projection endpoints"
         queryController -> queryDSL "Builds queries"
         projectionController -> projectionGenServer "Manages real-time views"
         eventController -> pipelineProcessor "Transforms events"
@@ -196,7 +191,7 @@ workspace "AllSource" "AI-native event sourcing platform for temporal data intel
         jsonRpcHandler -> reconstructStateTool "Dispatches reconstruct_state"
         jsonRpcHandler -> analyzeChangesTool "Dispatches analyze_changes"
         jsonRpcHandler -> findPatternsTool "Dispatches find_patterns"
-        jsonRpcHandler -> semanticSearchTool "Dispatches semantic_search"
+        jsonRpcHandler -> semanticSearchTool "Dispatches semantic_search_events"
         jsonRpcHandler -> deleteEventsTool "Dispatches delete_events"
         jsonRpcHandler -> exportEventsTool "Dispatches export_events"
         queryEventsTool -> toonFormatter "Formats responses"

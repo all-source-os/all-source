@@ -7,52 +7,53 @@
 ## Directory Layout
 
 ```
-chronos-monorepo/
-├── apps/                  # Deployable services (backend, frontend)
+all-source/
+├── apps/                  # Deployable services (backend, frontend, CLI)
 │   ├── core/              # Rust event store (AllSource Core)
 │   ├── query-service/     # Elixir/Phoenix API gateway
-│   ├── control-plane/     # Go control plane
+│   ├── control-plane/     # Go control plane (auth, onboarding, billing, admin)
+│   ├── auth/              # Rust auth service
 │   ├── web/               # Next.js frontend dashboard
+│   ├── admin/             # Admin frontend
 │   ├── mcp-server-elixir/ # Elixir MCP server
-│   └── chronis/           # Event-sourced task CLI (standalone workspace)
+│   ├── prime-mcp/         # Rust MCP server for Prime
+│   ├── chronis/           # Event-sourced task CLI (standalone workspace)
+│   └── marketing-assets/  # Marketing assets
 │
-├── sdks/                  # Client SDKs — ALL languages go here
-│   ├── rust/              # Rust SDK (allsource crate)
-│   ├── go/                # Go SDK
-│   └── python-client/     # Python SDK
+├── sdks/                  # Client SDKs, one directory per language
+│   ├── rust/
+│   ├── go/
+│   ├── python-client/
+│   ├── typescript/
+│   └── contract/          # Shared SDK test fixtures for the latest-state read contract
 │
-├── crates/                # Shared Rust crates (libraries, NOT binaries)
-│   └── (future)           # e.g., allsource-core library split
+├── crates/                # Shared Rust libraries (not binaries)
+│   ├── allsource-prime-models/   # Vendored all-MiniLM-L6-v2 ONNX weights for Prime
+│   ├── better-auth-allsource/   # better-auth DatabaseAdapter (event-sourced auth)
+│   └── hound-extract/           # Tree-sitter codebase extractor for Prime Hound
 │
 ├── packages/              # Shared non-Rust packages (NOT SDKs, NOT crates)
 │   └── ui/                # Shared UI component library
 │
-├── deploy/                # Deployment manifests
-│   └── k8s/               # Kubernetes manifests
-│
+├── deploy/                # Deployment manifests (k8s, helm, grafana, prometheus, cloudrun)
 ├── docs/                  # Documentation
-│   ├── proposals/         # Design proposals
-│   ├── use-cases/         # Use case documents
-│   ├── current/           # Current architecture docs
-│   ├── sales/             # Sales-facing docs
-│   └── checklists/        # Operational checklists
-│
-├── .claude/
-│   └── skills/            # Claude Code skills (auto-discovered)
-│       ├── chronos-data-flow/          # Docker stack data flow test
-│       ├── chronos-data-flow-embedded/ # Embedded backend data flow test
-│       ├── chronos-durability/         # Container restart durability test
-│       ├── chronos-embedded-durability/# Rust crate crash recovery test
-│       └── chronos-release/            # Versioned release automation
-│
+├── integrations/          # Integration packages (langgraph-checkpoint-allsource)
+├── plugin/                # Plugin packages (mammoth)
+├── skills/                # Agent skills shipped with the repo
 ├── scripts/               # Build and automation scripts
-├── tooling/               # Developer tooling
-│   ├── data-flow-test/             # Docker stack E2E test
-│   ├── durability-test/            # Container restart durability test
-│   ├── embedded-data-flow-test/    # Embedded backend E2E test
-│   └── embedded-durability-test/   # Rust crate crash recovery test
-└── test-results/          # CI test output artifacts
+├── tooling/               # Developer tools and quality gates, one directory per tool
+├── test-results/          # Test output (tracked: .last-run.json only)
+│
+├── .agents/               # Agent skills
+├── .chronis/              # Chronis task sync state
+├── .claude/skills/        # Claude Code skills (auto-discovered)
+├── .claude-plugin/        # Claude plugin marketplace manifest
+├── .github/               # CI workflows
+└── .rewind/               # Rewind configuration
 ```
+
+`tmp/` and `.planning/` exist in a working checkout but hold no git-tracked files.
+They are not part of the layout. Do not commit files under them.
 
 ---
 
@@ -67,7 +68,7 @@ sdks/
 ├── rust/           # name by language, not "rust-client"
 ├── go/
 ├── python-client/  # (legacy naming, would be python/ if starting fresh)
-├── typescript/     # future
+├── typescript/     # TypeScript SDK
 └── swift/          # future
 ```
 
@@ -115,7 +116,9 @@ Shared Rust crates consumed by multiple `apps/`. If a Rust crate is a library (n
 
 ```
 crates/
-└── (future)     # e.g., allsource-core library if split from the binary
+├── allsource-prime-models/
+├── better-auth-allsource/
+└── hound-extract/
 ```
 
 **Note**: `allsource-core` currently lives in `apps/core/` because it is both a library and a deployable binary. If/when the library is split from the binary, the library portion moves to `crates/` and the binary stays in `apps/`.
@@ -157,6 +160,8 @@ Allowed dependency direction:
 | `sales/` | Customer-facing documents |
 | `checklists/` | Operational runbooks and checklists |
 
+Other `docs/` subdirectories (for example `adr/`, `guides/`, `runbooks/`, `reports/`) follow the same rule: one purpose per directory.
+
 ### 8. No stray top-level directories
 
 Do not create new top-level directories without updating this document. The current set is intentional:
@@ -168,14 +173,16 @@ Do not create new top-level directories without updating this document. The curr
 - `deploy/` — deployment configs
 - `docs/` — documentation
 - `scripts/` — automation
-- `tooling/` — dev tools
-- `test-results/` — CI artifacts
+- `tooling/` — dev tools and gates
+- `test-results/` — test output
+- `integrations/`, `plugin/`, `skills/` — integration and plugin code
+- `.agents/`, `.chronis/`, `.claude/`, `.claude-plugin/`, `.github/`, `.rewind/` — tool and CI configuration
 
 ### 9. Version consistency
 
-All services and SDKs share the same version number. Use `make set-version VERSION=X.Y.Z` to bump everywhere. After bumping, verify with `make check-versions`.
+Apps and services share one version number. Use `make set-version VERSION=X.Y.Z` to bump them and `make check-versions` to verify. `set-version` does not touch the SDKs.
 
-SDK versions must match the release tag. If Core is v0.10.5, every SDK is v0.10.5.
+SDKs release independently. Bump one with `make set-sdk-version SDK=<rust|go|typescript|python> VERSION=X.Y.Z`. Its release tag is `sdk-<lang>-v<VERSION>`, so SDK versions do not follow the Core version.
 
 ---
 

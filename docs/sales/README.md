@@ -11,12 +11,14 @@ docs/sales/
 │   └── SAAS_EVALUATION.md             # SaaS readiness assessment
 ├── diagrams/
 │   ├── C4_ARCHITECTURE_MERMAID.md     # C4 diagrams in Mermaid format
-│   └── allsource.dsl                     # C4 diagrams in Structurizr DSL
+│   └── allsource.dsl                  # C4 diagrams in Structurizr DSL
 ├── pitch-deck/
 │   ├── SALES_PITCH_DECK.md            # 14-slide pitch deck outline
 │   └── VISUAL_ASSETS.md               # SVG graphics, charts, brand assets
-└── videos/
-    └── VIDEO_SCRIPTS.md               # Scripts for 4 video types
+├── videos/
+│   └── VIDEO_SCRIPTS.md               # Scripts for 4 video types
+├── SUMMARY.md
+└── voice-file-comparison.md
 ```
 
 ## Quick Start Guide
@@ -52,7 +54,7 @@ docs/sales/
 
 1. **Mermaid format**: `diagrams/C4_ARCHITECTURE_MERMAID.md`
    - Renders in GitHub, Notion, VS Code
-   - 5 diagram levels (Context, Container, 3x Component)
+   - Context, Container, and 4 Component diagrams (Core, Control Plane, Query Service, MCP Server)
    - Data flow and deployment diagrams
 
 2. **Structurizr DSL**: `diagrams/allsource.dsl`
@@ -76,10 +78,10 @@ Use these consistently across all materials:
 
 | Message | Supporting Data |
 |---------|----------------|
-| **AI-Native First** | Only event store with native MCP (27 tools) |
+| **AI-Native First** | Native MCP server (73 tool definitions) |
 | **Blazing Performance** | 469K events/sec, 11.9μs p99 latency |
 | **Polyglot Excellence** | Rust + Go + Elixir = best tool for each job |
-| **Tiny Footprint** | 129MB total (vs 500MB+ typical) |
+| **Self-Host** | Apache-2.0 community edition, `docker compose up` |
 | **Enterprise Security** | Multi-tenancy, RBAC, audit logging |
 | **Time-Travel** | Query any point in history instantly |
 
@@ -116,12 +118,6 @@ mmdc -i diagram.mmd -o diagram.png -t dark
 structurizr-cli export -workspace allsource.dsl -format plantuml
 ```
 
-### Generate Charts with Python
-```bash
-pip install plotly kaleido pandas
-python scripts/generate_charts.py
-```
-
 ### Record Terminal Demos
 ```bash
 brew install asciinema
@@ -150,5 +146,5 @@ These materials should be updated when:
 - New customer testimonials available
 - Competitive landscape shifts
 
-Last updated: February 2026
-Version: 0.10.0
+Last updated: 2026-11-23
+Version: Core 0.30.0

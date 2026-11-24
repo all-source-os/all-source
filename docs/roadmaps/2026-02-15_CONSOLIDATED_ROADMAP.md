@@ -1,7 +1,7 @@
 ---
 title: "AllSource Event Store - Consolidated Roadmap"
 status: CURRENT
-last_updated: 2026-02-15
+last_updated: 2026-11-23
 category: roadmap
 supersedes:
   - "archive/2026-02-02_CONSOLIDATED_ROADMAP.md"
@@ -11,7 +11,7 @@ supersedes:
 # AllSource Event Store - Consolidated Roadmap
 
 **Date**: 2026-02-19
-**Version**: 5.1 (updated for v0.10.6)
+**Version**: 5.1 (Core workspace 0.30.0)
 
 ---
 
@@ -26,7 +26,6 @@ The codebase is real and substantial: Rust Core, Go Control Plane, Elixir Query 
 - Control Plane: JWT/RBAC, policy engine, OpenTelemetry, HAL responses, OpenAPI spec
 - LemonSqueezy billing integration (checkout, webhooks, usage reporting)
 - Query Service: stateless gateway, Tesla HTTP client to Core, Broadway pipeline, OpenAPI, server-side projections with fold-on-read
-- Self-hosted SDK registry (`apps/registry`) serving Cargo, Go, npm, PyPI protocols
 - OAuth login (GitHub, Google) in Control Plane
 - MCP Server: 61 tool definitions, TOON encoder, conversation context, Core/Control Plane clients
 - Web: auth pages, dashboard skeleton, real React/Next.js pages
@@ -42,38 +41,30 @@ These items were previously marked as complete but have known gaps that need add
 
 ### 1. Query Service API Completeness
 
-Four projection endpoints and one event endpoint return `501 Not Implemented`:
+Projection reset and rebuild statistics have no route in the Query Service router:
 
-- [ ] `GET /api/events/:id` — event detail lookup (Core lacks single-event-by-ID endpoint)
-- [ ] `DELETE /api/projections/:name` — projection deletion (Core lacks endpoint)
-- [ ] `GET /api/projections/:name/state` — projection state query (Core lacks endpoint)
-- [ ] `POST /api/projections/:name/reset` — projection reset (Core lacks endpoint)
-- [ ] `GET /api/projections/rebuild_stats` — returns hardcoded zeros instead of real data
+- [ ] `POST /api/projections/:name/reset` — projection reset (no route)
+- [ ] `GET /api/projections/rebuild_stats` — rebuild statistics (no route)
 
-**Root cause**: Core needs these endpoints added first. Then Query Service controllers can call them.
+Routes exist for `GET /api/events/:id`, `DELETE /api/projections/:name` and `GET /api/projections/:name/state`.
 
 ### 2. Core: Fork Event Commit
 
-`MergeForkUseCase.execute()` marks a fork as merged but does NOT commit events back to the parent store when `commit_events=true`. There's a TODO:
-```
-// TODO: If commit_events is true, apply events to parent/main store
-```
+`MergeForkUseCase.execute()` marks a fork as merged. When `commit_events=true`, fork events are ingested into the main event store (`apps/core/src/application/use_cases/manage_fork.rs`).
 
-- [ ] Inject EventRepository into MergeForkUseCase
-- [ ] Implement actual event transfer from fork to main store
+- [x] Event transfer from fork to main store when `commit_events=true`
 - [ ] Add integration test for fork → merge → verify events in main store
 
 ### 3. Core: KMS Cloud Providers
 
-Only Local KMS is implemented. AWS, Azure, GCP, Vault all return `"not yet implemented"` error.
+Only Local KMS is implemented. The `KmsProvider` enum (`apps/core/src/security/kms.rs`) has no cloud variants for AWS, Azure, GCP or Vault.
 
-- [ ] Implement AWS KMS provider (or remove from KmsProvider enum if not planned)
-- [ ] Decide: remove cloud KMS stubs or implement them. Don't ship dead code paths.
+- [ ] Decide whether cloud KMS providers (AWS, Azure, GCP, Vault) are planned. Don't ship dead code paths.
 
 ### 4. Core: Storage Integrity Gaps
 
-- [ ] Parquet metadata checksum verification (TODO in `storage_integrity.rs`)
-- [ ] License compliance scanning is a no-op (`check_licenses()` always returns empty)
+- [ ] Parquet metadata checksum verification (`apps/core/src/infrastructure/persistence/storage_integrity.rs`)
+- [x] License compliance scanning: `check_licenses()` runs `cargo license --json`, falls back to `cargo metadata`, and flags GPL-3.0, AGPL-3.0, SSPL
 
 ### 5. Core: Vector Search Test Coverage
 
@@ -101,7 +92,7 @@ Mock repository methods for vector search use `unimplemented!()` for most operat
 ## P1: SaaS Launch
 
 ### Phase 0: Ship What You Have (Week 1)
-- [ ] Deploy to Fly.io
+- [x] Deploy to Fly.io
 - [ ] Create LemonSqueezy products (Free, Pro $29, Team $99)
 - [ ] Landing page on `/` (static HTML — hero + pricing + signup)
 - [ ] Waitlist → OAuth flow
@@ -135,14 +126,14 @@ Mock repository methods for vector search use `unimplemented!()` for most operat
 ## P2: Query Service Phase 3 (Q2-Q3 2026)
 
 ### Phoenix Channels WebSocket (1-2 weeks)
-Expose WebSocket endpoint for external clients (currently only internal WS client to Core exists).
+WebSocket endpoint at `/ws` (`QueryServiceExWeb.UserSocket`), with channels under `apps/query-service/lib/query_service_ex_web/channels/`.
 
-- [ ] Phoenix.Socket and Channel implementation
-- [ ] `/ws` endpoint on port 3902
-- [ ] EventChannel for `events:all`, `events:{entity_id}`, `events:type:{type}`
-- [ ] ProjectionChannel for real-time projection state updates
+- [x] Phoenix.Socket and Channel implementation
+- [x] `/ws` endpoint on port 3902
+- [x] EventChannel for `events:all`, `events:{entity_id}`, `events:type:{type}`
+- [x] ProjectionChannel for real-time projection state updates
 - [ ] JWT authentication for WebSocket connections
-- [ ] Presence tracking
+- [x] Presence tracking
 
 ### Distributed Mode (2-3 weeks)
 - [ ] libcluster for multi-node (dependency exists, not wired)

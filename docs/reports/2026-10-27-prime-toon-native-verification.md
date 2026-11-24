@@ -4,7 +4,7 @@
 
 Prime MCP preserves every original property name when a client reopens retained memory and decodes its TOON response. Non-identifier keys are quoted, and quoted keys use TOON-specific escapes. Ordinary ASCII identifier and dotted keys keep their compact representation.
 
-The [accepted plan](../plans/2026-10-27-prime-toon-key-quoting.md) and [application request](../reference/prime-toon-keys-request.md) define the job. The repair belongs in the presentation encoder. Stored data, JSON output and string-value policy keep their existing behavior. The eight existing encoder tests were moved to a sibling module intact; parent comparison verified their contents and the value-formatting section against baseline bytes.
+The [accepted plan](../archive/2026-11-23/plans/2026-10-27-prime-toon-key-quoting.md) and [application request](../archive/2026-11-23/reference/prime-toon-keys-request.md) define the job. The repair belongs in the presentation encoder. Stored data, JSON output and string-value policy keep their existing behavior. The eight existing encoder tests were moved to a sibling module intact; parent comparison verified their contents and the value-formatting section against baseline bytes.
 
 ## Current-source baseline and candidate
 

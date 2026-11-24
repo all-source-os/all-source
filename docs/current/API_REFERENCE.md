@@ -1,7 +1,7 @@
 ---
 title: "API Reference"
 status: CURRENT
-last_updated: 2026-02-10
+last_updated: 2026-11-23
 category: reference
 related:
   - EVENT_STORE_FEATURES.md
@@ -168,112 +168,29 @@ curl http://localhost:3900/api/v1/entities/user-456/snapshot
 
 ---
 
-### Snapshots
-
-#### POST /api/v1/snapshots
-Create a snapshot for an entity.
-
-```bash
-curl -X POST http://localhost:3900/api/v1/snapshots \
-  -H "Content-Type: application/json" \
-  -d '{
-    "entity_id": "user-456"
-  }'
-```
-
-#### GET /api/v1/snapshots
-List all snapshots.
-
-```bash
-curl http://localhost:3900/api/v1/snapshots
-
-# Filter by entity
-curl "http://localhost:3900/api/v1/snapshots?entity_id=user-456"
-```
-
-#### GET /api/v1/snapshots/{entity_id}/latest
-Get the latest snapshot for an entity.
-
-```bash
-curl http://localhost:3900/api/v1/snapshots/user-456/latest
-```
-
----
-
 ### Projections
 
-#### POST /api/v1/projections/:name/:entity_id/state
-Save projection state.
+#### GET /api/v1/projections
+List Core's internal projections.
 
 ```bash
-curl -X POST http://localhost:3900/api/v1/projections/user_stats/user-456/state \
-  -H "Content-Type: application/json" \
-  -d '{
-    "state": {
-      "event_count": 42,
-      "last_updated": "2026-02-02T12:00:00Z"
-    }
-  }'
+curl http://localhost:3900/api/v1/projections
 ```
 
-#### GET /api/v1/projections/:name/:entity_id/state
-Get projection state.
+#### GET /api/v1/projections/{name}
+Get a projection.
 
-```bash
-curl http://localhost:3900/api/v1/projections/user_stats/user-456/state
-```
+#### DELETE /api/v1/projections/{name}
+Delete a projection.
 
-#### GET /api/v1/projections/:name/state
-List the states for a projection. This is the only way to *enumerate* a
-projection — `/bulk` requires the entity ids up front.
+#### POST /api/v1/projections/{name}/reset
+Reset a projection.
 
-Optional query parameters (all default to "everything", so an unparameterised
-call returns the whole projection as before):
+#### POST /api/v1/projections/{name}/pause
+Pause a projection.
 
-| Parameter | Description |
-|-----------|-------------|
-| `limit` | Maximum number of entity states to return. Unbounded when absent. |
-| `offset` | Number of matching states to skip before applying `limit`. Default `0`. |
-| `entity_id_prefix` | Return only entities whose id starts with this prefix. |
-
-States are ordered by `entity_id` ascending, so offset paging is stable.
-The response carries `count` (states in this page), `total` (full match set) and
-`has_more` (`offset + count < total`) — page until `has_more` is `false`.
-
-```bash
-# Everything
-curl http://localhost:3900/api/v1/projections/user_stats/state
-
-# One page of 100, resumable
-curl "http://localhost:3900/api/v1/projections/user_stats/state?limit=100&offset=200"
-
-# One shard of the keyspace
-curl "http://localhost:3900/api/v1/projections/user_stats/state?entity_id_prefix=tenant-a"
-```
-
-```json
-{
-  "projection": "user_stats",
-  "states": [{ "entity_id": "user-456", "state": { "event_count": 42 } }],
-  "count": 1,
-  "total": 1,
-  "has_more": false
-}
-```
-
-#### DELETE /api/v1/projections/:name/:entity_id/state
-Delete projection state.
-
-```bash
-curl -X DELETE http://localhost:3900/api/v1/projections/user_stats/user-456/state
-```
-
-#### GET /api/v1/projections/stats
-Get projection statistics.
-
-```bash
-curl http://localhost:3900/api/v1/projections/stats
-```
+#### POST /api/v1/projections/{name}/start
+Start a paused projection.
 
 ---
 
@@ -552,11 +469,11 @@ curl http://localhost:3901/metrics
 
 ### Authentication
 
-#### POST /auth/login
+#### POST /api/v1/auth/login
 Authenticate and receive JWT token.
 
 ```bash
-curl -X POST http://localhost:3901/auth/login \
+curl -X POST http://localhost:3901/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "username": "admin@example.com",
@@ -572,17 +489,6 @@ curl -X POST http://localhost:3901/auth/login \
   "token_type": "Bearer",
   "expires_in": 3600
 }
-```
-
-#### POST /auth/refresh
-Refresh an access token.
-
-```bash
-curl -X POST http://localhost:3901/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d '{
-    "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
-  }'
 ```
 
 ---
@@ -648,21 +554,6 @@ curl -X DELETE http://localhost:3901/api/v1/tenants/tenant-123 \
 
 ### Users
 
-#### POST /api/v1/users
-Create a new user.
-
-```bash
-curl -X POST http://localhost:3901/api/v1/users \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "secure-password",
-    "tenant_id": "tenant-123",
-    "role": "developer"
-  }'
-```
-
 #### GET /api/v1/users
 List users.
 
@@ -671,84 +562,11 @@ curl http://localhost:3901/api/v1/users \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-#### GET /api/v1/users/{user_id}
-Get user details.
-
-```bash
-curl http://localhost:3901/api/v1/users/user-456 \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-#### PUT /api/v1/users/{user_id}
-Update a user.
-
-```bash
-curl -X PUT http://localhost:3901/api/v1/users/user-456 \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "role": "admin"
-  }'
-```
-
 #### DELETE /api/v1/users/{user_id}
 Delete a user.
 
 ```bash
 curl -X DELETE http://localhost:3901/api/v1/users/user-456 \
-  -H "Authorization: Bearer $TOKEN"
-```
-
----
-
-### Roles
-
-#### POST /api/v1/roles
-Create a custom role.
-
-```bash
-curl -X POST http://localhost:3901/api/v1/roles \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "analyst",
-    "permissions": ["read", "metrics"]
-  }'
-```
-
-#### GET /api/v1/roles
-List all roles.
-
-```bash
-curl http://localhost:3901/api/v1/roles \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-#### GET /api/v1/roles/{role_id}
-Get role details.
-
-```bash
-curl http://localhost:3901/api/v1/roles/analyst \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-#### PUT /api/v1/roles/{role_id}
-Update a role.
-
-```bash
-curl -X PUT http://localhost:3901/api/v1/roles/analyst \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "permissions": ["read", "metrics", "manage_schemas"]
-  }'
-```
-
-#### DELETE /api/v1/roles/{role_id}
-Delete a role.
-
-```bash
-curl -X DELETE http://localhost:3901/api/v1/roles/analyst \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -811,11 +629,11 @@ curl -X DELETE http://localhost:3901/api/v1/policies/policy-123 \
 
 ### Operations
 
-#### POST /api/v1/operations/snapshot
+#### POST /api/v1/operations/snapshots
 Coordinate snapshot creation across cluster.
 
 ```bash
-curl -X POST http://localhost:3901/api/v1/operations/snapshot \
+curl -X POST http://localhost:3901/api/v1/operations/snapshots \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -943,11 +761,11 @@ Get projection details and current state.
 curl http://localhost:3902/api/projections/user_stats
 ```
 
-#### GET /api/projections/{name}/{entity_id}
-Get projection state for a specific entity.
+#### GET /api/projections/{name}/state
+Get projection state for all entities.
 
 ```bash
-curl http://localhost:3902/api/projections/user_stats/user-456
+curl http://localhost:3902/api/projections/user_stats/state
 ```
 
 ---

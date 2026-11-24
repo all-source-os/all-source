@@ -94,7 +94,5 @@ flyctl releases --app allsource-admin
 flyctl releases rollback <version> --app allsource-admin
 ```
 
-DNS rollback requires restoring prior Vercel project-domain attachments, then
-changing the authoritative Unstoppable Domains records back to Vercel targets.
-Keep Vercel projects undeleted until Fly has served production traffic
-successfully through one full release cycle.
+Frontends run on Fly, so rollback is `flyctl releases rollback` only. Vercel is
+retired; no Vercel project or DNS record is part of the rollback.

@@ -50,8 +50,8 @@ NARRATOR:
 built for the way modern applications work.
 
 469,000 events per second.
-Sub-microsecond queries.
-27 tools for AI agents, built right in.
+11.9 microsecond p99 queries.
+73 tools for AI agents, built right in.
 
 It's not just fast. It's designed for the AI era."
 
@@ -85,7 +85,7 @@ Open source. Cloud ready.
 Future proof."
 
 TEXT ON SCREEN:
-github.com/[org]/allsource
+github.com/all-source-os/all-source
 "Star on GitHub"
 ```
 
@@ -107,7 +107,7 @@ github.com/[org]/allsource
 │                 │  │                 │  │                 │
 │    469K/sec     │  │  [Feature cards │  │  [GitHub link   │
 │    11.9us       │  │   animate in]   │  │   + dashboard]  │
-│    129MB        │  │                 │  │                 │
+│    73 MCP tools │  │                 │  │                 │
 │                 │  │                 │  │ "Start today"   │
 └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
@@ -133,19 +133,15 @@ NARRATOR:
 "Let's spin up AllSource locally. It's just one command."
 
 COMMANDS:
-$ git clone https://github.com/[org]/allsource-monorepo
-$ cd allsource-monorepo
+$ git clone https://github.com/all-source-os/all-source.git
+$ cd all-source
 $ docker compose up -d
 
 NARRATOR:
-"The entire stack is up in seconds.
-Notice the container sizes - just 129 megabytes total."
+"The stack starts from one compose file."
 
 COMMANDS:
-$ docker images | grep allsource
-allsource-core           15.7MB
-allsource-control-plane  27.9MB
-allsource-query-service  35.1MB
+$ docker compose ps
 
 [SCENE 2: Event Ingestion - 1:00-2:30]
 -------------------------------------------
@@ -160,7 +156,7 @@ $ curl -X POST http://localhost:3900/api/v1/events \
   -d '{
     "entity_id": "order-12345",
     "event_type": "OrderCreated",
-    "data": {
+    "payload": {
       "customer_id": "cust-001",
       "items": [{"sku": "ABC", "qty": 2}],
       "total": 99.99
@@ -168,7 +164,7 @@ $ curl -X POST http://localhost:3900/api/v1/events \
   }'
 
 RESPONSE:
-{"event_id": "evt_abc123", "version": 1, "timestamp": "..."}
+200 OK
 
 NARRATOR:
 "Event ingested. Now let's add more events to build a history."
@@ -183,20 +179,20 @@ COMMANDS (rapid fire):
 TERMINAL
 
 NARRATOR:
-"Query by entity, type, or time range. Sub-microsecond latency."
+"Query by entity, type, or time range. 11.9us p99 latency."
 
 COMMANDS:
-$ curl "http://localhost:3900/api/v1/events?entity_id=order-12345"
+$ curl "http://localhost:3900/api/v1/events/query?entity_id=order-12345"
 
 # Show formatted JSON response with 4 events
 
-$ curl "http://localhost:3900/api/v1/events?event_type=OrderShipped&after=2024-01-01"
+$ curl "http://localhost:3900/api/v1/events/query?event_type=OrderShipped&since=2024-01-01T00:00:00Z"
 
 NARRATOR:
 "Time-travel queries let you see state at any point in history."
 
 COMMANDS:
-$ curl "http://localhost:3900/api/v1/events/order-12345/state?as_of=2024-01-15T10:00:00Z"
+$ curl "http://localhost:3900/api/v1/entities/order-12345/state?as_of=2024-01-15T10:00:00Z"
 
 [SCENE 4: AI Integration with MCP - 3:30-5:00]
 -------------------------------------------
@@ -237,8 +233,8 @@ NARRATOR:
 "Real-time subscriptions via WebSocket."
 
 COMMANDS:
-$ wscat -c "ws://localhost:3902/socket/websocket"
-> {"topic": "events:order-*", "event": "phx_join", "payload": {}, "ref": 1}
+$ wscat -c "ws://localhost:3902/ws/websocket?token=<jwt>"
+> {"topic": "events:order-12345", "event": "phx_join", "payload": {}, "ref": 1}
 < {"event": "phx_reply", "payload": {"status": "ok"}}
 
 # Show events streaming in as they're ingested
@@ -289,8 +285,7 @@ Show AI/ML engineers how to integrate AllSource with LLM applications.
 VISUAL: Claude Desktop interface
 
 NARRATOR:
-"AllSource is the only event store with native
-Model Context Protocol support.
+"AllSource ships a native Model Context Protocol server.
 
 Let me show you what that means for AI applications."
 
@@ -309,14 +304,14 @@ CODE:
       "args": ["run", "--no-halt"],
       "cwd": "/path/to/allsource/mcp-server-elixir",
       "env": {
-        "ALLSOURCE_CORE_URL": "http://localhost:3900"
+        "CORE_URL": "http://localhost:3900"
       }
     }
   }
 }
 
 NARRATOR:
-"Restart Claude Desktop, and you now have 27 tools available."
+"Restart Claude Desktop. The AllSource tools are available: 55 by default, 73 with system administration enabled."
 
 [SCENE 3: Tool Showcase - 1:30-3:00]
 -------------------------------------------
@@ -406,7 +401,7 @@ Technical deep-dive into the polyglot architecture for architects.
 2:00 - Highlight Elixir Services
        "Elixir powers real-time and AI integration"
        Animate: WebSocket streams, MCP tool calls
-       Stats overlay: BEAM reliability, 27 MCP tools
+       Stats overlay: BEAM reliability, 73 MCP tools
 
 2:30 - Zoom into Rust Core Components
        "Clean Architecture inside the Core"
@@ -418,15 +413,13 @@ Technical deep-dive into the polyglot architecture for architects.
 
 3:30 - Deployment Options
        "Deploy anywhere"
-       Animate: Docker -> K8s -> Cloud Run icons
+       Animate: Docker image -> Kubernetes manifests -> Fly.io icons (hosted)
 
 4:00 - Summary Stats
        Animate all key metrics appearing:
        - 469K events/sec
        - 11.9us p99
-       - 129MB total
-       - 27 MCP tools
-       - 492+ tests
+       - 73 MCP tool definitions
 ```
 
 ### Animation Tools
@@ -457,8 +450,8 @@ asciinema rec quickstart.cast --title "AllSource Quick Start"
 
 # Commands to execute during recording:
 echo "# Clone the repository"
-git clone https://github.com/[org]/allsource-monorepo
-cd allsource-monorepo
+git clone https://github.com/all-source-os/all-source.git
+cd all-source
 
 echo "# Start the stack"
 docker compose up -d
@@ -472,10 +465,10 @@ docker compose ps
 echo "# Ingest an event"
 curl -X POST http://localhost:3900/api/v1/events \
   -H "Content-Type: application/json" \
-  -d '{"entity_id":"demo-1","event_type":"Created","data":{"hello":"world"}}'
+  -d '{"entity_id":"demo-1","event_type":"Created","payload":{"hello":"world"}}'
 
 echo "# Query events"
-curl http://localhost:3900/api/v1/events?entity_id=demo-1 | jq
+curl http://localhost:3900/api/v1/events/query?entity_id=demo-1 | jq
 
 echo "# Clean up"
 docker compose down
@@ -491,10 +484,10 @@ asciinema rec performance.cast --title "AllSource Performance Demo"
 
 # Show benchmark
 echo "# Running throughput benchmark"
-cargo bench --manifest-path apps/core/Cargo.toml -- throughput
+cargo bench --manifest-path apps/core/Cargo.toml --bench performance_benchmarks -- ingestion_throughput
 
 echo "# Running latency benchmark"
-cargo bench --manifest-path apps/core/Cargo.toml -- query_latency
+cargo bench --manifest-path apps/core/Cargo.toml --bench performance_benchmarks -- query_performance
 
 echo "# Results:"
 echo "Throughput: 469,000 events/sec"
