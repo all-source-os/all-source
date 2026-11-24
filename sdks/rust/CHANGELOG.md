@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versio
 
 ## [Unreleased]
 
-## [0.30.0] — unreleased
+## [0.30.0] — 2026-11-24
 
 Read attribution. A caller names itself on each read, and each response reports
 how many body bytes it carried, so reads can be counted by who made them.
