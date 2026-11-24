@@ -294,7 +294,8 @@ pub fn http_routes() -> Vec<HttpRoute> {
             json!({
                 "vector": {"type": "array", "items": {"type": "number"}},
                 "text": {"type": "string"},
-                "top_k": {"type": "integer"}
+                "top_k": {"type": "integer"},
+                "id_prefix": {"type": "string"}
             }),
         )),
         HttpRoute::new(
@@ -672,6 +673,8 @@ struct VectorSearchRequest {
     /// Natural-language query. Embedded server-side when `vector` is absent.
     text: Option<String>,
     top_k: Option<usize>,
+    /// Exact search over vector ids starting with this prefix only.
+    id_prefix: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1396,7 +1399,10 @@ async fn search_vectors(
             None => return bad_request("missing 'vector' or 'text' — supply at least one"),
         },
     };
-    let results = prime.vector_search(&vector, top_k);
+    let results = match req.id_prefix.as_deref() {
+        Some(prefix) => prime.vector_search_prefix(&vector, top_k, prefix),
+        None => prime.vector_search(&vector, top_k),
+    };
     let results_json: Vec<Value> = results
         .iter()
         .map(|r| json!({"id": r.id, "score": r.score, "text": r.text}))

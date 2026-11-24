@@ -266,6 +266,43 @@ async fn http_invalid_confidence_is_a_client_error() {
     assert_eq!(stats["total_nodes"], 0);
 }
 
+#[cfg(feature = "prime-vectors")]
+#[tokio::test]
+async fn http_vector_search_with_id_prefix_returns_only_that_subset() {
+    let app = app().await;
+    for (id, vector) in [
+        ("output:1", [1.0, 0.0]),
+        ("output:2", [1.0, 0.0]),
+        ("tool:far", [0.0, 1.0]),
+        ("tool:near", [0.6, 0.4]),
+    ] {
+        let (status, _) = send(
+            &app,
+            "POST",
+            "/vectors",
+            Some(json!({"id": id, "vector": vector})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let (status, body) = send(
+        &app,
+        "POST",
+        "/vectors/search",
+        Some(json!({"vector": [1.0, 0.0], "top_k": 2, "id_prefix": "tool:"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<&str> = body["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["vec:tool:near", "vec:tool:far"]);
+}
+
 #[test]
 fn http_edge_body_carries_the_assertion_source_beside_the_edge_source_node() {
     let req: CreateEdgeReq = serde_json::from_value(json!({

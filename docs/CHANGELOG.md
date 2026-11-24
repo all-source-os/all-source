@@ -8,10 +8,16 @@ All notable changes to AllSource Chronos are documented here.
 
 - **Read-cost attribution**: reads are attributed to their source and the cost of
   each read is reported.
+- Prime `POST /api/v1/prime/vectors/search` (Core and Prime MCP) accepts an
+  optional `id_prefix` for an exact search over one id prefix.
 
 ### Fixed
 
 - Embedded stores open without performing writes.
+- Prime vector search never waits for an HNSW build. The first search on a
+  fresh or restored index scans exactly while the build runs in the
+  background, and concurrent writers can no longer hide a vector from a
+  search (#398).
 
 ## [0.29.0] - 2026-11-16
 

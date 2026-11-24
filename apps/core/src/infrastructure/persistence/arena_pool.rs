@@ -448,8 +448,8 @@ mod tests {
 
     #[test]
     fn test_concurrent_arena_access() {
-        reset_stats();
-
+        // The stats counters are process-global and other tests reset them in
+        // parallel, so recycling is checked through each thread's own pool.
         std::thread::scope(|s| {
             for _ in 0..4 {
                 s.spawn(|| {
@@ -458,14 +458,11 @@ mod tests {
                         let _ = arena.alloc_str("concurrent test");
                         drop(arena);
                     }
+                    let pooled = ARENA_POOL.with(|pool| pool.borrow().len());
+                    assert_eq!(pooled, 1, "100 get/drop cycles reuse one arena");
                 });
             }
         });
-
-        let stats = arena_stats();
-        // Each thread has its own pool, so we should see both creates and recycles
-        assert!(stats.arenas_created > 0);
-        assert!(stats.arenas_recycled > 0);
     }
 
     #[test]
