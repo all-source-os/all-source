@@ -38,6 +38,8 @@ pub mod recall;
 // In the lib, not tests/: the only job that runs core tests is `--lib`.
 #[cfg(all(test, feature = "prime-vectors"))]
 mod recall_degradation_tests;
+#[cfg(all(test, feature = "prime-vectors"))]
+mod recall_type_filter_tests;
 pub mod schema;
 pub mod sync;
 pub mod temporal;

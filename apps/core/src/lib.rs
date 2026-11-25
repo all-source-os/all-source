@@ -235,7 +235,7 @@ pub mod query {
 }
 
 // Main store facade
-pub use store::EventStore;
+pub use store::{BackfillPosition, EventStore};
 
 // =============================================================================
 // Tests

@@ -10,14 +10,28 @@ All notable changes to AllSource Chronos are documented here.
   each read is reported.
 - Prime `POST /api/v1/prime/vectors/search` (Core and Prime MCP) accepts an
   optional `id_prefix` for an exact search over one id prefix.
+- **Checkpointed projection backfill** (#436):
+  `EventStore::register_projection_with_backfill_from(projection, after)` replays
+  only the events ordered after a caller-persisted `BackfillPosition`, and
+  `register_projection_with_backfill_for(projection, prefixes)` sorts and replays
+  only events whose type matches a prefix (`_from_for` combines both). Replay
+  order is now `(timestamp, version, id)`, so events sharing a timestamp and
+  version replay in a fixed order across restarts.
 
 ### Fixed
 
+- A projection registered with backfill no longer sees an event twice when the
+  event is ingested between registration and the start of the replay.
 - Embedded stores open without performing writes.
 - Prime vector search never waits for an HNSW build. The first search on a
   fresh or restored index scans exactly while the build runs in the
   background, and concurrent writers can no longer hide a vector from a
   search (#398).
+- Prime semantic recall honours `node_type`: vector seeds come from an exact
+  search over that type's vectors, so nearer vectors of other types no longer
+  fill the `top_k` slots, and `vectors` lists only that type (#437). With
+  `tenant` set, `vectors` also leaves out other tenants' vectors and vectors
+  with no node behind them.
 
 ## [0.29.0] - 2026-11-16
 
