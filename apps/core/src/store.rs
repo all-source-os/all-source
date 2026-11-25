@@ -1421,42 +1421,6 @@ impl EventStore {
         pm.register(projection);
     }
 
-    /// Register a custom projection and replay all existing events through it.
-    ///
-    /// After registration, the projection will also receive all future events.
-    /// Historical events are replayed under a read lock — the projection's
-    /// internal state (typically DashMap) handles concurrent access.
-    ///
-    /// Replay is ordered by `(timestamp, version)`. The in-memory pile can be
-    /// physically out of order when Parquet is hydrated after WAL recovery —
-    /// the WAL tail holds the newest events while Parquet holds the older
-    /// history — so the backfill must sort before replaying. Projections with
-    /// last-write-wins merge semantics produce wrong state otherwise.
-    pub fn register_projection_with_backfill(
-        &self,
-        projection: &Arc<dyn crate::application::services::projection::Projection>,
-    ) -> Result<()> {
-        // First register so future events are processed
-        {
-            let mut pm = self.projections.write();
-            pm.register(Arc::clone(projection));
-        }
-
-        // Then replay existing events in chronological order under read lock
-        let events = self.events.read();
-        let mut ordered: Vec<&Event> = events.iter().collect();
-        ordered.sort_by(|a, b| {
-            a.timestamp
-                .cmp(&b.timestamp)
-                .then_with(|| a.version.cmp(&b.version))
-        });
-        for event in ordered {
-            projection.process(event)?;
-        }
-
-        Ok(())
-    }
-
     /// Eagerly reconstruct the in-memory event pile from the full Parquet
     /// archive.
     ///
@@ -4087,6 +4051,10 @@ mod strict_read;
 
 #[path = "store_prefix_read.rs"]
 mod prefix_read;
+
+#[path = "store_backfill.rs"]
+mod backfill;
+pub use backfill::BackfillPosition;
 
 #[path = "store_refresh.rs"]
 mod refresh;

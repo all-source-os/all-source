@@ -1722,35 +1722,40 @@ impl Prime {
         // Step 1: Vector similarity (if query vector provided)
         if let Some(ref qvec) = query.vector {
             retrieval = Retrieval::Semantic;
-            let hits = self.vector_search(qvec, seed_cap); // Over-fetch for graph expansion
-            vector_results = hits
-                .iter()
-                .map(|h| super::vectors::VectorSearchResult {
-                    id: h.id.clone(),
-                    score: h.score,
-                    text: h.text.clone(),
-                    metadata: h.metadata.clone(),
-                })
-                .collect();
+            // A typed query searches only that type's vectors, so vectors of
+            // other types cannot take the top-k slots.
+            let hits = match query.node_type.as_deref() {
+                Some(nt) => self.vector_search_prefix(qvec, seed_cap, &node_entity_id(nt, "")),
+                None => self.vector_search(qvec, seed_cap),
+            };
 
             // Seed scored nodes from vector hits (depth=0)
-            for hit in &hits {
+            for hit in hits {
                 // Vector entity_id is "vec:{graph_entity_id}" — strip prefix
                 let graph_id = hit.id.strip_prefix("vec:").unwrap_or(&hit.id);
-                if let Some(node) = self
-                    .recall_node(graph_id, at)
-                    .await?
-                    .filter(|n| Self::node_in_tenant(n, tenant))
-                {
+                let node = self.recall_node(graph_id, at).await?;
+                // A vector with no node behind it has no tenant to check, so a
+                // tenant-scoped recall leaves it out.
+                let visible = match &node {
+                    Some(n) => Self::node_in_tenant(n, tenant),
+                    None => tenant.is_none(),
+                };
+                if !visible {
+                    continue;
+                }
+                let graph_id = graph_id.to_string();
+                let similarity = hit.score;
+                vector_results.push(hit);
+                if let Some(node) = node {
                     let recency = recency_score(node.recency_instant(), now);
                     let components = ScoreComponents {
-                        similarity: hit.score,
+                        similarity,
                         proximity: 1.0, // depth 0 = max proximity
                         recency,
                     };
-                    let score = sw * hit.score + pw * 1.0 + rw * recency;
+                    let score = sw * similarity + pw * 1.0 + rw * recency;
                     scored.insert(
-                        graph_id.to_string(),
+                        graph_id,
                         ScoredNode {
                             node,
                             score,

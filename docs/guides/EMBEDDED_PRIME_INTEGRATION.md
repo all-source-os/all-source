@@ -156,6 +156,26 @@ store.register_projection_with_backfill(
 // now process the same event stream.
 ```
 
+A projection that persists its own state can resume instead of replaying the
+whole history on every boot. Store `BackfillPosition::of(&event)` for the last
+event it applied, next to its state, and pass it back on the next start:
+
+```rust
+use allsource_core::BackfillPosition;
+
+let after: Option<BackfillPosition> = load_checkpoint()?; // your storage
+store.register_projection_with_backfill_from_for(
+    &(Arc::clone(&activity_log) as Arc<dyn Projection>),
+    after,
+    &["activity.logged"],
+)?;
+```
+
+Only matching events ordered after `after` by `(timestamp, version, id)` are
+replayed. Events ingested while the backfill runs are delivered once, after it.
+The type filter applies to the backfill only; live events still reach
+`process()` unfiltered.
+
 ### Option C: Separate data directories
 
 If you want complete isolation between your domain events and Prime's graph events:
