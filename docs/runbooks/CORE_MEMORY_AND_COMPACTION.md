@@ -66,25 +66,22 @@ Three things about this variable that the name does not tell you:
 
 It is currently `0` in `apps/core/fly.toml`. Compaction ran for the first
 time on 2026-10-12 and this TTL has still never been applied, so enabling it
-deletes heartbeat history that has never been subject to it — around 1.9 GB,
-outright, because no cold-tier archive is configured. **Turning it on is a
-separate, deliberate change**: set it to `30`, and consider configuring
-`ALLSOURCE_COLD_STORAGE_URL` first so the dropped events are archived rather
-than discarded (`docs/operations/COLD_TIER.md`).
+deletes heartbeat history that has never been subject to it (`system` was
+429 MB after compaction, 2026-11-25) outright, because no cold-tier archive
+is configured. **Turning it on is a separate, deliberate change**, tracked in
+gh#440: set it to `30`, and consider configuring `ALLSOURCE_COLD_STORAGE_URL`
+first so the dropped events are archived rather than discarded
+(`docs/operations/COLD_TIER.md`).
 
-### Plan-tier retention is defined but not enforced
+### Customer tenants keep events forever
 
-`apps/control-plane/internal/domain/entities/subscription.go` gives each tier
-a `RetentionDays` — 7 (Free), 14 (Indie), 90 (Studio), 365 (Scale), `-1`
-forever (Enterprise). **Nothing applies it.** Core is the only component that
-could expire a tenant's events and it has no view of the tenant's plan, so
-every customer tenant today behaves as unlimited.
-
-That is the safe direction to be wrong in, and it is why no customer's data
-was at risk when the sweep was switched on. Closing the gap means Core
-deleting customer events on a schedule, so it needs its own design — at
-minimum a per-tenant TTL carried in tenant metadata, a cold tier configured
-first, and a dry-run mode that reports what a sweep would drop.
+Every tier in `apps/control-plane/internal/domain/entities/subscription.go`
+sets `RetentionDays: -1`, and retention is not a pricing lever
+(`docs/proposals/PRICING_PLAN_DETAILS.md`). Core applies no TTL to any
+customer tenant, which matches the plans. Introducing a per-tier TTL would
+mean Core deleting customer events on a schedule, so it would need its own
+design: a per-tenant TTL in tenant metadata, a cold tier configured first,
+and a dry-run mode that reports what a sweep would drop.
 
 ## Why file count matters more than bytes
 

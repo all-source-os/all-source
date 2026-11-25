@@ -52,9 +52,9 @@ kill_timeout = 65
   ALLSOURCE_SNAPSHOT_INTERVAL_SECONDS = "3600"
   # Step 5: retention for the `system` tenant ONLY — Core's own CP heartbeat
   # stream. It reaches no customer tenant: RetentionConfig's default_ttl is
-  # None and `system` is the single override. Plan-tier retention
-  # (subscription.go: 7/14/90/365/-1 days) is a Control Plane concept that
-  # nothing currently enforces.
+  # None and `system` is the single override. Every plan tier keeps events
+  # forever (subscription.go: RetentionDays -1), so there is no plan-tier
+  # retention to apply.
   #
   # 0 = keep forever. Unsetting this does NOT disable it — the code default
   # is 30 days.
