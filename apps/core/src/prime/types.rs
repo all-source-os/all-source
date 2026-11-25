@@ -126,6 +126,22 @@ pub enum Direction {
     Both,
 }
 
+impl std::str::FromStr for Direction {
+    type Err = String;
+
+    /// Parses the wire spelling used by the MCP and HTTP surfaces.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "outgoing" => Ok(Self::Outgoing),
+            "incoming" => Ok(Self::Incoming),
+            "both" => Ok(Self::Both),
+            other => Err(format!(
+                "invalid direction '{other}': expected 'outgoing', 'incoming' or 'both'"
+            )),
+        }
+    }
+}
+
 /// A subgraph extracted from a traversal (ego network).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubGraph {

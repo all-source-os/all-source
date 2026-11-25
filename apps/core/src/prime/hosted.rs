@@ -676,8 +676,7 @@ impl HostedPrime {
     }
 
     /// Shortest path between two nodes (BFS over outgoing edges, optional relation
-    /// filter). Mirrors the embedded `Prime::shortest_path`, but runs the BFS over
-    /// the tenant's warm bundle (resolved once) instead of the embedded store.
+    /// filter). Mirrors the embedded `Prime::shortest_path`.
     pub async fn shortest_path(
         &self,
         tenant: &str,
@@ -685,49 +684,33 @@ impl HostedPrime {
         to: &str,
         relation: Option<&str>,
     ) -> Result<Option<Vec<Node>>> {
-        use std::collections::{HashMap, VecDeque};
+        Ok(self
+            .shortest_path_directed(tenant, from, to, relation, Direction::Outgoing)
+            .await?
+            .map(|p| p.nodes))
+    }
 
+    /// Shortest path following edges in `direction`, with each hop's relation
+    /// and direction. Mirrors the embedded `Prime::shortest_path_directed`, over
+    /// the tenant's warm bundle.
+    pub async fn shortest_path_directed(
+        &self,
+        tenant: &str,
+        from: &str,
+        to: &str,
+        relation: Option<&str>,
+        direction: Direction,
+    ) -> Result<Option<super::path::GraphPath>> {
         let g = self.tenant_graph(tenant).await?;
-        let get_node = |id: &str| g.node_state.get_node(id).filter(|n| !n.deleted);
-
-        if from == to {
-            return Ok(get_node(from).map(|n| vec![n]));
-        }
-
-        let mut visited: HashMap<String, String> = HashMap::new(); // child -> parent
-        let mut queue: VecDeque<String> = VecDeque::new();
-        visited.insert(from.to_string(), String::new());
-        queue.push_back(from.to_string());
-
-        while let Some(current) = queue.pop_front() {
-            for entry in g.adjacency.outgoing(&current) {
-                if relation.is_some() && relation != Some(entry.relation.as_str()) {
-                    continue;
-                }
-                let peer = entry.peer;
-                if visited.contains_key(&peer) {
-                    continue;
-                }
-                visited.insert(peer.clone(), current.clone());
-                if peer == to {
-                    let mut path_ids = vec![to.to_string()];
-                    let mut cursor = to.to_string();
-                    while let Some(parent) = visited.get(&cursor) {
-                        if parent.is_empty() {
-                            break;
-                        }
-                        path_ids.push(parent.clone());
-                        cursor = parent.clone();
-                    }
-                    path_ids.reverse();
-                    return Ok(Some(
-                        path_ids.iter().filter_map(|id| get_node(id)).collect(),
-                    ));
-                }
-                queue.push_back(peer);
-            }
-        }
-        Ok(None)
+        Ok(super::path::shortest_path(
+            from,
+            to,
+            relation,
+            direction,
+            |id| g.adjacency.outgoing(id),
+            |id| g.reverse_index.incoming(id),
+            |id| g.node_state.get_node(id).filter(|n| !n.deleted),
+        ))
     }
 
     // ── Vectors & Recall ─────────────────────────────────────────────────

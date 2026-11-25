@@ -30,6 +30,9 @@ pub mod hosted;
 pub mod http_core;
 pub mod import_export;
 pub mod lexical;
+pub mod path;
+#[cfg(test)]
+mod path_tests;
 #[cfg(feature = "prime-recall")]
 pub mod projection_bundle;
 pub mod projections;
@@ -56,6 +59,7 @@ pub use event_store::EventStore;
 pub use facade::{ConversationScope, Prime};
 #[cfg(feature = "prime-recall")]
 pub use http_core::HttpCore;
+pub use path::{GraphPath, HopDirection, PathHop};
 pub use schema::{EnforcementMode, SchemaEntry, SchemaKind, Violation};
 pub use types::{
     Direction, Edge, EdgeId, EntityId, GraphDiff, HistoryEntry, Node, NodeId, PrimeStats, SubGraph,

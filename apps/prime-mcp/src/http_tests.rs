@@ -508,3 +508,47 @@ async fn rest_hosted_missing_tenant_returns_400() {
         "expected an X-Tenant-Id error, got {body}"
     );
 }
+
+#[tokio::test]
+async fn rest_shortest_path_takes_a_direction_and_returns_hops() {
+    let state = test_state().await;
+    let prime = state.prime.as_ref().unwrap();
+    let mut ids = Vec::new();
+    for (ty, name) in [("skill", "A"), ("skill", "B"), ("tool", "T")] {
+        let id = prime.add_node(ty, json!({ "name": name })).await.unwrap();
+        ids.push(EntityId::node(ty, id.as_str()).to_wire());
+    }
+    let (a, b, t) = (&ids[0], &ids[1], &ids[2]);
+    prime.add_edge(a, t, "requires", None).await.unwrap();
+    prime.add_edge(b, t, "requires", None).await.unwrap();
+    let app = rest_router(state);
+    let path = "/api/v1/prime/shortest-path";
+
+    let (status, body) = rest_request(
+        &app,
+        "POST",
+        path,
+        None,
+        Some(json!({ "from": a, "to": b })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["path"], Value::Null, "default stays outgoing: {body}");
+
+    let both = json!({ "from": a, "to": b, "direction": "both" });
+    let (status, body) = rest_request(&app, "POST", path, None, Some(both)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["path"].as_array().unwrap().len(), 3);
+    assert_eq!(body["hops"][0]["direction"], "outgoing");
+    assert_eq!(body["hops"][1]["direction"], "incoming");
+    assert_eq!(body["hops"][1]["from"], json!(t));
+    assert_eq!(body["hops"][1]["relation"], "requires");
+
+    let bad = json!({ "from": a, "to": b, "direction": "sideways" });
+    let (status, body) = rest_request(&app, "POST", path, None, Some(bad)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"].as_str().unwrap().contains("sideways"),
+        "{body}"
+    );
+}

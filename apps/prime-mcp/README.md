@@ -54,7 +54,7 @@ Restart Claude Desktop. You now have 23 `prime_*` tools, including:
 | `prime_add_edge` | Create a relationship between nodes |
 | `prime_neighbors` | Find connected nodes (1-hop or multi-hop BFS) |
 | `prime_search` | Find nodes by type |
-| `prime_shortest_path` | Find shortest path between two nodes |
+| `prime_shortest_path` | Find shortest path between two nodes, with each hop's relation and direction (`direction`: `both` by default, `outgoing`, `incoming`) |
 | `prime_forget` | Soft-delete a node (preserved in history) |
 | `prime_history` | Full audit trail for any entity |
 | `prime_stats` | Graph statistics |

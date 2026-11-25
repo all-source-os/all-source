@@ -317,7 +317,8 @@ pub fn http_routes() -> Vec<HttpRoute> {
             json!({
                 "from": {"type": "string"},
                 "to": {"type": "string"},
-                "relation": {"type": "string"}
+                "relation": {"type": "string"},
+                "direction": {"type": "string", "enum": ["outgoing", "incoming", "both"], "default": "outgoing"}
             }),
         )),
         HttpRoute::new(
@@ -682,6 +683,8 @@ struct ShortestPathRequest {
     from: String,
     to: String,
     relation: Option<String>,
+    /// `outgoing` (default), `incoming` or `both`.
+    direction: Option<String>,
 }
 
 /// Query parameters for `GET /api/v1/prime/graph`.
@@ -1435,33 +1438,35 @@ async fn shortest_path(
     scope: Scope,
     Json(req): Json<ShortestPathRequest>,
 ) -> impl IntoResponse {
-    let found = |path: Vec<allsource_core::prime::Node>| {
-        let nodes: Vec<Value> = path.iter().map(node_brief).collect();
-        (StatusCode::OK, Json(json!({"path": nodes})))
+    let direction = match req.direction.as_deref().map(str::parse::<Direction>) {
+        None => Direction::Outgoing,
+        Some(Ok(d)) => d,
+        Some(Err(e)) => return bad_request(&e),
     };
-    let none = || {
-        (
+    let reply = |path: Option<allsource_core::prime::GraphPath>| match path {
+        Some(p) => {
+            let nodes: Vec<Value> = p.nodes.iter().map(node_brief).collect();
+            (StatusCode::OK, Json(json!({"path": nodes, "hops": p.hops})))
+        }
+        None => (
             StatusCode::OK,
             Json(json!({"path": null, "message": "No path found"})),
-        )
+        ),
     };
+    let relation = req.relation.as_deref();
     if let Some(hosted) = state.hosted.as_ref() {
         let Some(tenant) = scoped_tenant(scope) else {
             return missing_tenant_response();
         };
         return match hosted
-            .shortest_path(&tenant, &req.from, &req.to, req.relation.as_deref())
+            .shortest_path_directed(&tenant, &req.from, &req.to, relation, direction)
             .await
         {
-            Ok(Some(path)) => found(path),
-            Ok(None) => none(),
+            Ok(path) => reply(path),
             Err(e) => server_error(e),
         };
     }
-    match embedded(&state).shortest_path(&req.from, &req.to, req.relation.as_deref()) {
-        Some(path) => found(path),
-        None => none(),
-    }
+    reply(embedded(&state).shortest_path_directed(&req.from, &req.to, relation, direction))
 }
 
 async fn recall(

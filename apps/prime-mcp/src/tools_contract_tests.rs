@@ -418,6 +418,90 @@ async fn every_advertised_hosted_tool_is_served() {
     }
 }
 
+/// Build `A -requires-> T <-requires- B` through the tools, then ask for A → B
+/// with `extra` merged into the `prime_shortest_path` arguments.
+async fn path_through_shared_tool<F, Fut>(call: F, extra: Value) -> (Value, [String; 3])
+where
+    F: Fn(&'static str, Value) -> Fut,
+    Fut: std::future::Future<Output = Value>,
+{
+    let mut ids = Vec::new();
+    for (ty, name) in [("skill", "A"), ("skill", "B"), ("tool", "T")] {
+        let created = ok(&call(
+            "prime_add_node",
+            json!({ "type": ty, "properties": { "name": name } }),
+        )
+        .await);
+        ids.push(created["entity_id"].as_str().unwrap().to_string());
+    }
+    let [a, b, t]: [String; 3] = ids.try_into().unwrap();
+    for source in [&a, &b] {
+        ok(&call(
+            "prime_add_edge",
+            json!({ "source": source, "target": t, "relation": "requires" }),
+        )
+        .await);
+    }
+    let mut args = json!({ "from": a, "to": b });
+    args.as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
+    (call("prime_shortest_path", args).await, [a, b, t])
+}
+
+fn assert_shared_tool_path(result: &Value, [a, b, t]: &[String; 3]) {
+    let out = ok(result);
+    let path: Vec<&str> = out["path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(path, [a.as_str(), t.as_str(), b.as_str()]);
+    assert_eq!(
+        out["hops"],
+        json!([
+            { "from": a, "to": t, "relation": "requires", "direction": "outgoing" },
+            { "from": t, "to": b, "relation": "requires", "direction": "incoming" },
+        ])
+    );
+}
+
+#[tokio::test]
+async fn shortest_path_connects_two_nodes_through_a_shared_target_on_both_backends() {
+    let e = Embedded::new().await;
+    let (result, ids) = path_through_shared_tool(|n, a| e.call(n, a), json!({})).await;
+    assert_shared_tool_path(&result, &ids);
+
+    let server = MockServer::start().await;
+    crate::hosted_test_core::mount_stateful_core(&server).await;
+    let hosted = HostedPrime::connect(server.uri(), None, 8, Duration::from_mins(1));
+    let t = "tenant-path";
+    let _ = hosted.stats(t).await;
+    let (result, ids) =
+        path_through_shared_tool(|n, a| hosted_call(&hosted, t, n, a), json!({})).await;
+    assert_shared_tool_path(&result, &ids);
+}
+
+#[tokio::test]
+async fn shortest_path_outgoing_only_finds_no_path_and_a_bad_direction_is_refused() {
+    let e = Embedded::new().await;
+    let (result, _) =
+        path_through_shared_tool(|n, a| e.call(n, a), json!({ "direction": "outgoing" })).await;
+    let out = ok(&result);
+    assert_eq!(out["path"], Value::Null);
+    assert_eq!(out["message"], "No path found");
+
+    let msg = refused(
+        &e.call(
+            "prime_shortest_path",
+            json!({ "from": "node:a:1", "to": "node:b:2", "direction": "sideways" }),
+        )
+        .await,
+    );
+    assert!(msg.contains("sideways"), "{msg}");
+}
+
 #[tokio::test]
 async fn update_of_a_missing_node_is_refused() {
     let e = Embedded::new().await;

@@ -6,14 +6,14 @@
 use std::sync::OnceLock;
 
 use allsource_core::prime::{
-    Prime, PrimeResult,
+    Direction, Prime, PrimeResult,
     recall::RecallEngine,
     types::{AsOf, RecallQuery, RecallResult, Retrieval},
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
-use crate::wire::{Fields, Page, node_row, paged};
+use crate::wire::{Fields, Page, node_row, paged, path_result};
 
 /// Encoding for the text payload of MCP tool results.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -193,13 +193,14 @@ fn base_tool_definitions() -> Value {
         },
         {
             "name": "prime_shortest_path",
-            "description": "Find how two entities are connected through the graph. Returns the chain of nodes linking them. Use to answer 'how does X relate to Y?' when you need the specific path of relationships.",
+            "description": "Find how two entities are connected through the graph. Returns the chain of nodes linking them in 'path', and in 'hops' each edge's relation and whether it was followed 'outgoing' (from → to) or 'incoming' (to → from). Edges are followed in both directions by default, so two skills that require the same tool connect through it. Use to answer 'how does X relate to Y?' when you need the specific path of relationships.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "from": { "type": "string", "description": "Start node entity_id" },
                     "to": { "type": "string", "description": "End node entity_id" },
-                    "relation": { "type": "string", "description": "Restrict path to this relation type only" }
+                    "relation": { "type": "string", "description": "Restrict path to this relation type only" },
+                    "direction": { "type": "string", "enum": ["incoming", "outgoing", "both"], "description": "Edge direction to follow (default: both). 'outgoing' only walks source → target." }
                 },
                 "required": ["from", "to"]
             }
@@ -1070,22 +1071,43 @@ fn call_search(prime: &Prime, args: &Value) -> Value {
     tool_result(paged("nodes", nodes_json, page, total))
 }
 
-fn call_shortest_path(prime: &Prime, args: &Value) -> Value {
-    let Some(from) = args.get("from").and_then(Value::as_str) else {
-        return tool_error("missing 'from'");
-    };
-    let Some(to) = args.get("to").and_then(Value::as_str) else {
-        return tool_error("missing 'to'");
-    };
-    let relation = args.get("relation").and_then(Value::as_str);
+/// Arguments of `prime_shortest_path`, shared by the embedded and hosted dispatch.
+pub(crate) struct ShortestPathArgs<'a> {
+    pub from: &'a str,
+    pub to: &'a str,
+    pub relation: Option<&'a str>,
+    pub direction: Direction,
+}
 
-    match prime.shortest_path(from, to, relation) {
-        Some(path) => {
-            let path_json: Vec<Value> = path.iter().map(|n| node_row(n, Fields::Full)).collect();
-            tool_result(json!({ "path": path_json }))
-        }
-        None => tool_result(json!({ "path": null, "message": "No path found" })),
+impl<'a> ShortestPathArgs<'a> {
+    /// Parse the arguments, or the tool error to return.
+    pub(crate) fn parse(args: &'a Value) -> Result<Self, Value> {
+        let Some(from) = args.get("from").and_then(Value::as_str) else {
+            return Err(tool_error("missing 'from'"));
+        };
+        let Some(to) = args.get("to").and_then(Value::as_str) else {
+            return Err(tool_error("missing 'to'"));
+        };
+        let direction = match args.get("direction").and_then(Value::as_str) {
+            None => Direction::Both,
+            Some(s) => s.parse().map_err(|e: String| tool_error(&e))?,
+        };
+        Ok(Self {
+            from,
+            to,
+            relation: args.get("relation").and_then(Value::as_str),
+            direction,
+        })
     }
+}
+
+fn call_shortest_path(prime: &Prime, args: &Value) -> Value {
+    let a = match ShortestPathArgs::parse(args) {
+        Ok(a) => a,
+        Err(e) => return e,
+    };
+    let path = prime.shortest_path_directed(a.from, a.to, a.relation, a.direction);
+    tool_result(path_result(path.as_ref()))
 }
 
 async fn call_forget(prime: &Prime, args: &Value) -> Value {

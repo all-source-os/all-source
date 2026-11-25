@@ -2025,46 +2025,31 @@ impl Prime {
         super::types::SubGraph { nodes, edges }
     }
 
-    /// BFS shortest path (unweighted). Returns ordered path including start and end.
+    /// BFS shortest path (unweighted) over outgoing edges. Returns ordered path
+    /// including start and end.
     pub fn shortest_path(&self, from: &str, to: &str, relation: Option<&str>) -> Option<Vec<Node>> {
-        use std::collections::{HashMap, VecDeque};
+        self.shortest_path_directed(from, to, relation, Direction::Outgoing)
+            .map(|p| p.nodes)
+    }
 
-        if from == to {
-            return self.get_node(from).map(|n| vec![n]);
-        }
-
-        let mut visited: HashMap<String, String> = HashMap::new(); // child -> parent
-        let mut queue = VecDeque::new();
-
-        visited.insert(from.to_string(), String::new());
-        queue.push_back(from.to_string());
-
-        while let Some(current) = queue.pop_front() {
-            let peers = self.neighbor_ids(&current, relation, Direction::Outgoing);
-            for peer in peers {
-                if visited.contains_key(&peer) {
-                    continue;
-                }
-                visited.insert(peer.clone(), current.clone());
-                if peer == to {
-                    // Reconstruct path
-                    let mut path_ids = vec![to.to_string()];
-                    let mut cursor = to.to_string();
-                    while let Some(parent) = visited.get(&cursor) {
-                        if parent.is_empty() {
-                            break;
-                        }
-                        path_ids.push(parent.clone());
-                        cursor = parent.clone();
-                    }
-                    path_ids.reverse();
-                    return Some(path_ids.iter().filter_map(|id| self.get_node(id)).collect());
-                }
-                queue.push_back(peer);
-            }
-        }
-
-        None // No path
+    /// BFS shortest path (unweighted) following edges in `direction`, with the
+    /// relation and direction of every hop.
+    pub fn shortest_path_directed(
+        &self,
+        from: &str,
+        to: &str,
+        relation: Option<&str>,
+        direction: Direction,
+    ) -> Option<super::path::GraphPath> {
+        super::path::shortest_path(
+            from,
+            to,
+            relation,
+            direction,
+            |id| self.adjacency.outgoing(id),
+            |id| self.reverse_index.incoming(id),
+            |id| self.get_node(id),
+        )
     }
 
     /// Dijkstra shortest path (weighted). Returns path + total weight.

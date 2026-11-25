@@ -17,7 +17,7 @@ use crate::{
     contract,
     protocol::{self, Request, Response},
     tools,
-    wire::{Fields, Page, node_row, paged},
+    wire::{Fields, Page, node_row, paged, path_result},
 };
 
 /// Tools the hosted backend serves. Hound ingest runs where the source lives,
@@ -245,19 +245,15 @@ async fn call_update_node(
 }
 
 async fn call_shortest_path(hosted: &HostedPrime, tenant: &str, args: &Value) -> Value {
-    let Some(from) = args.get("from").and_then(Value::as_str) else {
-        return tool_error("missing 'from'");
+    let a = match tools::ShortestPathArgs::parse(args) {
+        Ok(a) => a,
+        Err(e) => return e,
     };
-    let Some(to) = args.get("to").and_then(Value::as_str) else {
-        return tool_error("missing 'to'");
-    };
-    let relation = args.get("relation").and_then(Value::as_str);
-    match hosted.shortest_path(tenant, from, to, relation).await {
-        Ok(Some(path)) => {
-            let path_json: Vec<Value> = path.iter().map(|n| node_row(n, Fields::Full)).collect();
-            tool_result(json!({ "path": path_json }))
-        }
-        Ok(None) => tool_result(json!({ "path": null, "message": "No path found" })),
+    match hosted
+        .shortest_path_directed(tenant, a.from, a.to, a.relation, a.direction)
+        .await
+    {
+        Ok(path) => tool_result(path_result(path.as_ref())),
         Err(e) => tool_error(&e.to_string()),
     }
 }

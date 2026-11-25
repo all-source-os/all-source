@@ -11,7 +11,7 @@
 //!   `toon::encode` take its tabular path. A nested `properties` falls back to
 //!   list form and compresses nothing.
 
-use allsource_core::prime::{EntityId, Node};
+use allsource_core::prime::{EntityId, GraphPath, Node};
 use serde_json::{Map, Value, json};
 
 /// Rows returned when the caller names no `limit`.
@@ -140,6 +140,28 @@ pub fn paged(key: &str, rows: Vec<Value>, page: Page, total: usize) -> Value {
         );
     }
     Value::Object(out)
+}
+
+/// Shape a shortest-path answer: the nodes in order, and one flat row per hop
+/// naming the edge's relation and which way it was crossed.
+pub fn path_result(path: Option<&GraphPath>) -> Value {
+    let Some(p) = path else {
+        return json!({ "path": null, "message": "No path found" });
+    };
+    let nodes: Vec<Value> = p.nodes.iter().map(|n| node_row(n, Fields::Full)).collect();
+    let hops: Vec<Value> = p
+        .hops
+        .iter()
+        .map(|h| {
+            json!({
+                "from": h.from,
+                "to": h.to,
+                "relation": h.relation,
+                "direction": h.direction,
+            })
+        })
+        .collect();
+    json!({ "path": nodes, "hops": hops })
 }
 
 #[cfg(test)]
