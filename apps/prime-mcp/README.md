@@ -57,7 +57,7 @@ Restart Claude Desktop. You now have 23 `prime_*` tools, including:
 | `prime_shortest_path` | Find shortest path between two nodes, with each hop's relation and direction (`direction`: `both` by default, `outgoing`, `incoming`) |
 | `prime_forget` | Soft-delete a node (preserved in history) |
 | `prime_history` | Full audit trail for any entity |
-| `prime_stats` | Graph statistics |
+| `prime_stats` | Graph statistics, and whether this server can write (`writable`, `writer_pid`) |
 | `prime_embed` | Store a vector embedding |
 | `prime_similar` | Find similar embeddings |
 | `prime_recall` | Hybrid recall: vectors + graph + temporal |
@@ -84,6 +84,34 @@ In HTTP mode the binary also serves a self-contained, offline graph viewer at
 `http://localhost:3905/api/v1/prime/graph.html` (logged on startup) — open it
 in a browser to see your local memory as a bubble graph + detail list, no
 account or network required.
+
+## Several sessions on one memory
+
+A stdio client such as Claude Code starts its own `allsource-prime` per
+session. Only one process can own a `--data-dir`: the first holds
+`prime.lock`, and every other one opens the same memory as a **read-only
+replica** that serves reads and fails every write. A replica says so before
+the first write: `initialize` carries an `instructions` notice, and
+`prime_stats` reports `"writable": false` with the owner's `writer_pid`.
+
+To let every session write to one shared memory, run a single writer in HTTP
+mode and point the clients at its MCP endpoint instead of starting a stdio
+server each:
+
+```bash
+allsource-prime --mode http --port 3905 --data-dir ~/.prime/memory
+```
+
+```json
+{
+  "mcpServers": {
+    "prime": { "type": "http", "url": "http://localhost:3905/mcp" }
+  }
+}
+```
+
+A per-project data dir (what `cn prime setup` writes) avoids the contention
+too, at the cost of one memory per project.
 
 ## Sync configuration
 

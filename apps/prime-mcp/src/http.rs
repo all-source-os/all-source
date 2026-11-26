@@ -815,13 +815,15 @@ async fn get_stats(State(state): State<Arc<AppState>>, scope: Scope) -> impl Int
                     "event_count": stats.event_count,
                     "nodes_by_type": stats.nodes_by_type,
                     "edges_by_relation": stats.edges_by_relation,
-                    "sync": crate::tools::sync_status_json(),
+                    "writable": true,
+                    "sync": crate::tools::sync_status_json(false),
                 })),
             ),
             Err(e) => server_error(e),
         };
     }
-    let stats = embedded(&state).stats();
+    let prime = embedded(&state);
+    let stats = prime.stats();
     (
         StatusCode::OK,
         Json(json!({
@@ -832,7 +834,10 @@ async fn get_stats(State(state): State<Arc<AppState>>, scope: Scope) -> impl Int
             "event_count": stats.event_count,
             "nodes_by_type": stats.nodes_by_type,
             "edges_by_relation": stats.edges_by_relation,
-            "sync": crate::tools::sync_status_json(),
+            "writable": !prime.is_read_only(),
+            "writer_pid": prime.writer_pid(),
+            "read_only_note": crate::tools::read_only_notice(prime),
+            "sync": crate::tools::sync_status_json(prime.is_read_only()),
         })),
     )
 }

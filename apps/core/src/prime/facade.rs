@@ -87,6 +87,8 @@ pub struct Prime {
     /// every write. Kept as its own flag rather than derived from the lock:
     /// an in-memory instance also has no lock and is perfectly writable.
     read_only: bool,
+    /// On a read-only replica, the PID the writer recorded in `prime.lock`.
+    writer_pid: Option<u32>,
     /// Held across check-then-append for `cardinality: one` edges so two
     /// concurrent writers cannot both see "no target yet".
     exclusive_edge_gate: tokio::sync::Mutex<()>,
@@ -109,7 +111,30 @@ enum DataDirAccess {
     /// This process owns the data-dir and may write. Hold the lock for life.
     Writer(DataDirLock),
     /// Another live process owns the data-dir; open a read-only replica.
-    Replica,
+    Replica { writer_pid: Option<u32> },
+}
+
+/// Record this process's PID in the lock file so a replica can name its writer.
+/// Best effort: the lock, not the PID, is what keeps a second writer out.
+fn record_writer_pid(file: &File) {
+    use std::io::{Seek, Write};
+    let mut file = file;
+    let written = file
+        .set_len(0)
+        .and_then(|()| file.rewind())
+        .and_then(|()| write!(file, "{}", std::process::id()));
+    if let Err(e) = written {
+        tracing::warn!(error = %e, "could not record the writer PID in prime.lock");
+    }
+}
+
+/// The PID the current writer recorded, if it has written one yet.
+fn read_writer_pid(file: &File) -> Option<u32> {
+    use std::io::Read;
+    let mut contents = String::new();
+    let mut file = file;
+    file.read_to_string(&mut contents).ok()?;
+    contents.trim().parse().ok()
 }
 
 /// Try to acquire the exclusive writer lock for `data_dir`.
@@ -146,9 +171,14 @@ fn acquire_data_dir_lock(data_dir: &Path) -> Result<DataDirAccess> {
     // Keep the two failure modes apart — collapsing them would either brick a
     // lone process on a lock-less filesystem or admit a second writer.
     match FileExt::try_lock(&file) {
-        Ok(()) => Ok(DataDirAccess::Writer(DataDirLock { _file: file })),
+        Ok(()) => {
+            record_writer_pid(&file);
+            Ok(DataDirAccess::Writer(DataDirLock { _file: file }))
+        }
         // Someone else holds the lock: this instance is a read-only replica.
-        Err(TryLockError::WouldBlock) => Ok(DataDirAccess::Replica),
+        Err(TryLockError::WouldBlock) => Ok(DataDirAccess::Replica {
+            writer_pid: read_writer_pid(&file),
+        }),
         Err(TryLockError::Error(e)) => {
             tracing::warn!(
                 error = %e,
@@ -158,6 +188,7 @@ fn acquire_data_dir_lock(data_dir: &Path) -> Result<DataDirAccess> {
             );
             // Synthesize a Writer without a real lock: better to keep a lone
             // process fully functional than to brick it on an FS without flock.
+            record_writer_pid(&file);
             Ok(DataDirAccess::Writer(DataDirLock { _file: file }))
         }
     }
@@ -290,6 +321,7 @@ impl Prime {
             embedder: OnceLock::new(),
             _data_dir_lock: data_dir_lock,
             read_only,
+            writer_pid: None,
             exclusive_edge_gate: tokio::sync::Mutex::new(()),
             kind_gate: tokio::sync::Mutex::new(()),
         }
@@ -307,6 +339,13 @@ impl Prime {
         self.read_only
     }
 
+    /// On a read-only replica, the PID of the process that owns the data-dir,
+    /// as it recorded it in `prime.lock`. `None` on a writer, in memory, or
+    /// when the writer has not recorded one.
+    pub fn writer_pid(&self) -> Option<u32> {
+        self.writer_pid
+    }
+
     /// Open a durable Prime instance at `path`.
     ///
     /// Acquires an exclusive advisory lock on the data dir. If another live
@@ -318,16 +357,17 @@ impl Prime {
     /// clients at it rather than opening the same data dir N times.
     pub async fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let (lock, read_only) = match acquire_data_dir_lock(path)? {
-            DataDirAccess::Writer(lock) => (Some(lock), false),
-            DataDirAccess::Replica => {
+        let (lock, read_only, writer_pid) = match acquire_data_dir_lock(path)? {
+            DataDirAccess::Writer(lock) => (Some(lock), false, None),
+            DataDirAccess::Replica { writer_pid } => {
                 tracing::warn!(
                     path = %path.display(),
+                    writer_pid = ?writer_pid,
                     "Prime data dir is owned by another running process — opening READ-ONLY \
                      replica. This instance serves reads of the shared memory but rejects writes. \
                      For a writable shared memory, run one Prime in --mode http and connect to it."
                 );
-                (None, true)
+                (None, true, writer_pid)
             }
         };
         let config = Self::config_builder()
@@ -335,7 +375,9 @@ impl Prime {
             .read_only(read_only)
             .build()?;
         let core = EmbeddedCore::open(config).await?;
-        Ok(Self::from_core(core, lock, read_only))
+        let mut prime = Self::from_core(core, lock, read_only);
+        prime.writer_pid = writer_pid;
+        Ok(prime)
     }
 
     /// Open an in-memory Prime instance (no persistence). Useful for testing.
@@ -4336,6 +4378,12 @@ mod tests {
             replica.is_read_only(),
             "a second process on the same data dir must know it is a replica"
         );
+        assert_eq!(
+            replica.writer_pid(),
+            Some(std::process::id()),
+            "a replica names the PID that owns the data dir"
+        );
+        assert_eq!(writer.writer_pid(), None);
 
         // In-memory has no lock either, so deriving read-only from the absence
         // of a lock would call this one a replica. It is not.

@@ -69,7 +69,7 @@ pub async fn handle_request(
     match req.method.as_str() {
         "initialize" => Some(Response::success(
             req.id.clone(),
-            protocol::server_info(auto_inject),
+            protocol::server_info(auto_inject, tools::read_only_notice(prime)),
         )),
         "notifications/initialized" => None,
 

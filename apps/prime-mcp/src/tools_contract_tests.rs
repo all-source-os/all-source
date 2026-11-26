@@ -503,6 +503,56 @@ async fn shortest_path_outgoing_only_finds_no_path_and_a_bad_direction_is_refuse
 }
 
 #[tokio::test]
+async fn a_read_only_replica_says_so_before_the_first_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let writer = Prime::open(dir.path()).await.unwrap();
+    let replica = Prime::open(dir.path()).await.unwrap();
+    let recall = RecallEngine::with_deps(replica.recall_deps(), &IndexConfig::default());
+
+    let stats = ok(&call_tool(&replica, &recall, "prime_stats", &json!({})).await);
+    assert_eq!(stats["writable"], false);
+    assert_eq!(stats["writer_pid"], std::process::id());
+    let note = stats["read_only_note"].as_str().unwrap();
+    assert!(note.contains(&std::process::id().to_string()), "{note}");
+    assert!(
+        !stats["sync"]["note"]
+            .as_str()
+            .unwrap()
+            .contains("will appear on the dashboard"),
+        "a replica must not promise dashboard writes: {}",
+        stats["sync"]["note"]
+    );
+
+    let init: protocol::Request = serde_json::from_value(
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }),
+    )
+    .unwrap();
+    let replica_init = crate::dispatch::handle_request(&replica, &recall, false, 0, &init)
+        .await
+        .unwrap();
+    let replica_init = serde_json::to_value(&replica_init).unwrap();
+    assert!(
+        replica_init["result"]["instructions"]
+            .as_str()
+            .is_some_and(|text| text.contains("READ-ONLY")),
+        "{replica_init}"
+    );
+
+    let writer_recall = RecallEngine::with_deps(writer.recall_deps(), &IndexConfig::default());
+    let writer_stats = ok(&call_tool(&writer, &writer_recall, "prime_stats", &json!({})).await);
+    assert_eq!(writer_stats["writable"], true);
+    assert_eq!(writer_stats["read_only_note"], Value::Null);
+    let writer_init = crate::dispatch::handle_request(&writer, &writer_recall, false, 0, &init)
+        .await
+        .unwrap();
+    assert!(
+        serde_json::to_value(&writer_init).unwrap()["result"]
+            .get("instructions")
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn update_of_a_missing_node_is_refused() {
     let e = Embedded::new().await;
     refused(

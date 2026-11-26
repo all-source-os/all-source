@@ -51,15 +51,20 @@ impl Response {
     }
 }
 
-/// Server capabilities for the `initialize` response.
-pub fn server_info(_auto_inject: bool) -> Value {
+/// Server capabilities for the `initialize` response. `instructions` reaches
+/// the client's model before it plans any tool call.
+pub fn server_info(_auto_inject: bool, instructions: Option<String>) -> Value {
     let capabilities = serde_json::json!({ "tools": {}, "resources": {} });
-    serde_json::json!({
+    let mut info = serde_json::json!({
         "protocolVersion": "2024-11-05",
         "capabilities": capabilities,
         "serverInfo": {
             "name": "allsource-prime",
             "version": env!("CARGO_PKG_VERSION")
         }
-    })
+    });
+    if let Some(instructions) = instructions {
+        info["instructions"] = Value::String(instructions);
+    }
+    info
 }

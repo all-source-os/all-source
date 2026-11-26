@@ -68,12 +68,37 @@ fn sync_status() -> SyncStatus {
     })
 }
 
+/// What an agent is told when this server is a read-only replica of a data
+/// dir another process owns: every write it plans will fail. `None` when the
+/// server can write.
+pub fn read_only_notice(prime: &Prime) -> Option<String> {
+    if !prime.is_read_only() {
+        return None;
+    }
+    let owner = prime.writer_pid().map_or_else(
+        || "another process".to_string(),
+        |pid| format!("process {pid}"),
+    );
+    Some(format!(
+        "This Prime server is a READ-ONLY replica: {owner} owns its data dir, so every \
+         write tool will fail. Reads work. To write, use that process, or run one Prime \
+         with --mode http and point every client at it."
+    ))
+}
+
 /// Build the `sync` object embedded in `prime_stats` output. Mirrors the
 /// startup log so an agent can read back whether its writes will appear in the
 /// `AllSource` dashboard. Also reused by the HTTP `/api/v1/prime/stats` handler.
-pub fn sync_status_json() -> Value {
+pub fn sync_status_json(read_only: bool) -> Value {
     let status = sync_status();
-    if status.enabled {
+    if read_only {
+        json!({
+            "enabled": status.enabled,
+            "remote_url": status.remote_url,
+            "note": "READ-ONLY replica: this server cannot write, so nothing reaches the \
+                     dashboard through it. See `writable` and `writer_pid`.",
+        })
+    } else if status.enabled {
         json!({
             "enabled": true,
             "remote_url": status.remote_url,
@@ -1173,9 +1198,12 @@ fn call_stats(prime: &Prime) -> Value {
         // unembedded store answers identically to an empty one.
         "nodes_without_vectors": unembedded,
         "recall_coverage": recall_coverage_note(stats.total_nodes, unembedded),
+        "writable": !prime.is_read_only(),
+        "writer_pid": prime.writer_pid(),
+        "read_only_note": read_only_notice(prime),
         // Surface sync state so the agent can tell whether what it just wrote
         // will reach the AllSource dashboard or is stranded local-only.
-        "sync": sync_status_json(),
+        "sync": sync_status_json(prime.is_read_only()),
     }))
 }
 
@@ -1211,7 +1239,7 @@ async fn call_hound_ingest(prime: &Prime, args: &Value) -> Value {
             "unresolved": s.unresolved,
             "embedded": s.embedded,
             "deleted_stale": s.deleted_stale,
-            "sync": sync_status_json(),
+            "sync": sync_status_json(prime.is_read_only()),
         })),
         Err(e) => tool_error(&e.to_string()),
     }
@@ -1238,7 +1266,7 @@ async fn call_hound_ingest_docs(prime: &Prime, args: &Value) -> Value {
                 "completion_tokens": s.completion_tokens,
                 "total_tokens": s.total_tokens,
             },
-            "sync": sync_status_json(),
+            "sync": sync_status_json(prime.is_read_only()),
         })),
         Err(e) => tool_error(&e.to_string()),
     }

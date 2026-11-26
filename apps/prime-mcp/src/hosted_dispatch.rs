@@ -92,7 +92,7 @@ pub async fn handle_request_hosted(
         // never enables it, matching the embedded `/mcp` handler's `false`.
         "initialize" => Some(Response::success(
             req.id.clone(),
-            protocol::server_info(false),
+            protocol::server_info(false, None),
         )),
         "notifications/initialized" => None,
 
