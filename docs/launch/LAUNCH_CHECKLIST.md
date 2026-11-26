@@ -1,7 +1,7 @@
 # AllSource Launch Checklist
 
 **Last reviewed:** 2026-11-24
-**Current versions:** Core 0.30.0 · latest release tag v0.30.0
+**Current versions:** Core 0.30.1 · latest release tag v0.30.1
 **Active branches:** `main` — x402 + agent registration are already merged. The `feat/agent-auth-x402` branch is historical.
 
 Single source of truth for what's left to launch. Supersedes the 6 archived docs under `docs/launch/archived/`. Pair with `docs/launch/CHRONIS_CLOUD_LAUNCH_PLAN.md` for the chronis cloud sync launch specifically.
@@ -25,13 +25,13 @@ Status legend: `[ ]` open · `[~]` in progress · `[x]` done · `[-]` dropped/de
 
 ## Phase B — Deploy core stack
 
-Backend and frontend on Fly. Each backend app runs the v0.30.0 build:
+Backend and frontend on Fly. Each backend app runs the v0.30.1 build:
 
-- [ ] `allsource-core` — v0.30.0, healthy, persistent volume `allsource_data`
-- [ ] `allsource-query` — v0.30.0, healthy 2/2
-- [ ] `allsource-control-plane` — v0.30.0, serves `GET /x402/routes`
-- [ ] `allsource-prime` — v0.30.0
-- [ ] `allsource-auth` — v0.30.0
+- [ ] `allsource-core` — v0.30.1, healthy, persistent volume `allsource_data`
+- [ ] `allsource-query` — v0.30.1, healthy 2/2
+- [ ] `allsource-control-plane` — v0.30.1, serves `GET /x402/routes`
+- [ ] `allsource-prime` — v0.30.1
+- [ ] `allsource-auth` — v0.30.1
 - [x] Web frontend deployed on Fly app `allsource-web` at `https://all-source.xyz`
 - [x] Core autoscale `min_machines_running = 1` (`apps/core/fly.toml:101`)
 - [x] Fly alerts on Core/Query `/health` failures configured in Fly dashboard

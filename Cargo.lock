@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "allsource-core"
-version = "0.30.0"
+version = "0.30.1"
 dependencies = [
  "aes-gcm",
  "allsource-prime-models",

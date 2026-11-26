@@ -28,7 +28,7 @@ docker pull ghcr.io/all-source-os/allsource-control-plane:latest
 docker pull ghcr.io/all-source-os/allsource-query-service:latest
 
 # Specific version (release tags are pushed without the "v" prefix, .github/workflows/release.yml:49)
-docker pull ghcr.io/all-source-os/allsource-core:0.30.0
+docker pull ghcr.io/all-source-os/allsource-core:0.30.1
 ```
 
 ### Run Locally

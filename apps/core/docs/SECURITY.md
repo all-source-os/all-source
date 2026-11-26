@@ -1130,5 +1130,5 @@ Or check the server logs on startup for the warning message.
 ---
 
 **Last Updated**: 2026-11-23
-**Version**: 0.30.0
+**Version**: 0.30.1
 **Maintained By**: AllSource Core Security Team

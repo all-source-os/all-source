@@ -1,7 +1,7 @@
 ---
 title: "MCP Server"
 status: CURRENT
-version: 0.30.0
+version: 0.30.1
 last_updated: 2026-11-23
 category: service
 technology: Elixir
@@ -16,7 +16,7 @@ technology: Elixir
 [![Tools](https://img.shields.io/badge/MCP%20tools-73-orange.svg)]()
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../../LICENSE)
 
-**Current Version**: v0.30.0
+**Current Version**: v0.30.1
 
 ## What Can It Do?
 

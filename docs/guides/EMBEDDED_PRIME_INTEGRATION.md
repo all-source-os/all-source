@@ -21,7 +21,7 @@ Add `allsource-core` with the features you need:
 
 ```toml
 [dependencies]
-allsource-core = { version = "0.30.0", features = ["prime-full", "prime-recall"] }
+allsource-core = { version = "0.30.1", features = ["prime-full", "prime-recall"] }
 ```
 
 | Feature | What it enables | Compile cost |
@@ -35,7 +35,7 @@ allsource-core = { version = "0.30.0", features = ["prime-full", "prime-recall"]
 For a Tauri app replacing O(n) cosine search with HNSW + tiered recall:
 
 ```toml
-allsource-core = { version = "0.30.0", features = ["prime-full", "prime-recall"] }
+allsource-core = { version = "0.30.1", features = ["prime-full", "prime-recall"] }
 ```
 
 ---
