@@ -74,7 +74,11 @@ pub async fn handle_request(
         "notifications/initialized" => None,
 
         "tools/list" => {
-            let defs = tools::tool_definitions();
+            let defs = if prime.is_read_only() {
+                tools::replica_tool_definitions()
+            } else {
+                tools::tool_definitions()
+            };
             Some(Response::success(
                 req.id.clone(),
                 serde_json::json!({ "tools": defs }),

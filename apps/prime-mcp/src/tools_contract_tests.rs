@@ -552,6 +552,84 @@ async fn a_read_only_replica_says_so_before_the_first_write() {
     );
 }
 
+#[test]
+fn every_advertised_tool_is_classified_exactly_once() {
+    let Value::Array(defs) = tool_definitions() else {
+        panic!("tool_definitions is not an array");
+    };
+    let lists = [STORE_WRITE_TOOLS, REMOTE_WRITE_TOOLS, READ_TOOLS];
+    for def in &defs {
+        let name = def["name"].as_str().unwrap();
+        let hits = lists.iter().filter(|list| list.contains(&name)).count();
+        assert_eq!(
+            hits, 1,
+            "{name} must be in exactly one of STORE_WRITE_TOOLS, REMOTE_WRITE_TOOLS, READ_TOOLS"
+        );
+        assert_eq!(
+            def["annotations"]["readOnlyHint"],
+            READ_TOOLS.contains(&name),
+            "{name}"
+        );
+    }
+    let advertised: Vec<&str> = defs.iter().filter_map(|d| d["name"].as_str()).collect();
+    for name in lists.iter().flat_map(|list| list.iter()) {
+        assert!(
+            advertised.contains(name),
+            "{name} is classified but not advertised"
+        );
+    }
+}
+
+async fn listed_tools(prime: &Prime) -> Vec<Value> {
+    let recall = RecallEngine::with_deps(prime.recall_deps(), &IndexConfig::default());
+    let req: protocol::Request =
+        serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }))
+            .unwrap();
+    let resp = crate::dispatch::handle_request(prime, &recall, false, 0, &req)
+        .await
+        .unwrap();
+    serde_json::to_value(&resp).unwrap()["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .clone()
+}
+
+fn description<'a>(tools: &'a [Value], name: &str) -> &'a str {
+    tools
+        .iter()
+        .find(|t| t["name"] == name)
+        .and_then(|t| t["description"].as_str())
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_replica_marks_its_store_writing_tools_unavailable_and_a_writer_does_not() {
+    let dir = tempfile::tempdir().unwrap();
+    let writer = Prime::open(dir.path()).await.unwrap();
+    let replica = Prime::open(dir.path()).await.unwrap();
+
+    let on_replica = listed_tools(&replica).await;
+    for name in STORE_WRITE_TOOLS {
+        assert!(
+            description(&on_replica, name).starts_with("UNAVAILABLE on this server"),
+            "{name}"
+        );
+    }
+    for name in REMOTE_WRITE_TOOLS.iter().chain(READ_TOOLS) {
+        assert!(
+            !description(&on_replica, name).contains("UNAVAILABLE"),
+            "{name} works on a replica"
+        );
+    }
+
+    let on_writer = listed_tools(&writer).await;
+    assert!(
+        on_writer
+            .iter()
+            .all(|t| !t["description"].as_str().unwrap().contains("UNAVAILABLE"))
+    );
+}
+
 #[tokio::test]
 async fn update_of_a_missing_node_is_refused() {
     let e = Embedded::new().await;

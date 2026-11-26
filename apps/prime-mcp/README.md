@@ -91,8 +91,10 @@ A stdio client such as Claude Code starts its own `allsource-prime` per
 session. Only one process can own a `--data-dir`: the first holds
 `prime.lock`, and every other one opens the same memory as a **read-only
 replica** that serves reads and fails every write. A replica says so before
-the first write: `initialize` carries an `instructions` notice, and
-`prime_stats` reports `"writable": false` with the owner's `writer_pid`.
+the first write: `initialize` carries an `instructions` notice, `tools/list`
+marks each tool that writes the local store as unavailable, and `prime_stats`
+reports `"writable": false` with the owner's `writer_pid`. Every tool also
+carries the standard MCP `readOnlyHint` annotation.
 
 To let every session write to one shared memory, run a single writer in HTTP
 mode and point the clients at its MCP endpoint instead of starting a stdio

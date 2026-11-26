@@ -116,6 +116,76 @@ pub fn sync_status_json(read_only: bool) -> Value {
     }
 }
 
+/// Tools that append to the local store, so they fail on a read-only replica.
+pub(crate) const STORE_WRITE_TOOLS: &[&str] = &[
+    "prime_add_node",
+    "prime_add_edge",
+    "prime_update_node",
+    "prime_forget",
+    "prime_embed",
+    "prime_define_projection",
+    "prime_define_type",
+    "prime_set_enforcement",
+    "hound_ingest",
+    "hound_ingest_docs",
+];
+
+/// Tools that change state outside the local store, so they still work on a
+/// replica. Only the classification test reads it.
+#[cfg(test)]
+pub(crate) const REMOTE_WRITE_TOOLS: &[&str] = &["inbox_draft"];
+
+/// Tools with no side effect. Every advertised tool is in exactly one of the
+/// three lists; `tools::tests` fails on one that is in none.
+pub(crate) const READ_TOOLS: &[&str] = &[
+    "prime_neighbors",
+    "prime_search",
+    "prime_shortest_path",
+    "prime_history",
+    "prime_stats",
+    "prime_index",
+    "prime_context",
+    "prime_similar",
+    "prime_recall",
+    "prime_list_projections",
+    "prime_project_node",
+    "prime_node_provenance",
+    "prime_list_types",
+    "prime_list_templates",
+    "prime_load_template",
+    "inbox_recall_thread",
+    "hound_impact",
+    "hound_report",
+    "hound_pr_impact",
+    "hound_export",
+];
+
+/// `tools/list` for a read-only replica: each tool that writes the local store
+/// says up front that it will fail here.
+pub fn replica_tool_definitions() -> Value {
+    let Value::Array(tools) = tool_definitions() else {
+        return Value::Array(Vec::new());
+    };
+    Value::Array(
+        tools
+            .into_iter()
+            .map(|mut tool| {
+                let writes_store = tool["name"]
+                    .as_str()
+                    .is_some_and(|name| STORE_WRITE_TOOLS.contains(&name));
+                if writes_store {
+                    let description = tool["description"].as_str().unwrap_or_default();
+                    tool["description"] = Value::String(format!(
+                        "UNAVAILABLE on this server: it is a read-only replica of a data dir \
+                         another process owns (see prime_stats). {description}"
+                    ));
+                }
+                tool
+            })
+            .collect(),
+    )
+}
+
 /// Return MCP tool definitions (for `tools/list`).
 pub fn tool_definitions() -> Value {
     let Value::Array(tools) = base_tool_definitions() else {
@@ -133,6 +203,13 @@ pub fn tool_definitions() -> Value {
                     crate::contract::ASSERTION_SOURCE_KEY,
                 ),
                 _ => tool,
+            })
+            .map(|mut tool| {
+                let read_only = tool["name"]
+                    .as_str()
+                    .is_some_and(|name| READ_TOOLS.contains(&name));
+                tool["annotations"] = json!({ "readOnlyHint": read_only });
+                tool
             })
             .collect(),
     )
