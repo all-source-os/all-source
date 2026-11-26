@@ -1,9 +1,20 @@
+// With `hotpath` + `hotpath-alloc`, `hotpath::main` declares the global
+// allocator itself, wrapping the one named in its `allocator` argument below;
+// a second declaration here would not compile.
+
 // `cap` counts live bytes for the heap gauges; no limit is set.
-#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
+#[cfg(not(any(
+    all(feature = "hotpath", feature = "hotpath-alloc"),
+    all(feature = "heap-profile", target_os = "linux")
+)))]
 #[global_allocator]
 static GLOBAL: cap::Cap<mimalloc::MiMalloc> = cap::Cap::new(mimalloc::MiMalloc, usize::MAX);
 
-#[cfg(all(feature = "heap-profile", target_os = "linux"))]
+#[cfg(all(
+    feature = "heap-profile",
+    target_os = "linux",
+    not(all(feature = "hotpath", feature = "hotpath-alloc"))
+))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
@@ -16,9 +27,22 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[unsafe(export_name = "malloc_conf")]
 pub static malloc_conf: &[u8] = b"prof:true,prof_active:true,lg_prof_sample:19\0";
 
-#[cfg(not(all(feature = "heap-profile", target_os = "linux")))]
+#[cfg(not(any(
+    all(feature = "hotpath", feature = "hotpath-alloc"),
+    all(feature = "heap-profile", target_os = "linux")
+)))]
 fn heap_live_bytes() -> u64 {
     GLOBAL.allocated() as u64
+}
+
+/// No live-byte counter exists when hotpath's allocator replaces `cap`.
+#[cfg(all(
+    feature = "hotpath",
+    feature = "hotpath-alloc",
+    not(all(feature = "heap-profile", target_os = "linux"))
+))]
+fn heap_live_bytes() -> u64 {
+    0
 }
 
 #[cfg(all(feature = "heap-profile", target_os = "linux"))]
@@ -55,7 +79,27 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[cfg_attr(feature = "hotpath", hotpath::main)]
+#[cfg_attr(
+    all(feature = "hotpath", not(feature = "hotpath-alloc")),
+    hotpath::main
+)]
+#[cfg_attr(
+    all(
+        feature = "hotpath",
+        feature = "hotpath-alloc",
+        feature = "heap-profile",
+        target_os = "linux"
+    ),
+    hotpath::main(allocator = tikv_jemallocator::Jemalloc)
+)]
+#[cfg_attr(
+    all(
+        feature = "hotpath",
+        feature = "hotpath-alloc",
+        not(all(feature = "heap-profile", target_os = "linux"))
+    ),
+    hotpath::main(allocator = mimalloc::MiMalloc)
+)]
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
