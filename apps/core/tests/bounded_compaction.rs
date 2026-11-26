@@ -158,6 +158,57 @@ fn an_expired_tenant_loses_its_events_only_once_the_sweep_runs() {
     );
 }
 
+/// Compact `count` fresh files into one snapshot, then hand back a manager
+/// for which that snapshot is finished output (at or above the threshold),
+/// with `ttl` on the tenant.
+fn finished_snapshot(root: &Path, tenant: &str, count: usize, ttl: Duration) -> CompactionManager {
+    seed_files(root, tenant, count);
+    CompactionManager::new(root, CompactionConfig::default())
+        .compact_tenant(tenant)
+        .unwrap();
+    assert_eq!(file_count(root, tenant), 1);
+
+    let mut config = CompactionConfig {
+        small_file_threshold: 1,
+        ..CompactionConfig::default()
+    };
+    config.retention.set(tenant, Some(ttl));
+    CompactionManager::new(root, config)
+}
+
+#[test]
+fn retention_reaches_a_finished_snapshot_once_every_event_in_it_has_expired() {
+    let directory = TempDir::new().unwrap();
+    let tenant = "synthetic-finished-expired";
+    let manager = finished_snapshot(directory.path(), tenant, 5, Duration::ZERO);
+    // The snapshot name records whole seconds; step past its last one.
+    std::thread::sleep(Duration::from_millis(1100));
+
+    manager.compact_tenant(tenant).unwrap();
+
+    assert_eq!(
+        file_count(directory.path(), tenant),
+        0,
+        "a finished snapshot whose every event is past the TTL must be dropped"
+    );
+}
+
+#[test]
+fn a_finished_snapshot_inside_the_ttl_is_left_alone() {
+    let directory = TempDir::new().unwrap();
+    let tenant = "synthetic-finished-live";
+    let manager = finished_snapshot(directory.path(), tenant, 5, Duration::from_hours(1));
+    let before = all_payload_indices(directory.path(), tenant);
+
+    let result = manager.compact_tenant(tenant).unwrap();
+
+    assert_eq!(
+        result.files_compacted, 0,
+        "a live finished snapshot was rewritten"
+    );
+    assert_eq!(all_payload_indices(directory.path(), tenant), before);
+}
+
 #[test]
 fn a_spent_time_budget_stops_the_sweep_without_losing_events() {
     let directory = TempDir::new().unwrap();

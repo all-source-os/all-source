@@ -830,6 +830,11 @@ impl CompactionManager {
             }
         }
         let threshold = self.config.small_file_threshold as u64;
+        let expiry_cutoff = self.config.retention.ttl_for(tenant_id).map(|ttl| {
+            Utc::now()
+                - chrono::Duration::from_std(ttl).unwrap_or_else(|_| chrono::Duration::zero())
+        });
+        let mut expired_snapshots = Vec::new();
         let raw_files: Vec<FileInfo> = all_files
             .into_iter()
             .filter_map(|p| {
@@ -838,16 +843,12 @@ impl CompactionManager {
                 }
                 let metadata = fs::metadata(&p).ok()?;
                 let size = metadata.len();
-                let is_snapshot = p
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.starts_with(SNAPSHOT_PREFIX));
-                // A snapshot that already reached the threshold is finished
-                // output: re-reading it would rewrite the whole tenant every
-                // pass for no reduction in file count.
-                if is_snapshot && size >= threshold {
-                    return None;
-                }
+                let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+                let is_snapshot = file_name.starts_with(SNAPSHOT_PREFIX);
+                let fully_expired = is_snapshot
+                    && expiry_cutoff.is_some_and(|cutoff| {
+                        snapshot_range_end(file_name, tenant_id).is_some_and(|end| end < cutoff)
+                    });
                 let created = repair_ages
                     .get(&p)
                     .copied()
@@ -856,15 +857,28 @@ impl CompactionManager {
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                     .and_then(|d| DateTime::from_timestamp(d.as_secs() as i64, 0))
                     .unwrap_or_else(Utc::now);
-                Some(FileInfo {
+                let file = FileInfo {
                     path: p,
                     size,
                     created,
-                })
+                };
+                // A snapshot that already reached the threshold is finished
+                // output: re-reading it would rewrite the whole tenant every
+                // pass for no reduction in file count. Once every event in it
+                // is past the tenant's TTL it is selected regardless of size,
+                // so retention reaches it; a partly expired one waits.
+                if is_snapshot && size >= threshold {
+                    if fully_expired {
+                        expired_snapshots.push(file);
+                    }
+                    return None;
+                }
+                Some(file)
             })
             .collect();
 
         let mut candidates = self.select_files_for_compaction(&raw_files);
+        candidates.extend(expired_snapshots);
         if candidates.is_empty() {
             if let Some(error) = first_error {
                 return Err(error);
@@ -1318,7 +1332,24 @@ pub struct CompactionResult {
 /// they're portable across filesystems. `pub(super)` so the
 /// cold-tier archive can reuse the same naming convention.
 pub(super) fn format_iso_basic(t: DateTime<Utc>) -> String {
-    t.format("%Y-%m-%dT%H%M%SZ").to_string()
+    t.format(ISO_BASIC).to_string()
+}
+
+const ISO_BASIC: &str = "%Y-%m-%dT%H%M%SZ";
+
+/// The newest event time a snapshot holds, read from the `<to>` half of its
+/// `snapshot.<tenant>.<from>-<to>.<nanos>` name. Each half is 18 characters.
+fn snapshot_range_end(file_name: &str, tenant_id: &str) -> Option<DateTime<Utc>> {
+    let range = file_name
+        .strip_prefix(SNAPSHOT_PREFIX)?
+        .strip_prefix(tenant_id)?
+        .strip_prefix('.')?;
+    if range.as_bytes().get(18) != Some(&b'-') {
+        return None;
+    }
+    chrono::NaiveDateTime::parse_from_str(range.get(19..37)?, ISO_BASIC)
+        .ok()
+        .map(|t| t.and_utc())
 }
 
 /// Background compaction task
@@ -2082,6 +2113,32 @@ mod tests {
         assert_eq!(ttl.as_secs(), 30 * 24 * 3600);
         // No override for arbitrary tenants → keep forever.
         assert!(cfg.ttl_for("acme").is_none());
+    }
+
+    #[test]
+    fn snapshot_range_end_reads_production_snapshot_names() {
+        let end = |name| snapshot_range_end(name, "system").map(|t| t.to_rfc3339());
+        assert_eq!(
+            end(
+                "snapshot.system.2026-04-25T222205Z-2026-05-08T001719Z.1791812837595718202.parquet"
+            ),
+            Some("2026-05-08T00:17:19+00:00".into())
+        );
+        assert_eq!(
+            end(
+                "snapshot.system.2026-10-27T005204Z-2026-11-26T001150Z.1795652801217639491.4823eb8dd1b046b0bb01f6e14b5972a6.part-0.parquet"
+            ),
+            Some("2026-11-26T00:11:50+00:00".into())
+        );
+        assert_eq!(
+            snapshot_range_end(
+                "snapshot.system.2026-04-25T222205Z-2026-05-08T001719Z.1.parquet",
+                "sys"
+            ),
+            None,
+            "another tenant's snapshot name must not parse"
+        );
+        assert_eq!(end("events-20261125-123730171-297139d1.parquet"), None);
     }
 
     #[test]
