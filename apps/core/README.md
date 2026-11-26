@@ -2,7 +2,7 @@
 title: "AllSource Event Store - Monorepo"
 status: CURRENT
 last_updated: 2026-11-24
-version: "0.30.1"
+version: "0.30.2"
 ---
 
 <div align="center">
@@ -17,9 +17,9 @@ version: "0.30.1"
 [![Release](https://img.shields.io/github/v/release/all-source-os/all-source?label=release&color=blue)](https://github.com/all-source-os/all-source/releases/latest)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../../LICENSE)
 
-[![Core](https://img.shields.io/badge/Core-v0.30.1-orange?logo=rust&logoColor=white)](../../apps/core/)
-[![Control Plane](https://img.shields.io/badge/Control_Plane-v0.30.1-00ADD8?logo=go&logoColor=white)](../../apps/control-plane/)
-[![Query Service](https://img.shields.io/badge/Query_Service-v0.30.1-4B275F?logo=elixir&logoColor=white)](../../apps/query-service/)
+[![Core](https://img.shields.io/badge/Core-v0.30.2-orange?logo=rust&logoColor=white)](../../apps/core/)
+[![Control Plane](https://img.shields.io/badge/Control_Plane-v0.30.2-00ADD8?logo=go&logoColor=white)](../../apps/control-plane/)
+[![Query Service](https://img.shields.io/badge/Query_Service-v0.30.2-4B275F?logo=elixir&logoColor=white)](../../apps/query-service/)
 [![Web](https://img.shields.io/badge/Web-Next.js_16-000000?logo=next.js&logoColor=white)](../../apps/web/)
 [![MCP Server](https://img.shields.io/badge/MCP_Server-73_tools-8A2BE2)](../../apps/mcp-server-elixir/)
 

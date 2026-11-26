@@ -2,7 +2,7 @@
 
 **Release Date**: 2026-02-08
 **Codename**: Clean Architecture
-**Status**: RELEASED (historical; current version 0.30.1)
+**Status**: RELEASED (historical; current version 0.30.2)
 
 ---
 

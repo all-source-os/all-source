@@ -37,7 +37,7 @@ defmodule McpServerElixir.MixProject do
   def project do
     [
       app: :mcp_server_elixir,
-      version: "0.30.1",
+      version: "0.30.2",
       elixir: "~> 1.17",
       compilers: [:customer_connection] ++ Mix.compilers(),
       elixirc_paths: elixirc_paths(Mix.env()),

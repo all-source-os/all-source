@@ -58,7 +58,7 @@ cargo run --release
 ```bash
 cd apps/control-plane
 go run main.go
-# Wait for: "Control Plane v0.30.1 listening on port 3901"
+# Wait for: "Control Plane v0.30.2 listening on port 3901"
 ```
 
 **Terminal 3 - Web UI:**

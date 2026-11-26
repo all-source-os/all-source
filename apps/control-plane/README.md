@@ -7,12 +7,12 @@ port: 3901
 technology: Go
 ---
 
-# AllSource Control Plane v0.30.1
+# AllSource Control Plane v0.30.2
 
 > Auth, RBAC, policy, billing and operations service in front of the AllSource Core event store.
 
 [![Go](https://img.shields.io/badge/go-1.26.11-blue.svg)](https://golang.org/)
-[![Status](https://img.shields.io/badge/status-v0.30.1-green.svg)]()
+[![Status](https://img.shields.io/badge/status-v0.30.2-green.svg)]()
 [![Framework](https://img.shields.io/badge/framework-gin-orange.svg)](https://gin-gonic.com/)
 [![Auth](https://img.shields.io/badge/auth-JWT-red.svg)]()
 [![Tracing](https://img.shields.io/badge/tracing-OpenTelemetry-purple.svg)]()
@@ -41,7 +41,7 @@ The control plane sits between operators and Core. It issues and validates JWTs,
                          │ HTTPS
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│       Go Control Plane v0.30.1 (Port 3901)          │
+│       Go Control Plane v0.30.2 (Port 3901)          │
 │  ┌───────────────────────────────────────────────┐  │
 │  │  🔐 JWT Authentication Middleware             │  │
 │  │  🛡️  RBAC & Permission Enforcement            │  │
@@ -54,7 +54,7 @@ The control plane sits between operators and Core. It issues and validates JWTs,
                          │ HTTP + Auth Token
                          ▼
 ┌─────────────────────────────────────────────────────┐
-│      Rust Event Store Core v0.30.1 (Port 3900)     │
+│      Rust Event Store Core v0.30.2 (Port 3900)     │
 │  • Event Ingestion (469K events/sec)                │
 │  • Multi-Tenancy with Quotas                        │
 │  • Rate Limiting (Token Bucket)                     │
@@ -735,9 +735,9 @@ The control plane is part of the enterprise edition, licensed under the [Busines
 
 <div align="center">
 
-**AllSource Control Plane v0.30.1** - *Enterprise orchestration*
+**AllSource Control Plane v0.30.2** - *Enterprise orchestration*
 
-Go service | v0.30.1
+Go service | v0.30.2
 
 Integrates with AllSource Core (Rust)
 

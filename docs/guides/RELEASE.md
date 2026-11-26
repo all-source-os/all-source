@@ -261,7 +261,7 @@ grep -rn "0\.9\.0\|0\.9\.1" --include="*.md" --include="*.tsx" --include="*.go" 
 
 ## Version History
 
-Current crate and service version: 0.30.1 (`apps/core/Cargo.toml:3`).
+Current crate and service version: 0.30.2 (`apps/core/Cargo.toml:3`).
 
 | Version | Date | Highlights |
 |---------|------|------------|
