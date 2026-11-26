@@ -59,13 +59,9 @@ kill_timeout = 65
   # 0 = keep forever. Unsetting this does NOT disable it — the code default
   # is 30 days.
   #
-  # Deliberately off while compaction runs for the first time. The sweep
-  # never ran before 2026-10-12, so this TTL never ran either, and enabling
-  # both at once would have the first pass delete ~1.9 GB of heartbeats that
-  # have never been subject to it. Compaction alone fixes the fragmentation
-  # behind gh#321. Set this to 30 as a separate, deliberate change — no
-  # cold-tier archive is configured, so the events are deleted outright.
-  ALLSOURCE_RETENTION_SYSTEM_DAYS = "0"
+  # No cold-tier archive is configured, so expired heartbeats are deleted
+  # outright. The tenant holds only `service.heartbeat` (gh#440).
+  ALLSOURCE_RETENTION_SYSTEM_DAYS = "30"
 
   # One-shot flat→tenant Parquet migration (Step 1 / commit bdd3cd8).
   # The migrator is idempotent: once the storage tree has no flat files

@@ -64,14 +64,18 @@ Three things about this variable that the name does not tell you:
   `system` lives in `RetentionConfig::default()`, so the explicit `0` is the
   only way to turn it off from the environment.
 
-It is currently `0` in `apps/core/fly.toml`. Compaction ran for the first
-time on 2026-10-12 and this TTL has still never been applied, so enabling it
-deletes heartbeat history that has never been subject to it (`system` was
-429 MB after compaction, 2026-11-25) outright, because no cold-tier archive
-is configured. **Turning it on is a separate, deliberate change**, tracked in
-gh#440: set it to `30`, and consider configuring `ALLSOURCE_COLD_STORAGE_URL`
-first so the dropped events are archived rather than discarded
+It is `30` in `apps/core/fly.toml` (gh#440). The `system` tenant holds only
+the control plane's `service.heartbeat` events; tenants, users and API keys
+are `_system` events in `/app/data/__system`, which no TTL reaches. No
+cold-tier archive is configured, so expired heartbeats are deleted outright;
+set `ALLSOURCE_COLD_STORAGE_URL` to archive them instead
 (`docs/operations/COLD_TIER.md`).
+
+**Never run an unscoped read of `system` on the prod machine.** A
+`/api/v1/events/query?tenant_id=system&limit=200` on 2026-11-25 hydrated the
+whole tenant (429 MB on disk) to 16.1 GB RSS and was OOM-killed instead of
+refused. Copy the files off with `fly ssh sftp get` and read them with
+`tooling/allsource-inspect` locally.
 
 ### Customer tenants keep events forever
 
