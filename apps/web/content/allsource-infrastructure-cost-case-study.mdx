@@ -1,0 +1,46 @@
+---
+title: "How AllSource cut its estimated infrastructure run rate by 12%"
+publishedAt: "2026-11-28"
+summary: "A production cost review shows where $17.19 per month came out of AllSource’s Fly.io footprint and why we kept the event store on 16 GB."
+author: "Decebal Dobrica"
+category: "engineering"
+image: "/assets/blog/allsource-infrastructure-cost-case-study.webp"
+---
+
+In November, we reviewed what it costs to run AllSource, an open-source event store and agent-memory platform. Between November 8 and 28, our estimated monthly Fly.io run rate for machines and volumes fell from **$144.87 to $127.68**. The changes saved **$17.19 per month**, about **12%**. Most of the opportunity still sat with one machine: the production event store.
+
+## Where the $17.19 came from
+
+The largest saving came from removing the remote builder’s 50 GB volume. We also stopped the admin machine, reduced memory allocations for Prime and Auth, and removed an unattached Core volume. A rehearsal volume added $1.50 back.
+
+| Change | Estimated monthly impact |
+| --- | ---: |
+| Removed remote builder volume | −$7.50 |
+| Stopped admin machine | −$3.69 |
+| Halved memory on two Prime machines | −$3.00 |
+| Halved memory on two Auth machines | −$3.00 |
+| Removed an unattached Core volume | −$1.50 |
+| Retained a Core rehearsal volume | +$1.50 |
+| **Net change** | **−$17.19** |
+
+We estimated the run rate from the deployed inventory and the Fly.io list rates used in our November 8 review. We derived the Core machine price from its CPU and RAM allocation. The estimate excludes network transfer and any root-filesystem charges on stopped machines. We did not reconcile it against a Fly.io invoice.
+
+## Why Core stayed on 16 GB
+
+Core accounted for **$103.02 per month**, or about **81%** of the machine and volume estimate. The 16 GB RAM allocation alone accounted for $96. Reducing that allocation to 12 GB would save another $24 per month at the rates we used.
+
+The latest process high-water mark was **8.91 GiB** after 27.3 hours of machine uptime. The November 8 review had recorded **12.64 GiB** after 41.4 hours. On November 25, a tenant cold load triggered an out-of-memory kill. That history made a resize premature.
+
+The engineering response was to add a memory check that refuses a cold load when there is insufficient room. Our next decision is to review a full week of memory measurements after rollout. The lower peak gives us a reason to measure again, and the earlier peak gives us a reason to keep the current allocation in the meantime.
+
+## Egress fell, but the cause is still open
+
+Gateway edge output fell from **16.33 GB** in the 24-hour window ending November 8 to **2.25 GB** in the window ending November 28. The preceding day recorded **3.03 GB**. The latest window was below the 10 GB daily warning threshold.
+
+The monitoring system retained two days of data, so we could compare snapshots but could not reconstruct the intervening period or attribute the drop to a specific change. Those figures cover gateway edge output only.
+
+GitHub Actions was a separate cost line. From November 1 to 28, it recorded **$124.65 gross and $0 net** in the organisation’s billing usage. We kept that out of the Fly.io estimate.
+
+## What we’d repeat
+
+Start with the deployed inventory. A stopped service, an unattached volume, and a smaller allocation show up clearly when every resource has a line item. For a stateful service, measure across the workload events that create the peaks. In our case, cold tenant loads mattered more to the resize decision than the latest steady-state snapshot.
