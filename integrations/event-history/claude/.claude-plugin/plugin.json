@@ -1,0 +1,11 @@
+{
+  "name": "allsource-event-history",
+  "version": "0.1.0",
+  "description": "See what changed in a workspace and open the event behind each change.",
+  "author": {
+    "name": "AllSource"
+  },
+  "homepage": "https://www.all-source.xyz",
+  "privacyPolicyUrl": "https://www.all-source.xyz/privacy",
+  "mcpServers": "./mcp.json"
+}

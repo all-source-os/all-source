@@ -27,9 +27,11 @@ defmodule QueryServiceEx.Domain.CustomerAgent.QueryOperationJournal do
         {:ok, nil}
 
       entry ->
-        if Map.delete(entry, "expected_period") == base,
-          do: {:ok, entry},
-          else: {:error, :idempotency_conflict}
+        if Map.drop(entry, ["expected_period", "outcome", "window_end_us"]) ==
+             Map.delete(base, "window_end_us") and
+             Map.has_key?(entry, "window_end_us") == Map.has_key?(base, "window_end_us"),
+           do: {:ok, Map.delete(entry, "outcome")},
+           else: {:error, :idempotency_conflict}
     end
   end
 
@@ -41,7 +43,7 @@ defmodule QueryServiceEx.Domain.CustomerAgent.QueryOperationJournal do
       not Owner.timestamp?(now) or now < journal["updated_at"] ->
         {:error, :clock_moved_backwards}
 
-      not QueryAdmission.request?(request, now) ->
+      not QueryAdmission.request?(Map.delete(request, "window_end_us"), now) ->
         {:error, :invalid_operation}
 
       map_size(entries) >= @limit ->
@@ -64,10 +66,17 @@ defmodule QueryServiceEx.Domain.CustomerAgent.QueryOperationJournal do
     case Operation.issued_at(id) do
       {:ok, issued} ->
         is_map(request) and request["operation_id"] == id and issued <= updated and
-          QueryAdmission.request?(request, issued)
+          request["outcome"] in [nil, "succeeded", "failed"] and
+          valid_window_end?(request, updated) and
+          QueryAdmission.request?(Map.drop(request, ["outcome", "window_end_us"]), issued)
 
       _ ->
         false
     end
   end
+
+  defp valid_window_end?(%{"window_end_us" => value}, updated),
+    do: is_integer(value) and value >= 0 and value < (updated + 1) * 1_000_000
+
+  defp valid_window_end?(_, _), do: true
 end

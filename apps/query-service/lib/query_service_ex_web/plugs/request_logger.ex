@@ -61,6 +61,7 @@ defmodule QueryServiceExWeb.Plugs.RequestLogger do
     )
   end
 
+  defp customer_review?(%{request_path: "/api/event-history/" <> _}), do: true
   defp customer_review?(%{request_path: "/api/customer-agent/" <> _}), do: true
   defp customer_review?(_), do: false
 

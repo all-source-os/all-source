@@ -1,6 +1,11 @@
 import Config
 
 config :mcp_server_elixir,
+  event_history: System.get_env("ALLSOURCE_EVENT_HISTORY_ENABLED") == "true",
+  event_history_origin: System.get_env("ALLSOURCE_EVENT_HISTORY_WEB_ORIGIN"),
+  event_history_query_url: System.get_env("ALLSOURCE_EVENT_HISTORY_QUERY_URL"),
+  event_history_origins:
+    String.split(System.get_env("ALLSOURCE_EVENT_HISTORY_ORIGINS", ""), ",", trim: true),
   customer_review: System.get_env("ALLSOURCE_CUSTOMER_REVIEW") == "true",
   customer_evidence_review: System.get_env("ALLSOURCE_CUSTOMER_EVIDENCE_REVIEW") == "true",
   customer_replay_review: System.get_env("ALLSOURCE_CUSTOMER_REPLAY_REVIEW") == "true",

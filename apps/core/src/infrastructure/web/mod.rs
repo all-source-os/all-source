@@ -10,6 +10,7 @@ pub mod boot_gate;
 pub mod conditional;
 pub mod config_api;
 pub mod demo_api;
+pub mod event_history;
 pub mod handlers;
 #[cfg(all(feature = "heap-profile", target_os = "linux"))]
 pub mod heap_profile_api;

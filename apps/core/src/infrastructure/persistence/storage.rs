@@ -9,7 +9,8 @@ use super::{
         ArchiveOutput, PublishedPart, pending_marker, pending_part, recover_pending_outputs,
     },
     event_codec::{
-        self, ENTITY_ID_COLUMN, VALID_FROM_COLUMN, VALID_TO_COLUMN, VERSION_COLUMN, event_schema,
+        self, ENTITY_ID_COLUMN, RECORD_NANO_REMAINDER, VALID_FROM_COLUMN, VALID_TO_COLUMN,
+        VERSION_COLUMN, event_schema,
     },
     version_manifest::{ResolvedVersion, VersionManifest},
 };
@@ -542,7 +543,7 @@ impl ParquetStorage {
     }
 
     fn write_tenant_events(&self, tenant_id: &str, events: &[Event]) -> Result<Vec<PublishedPart>> {
-        let record_batch = self.events_to_record_batch(events)?;
+        let record_batch = event_codec::events_to_record_batch(&self.schema, events, true)?;
 
         let now = chrono::Utc::now();
         let partition_dir = partition_path_for_tenant(&self.storage_dir, tenant_id, now)?;
@@ -879,7 +880,7 @@ impl ParquetStorage {
     }
 
     fn events_to_record_batch(&self, events: &[Event]) -> Result<RecordBatch> {
-        event_codec::events_to_record_batch(&self.schema, events)
+        event_codec::events_to_record_batch(&self.schema, events, false)
     }
 
     /// Load events from all Parquet files under the storage directory.
@@ -1152,6 +1153,17 @@ impl ParquetStorage {
 
         let valid_froms = optional_timestamp_column(batch, VALID_FROM_COLUMN)?;
         let valid_tos = optional_timestamp_column(batch, VALID_TO_COLUMN)?;
+        let remainders = batch
+            .column_by_name(RECORD_NANO_REMAINDER)
+            .map(|column| {
+                column
+                    .as_any()
+                    .downcast_ref::<arrow::array::UInt16Array>()
+                    .ok_or_else(|| {
+                        AllSourceError::StorageError("Invalid recorded timestamp fraction".into())
+                    })
+            })
+            .transpose()?;
 
         let mut events = Vec::new();
 
@@ -1159,8 +1171,18 @@ impl ParquetStorage {
             let id = uuid::Uuid::parse_str(event_ids.value(i))
                 .map_err(|e| AllSourceError::StorageError(format!("Invalid UUID: {e}")))?;
 
-            let timestamp = chrono::DateTime::from_timestamp_micros(timestamps.value(i))
+            let mut timestamp = chrono::DateTime::from_timestamp_micros(timestamps.value(i))
                 .ok_or_else(|| AllSourceError::StorageError("Invalid timestamp".to_string()))?;
+            if let Some(values) = remainders
+                && !values.is_null(i)
+            {
+                if values.value(i) > 999 {
+                    return Err(AllSourceError::StorageError(
+                        "Invalid recorded timestamp fraction".into(),
+                    ));
+                }
+                timestamp += chrono::Duration::nanoseconds(i64::from(values.value(i)));
+            }
 
             let metadata = if metadatas.is_null(i) {
                 None

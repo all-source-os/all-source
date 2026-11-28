@@ -2,8 +2,11 @@ import { buttonVariants, cn, Icons } from "@allsource/ui";
 import { ChevronDown, Menu } from "lucide-react";
 import Link from "next/link";
 import { platformNavigationGroups, primaryNavigation, siteConfig } from "@/lib/config";
+import MobileMenuLink from "./mobile-menu-link";
 
-export default function Header() {
+export default function Header({ homepage = false }: { homepage?: boolean }) {
+  const startHref = homepage ? "/#build-your-first-harness" : "/signup";
+  const startLabel = homepage ? "Build a harness" : "Start 14-day trial";
   return (
     <header className="sticky top-0 z-50 border-b border-border/80 bg-background/95 backdrop-blur">
       <div className="container mx-auto flex h-16 items-center justify-between gap-4">
@@ -78,10 +81,10 @@ export default function Header() {
             Sign in
           </Link>
           <Link
-            href="/signup"
+            href={startHref}
             className={cn(buttonVariants({ variant: "default" }), "text-background")}
           >
-            Start 14-day trial
+            {startLabel}
           </Link>
         </div>
 
@@ -136,12 +139,11 @@ export default function Header() {
               <Link href="/login" className={buttonVariants({ variant: "outline" })}>
                 Sign in
               </Link>
-              <Link
-                href="/signup"
+              <MobileMenuLink
+                href={startHref}
                 className={cn(buttonVariants({ variant: "default" }), "text-background")}
-              >
-                Start 14-day trial
-              </Link>
+                label={startLabel}
+              />
             </div>
           </div>
         </details>

@@ -152,6 +152,23 @@ defmodule QueryServiceExWeb.Router do
 
   # Agent grants have their own live boundary. Generic JWT/dev/tenant fallback
   # pipelines must not authenticate this surface. Never log proposal parameters.
+  scope "/api/event-history", QueryServiceExWeb do
+    pipe_through(:api)
+    get("/oauth/metadata", EventHistoryController, :metadata, log: false)
+    get("/oauth/resource", EventHistoryController, :resource, log: false)
+    post("/oauth/prepare", EventHistoryController, :prepare, log: false)
+    post("/oauth/inspect", EventHistoryController, :inspect_request, log: false)
+    post("/oauth/decision", EventHistoryController, :decision, log: false)
+    post("/oauth/token", EventHistoryController, :token, log: false)
+    post("/workspaces", EventHistoryController, :workspaces, log: false)
+    post("/connections", EventHistoryController, :connections, log: false)
+    post("/revoke", EventHistoryController, :revoke, log: false)
+    post("/evidence-intent", EventHistoryController, :evidence_intent, log: false)
+    post("/evidence", EventHistoryController, :evidence, log: false)
+    post("/session", EventHistoryController, :session, log: false)
+    post("/timeline", EventHistoryController, :timeline, log: false)
+  end
+
   scope "/api/customer-agent", QueryServiceExWeb do
     pipe_through(:api)
 

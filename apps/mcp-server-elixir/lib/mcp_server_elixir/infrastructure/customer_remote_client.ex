@@ -5,15 +5,27 @@ defmodule McpServerElixir.Infrastructure.CustomerRemoteClient do
   def call(operation, arguments, credential)
       when operation in ~w(session context validate prepare review result) do
     url = Application.get_env(:mcp_server_elixir, :customer_review_query_url)
+    post(url, "/api/customer-agent/remote/" <> operation, arguments, credential, :review)
+  end
 
+  def call(_, _, _), do: {:error, :unknown_operation}
+
+  def history(operation, arguments, credential) when operation in ~w(session timeline) do
+    url = Application.get_env(:mcp_server_elixir, :event_history_query_url)
+    post(url, "/api/event-history/" <> operation, arguments, credential, :history)
+  end
+
+  defp post(url, path, arguments, credential, profile) do
     with true <- valid_url?(url),
          true <- is_binary(credential) and byte_size(credential) in 1..3_800,
          {:ok, body} <- Jason.encode(arguments),
          true <- byte_size(body) <= 65_536 do
       CustomerReviewHTTP.post(
-        String.trim_trailing(url, "/") <> "/api/customer-agent/remote/" <> operation,
+        String.trim_trailing(url, "/") <> path,
         credential,
-        body
+        body,
+        30_000,
+        profile
       )
     else
       _ -> {:error, :access_unavailable}
@@ -21,8 +33,6 @@ defmodule McpServerElixir.Infrastructure.CustomerRemoteClient do
   rescue
     _ -> {:error, :access_unavailable}
   end
-
-  def call(_, _, _), do: {:error, :unknown_operation}
 
   defp valid_url?(url) when is_binary(url) and byte_size(url) <= 512 do
     case URI.new(url) do

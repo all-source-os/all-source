@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "allsource-event-history": {
+      "type": "streamable-http",
+      "url": "https://www.all-source.xyz/mcp/event-history",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "provided",
+              "clientId": "allsource-history-chatgpt",
+              "tokenEndpointAuthMethod": "none"
+            },
+            "baseScopes": [
+              "allsource.history.read"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

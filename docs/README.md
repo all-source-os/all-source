@@ -215,6 +215,14 @@ Client SDKs live under `sdks/`: [Rust](../sdks/rust/README.md), Go (`sdks/go/`),
 
 ### Plans
 
+- CTO referral homepage: [implementation plan](plans/2026-11-26-cto-landing-plan.md), [browser walkthrough with screenshots](reports/2026-11-26-cto-homepage.html), and [independent code review](plans/2026-11-26-cto-landing-code-review.md).
+- [Engineering harness capabilities and marketplace routes across the AllSource suite](reports/2026-11-26-harness-suite-marketplaces.md).
+- AllSource Event History: [self-service brief](plans/2026-11-26-event-history-brief.md), [workspace connection and evidence design](plans/2026-11-26-event-history-design.md), [independent review A](plans/2026-11-26-event-history-design-review-a.md), and [independent review B](plans/2026-11-26-event-history-design-review-b.md).
+  [Reviewer deployment and host acceptance cases](plans/2026-11-26-event-history-verification.md).
+  [Implementation review](plans/2026-11-26-event-history-code-review.md).
+
+- CTO referral homepage: [research brief](plans/2026-11-26-cto-landing-brief.md), [proposed copy and buyer test](plans/2026-11-26-cto-landing-design.md), [review A](plans/2026-11-26-cto-landing-design-review-a.md), [review B](plans/2026-11-26-cto-landing-design-review-b.md), and [source evidence](evidence/2026-11-26-cto-landing/README.md).
+
 - [Prime as a Folk and Notion replacement](plans/2026-06-10-prime-workspace-crm-design.md): design for a Prime workspace CRM.
 - [Dashboard route-family improvement](plans/2026-08-13-dashboard-autoresearch-design.md): one operational question and one next action per dashboard route.
 - [Dashboard and onboarding UX](plans/2026-08-13-dashboard-onboarding-ux.md): moving a signed-in user from an empty tenant to one verified event.
@@ -309,6 +317,8 @@ Client SDKs live under `sdks/`: [Rust](../sdks/rust/README.md), Go (`sdks/go/`),
 - [Infrastructure costs status (2026-11-08)](reports/2026-11-08-infra-costs-status.html): Fly machines, volumes, gateway egress and the actions that cut cost.
 
 ### Verification reports
+
+- [Event History checkout acceptance in ChatGPT and Claude](reports/2026-11-26-event-history-acceptance.md)
 
 - [Hosted Prime sync verification](reports/2026-10-26-hosted-prime-sync-verification.md): synthetic sync observations bound to runtime source `f1ede26f`.
 - [Managed API key lifecycle verification](reports/2026-10-26-managed-key-lifecycle-verification.md): deployed gateways, legacy-key compatibility and production readback.

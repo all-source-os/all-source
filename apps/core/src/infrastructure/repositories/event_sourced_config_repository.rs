@@ -199,6 +199,31 @@ impl EventSourcedConfigRepository {
         self.cache.iter().map(|e| e.value().clone()).collect()
     }
 
+    pub(crate) fn membership_candidates(&self, subject: &str) -> Vec<String> {
+        let mut tenants: Vec<_> = self
+            .cache
+            .iter()
+            .filter_map(|entry| {
+                let tenant = entry
+                    .key()
+                    .strip_prefix("team:")?
+                    .strip_suffix(":members")?;
+                let value = &entry.value().value;
+                let members = value
+                    .as_array()
+                    .or_else(|| value.get("members")?.as_array())?;
+                members
+                    .iter()
+                    .any(|row| {
+                        row.get("user_id").and_then(serde_json::Value::as_str) == Some(subject)
+                    })
+                    .then(|| tenant.to_string())
+            })
+            .collect();
+        tenants.sort();
+        tenants
+    }
+
     /// Delete a configuration key.
     pub fn delete(&self, key: &str, deleted_by: Option<&str>) -> Result<bool> {
         let _guard = self.write_lock.lock().map_err(|_| {
@@ -265,6 +290,28 @@ mod tests {
             Arc::new(SystemMetadataStore::new(temp_dir.path().join("__system")).unwrap());
         let repo = EventSourcedConfigRepository::new(system_store);
         (repo, temp_dir)
+    }
+
+    #[test]
+    fn workspace_candidates_follow_current_members_across_schema_versions() {
+        let (repo, _dir) = create_test_repo();
+        for (key, members) in [
+            ("team:alpha:members", serde_json::json!([{"user_id":"ada"}])),
+            (
+                "team:beta:members",
+                serde_json::json!({"members":[{"user_id":"ada"}]}),
+            ),
+            (
+                "team:invited:members",
+                serde_json::json!({"members":[], "invitations":[{"user_id":"ada"}]}),
+            ),
+            ("team:other:members", serde_json::json!([{"user_id":"bob"}])),
+        ] {
+            repo.set(key, members, None).unwrap();
+        }
+        assert_eq!(repo.membership_candidates("ada"), ["alpha", "beta"]);
+        repo.delete("team:alpha:members", None).unwrap();
+        assert_eq!(repo.membership_candidates("ada"), ["beta"]);
     }
 
     #[test]

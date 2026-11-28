@@ -10,12 +10,12 @@
  *     ingest, Apache-2.0 Core/self-host, x402 per-call
  *     pricing, 55 default tenant MCP tools (73 with fleet controls). These are
  *     defensible against our own docs.
- *   - Competitor cells mirror the homepage matrix (`sections/social-proof.tsx`)
- *     where that matrix took a position, and otherwise read "unknown" / "varies"
- *     rather than inventing a number. NEVER fabricate competitor figures.
- *   - The homepage matrix asserted: temporal `as_of` — zep yes, mem0/letta no;
- *     full event provenance / compressed index / offline-embedded — AllSource
- *     only; Apache-2.0 self-host — mem0 yes, letta/zep no.
+ *   - Competitor cells take a position only where listed below, and otherwise
+ *     read "unknown" / "varies" rather than inventing a number. NEVER fabricate
+ *     competitor figures.
+ *   - Positions taken: temporal `as_of` — zep yes, mem0/letta no; full event
+ *     provenance / compressed index / offline-embedded — AllSource only;
+ *     Apache-2.0 self-host — mem0 yes, letta/zep no.
  */
 
 /** A table cell. Booleans render as check/cross; strings render verbatim. */

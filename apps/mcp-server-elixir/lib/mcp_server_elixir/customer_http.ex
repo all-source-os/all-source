@@ -9,9 +9,14 @@ defmodule McpServerElixir.CustomerHTTP do
   def init(opts), do: opts
 
   @impl true
+  def call(%{request_path: "/mcp/event-history"} = conn, _opts),
+    do: McpServerElixir.EventHistoryHTTP.call(conn, &CustomerRemoteClient.history/3)
+
   def call(conn, _opts) do
     cond do
-      not Application.get_env(:mcp_server_elixir, :customer_review, false) ->
+      not Application.get_env(:mcp_server_elixir, :customer_review, false) or
+          (Application.get_env(:mcp_server_elixir, :event_history, false) and
+             not Application.get_env(:mcp_server_elixir, :customer_review_http, false)) ->
         respond(conn, 404, %{error: "unavailable"})
 
       conn.request_path != "/mcp/customer-review" ->

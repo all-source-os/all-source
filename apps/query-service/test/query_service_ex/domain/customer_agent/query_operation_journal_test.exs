@@ -37,6 +37,17 @@ defmodule QueryServiceEx.Domain.CustomerAgent.QueryOperationJournalTest do
     assert other_purpose["operation_id"] != base["operation_id"]
   end
 
+  test "a retry retains the default window captured before admission" do
+    first = @now * 1_000_000
+    base = Map.put(request(1), "window_end_us", first)
+    entry = Map.put(base, "expected_period", 0)
+    assert {:ok, journal} = Journal.insert(Journal.empty(@owner["tenant_id"]), entry, @now)
+    assert {:ok, ^entry} = Journal.find(journal, %{base | "window_end_us" => first + 9_000_000})
+
+    assert {:error, :idempotency_conflict} =
+             Journal.find(journal, Map.delete(base, "window_end_us"))
+  end
+
   test "capacity is bounded and expired IDs cannot be revived after pruning" do
     full =
       Enum.reduce(1..192, Journal.empty(@owner["tenant_id"]), fn n, journal ->

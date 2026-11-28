@@ -5,7 +5,7 @@
 
 use crate::{domain::entities::Event, error::Result};
 use arrow::{
-    array::{ArrayRef, StringBuilder, TimestampMicrosecondBuilder, UInt64Builder},
+    array::{ArrayRef, StringBuilder, TimestampMicrosecondBuilder, UInt16Builder, UInt64Builder},
     datatypes::{DataType, Field, Schema, TimeUnit},
     record_batch::RecordBatch,
 };
@@ -28,6 +28,7 @@ pub(super) const VERSION_COLUMN: usize = 6;
 /// the event's valid time is its record time (`timestamp`) and open-ended.
 pub(super) const VALID_FROM_COLUMN: &str = "valid_from";
 pub(super) const VALID_TO_COLUMN: &str = "valid_to";
+pub(super) const RECORD_NANO_REMAINDER: &str = "recorded_ns_remainder";
 
 /// Arrow schema for events.
 /// ENTITY_ID_COLUMN / VERSION_COLUMN index into this field order.
@@ -56,6 +57,7 @@ pub(super) fn event_schema() -> Arc<Schema> {
             DataType::Timestamp(TimeUnit::Microsecond, None),
             true,
         ),
+        Field::new(RECORD_NANO_REMAINDER, DataType::UInt16, true),
     ]))
 }
 
@@ -64,6 +66,7 @@ pub(super) fn event_schema() -> Arc<Schema> {
 pub(super) fn events_to_record_batch(
     schema: &Arc<Schema>,
     events: &[Event],
+    original_times: bool,
 ) -> Result<RecordBatch> {
     let mut event_id_builder = StringBuilder::new();
     let mut event_type_builder = StringBuilder::new();
@@ -74,6 +77,7 @@ pub(super) fn events_to_record_batch(
     let mut version_builder = UInt64Builder::new();
     let mut valid_from_builder = TimestampMicrosecondBuilder::new();
     let mut valid_to_builder = TimestampMicrosecondBuilder::new();
+    let mut remainder_builder = UInt16Builder::new();
 
     for event in events {
         event_id_builder.append_value(event.id.to_string());
@@ -83,6 +87,10 @@ pub(super) fn events_to_record_batch(
 
         let timestamp_micros = event.timestamp.timestamp_micros();
         timestamp_builder.append_value(timestamp_micros);
+        let nanos = (event.timestamp.timestamp_subsec_nanos() % 1000) as u16;
+        // Rewrites can contain old microsecond-only rows. A zero remainder
+        // from a decoded snapshot cannot establish their original precision.
+        remainder_builder.append_option((original_times || nanos != 0).then_some(nanos));
 
         if let Some(ref metadata) = event.metadata {
             metadata_builder.append_value(serde_json::to_string(metadata)?);
@@ -105,6 +113,7 @@ pub(super) fn events_to_record_batch(
         Arc::new(version_builder.finish()),
         Arc::new(valid_from_builder.finish()),
         Arc::new(valid_to_builder.finish()),
+        Arc::new(remainder_builder.finish()),
     ];
 
     let record_batch = RecordBatch::try_new(schema.clone(), arrays)?;

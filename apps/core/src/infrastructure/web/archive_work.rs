@@ -92,6 +92,17 @@ pub(super) async fn retained_query(
 
 struct CancelOnDrop(Arc<AtomicBool>);
 
+pub(super) async fn history(
+    store: Arc<EventStore>,
+    tenant: String,
+    selection: crate::store::history::HistorySelection,
+) -> Result<crate::store::history::HistoryPage> {
+    run(Arc::clone(&SLOTS), RESPONSE_TIMEOUT, move |cancel| {
+        store.retained_history(&tenant, &selection, cancel)
+    })
+    .await
+}
+
 pub(super) async fn prefix_query(
     store: Arc<EventStore>,
     request: crate::application::dto::QueryEventsRequest,
