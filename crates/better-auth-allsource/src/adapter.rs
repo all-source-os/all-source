@@ -100,6 +100,22 @@ impl AllsourceAuthAdapter {
         self
     }
 
+    /// Serve a read answered within `ttl` without asking Core again. Writes
+    /// through this adapter clear the cache at once; writes from another
+    /// process (a second replica) become visible after at most `ttl`.
+    pub fn with_read_ttl(mut self, ttl: std::time::Duration) -> Self {
+        self.client = self.client.with_read_ttl(ttl);
+        self
+    }
+
+    /// Replace `better_auth` in the `x-allsource-caller` header each read
+    /// carries (`better_auth.member`, `better_auth.session`, …). Must match
+    /// `^[a-z][a-z0-9_.]*$`.
+    pub fn with_caller_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.client = self.client.with_caller_prefix(prefix);
+        self
+    }
+
     /// Create a new adapter.
     ///
     /// - `core_url`: Allsource Core URL (e.g., `http://localhost:3900`)

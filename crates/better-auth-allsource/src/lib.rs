@@ -24,6 +24,7 @@ mod adapter;
 mod client;
 mod credentials;
 mod error;
+mod read_cache;
 mod user_record;
 
 pub use adapter::AllsourceAuthAdapter;

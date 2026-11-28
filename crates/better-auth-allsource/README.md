@@ -45,7 +45,7 @@ Against the hosted gateway, the adapter can sign every request with a P-256 key 
 ```toml
 [dependencies]
 allsource = { version = "0.30", features = ["es256-assertion"] }
-better-auth-allsource = "0.14.15"
+better-auth-allsource = "0.14.16"
 ```
 
 ```rust,ignore
@@ -94,6 +94,19 @@ Each auth entity maps to an Allsource event stream:
 - **Read** — fetches the latest event for the entity and deserializes the payload
 
 This means every auth state change is preserved as an immutable event. You can reconstruct any entity's full history by querying its event stream.
+
+### Read cost
+
+Every read carries `x-allsource-caller: better_auth.<entity>` (`better_auth.member`, `better_auth.session`, …), so the gateway's egress dashboard and Core's `read_costs` attribute it. `with_caller_prefix("myapp.auth")` replaces `better_auth`; the prefix must match `^[a-z][a-z0-9_.]*$` or the gateway counts the read as `invalid`.
+
+The adapter remembers each answer's `ETag` and revalidates with `If-None-Match`, so an unchanged answer is a `304` with no body. Answers over 64 events and reads past the 4,096 most recent are not kept.
+
+`with_read_ttl(Duration)` goes further: an answer younger than the TTL is served without a request. A write through the adapter clears the cache at once. A write from another process, such as a second replica, becomes visible after at most the TTL, so keep it short (a few seconds) where a revoked session or removed member must stop working promptly.
+
+```rust,ignore
+let adapter = AllsourceAuthAdapter::new(core_url, query_url, api_key)
+    .with_read_ttl(std::time::Duration::from_secs(2));
+```
 
 ## Features
 

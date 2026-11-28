@@ -1,6 +1,7 @@
 use crate::{
     credentials::{Credential, CredentialProvider},
     error::AllsourceAuthError,
+    read_cache::{caller_label, ReadCache, DEFAULT_CALLER_PREFIX},
 };
 use chrono::{DateTime, Utc};
 use reqwest::Client;
@@ -90,7 +91,13 @@ pub struct AllsourceClient {
     /// Shared by every clone: the instant before which calls fail fast with
     /// [`AllsourceAuthError::RateLimited`], and the refusal's scope.
     not_before: Arc<Mutex<Option<NotBefore>>>,
+    /// Shared by every clone, so a write through one clears what all read.
+    reads: Arc<Mutex<ReadCache>>,
+    read_ttl: Option<Duration>,
+    caller_prefix: String,
 }
+
+const CALLER_HEADER: &str = "x-allsource-caller";
 
 /// The fail-fast deadline and the scope of the refusal that set it.
 type NotBefore = (Instant, Option<String>);
@@ -109,7 +116,7 @@ struct QueryResponse {
     events: Vec<StoredEvent>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct StoredEvent {
     pub payload: serde_json::Value,
     /// Core stamps every event with an ingestion timestamp and a per-entity
@@ -211,6 +218,85 @@ impl AllsourceClient {
             credential,
             tenant_id: None,
             not_before: Arc::new(Mutex::new(None)),
+            reads: Arc::new(Mutex::new(ReadCache::default())),
+            read_ttl: None,
+            caller_prefix: DEFAULT_CALLER_PREFIX.to_string(),
+        }
+    }
+
+    /// Serve a read answered within `ttl` without asking Core again. Writes
+    /// through this client (or any clone) clear the cache; writes from other
+    /// processes become visible after at most `ttl`.
+    pub fn with_read_ttl(mut self, ttl: Duration) -> Self {
+        self.read_ttl = Some(ttl);
+        self
+    }
+
+    /// Replace `better_auth` in the `x-allsource-caller` header. Must match
+    /// `^[a-z][a-z0-9_.]*$`, or the gateway counts the reads as `invalid`.
+    pub fn with_caller_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.caller_prefix = prefix.into();
+        self
+    }
+
+    fn reads(&self) -> std::sync::MutexGuard<'_, ReadCache> {
+        self.reads.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// `GET /api/v1/events/query` with `params`, attributed to `stream`'s
+    /// caller and revalidated against the last answer to the same query. A
+    /// non-2xx response comes back unread for the caller to classify.
+    async fn query_events(
+        &self,
+        stream: &str,
+        params: &[(&str, &str)],
+    ) -> Result<Result<Arc<Vec<StoredEvent>>, reqwest::Response>, AllsourceAuthError> {
+        self.fail_fast()?;
+        let key = serde_json::to_string(&(&self.tenant_id, params))?;
+        let cached = self.reads().get(&key);
+        if let Some(read) = cached.as_ref().filter(|read| read.fresh(self.read_ttl)) {
+            return Ok(Ok(read.events.clone()));
+        }
+        let mut request = self
+            .http
+            .get(format!("{}/api/v1/events/query", self.query_url))
+            .query(&self.tenant_query())
+            .query(params)
+            .header("Authorization", self.credential.header()?)
+            .header(CALLER_HEADER, caller_label(&self.caller_prefix, stream));
+        if let Some(read) = &cached {
+            request = request.header(reqwest::header::IF_NONE_MATCH, &read.etag);
+        }
+        let resp = request.send().await?;
+        if let (reqwest::StatusCode::NOT_MODIFIED, Some(read)) = (resp.status(), &cached) {
+            self.reads()
+                .put(key, read.etag.clone(), read.events.clone());
+            return Ok(Ok(read.events.clone()));
+        }
+        if !resp.status().is_success() {
+            return Ok(Err(resp));
+        }
+        let etag = resp
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let events = Arc::new(resp.json::<QueryResponse>().await?.events);
+        if let Some(etag) = etag {
+            self.reads().put(key, etag, events.clone());
+        }
+        Ok(Ok(events))
+    }
+
+    /// [`Self::query_events`] with every non-2xx turned into an error.
+    async fn read(
+        &self,
+        stream: &str,
+        params: &[(&str, &str)],
+    ) -> Result<Arc<Vec<StoredEvent>>, AllsourceAuthError> {
+        match self.query_events(stream, params).await? {
+            Ok(events) => Ok(events),
+            Err(resp) => Err(self.error_from(resp).await),
         }
     }
 
@@ -313,6 +399,7 @@ impl AllsourceClient {
             return Err(self.error_from(resp).await);
         }
 
+        self.reads().clear();
         Ok(())
     }
 
@@ -355,29 +442,16 @@ impl AllsourceClient {
         &self,
         entity_id: &str,
         limit: usize,
-    ) -> Result<Vec<StoredEvent>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
-        self.fail_fast()?;
-        let resp = self
-            .http
-            .get(&url)
-            .query(&self.tenant_query())
-            .header("Authorization", self.credential.header()?)
-            .query(&[
+    ) -> Result<Arc<Vec<StoredEvent>>, AllsourceAuthError> {
+        self.read(
+            entity_id,
+            &[
                 ("entity_id", entity_id),
                 ("limit", &limit.to_string()),
                 ("order", "desc"),
-            ])
-            .send()
-            .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            return Err(self.error_from(resp).await);
-        }
-
-        let query_resp: QueryResponse = resp.json().await?;
-        Ok(query_resp.events)
+            ],
+        )
+        .await
     }
 
     /// Query all non-deleted entities of a given type by event_type prefix.
@@ -387,35 +461,23 @@ impl AllsourceClient {
         event_type_prefix: &str,
         limit: usize,
     ) -> Result<Vec<T>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
-
-        self.fail_fast()?;
-        let resp = self
-            .http
-            .get(&url)
-            .query(&self.tenant_query())
-            .header("Authorization", self.credential.header()?)
-            .query(&[
-                ("event_type_prefix", event_type_prefix),
-                ("limit", &limit.to_string()),
-                ("order", "desc"),
-            ])
-            .send()
+        let events = self
+            .read(
+                event_type_prefix,
+                &[
+                    ("event_type_prefix", event_type_prefix),
+                    ("limit", &limit.to_string()),
+                    ("order", "desc"),
+                ],
+            )
             .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            return Err(self.error_from(resp).await);
-        }
-
-        let query_resp: QueryResponse = resp.json().await?;
         let mut results = Vec::new();
 
         // Group by entity_id, take latest per entity. The `order=desc` param
         // above makes Core return newest-first, so the first event seen for
         // each entity_id is its current state.
         let mut seen = std::collections::HashSet::new();
-        for event in &query_resp.events {
+        for event in events.iter() {
             let entity_id = event
                 .payload
                 .get("id")
@@ -449,30 +511,20 @@ impl AllsourceClient {
         filter: &[(&str, &str)],
         limit: usize,
     ) -> Result<Vec<StoredEvent>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
         let filter = build_payload_filter_all(filter);
-
-        self.fail_fast()?;
-        let resp = self
-            .http
-            .get(&url)
-            .query(&self.tenant_query())
-            .header("Authorization", self.credential.header()?)
-            .query(&[
-                ("event_type_prefix", event_type_prefix),
-                ("payload_filter", &filter),
-                ("limit", &limit.to_string()),
-                ("order", "desc"),
-            ])
-            .send()
-            .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            return Err(self.error_from(resp).await);
-        }
-
-        let mut events = resp.json::<QueryResponse>().await?.events;
+        let mut events = self
+            .read(
+                event_type_prefix,
+                &[
+                    ("event_type_prefix", event_type_prefix),
+                    ("payload_filter", &filter),
+                    ("limit", &limit.to_string()),
+                    ("order", "desc"),
+                ],
+            )
+            .await?
+            .as_ref()
+            .clone();
         events.sort_by(|a, b| {
             b.timestamp
                 .cmp(&a.timestamp)
@@ -517,37 +569,29 @@ impl AllsourceClient {
         field: &str,
         value: &str,
     ) -> Result<Option<T>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
-
         let filter = build_payload_filter(field, value);
-
-        self.fail_fast()?;
-        let resp = self
-            .http
-            .get(&url)
-            .query(&self.tenant_query())
-            .header("Authorization", self.credential.header()?)
-            .query(&[
-                ("event_type_prefix", event_type_prefix),
-                ("payload_filter", &filter),
-                ("limit", "1"),
-                ("order", "desc"),
-            ])
-            .send()
-            .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            if status.as_u16() == 400 || status.as_u16() == 422 {
+        let events = match self
+            .query_events(
+                event_type_prefix,
+                &[
+                    ("event_type_prefix", event_type_prefix),
+                    ("payload_filter", &filter),
+                    ("limit", "1"),
+                    ("order", "desc"),
+                ],
+            )
+            .await?
+        {
+            Ok(events) => events,
+            Err(resp) if matches!(resp.status().as_u16(), 400 | 422) => {
                 return self
                     .find_by_field_scan(event_type_prefix, field, value)
                     .await;
             }
-            return Err(self.error_from(resp).await);
-        }
+            Err(resp) => return Err(self.error_from(resp).await),
+        };
 
-        let query_resp: QueryResponse = resp.json().await?;
-        match query_resp.events.first() {
+        match events.first() {
             Some(event) => {
                 if is_deleted(&event.payload) {
                     return Ok(None);
@@ -573,31 +617,19 @@ impl AllsourceClient {
         field: &str,
         value: &str,
     ) -> Result<Option<T>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
-
-        self.fail_fast()?;
-        let resp = self
-            .http
-            .get(&url)
-            .query(&self.tenant_query())
-            .header("Authorization", self.credential.header()?)
-            .query(&[
-                ("event_type_prefix", event_type_prefix),
-                ("limit", "10000"),
-                ("order", "desc"),
-            ])
-            .send()
+        let events = self
+            .read(
+                event_type_prefix,
+                &[
+                    ("event_type_prefix", event_type_prefix),
+                    ("limit", "10000"),
+                    ("order", "desc"),
+                ],
+            )
             .await?;
-
-        let status = resp.status();
-        if !status.is_success() {
-            return Err(self.error_from(resp).await);
-        }
-
-        let query_resp: QueryResponse = resp.json().await?;
         let mut seen = std::collections::HashSet::new();
 
-        for event in &query_resp.events {
+        for event in events.iter() {
             let entity_id = event
                 .payload
                 .get("id")
@@ -687,32 +719,23 @@ impl AllsourceClient {
         event_type_prefix: &str,
         filter: &[(&str, &str)],
     ) -> Result<Vec<StoredEvent>, AllsourceAuthError> {
-        let url = format!("{}/api/v1/events/query", self.query_url);
         let filter = build_payload_filter_all(filter);
         let mut events = Vec::new();
         for page in 0..MATCH_PAGES {
-            self.fail_fast()?;
-            let resp = self
-                .http
-                .get(&url)
-                .query(&self.tenant_query())
-                .header("Authorization", self.credential.header()?)
-                .query(&[
-                    ("event_type_prefix", event_type_prefix),
-                    ("payload_filter", &filter),
-                    ("limit", &MATCH_PAGE.to_string()),
-                    ("offset", &(page * MATCH_PAGE).to_string()),
-                    ("order", "desc"),
-                ])
-                .send()
+            let batch = self
+                .read(
+                    event_type_prefix,
+                    &[
+                        ("event_type_prefix", event_type_prefix),
+                        ("payload_filter", &filter),
+                        ("limit", &MATCH_PAGE.to_string()),
+                        ("offset", &(page * MATCH_PAGE).to_string()),
+                        ("order", "desc"),
+                    ],
+                )
                 .await?;
-            let status = resp.status();
-            if !status.is_success() {
-                return Err(self.error_from(resp).await);
-            }
-            let batch = resp.json::<QueryResponse>().await?.events;
             let last = batch.len() < MATCH_PAGE;
-            events.extend(batch);
+            events.extend(batch.iter().cloned());
             if last {
                 break;
             }
