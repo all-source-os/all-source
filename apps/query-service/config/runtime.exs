@@ -1,5 +1,16 @@
 import Config
 
+history_clients =
+  case Jason.decode(System.get_env("ALLSOURCE_EVENT_HISTORY_CLIENTS", "{}")) do
+    {:ok, clients} when is_map(clients) -> clients
+    _ -> %{}
+  end
+
+config :query_service_ex,
+  event_history_enabled: System.get_env("ALLSOURCE_EVENT_HISTORY_ENABLED") == "true",
+  event_history_origin: System.get_env("ALLSOURCE_EVENT_HISTORY_WEB_ORIGIN"),
+  event_history_clients: history_clients
+
 # Customer review remains opt-in until connection consent and release gates pass.
 config :query_service_ex,
   customer_review_enabled: System.get_env("CUSTOMER_REVIEW_ENABLED") == "true",

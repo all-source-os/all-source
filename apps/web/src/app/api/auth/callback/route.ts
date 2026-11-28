@@ -1,6 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { publicUrl } from "@/lib/public-url";
 import { remoteEnabled, remoteRequestCookie } from "@/lib/server/customer-agent-http";
+import {
+  cookieOptions,
+  historyEnabled,
+  historyReturnCookie,
+  historyReturnPath,
+} from "@/lib/server/event-history-http";
 
 // Session tokens are minted by the Control Plane and validated by the Query
 // Service's /api/v1/auth/me. NEXT_PUBLIC_API_URL points at the branded gateway
@@ -69,8 +75,17 @@ export async function GET(request: NextRequest) {
     const pendingConnection = remoteEnabled() && request.cookies.has(remoteRequestCookie);
     const redirectUrl =
       nextPath ??
+      (historyEnabled()
+        ? historyReturnPath(request.cookies.get(historyReturnCookie)?.value)
+        : undefined) ??
       (pendingConnection ? "/connect/claude" : isNewUser ? "/onboarding" : "/dashboard");
     const response = NextResponse.redirect(publicUrl(request, redirectUrl));
+    if (request.cookies.has(historyReturnCookie))
+      response.cookies.set(historyReturnCookie, "", {
+        ...cookieOptions,
+        path: "/api/auth/callback",
+        maxAge: 0,
+      });
 
     // Set httpOnly cookie with the token
     response.cookies.set("auth_token", token, {

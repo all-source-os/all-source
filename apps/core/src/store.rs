@@ -241,6 +241,7 @@ pub struct EventStore {
     /// strategy.
     tenant_loader: Arc<TenantLoader>,
     strict_archive_limits: ArchiveReadLimits,
+    history_recovery_healthy: bool,
     /// Eviction must not reset indexes/versions underneath a writer or a
     /// certified cache load. Acquire before durability, events and storage locks.
     cache_residency_gate: RwLock<()>,
@@ -480,8 +481,10 @@ impl EventStore {
         // (TUI, web) can live-reload without the `server` feature.
         let (event_broadcast_tx, _) = tokio::sync::broadcast::channel(STORE_RING_CAPACITY);
 
-        let store = Self {
+        let mut store = Self {
             strict_archive_limits: config.strict_archive_limits,
+            history_recovery_healthy: (config.storage_dir.is_none() || storage.is_some())
+                && (config.wal_dir.is_none() || wal.is_some()),
             cache_residency_gate: RwLock::new(()),
             cache_generations: fast_dashmap(),
             events_removed: std::sync::atomic::AtomicU64::new(0),
@@ -601,7 +604,9 @@ impl EventStore {
             {
                 store.refresh_state.lock().set_wal_stamps(stamps);
             }
-            match wal.recover() {
+            let recovered = wal.recover();
+            store.history_recovery_healthy &= recovered.is_ok() && wal.recovered_all_segments();
+            match recovered {
                 Ok(recovered_events) if !recovered_events.is_empty() => {
                     let mut wal_new = 0usize;
                     for event in recovered_events {
@@ -4046,6 +4051,8 @@ impl Default for EventStore {
     }
 }
 
+#[path = "store_history.rs"]
+pub(crate) mod history;
 #[path = "store_strict_read.rs"]
 mod strict_read;
 

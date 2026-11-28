@@ -659,6 +659,10 @@ fn convert_response(auth_response: better_auth_core::AuthResponse) -> Response {
 }
 
 #[cfg(test)]
+#[path = "../../../tooling/e2e/event-history-review/auth.rs"]
+mod event_history_review;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use tower::ServiceExt; // for oneshot()

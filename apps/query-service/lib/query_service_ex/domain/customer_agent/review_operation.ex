@@ -3,7 +3,7 @@ defmodule QueryServiceEx.Domain.CustomerAgent.ReviewOperation do
   alias QueryServiceEx.Domain.AgentRun.Event
   alias QueryServiceEx.Domain.CustomerAgent.ReviewOwner, as: Owner
 
-  @purposes ~w(source.inspect source.share review.prepare review.read review.result human.review replay.inspect replay.share replay.prepare replay.read replay.approve)
+  @purposes ~w(source.inspect source.share review.prepare review.read review.result human.review replay.inspect replay.share replay.prepare replay.read replay.approve history.timeline history.evidence)
 
   def issued_at(value) when is_binary(value) and byte_size(value) in 38..53 do
     with [time, nonce] <- String.split(value, ":"),

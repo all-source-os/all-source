@@ -3,9 +3,9 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
   @limit 65_536
   @timeout 30_000
 
-  def post(url, credential, body, timeout \\ @timeout)
+  def post(url, credential, body, timeout \\ @timeout, profile \\ :review)
 
-  def post(url, credential, body, timeout)
+  def post(url, credential, body, timeout, profile)
       when byte_size(body) <= @limit and timeout in 1..@timeout do
     deadline = System.monotonic_time(:millisecond) + timeout
 
@@ -28,7 +28,7 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
     case :hackney.request(:post, url, headers, body, options) do
       {:ok, ref} when is_pid(ref) ->
         try do
-          receive_response(ref, deadline, nil, [], 0)
+          receive_response(ref, deadline, nil, [], 0, profile)
         after
           close(ref)
         end
@@ -42,7 +42,7 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
     _, _ -> {:error, :access_unavailable}
   end
 
-  def post(_, _, _, _), do: {:error, :access_unavailable}
+  def post(_, _, _, _, _), do: {:error, :access_unavailable}
 
   defp close(ref) do
     # Wait for the sender to terminate before flushing its queued headers/chunks.
@@ -65,7 +65,7 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
     end
   end
 
-  defp receive_response(ref, deadline, status, chunks, size) do
+  defp receive_response(ref, deadline, status, chunks, size, profile) do
     remaining = max(0, deadline - System.monotonic_time(:millisecond))
 
     if remaining == 0, do: throw(:deadline)
@@ -73,13 +73,13 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
     receive do
       {:hackney_response, ^ref, {:status, code, _}} ->
         if code == 200,
-          do: receive_response(ref, deadline, code, chunks, size),
-          else: {:error, error(code)}
+          do: receive_response(ref, deadline, code, chunks, size, profile),
+          else: {:error, error(code, profile)}
 
       {:hackney_response, ^ref, {:headers, headers}} ->
         if acceptable?(headers) do
           :hackney.stream_next(ref)
-          receive_response(ref, deadline, status, chunks, size)
+          receive_response(ref, deadline, status, chunks, size, profile)
         else
           {:error, :access_unavailable}
         end
@@ -87,7 +87,7 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
       {:hackney_response, ^ref, chunk}
       when is_binary(chunk) and size + byte_size(chunk) <= @limit ->
         :hackney.stream_next(ref)
-        receive_response(ref, deadline, status, [chunk | chunks], size + byte_size(chunk))
+        receive_response(ref, deadline, status, [chunk | chunks], size + byte_size(chunk), profile)
 
       {:hackney_response, ^ref, :done} when status == 200 ->
         decode(chunks |> Enum.reverse() |> IO.iodata_to_binary())
@@ -129,6 +129,10 @@ defmodule McpServerElixir.Infrastructure.CustomerReviewHTTP do
         {:error, :access_unavailable}
     end
   end
+
+  defp error(404, :history), do: :invalid_session
+  defp error(400, :history), do: :invalid_proposal
+  defp error(code, _profile), do: error(code)
 
   defp error(status) when status in [401, 403], do: :access_denied
   defp error(402), do: :query_quota_exceeded

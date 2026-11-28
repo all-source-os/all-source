@@ -13,7 +13,7 @@ const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 export type ChangelogPlacement = "home" | "prime";
 
 const HEADINGS: Record<ChangelogPlacement, string> = {
-  home: "Not ready for a trial?",
+  home: "Follow AllSource releases",
   prime: "Not ready to install?",
 };
 

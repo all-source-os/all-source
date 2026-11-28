@@ -315,6 +315,9 @@ pub async fn build_v1_router(
             post(super::api::ingest_events_batch_v1),
         )
         .route("/api/v1/events/query", get(super::api::query_events))
+        .merge(super::event_history::routes(
+            std::env::var("ALLSOURCE_HISTORY_GATEWAY_SUBJECT").ok(),
+        ))
         .route(
             "/api/v1/events/{event_id}",
             get(super::api::get_event_by_id),
@@ -580,7 +583,7 @@ pub async fn build_v1_router(
                 .allow_methods(Any)
                 .allow_headers(Any),
         )
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http().make_span_with(super::event_history::trace_span));
 
     // Prime API — nested router with its own state (feature-gated)
     #[cfg(feature = "prime")]

@@ -52,7 +52,7 @@ describe("public website background", () => {
     expect(theme).toContain("color-scheme: dark;");
     expect(theme).toContain("--background: var(--brand-field);");
     expect(css).not.toMatch(/\.dark\s+\.marketing-theme\s*\{/);
-    expect(homepage).toContain('className="marketing-theme dark relative min-h-screen');
+    expect(homepage).toContain("<main className={`marketing-theme dark relative min-h-screen ");
     expect(marketingLayout).toContain('className="marketing-theme dark min-h-screen');
     expect(rootLayout).toContain('themeColor: "#0E1A2A"');
     expect(header).not.toContain("ThemeToggle");

@@ -611,6 +611,16 @@ impl WriteAheadLog {
         self.erasure_floor_readable.load(Ordering::Acquire)
     }
 
+    pub(crate) fn recovered_all_segments(&self) -> bool {
+        if !self.unreadable_segments.lock().is_empty() {
+            return false;
+        }
+        match fs::read_dir(self.wal_dir.join(QUARANTINE_DIR)) {
+            Ok(mut entries) => entries.next().is_none(),
+            Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+        }
+    }
+
     /// [`Self::recover_for_append`], keeping each entry's sequence and
     /// `wal_timestamp`. The next sequence is above `floor` even if no entry
     /// reaches it.

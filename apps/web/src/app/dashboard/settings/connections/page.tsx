@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { CustomerConnections } from "@/components/settings/customer-connections";
 import { remoteEnabled, remoteIssuer } from "@/lib/server/customer-agent-http";
+import { historyEnabled, historyManage } from "@/lib/server/event-history-http";
 
 export default async function ConnectionsPage() {
   await connection();
@@ -14,6 +15,18 @@ export default async function ConnectionsPage() {
           Choose what your assistant can read. Review decisions stay in your workspace.
         </p>
       </div>
+      {historyEnabled() && (
+        <section className="space-y-3 rounded-xl border p-6 text-base leading-relaxed">
+          <h2 className="text-xl font-semibold">AllSource Event History</h2>
+          <p>
+            Open AllSource Event History in ChatGPT or Claude, connect a workspace and ask “What
+            changed in checkout?” Each answer links to its recorded events.
+          </p>
+          <a href={historyManage} className="inline-block underline">
+            Manage Event History connections
+          </a>
+        </section>
+      )}
       {remoteEnabled() && issuer && (
         <section className="space-y-4 rounded-xl border p-6 text-base leading-relaxed">
           <h2 className="text-xl font-semibold">Connect Claude on the web</h2>

@@ -1,44 +1,29 @@
 import { ChangelogSignup } from "@/components/changelog-signup";
-import { EarlyAccessBanner } from "@/components/early-access-banner";
-import Blog from "@/components/sections/blog";
-import CTA from "@/components/sections/cta";
-import FAQ from "@/components/sections/faq";
-import Features from "@/components/sections/features";
 import Footer from "@/components/sections/footer";
+import HarnessHome from "@/components/sections/harness-home";
+import styles from "@/components/sections/harness-home.module.css";
 import Header from "@/components/sections/header";
 import Hero from "@/components/sections/hero";
-import HowItWorks from "@/components/sections/how-it-works";
-import Pricing from "@/components/sections/pricing";
-import Problem from "@/components/sections/problem";
-import SocialProof from "@/components/sections/social-proof";
-import StatStrip from "@/components/sections/stat-strip";
-// Public HTML is cacheable; live prices load after paint from the catalog proxy.
-// Keep the freshness bound used by other bet marketing sites.
-export const revalidate = 300;
+import { constructMetadata } from "@/lib/utils";
+
+export const metadata = constructMetadata({
+  title: "Agent Memory on an Event Store | AllSource Prime",
+  description:
+    "Give your coding agent a memory of how your company works. Connect services to owners and decisions in AllSource Prime, built on a durable event store, and find the source in a fresh session.",
+  canonical: "/",
+});
 
 export default function Home() {
   return (
-    <main className="marketing-theme dark relative min-h-screen overflow-hidden bg-background text-foreground">
-      <EarlyAccessBanner />
-      <Header />
-      <Hero />
-      {/* Stats demoted below the fold — final values painted, never "0K" flash */}
-      <StatStrip />
-      {/* Logos section hidden - needs real partner logos */}
-      {/* <Logos /> */}
-      <Problem />
-      <HowItWorks />
-      {/* Testimonials carousel hidden - no real testimonials yet */}
-      {/* <TestimonialsCarousel /> */}
-      <Features />
-      <SocialProof />
-      <Pricing />
-      <section className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+    <main className={`marketing-theme dark relative min-h-screen ${styles.page}`}>
+      <Header homepage />
+      <div className={styles.canvas}>
+        <Hero />
+        <HarnessHome />
+      </div>
+      <div className={styles.news}>
         <ChangelogSignup placement="home" />
-      </section>
-      <FAQ />
-      <Blog />
-      <CTA />
+      </div>
       <Footer />
     </main>
   );

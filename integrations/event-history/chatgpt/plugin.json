@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "allsource-event-history",
+  "version": "0.1.0",
+  "description": "See what changed in a workspace and open the event behind each change.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "AllSource Event History",
+        "shortDescription": "Trace changes to source events",
+        "longDescription": "Engineering teams can ask what changed in a service and open the event behind each answer. Connect one authorized AllSource workspace. A question about checkout reads the last 24 hours of recorded checkout events. Each lookup and each event opened uses one workspace query unit.",
+        "category": "Developer Tools",
+        "developerName": "AllSource",
+        "capabilities": [
+          "Read"
+        ],
+        "websiteURL": "https://www.all-source.xyz",
+        "privacyPolicyURL": "https://www.all-source.xyz/privacy",
+        "termsOfServiceURL": "https://www.all-source.xyz/terms",
+        "supportURL": "https://github.com/all-source-os/all-source/issues",
+        "logo": "./assets/icon.png",
+        "composerIcon": "./assets/icon.png",
+        "defaultPrompt": [
+          "What changed in checkout?"
+        ]
+      }
+    }
+  }
+}

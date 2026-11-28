@@ -27,7 +27,9 @@ describe("event store definition route", () => {
   });
 
   it("connects homepage, docs, footer, and sitemap with rendered links", () => {
-    expect(source("src/components/sections/hero.tsx")).toContain('href="/what-is-an-event-store"');
+    expect(source("src/components/sections/harness-home.tsx")).toContain(
+      'href="/what-is-an-event-store"'
+    );
     expect(source("src/app/(marketing)/docs/page.tsx")).toContain(
       'href: "/what-is-an-event-store"'
     );

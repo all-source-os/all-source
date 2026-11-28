@@ -98,8 +98,8 @@ describe("event-store category and event-sourcing pSEO cluster", () => {
     const productIdentity = source("src/lib/product-verticals.ts");
     const software = softwareApplicationSchema();
 
-    expect(homepage).toContain("Event store database built for event sourcing.");
-    expect(homepage).toContain("through Prime");
+    expect(homepage).toContain("Build your first harness");
+    expect(homepage).toContain("AllSource Prime");
     expect(rootLayout).toContain("Event Store Database for Event Sourcing | AllSource");
     expect(productIdentity).toContain("purpose-built event store database for event sourcing");
     expect(software.applicationSubCategory).toBe("Event store database");

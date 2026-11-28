@@ -34,8 +34,10 @@ defmodule McpServerElixir.Application do
   end
 
   defp transport_children do
-    if Application.get_env(:mcp_server_elixir, :customer_review_http, false) do
-      unless Application.get_env(:mcp_server_elixir, :customer_review, false),
+    review_http = Application.get_env(:mcp_server_elixir, :customer_review_http, false)
+
+    if review_http or Application.get_env(:mcp_server_elixir, :event_history, false) do
+      if review_http and not Application.get_env(:mcp_server_elixir, :customer_review, false),
         do: raise("HTTP customer transport requires the exclusive customer profile")
 
       {:ok, ip} =
@@ -66,9 +68,10 @@ defmodule McpServerElixir.Application do
   end
 
   defp backend_children(core_mode) do
-    if Application.get_env(:mcp_server_elixir, :customer_review, false),
-      do: [],
-      else: mode_children(core_mode)
+    if Application.get_env(:mcp_server_elixir, :customer_review, false) or
+         Application.get_env(:mcp_server_elixir, :event_history, false),
+       do: [],
+       else: mode_children(core_mode)
   end
 
   defp stdio_children do

@@ -47,8 +47,8 @@ impl EmailService {
         let from_email = std::env::var("RESEND_FROM_EMAIL")
             .unwrap_or_else(|_| "AllSource <noreply@allsource.io>".to_string());
 
-        let app_url = std::env::var("APP_URL")
-            .unwrap_or_else(|_| "https://app.allsource.io".to_string());
+        let app_url =
+            std::env::var("APP_URL").unwrap_or_else(|_| "https://app.allsource.io".to_string());
 
         Some(Self {
             client: reqwest::Client::new(),
@@ -163,12 +163,9 @@ impl EmailService {
             Ok(result.id)
         } else {
             let status = response.status();
-            let error: ResendError = response
-                .json()
-                .await
-                .unwrap_or(ResendError {
-                    message: "Unknown error".to_string(),
-                });
+            let error: ResendError = response.json().await.unwrap_or(ResendError {
+                message: "Unknown error".to_string(),
+            });
             warn!(to = to, subject = subject, status = %status, error = %error.message, "Resend API error");
             Err(anyhow::anyhow!(
                 "Resend API error ({}): {}",
@@ -185,7 +182,10 @@ pub struct NoOpEmailService;
 
 impl NoOpEmailService {
     pub async fn send_welcome(&self, to_email: &str) -> Result<String> {
-        warn!(to = to_email, "Email not sent (no RESEND_API_KEY configured)");
+        warn!(
+            to = to_email,
+            "Email not sent (no RESEND_API_KEY configured)"
+        );
         Ok("noop".to_string())
     }
 

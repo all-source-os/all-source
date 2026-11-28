@@ -66,7 +66,7 @@ jobs:
         env:
           MIX_ENV: test
         run: timeout -k 15 300 mix deps.get --check-locked
-      - name: Verify Query Service key lifecycle against real Core
+      - name: Verify key lifecycle and Event History against real Core
         timeout-minutes: 5
         working-directory: apps/query-service
         env:
@@ -80,4 +80,5 @@ jobs:
           timeout -k 15 300 mix test
           test/query_service_ex_web/managed_key_lifecycle_test.exs
           test/query_service_ex/integration/managed_key_core_test.exs
+          test/query_service_ex/integration/event_history_test.exs
           --include integration --seed 0

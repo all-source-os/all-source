@@ -12,24 +12,37 @@ defmodule QueryServiceExWeb.Plugs.CustomerAgentBody do
 
   def init(opts), do: opts
 
-  def call(%{request_path: "/api/customer-agent/" <> _} = conn, _opts) do
+  def call(%{request_path: "/api/event-history/" <> _} = conn, _opts), do: customer_body(conn)
+  def call(%{request_path: "/api/customer-agent/" <> _} = conn, _opts), do: customer_body(conn)
+  def call(conn, _opts), do: conn
+
+  defp customer_body(conn) do
     cond do
-      conn.query_string != "" -> reject(conn, 403, "access_denied")
-      metadata?(conn) -> conn
-      conn.request_path == "/api/customer-agent/oauth/token" -> token_body(conn)
-      content_type?(conn, "json") -> read(conn, limit(conn), &Jason.decode/1)
-      true -> reject(conn, 415, "json_required")
+      conn.query_string != "" ->
+        reject(conn, 403, "access_denied")
+
+      metadata?(conn) ->
+        conn
+
+      conn.request_path in ["/api/customer-agent/oauth/token", "/api/event-history/oauth/token"] ->
+        token_body(conn)
+
+      content_type?(conn, "json") ->
+        read(conn, limit(conn), &Jason.decode/1)
+
+      true ->
+        reject(conn, 415, "json_required")
     end
   end
-
-  def call(conn, _opts), do: conn
 
   defp metadata?(conn),
     do:
       conn.method == "GET" and
         conn.request_path in [
           "/api/customer-agent/oauth/metadata",
-          "/api/customer-agent/oauth/resource"
+          "/api/customer-agent/oauth/resource",
+          "/api/event-history/oauth/resource",
+          "/api/event-history/oauth/metadata"
         ]
 
   defp content_type?(conn, subtype) do
@@ -48,7 +61,8 @@ defmodule QueryServiceExWeb.Plugs.CustomerAgentBody do
   defp limit(conn) do
     if String.starts_with?(conn.request_path, [
          "/api/customer-agent/connections/",
-         "/api/customer-agent/oauth/"
+         "/api/customer-agent/oauth/",
+         "/api/event-history/"
        ]),
        do: 4_096,
        else: 65_536

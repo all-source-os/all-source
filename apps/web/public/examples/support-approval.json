@@ -1,0 +1,33 @@
+{
+  "binary": "allsource-prime 0.30.1",
+  "transport": "local MCP",
+  "lookup": "prime_history by saved entity_id",
+  "exit": "clean",
+  "observations": [
+    {
+      "stage": "write",
+      "result": {
+        "entity_id": "node:decision:b5692abd-fcce-46a0-a956-a11a5537f7d8",
+        "node_id": "b5692abd-fcce-46a0-a956-a11a5537f7d8"
+      }
+    },
+    {
+      "stage": "restart",
+      "events": [
+        {
+          "payload": {
+            "id": "b5692abd-fcce-46a0-a956-a11a5537f7d8",
+            "node_type": "decision",
+            "properties": {
+              "domain": "support",
+              "name": "Replacement approved",
+              "source": "case-1842"
+            }
+          },
+          "timestamp": "2026-11-26T22:03:12.695142+00:00",
+          "type": "prime.node.created"
+        }
+      ]
+    }
+  ]
+}

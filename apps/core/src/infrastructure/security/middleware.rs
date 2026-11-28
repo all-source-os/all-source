@@ -66,7 +66,17 @@ pub const AUTH_SKIP_PREFIXES: &[&str] = &[
 /// tenant-from-body is the security model now.
 #[inline]
 pub fn should_skip_auth(path: &str) -> bool {
+    if is_event_history_path(path) {
+        return false;
+    }
     AUTH_SKIP_PATHS.contains(&path) || AUTH_SKIP_PREFIXES.iter().any(|pfx| path.starts_with(pfx))
+}
+
+pub(crate) fn is_event_history_path(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/v1/events/history" | "/api/v1/events/history/workspaces"
+    )
 }
 
 /// Check if development mode is enabled via environment variable.

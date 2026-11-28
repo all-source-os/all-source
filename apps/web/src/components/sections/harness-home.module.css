@@ -1,0 +1,447 @@
+.page {
+  --rule: color-mix(in srgb, var(--brand-ice) 23%, transparent);
+  --quiet: var(--muted-foreground);
+  background: var(--brand-field);
+  color: var(--brand-paper);
+}
+.canvas,
+.news {
+  width: min(100% - clamp(2.5rem, 8vw, 9rem), 88rem);
+  margin-inline: auto;
+}
+.page > header > div {
+  width: min(100% - clamp(2.5rem, 8vw, 9rem), 88rem);
+  padding-inline: 0;
+}
+.page :is(a, button, summary, pre):focus-visible {
+  outline: 3px solid var(--brand-ice);
+  outline-offset: 3px;
+}
+.canvas section {
+  scroll-margin-top: 5.5rem;
+}
+.hero,
+.example,
+.starter,
+.workflows {
+  display: grid;
+  align-items: center;
+}
+.hero {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: clamp(1.75rem, 4vw, 5rem);
+  padding-block: clamp(3.5rem, 7.2vw, 7.7rem) clamp(3rem, 6.6vw, 7rem);
+}
+.heroCopy {
+  min-width: 0;
+}
+.kicker,
+.plateHead,
+.readout b,
+.answer dt,
+.workflowLinks span {
+  font-family: var(--font-mono, ui-monospace), monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.045em;
+}
+.kicker,
+.plateHead > span,
+.actions,
+.textLink,
+.primary,
+.inlineLink,
+.helpLinks a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.kicker {
+  color: var(--brand-ice);
+  margin: 0 0 1.35rem;
+}
+.trace {
+  width: 1.9rem;
+  height: 2px;
+  background: var(--brand-signal);
+}
+.hero h1,
+.sectionIntro h2,
+.help h2 {
+  margin: 0;
+  font-weight: 530;
+  text-wrap: balance;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.hero h1 {
+  word-spacing: 0.03em;
+  font-size: clamp(3.45rem, 5.8vw, 6.4rem);
+  max-width: 12ch;
+  line-height: 0.98;
+}
+.hero h1 em {
+  font: inherit;
+  color: var(--brand-ice);
+}
+.lead,
+.sectionIntro > p:not(.kicker),
+.steps li > p,
+.help p {
+  color: var(--quiet);
+  line-height: 1.58;
+}
+.lead {
+  max-width: 44ch;
+  font-size: clamp(1.02rem, 1.3vw, 1.22rem);
+  margin: 1.6rem 0 1.75rem;
+}
+.actions {
+  flex-wrap: wrap;
+  gap: 0.8rem 1.4rem;
+}
+.primary,
+.textLink,
+.inlineLink,
+.helpLinks a {
+  font-weight: 600;
+}
+.primary {
+  min-height: 3.05rem;
+  padding: 0.65rem 1.15rem;
+  border-radius: 0.35rem;
+  background: var(--brand-ice);
+  color: var(--brand-ink);
+}
+.primary:hover {
+  background: var(--brand-paper);
+}
+.textLink {
+  min-height: 2.75rem;
+}
+.textLink:hover,
+.helpLinks a:hover,
+.resources a:hover {
+  color: var(--brand-ice);
+  text-decoration: underline;
+}
+.clientLine {
+  color: var(--quiet);
+  font-size: 0.84rem;
+  margin-top: 1.4rem;
+}
+.clientLine strong {
+  color: var(--brand-paper);
+  font-weight: 550;
+}
+.plate {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: 0.55rem;
+  overflow: clip;
+  background: var(--brand-ink);
+}
+.plateHead {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.8rem 1.1rem;
+  color: var(--quiet);
+  border-bottom: 1px solid var(--rule);
+}
+.plateHead > span:first-child {
+  color: var(--brand-paper);
+}
+.graphStage {
+  position: relative;
+}
+.graphStage img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.node {
+  display: flex;
+  white-space: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+  background: var(--brand-field);
+  color: var(--brand-paper);
+  border: 1px solid var(--brand-ice);
+  border-radius: 1rem;
+  font:
+    550 clamp(0.65rem, 0.76vw, 0.82rem) / 1.1 ui-monospace,
+    monospace;
+  cursor: pointer;
+}
+.node span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--brand-signal);
+}
+.node:hover,
+.node[aria-pressed="true"] {
+  color: var(--brand-ink);
+  background: var(--brand-ice);
+}
+.node[aria-pressed="true"] span {
+  background: var(--brand-ink);
+}
+.checkout {
+  top: 67%;
+  left: 26%;
+}
+.source {
+  top: 60%;
+  left: 84%;
+}
+.payments {
+  top: 20%;
+  left: 59%;
+}
+.readout {
+  border-top: 1px solid var(--rule);
+  padding: 0.9rem 1.1rem;
+  display: flex;
+  gap: 0.65rem;
+  min-height: 5.75rem;
+}
+.readout svg {
+  color: var(--brand-ice);
+  flex: none;
+}
+.readout b {
+  display: block;
+  color: var(--brand-ice);
+  line-height: 1.45;
+}
+.readout p {
+  margin: 0.22rem 0 0;
+  font-size: 0.88rem;
+  color: var(--quiet);
+  line-height: 1.5;
+}
+.example,
+.starter,
+.workflows {
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1fr);
+  gap: clamp(2rem, 7vw, 9rem);
+  padding-block: clamp(3rem, 6.8vw, 7.2rem);
+  border-top: 1px solid var(--rule);
+}
+.sectionIntro h2 {
+  max-width: 15ch;
+  font-size: clamp(2.5rem, 4.3vw, 4.7rem);
+  line-height: 1.04;
+}
+.sectionIntro > p:not(.kicker) {
+  margin: 1.2rem 0 0.6rem;
+  max-width: 38ch;
+}
+.answer {
+  padding-left: clamp(1.3rem, 2.5vw, 2.8rem);
+  border-left: 2px solid var(--brand-signal);
+}
+.answer > p {
+  max-width: 33ch;
+  font-size: clamp(1.22rem, 1.9vw, 1.9rem);
+  line-height: 1.36;
+  letter-spacing: -0.025em;
+}
+.answer dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 3rem;
+  margin: 1.2rem 0 0.6rem;
+}
+.answer dt,
+.workflowLinks span {
+  color: var(--brand-ice);
+}
+.answer dd {
+  margin: 0.3rem 0 0;
+  font-weight: 600;
+}
+.answer small {
+  display: block;
+  max-width: 50ch;
+  color: var(--quiet);
+  line-height: 1.5;
+}
+.starter,
+.workflows {
+  align-items: start;
+}
+.steps {
+  list-style: none;
+  counter-reset: setup;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.steps li {
+  counter-increment: setup;
+  position: relative;
+  padding: 0 0 1.6rem 2.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+.steps li + li {
+  margin-top: 1.6rem;
+}
+.steps li::before {
+  content: counter(setup, decimal-leading-zero);
+  color: var(--brand-ice);
+  position: absolute;
+  left: 0;
+  top: 0.28rem;
+  font:
+    0.76rem / 1.4 ui-monospace,
+    monospace;
+}
+.steps h3,
+.workflowLinks strong {
+  font-size: clamp(1.18rem, 1.5vw, 1.55rem);
+  font-weight: 550;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+.steps li > p {
+  font-size: 0.95rem;
+  margin: 0.7rem 0;
+}
+.steps pre,
+.steps blockquote {
+  background: var(--brand-ink);
+  border: 1px solid var(--rule);
+  padding: 0.95rem 1rem;
+  margin: 0.8rem 0;
+  border-radius: 0.3rem;
+}
+.steps pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    0.84rem / 1.7 ui-monospace,
+    monospace;
+  color: var(--brand-ice);
+}
+.steps blockquote {
+  color: var(--brand-paper);
+  line-height: 1.55;
+}
+.steps summary,
+.inlineLink {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--brand-ice);
+}
+.steps summary {
+  padding-block: 0.6rem;
+}
+.workflowLinks > :is(a, div) {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem 1rem;
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+.workflowLinks a:first-child {
+  padding-top: 0;
+}
+.workflowLinks span {
+  grid-column: 1 / -1;
+}
+.workflowLinks a:hover strong {
+  color: var(--brand-ice);
+}
+.workflowLinks svg {
+  width: 1.2rem;
+}
+.help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: clamp(1.5rem, 3.5vw, 3.4rem);
+  background: var(--brand-ink);
+  border: 1px solid var(--rule);
+}
+.help h2 {
+  font-size: clamp(1.7rem, 2.5vw, 2.6rem);
+}
+.help p {
+  margin: 0.7rem 0 0;
+  max-width: 55ch;
+}
+.helpLinks,
+.resources {
+  display: flex;
+  gap: 0.6rem 1.5rem;
+  flex-wrap: wrap;
+}
+.helpLinks a,
+.resources a {
+  padding-block: 0.5rem;
+}
+.resources {
+  padding-block: 1.4rem;
+  color: var(--quiet);
+  font-size: 0.9rem;
+}
+.news {
+  padding-block: 2rem;
+}
+@media (max-width: 760px) {
+  .hero,
+  .example,
+  .starter,
+  .workflows {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .hero {
+    padding-block: 2.7rem;
+  }
+  .hero h1 {
+    font-size: clamp(3.2rem, 11vw, 4.8rem);
+  }
+  .hero .kicker {
+    margin-bottom: 1rem;
+  }
+  .lead {
+    margin-block: 1.05rem 1.2rem;
+  }
+  .clientLine {
+    margin-top: 0.8rem;
+  }
+  .sectionIntro h2 {
+    max-width: 18ch;
+  }
+  .node {
+    min-height: 2.4rem;
+  }
+  .steps li {
+    padding-left: 2rem;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .node,
+  .primary {
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease;
+  }
+  .textLink svg,
+  .workflowLinks svg {
+    transition: transform 0.18s ease;
+  }
+  .textLink:hover svg,
+  .workflowLinks a:hover svg {
+    transform: translate(2px, -2px);
+  }
+}

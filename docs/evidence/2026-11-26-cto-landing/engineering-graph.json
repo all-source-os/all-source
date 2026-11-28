@@ -1,0 +1,64 @@
+{
+  "version": "allsource-prime 0.30.1",
+  "transport": "local MCP stdio",
+  "fixture": "two writer processes (nodes, then links) and three fresh reader processes over the same temporary store, each exiting before the next starts; discover Checkout by type, follow owner and decision relations from the discovered ID, inspect decision history",
+  "discovery": {
+    "nodes": [
+      {
+        "id": "node:service:29b8097b-9a08-48ba-8961-8db85266c7f4",
+        "properties": {
+          "name": "Checkout"
+        },
+        "type": "service"
+      }
+    ],
+    "offset": 0,
+    "returned": 1,
+    "total": 1
+  },
+  "owned_by": {
+    "nodes": [
+      {
+        "id": "node:team:3d6cc837-f242-454a-8841-af7f2b146392",
+        "properties": {
+          "name": "Payments"
+        },
+        "type": "team"
+      }
+    ],
+    "offset": 0,
+    "returned": 1,
+    "total": 1
+  },
+  "governed_by": {
+    "nodes": [
+      {
+        "id": "node:decision:a405e02a-159f-4d00-a4dd-b4afecf3e29e",
+        "properties": {
+          "name": "Queue checkout requests during payment provider outages",
+          "source": "ADR-17"
+        },
+        "type": "decision"
+      }
+    ],
+    "offset": 0,
+    "returned": 1,
+    "total": 1
+  },
+  "history": {
+    "events": [
+      {
+        "payload": {
+          "id": "a405e02a-159f-4d00-a4dd-b4afecf3e29e",
+          "node_type": "decision",
+          "properties": {
+            "name": "Queue checkout requests during payment provider outages",
+            "source": "ADR-17"
+          }
+        },
+        "timestamp": "2026-11-26T22:02:31.712758+00:00",
+        "type": "prime.node.created"
+      }
+    ]
+  }
+}

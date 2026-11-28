@@ -56,15 +56,32 @@ const nextConfig = {
         ],
       },
     ];
-    const policy = headers[0].headers.find((header) => header.key === "Content-Security-Policy");
+    const policy = headers[0].headers.find(
+      (header) => header.key === "Content-Security-Policy",
+    );
+    const pagePolicy = (header) =>
+      header.key === "Content-Security-Policy" ||
+      header.key === "Referrer-Policy";
     return [
-      ...headers,
-      ...["/api/customer-agent/:path*", "/mcp/customer-review", "/.well-known/:path*"].map(
-        (source) => ({
-          source,
-          headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
-        })
-      ),
+      {
+        source: "/(.*)",
+        headers: headers[0].headers.filter((header) => !pagePolicy(header)),
+      },
+      // Event History serves a request-specific form destination for the registered OAuth host.
+      {
+        source: "/((?!event-history(?:/|$)).*)",
+        headers: headers[0].headers.filter(pagePolicy),
+      },
+      ...[
+        "/api/customer-agent/:path*",
+        "/api/event-history/:path*",
+        "/mcp/customer-review",
+        "/mcp/event-history",
+        "/.well-known/:path*",
+      ].map((source) => ({
+        source,
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      })),
       {
         source: "/connect/claude",
         headers: [
@@ -73,7 +90,7 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: policy.value.replace(
               "form-action 'self'",
-              "form-action 'self' https://claude.ai/api/mcp/auth_callback"
+              "form-action 'self' https://claude.ai/api/mcp/auth_callback",
             ),
           },
           { key: "Referrer-Policy", value: "no-referrer" },

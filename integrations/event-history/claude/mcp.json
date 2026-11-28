@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "allsource-event-history": {
+      "type": "http",
+      "url": "https://www.all-source.xyz/mcp/event-history"
+    }
+  }
+}
