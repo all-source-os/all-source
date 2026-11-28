@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AllSource Infra Costs</title>
+<meta name="description" content="Fly compute, volumes, gateway egress and GitHub Actions for the AllSource org, measured 2026-11-28, compared with the 2026-11-08 report.">
+<style>
+  :root {
+    color-scheme: light;
+    --background: #fafafa;
+    --card: #ffffff;
+    --foreground: #09090b;
+    --muted-foreground: #71717a;
+    --border: #e4e4e7;
+    --muted: #f4f4f5;
+    --ring: rgba(9, 9, 11, 0.10);
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --good-text: #006300;
+    --warn-text: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --background: #09090b;
+      --card: #111113;
+      --foreground: #fafafa;
+      --muted-foreground: #a1a1aa;
+      --border: #27272a;
+      --muted: #18181b;
+      --ring: rgba(255, 255, 255, 0.10);
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --good-text: #0ca30c;
+      --warn-text: #fab219;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --background: #09090b;
+    --card: #111113;
+    --foreground: #fafafa;
+    --muted-foreground: #a1a1aa;
+    --border: #27272a;
+    --muted: #18181b;
+    --ring: rgba(255, 255, 255, 0.10);
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --good-text: #0ca30c;
+    --warn-text: #fab219;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .skip { position: absolute; left: -9999px; }
+  .skip:focus { left: 16px; top: 8px; background: var(--card); padding: 6px 10px; border-radius: 6px; z-index: 20; }
+  :focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+  .shell { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  header.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 4px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  p { margin: 0 0 8px; }
+  .sub { color: var(--muted-foreground); font-size: 13px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 10px; font-size: 12px; font-weight: 500; background: var(--card);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  button.toggle {
+    font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+    border-radius: 8px; padding: 6px 12px; min-height: 32px;
+  }
+  .grid { display: grid; gap: 16px; }
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 16px; }
+  .two { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); margin-bottom: 16px; }
+  @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; box-shadow: 0 1px 2px var(--ring); min-width: 0;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .kpi-label { color: var(--muted-foreground); font-size: 13px; font-weight: 500; }
+  .kpi-value { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin: 4px 0 2px; }
+  .kpi-note { color: var(--muted-foreground); font-size: 12px; }
+  .good { color: var(--good-text); font-weight: 600; }
+  .warn { color: var(--warn-text); font-weight: 600; }
+  .chart { width: 100%; overflow: hidden; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .chart text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--muted-foreground); }
+  .chart text.val { fill: var(--foreground); font-variant-numeric: tabular-nums; }
+  .chart text.lbl { fill: var(--foreground); }
+  .chart .bar { fill: var(--series-1); }
+  .chart .bar.s2 { fill: var(--series-2); }
+  .chart .bar.partial { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-dasharray: 4 3; }
+  .chart .hit { fill: transparent; cursor: default; }
+  .chart g.row:hover .bar { opacity: 0.85; }
+  .chart line.grid { stroke: var(--grid); stroke-width: 1; }
+  .chart line.base { stroke: var(--axis); stroke-width: 1; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--muted-foreground); font-size: 12px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted-foreground); font-weight: 500; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .actions li { margin-bottom: 10px; }
+  .actions b { font-weight: 600; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 12px; white-space: nowrap; }
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--card); color: var(--foreground); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px var(--ring);
+    max-width: 280px;
+  }
+  .tooltip b { display: block; font-weight: 600; margin-bottom: 2px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted-foreground); margin-top: 6px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .sw.dash { border: 2px dashed var(--series-1); background: transparent; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--muted); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .wide { margin-bottom: 16px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell" id="main">
+
+<header class="top">
+  <div>
+    <h1>AllSource infra costs</h1>
+    <p class="sub">The <code>allsource</code> Fly org and the <code>all-source-os</code> GitHub org, measured 2026-11-28 01:44Z. Compared with the <a href="2026-11-08-infra-costs-status.html">2026-11-08 report</a>. Prices are the Fly iad list rates that report used.</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span class="badge"><span class="dot" style="background:var(--good)"></span>✓ No bandwidth alert firing</span>
+    <button class="toggle" id="theme" type="button" aria-label="Toggle colour theme">◐ Theme</button>
+  </div>
+</header>
+
+<div class="grid kpis">
+  <div class="card">
+    <div class="kpi-label">Fly machines + volumes</div>
+    <div class="kpi-value">$127.68<span class="sub" style="font-size:14px">/mo</span></div>
+    <div class="kpi-note"><span class="good">−$17.19 (−12%)</span> since 11-08. $124.23 machines, $3.45 volumes. Core's price is derived, so treat this as an estimate.</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">allsource-core share</div>
+    <div class="kpi-value">81%</div>
+    <div class="kpi-note">$103.02 of it, and $96 of that is 16 GB of RAM. Every other app together is $24.66.</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">Gateway edge egress, last 24 h</div>
+    <div class="kpi-value">2.25<span class="sub" style="font-size:14px"> GB</span></div>
+    <div class="kpi-note"><span class="good">−86%</span> from 16.3 GB on 11-08; 3.03 GB the day before. ≈ $0.05/day, ≈ $1.35/month at $0.02/GB.</div>
+  </div>
+  <div class="card">
+    <div class="kpi-label">GitHub Actions, net</div>
+    <div class="kpi-value">$0</div>
+    <div class="kpi-note">Public repo. Gross November 1–28: $124.65 (17,078 Linux min, 349 macOS min, storage).</div>
+  </div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <div class="card-head"><h2>Core is four-fifths of the Fly bill</h2><span class="sub">monthly, machines + volumes</span></div>
+    <div class="chart" id="flyChart"></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--series-1)"></i>Priced from Fly's list</span>
+      <span><i class="sw dash"></i>Derived: shared-cpu-8x is not on the price page</span>
+    </div>
+    <details><summary>Table view</summary><div class="table-wrap"><table id="flyTable"></table></div></details>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>$17.19 a month came off since 11-08</h2><span class="sub">monthly delta by change</span></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Change</th><th class="num">Δ /mo</th></tr></thead>
+      <tbody>
+        <tr><td>Suspended remote builder and its 50 GB lhr volume gone</td><td class="num good">−$7.50</td></tr>
+        <tr><td><code>allsource-admin</code> machine stopped (app suspended)</td><td class="num good">−$3.69</td></tr>
+        <tr><td><code>allsource-prime</code> 2 × 512 MB → 2 × 256 MB</td><td class="num good">−$3.00</td></tr>
+        <tr><td><code>allsource-auth</code> 2 × 512 MB → 2 × 256 MB</td><td class="num good">−$3.00</td></tr>
+        <tr><td>Unattached Core volume <code>vol_vwjoq95l03qzy88r</code> gone</td><td class="num good">−$1.50</td></tr>
+        <tr><td><code>allsource-core-rehearsal</code> added: machine stopped, 10 GB volume kept</td><td class="num warn">+$1.50</td></tr>
+        <tr><td><b>Net</b></td><td class="num"><b>−$17.19</b></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="sub" style="margin-top:8px">Stopped machines are counted at $0 compute. Fly may still bill their root filesystem; that is not checked.</p>
+  </div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <div class="card-head"><h2>Egress is now under the 10 GB warning every hour</h2><span class="sub">GB per hour, hour ending (UTC)</span></div>
+    <div class="chart" id="hourChart"></div>
+    <p class="sub" style="margin-top:8px">0.03–0.22 GB/h. The 10 GB/day warning equals 0.42 GB/h; no hour came within half of it. On 11-08 the quietest hour was 0.49 GB/h.</p>
+    <details><summary>Table view</summary><div class="table-wrap"><table id="hourTable"></table></div></details>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Daily egress fell from 33.7 GB to 2.25 GB</h2><span class="sub">GB per 24 h</span></div>
+    <div class="chart" id="egressChart"></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--series-1)"></i>Measured <code>fly_edge_data_out</code></span>
+      <span class="status"><i class="sw" style="background:var(--warning)"></i>⚠ Warning 10 GB</span>
+      <span class="status"><i class="sw" style="background:var(--critical)"></i>✕ Critical 50 GB</span>
+    </div>
+    <p class="sub" style="margin-top:8px">The first three rows come from the 11-08 report; the alert Prometheus keeps 2 days, so the days between are not available. What caused the drop was not established.</p>
+    <details><summary>Table view</summary><div class="table-wrap"><table id="egressTable"></table></div></details>
+  </div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <div class="card-head"><h2>Core peaked at 8.9 GiB this run, on a 16 GB machine</h2></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Measure</th><th class="num">Value</th></tr></thead>
+      <tbody>
+        <tr><td>Process peak (<code>VmHWM</code>), PID 672</td><td class="num">8.91 GiB</td></tr>
+        <tr><td>Process now (<code>VmRSS</code>)</td><td class="num">8.20 GiB</td></tr>
+        <tr><td>Machine uptime</td><td class="num">27.3 h</td></tr>
+        <tr><td>Peak in the 11-08 report (41.4 h uptime)</td><td class="num">12.64 GiB</td></tr>
+        <tr><td>2026-11-25 OOM kill (<code>system</code> tenant cold load, gh#444)</td><td class="num">16.1 GB</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="sub" style="margin-top:8px">A 12 GB machine would hold this run's peak but not the 11-08 peak. 16 GB → 12 GB would save $24.00/month (4 GB × $6.00).</p>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Actions cost nothing net; gross is on October's pace</h2><span class="sub">November 1–28</span></div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>SKU</th><th class="num">Quantity</th><th class="num">Gross</th><th class="num">Net</th></tr></thead>
+      <tbody>
+        <tr><td>Actions Linux</td><td class="num">17,078 min</td><td class="num">$102.47</td><td class="num">$0</td></tr>
+        <tr><td>Actions macOS 3-core</td><td class="num">349 min</td><td class="num">$21.64</td><td class="num">$0</td></tr>
+        <tr><td>Actions storage</td><td class="num">1,633 GB-h</td><td class="num">$0.55</td><td class="num">$0</td></tr>
+        <tr><td><b>Total</b></td><td class="num"></td><td class="num"><b>$124.65</b></td><td class="num"><b>$0</b></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p class="sub" style="margin-top:8px">October gross was $119.40 (17,058 Linux and 275 macOS minutes). All covered because the repo is public.</p>
+  </div>
+</div>
+
+<div class="card wide">
+  <div class="card-head"><h2>Actions worth taking</h2><span class="sub">ordered by money at stake</span></div>
+  <ol class="actions">
+    <li><b>allsource-core: measure for a week after gh#444 ships, then decide on 12 GB.</b> $24.00/month. This run peaked at 8.91 GiB, the 11-08 run at 12.64 GiB. gh#444 now refuses a cold load memory cannot hold, so a one-off load no longer kills the process, but a 12 GB machine still fails on the 11-08 peak. Read <code>VmHWM</code> on PID 672 after seven days of uptime; downsize only if it stays under ~10 GiB.</li>
+    <li><b>Remove <code>allsource-core-rehearsal</code> once the rehearsal is done.</b> $1.50/month for the volume, plus whatever Fly bills for the stopped 16 GB machine's root filesystem. Its last deploy was 2026-11-09.</li>
+    <li><b>Re-baseline the bandwidth warning.</b> It is no longer firing, and the last 24 h used 22% of its 10 GB. Leaving it at 10 GB now gives early warning of a return to the 11-08 rate; lowering it to ~5 GB would catch a doubling.</li>
+    <li><b>Confirm <code>allsource-admin</code> being suspended is intended.</b> Its only machine is stopped, last deployed 2026-09-27. If <code>admin.all-source.xyz</code> should answer, the machine needs auto-start or a restart; if not, the app can go.</li>
+  </ol>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <h2 style="margin-bottom:8px">Sources</h2>
+    <div class="table-wrap">
+    <table>
+      <tbody>
+        <tr><td>Apps</td><td><code>fly apps list -o allsource</code></td></tr>
+        <tr><td>Machines, sizes</td><td><code>fly machine list -a &lt;app&gt; --json</code> for all nine apps</td></tr>
+        <tr><td>Volumes</td><td><code>fly volumes list -a &lt;app&gt; --json</code></td></tr>
+        <tr><td>Fly prices</td><td>The 11-08 report's iad list rates: shared-cpu-1x 256MB $2.19, 512MB $3.69; extra RAM $6.00/GB; volume $0.15/GB; outbound NA $0.02/GB. Core derived as 8 × $0.69 + 16 × $6.00. Not re-fetched.</td></tr>
+        <tr><td>Egress</td><td><code>sum(increase(fly_edge_data_out{app="allsource-control-plane"}[1d]))</code>, the same with <code>offset 1d</code>, and <code>[1h]</code> over <code>query_range</code>, on the <code>allsource-bandwidth-alerts</code> Prometheus (<code>127.0.0.1:9090</code> over <code>fly ssh</code>); alert state from <code>/api/v1/alerts</code></td></tr>
+        <tr><td>Actions</td><td><code>gh api /organizations/all-source-os/settings/billing/usage -f year=2026 -f month=11</code></td></tr>
+        <tr><td>Core memory</td><td><code>/proc/672/status</code> and <code>/proc/uptime</code> on machine <code>85777d6c1d17d8</code> over <code>fly ssh</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+  <div class="card">
+    <h2 style="margin-bottom:8px">What I have NOT checked</h2>
+    <ul style="margin:0;padding-left:18px">
+      <li>The Fly invoice. There is no CLI path to current-period spend; every figure here is list price × what is running.</li>
+      <li>Whether the list prices changed since 11-08. They were not re-fetched.</li>
+      <li>Root-filesystem charges for the two stopped machines (<code>allsource-admin</code>, <code>allsource-core-rehearsal</code>).</li>
+      <li>Why daily egress fell from 16.3 GB to 2–3 GB. Longhand's read cache (#1850) is a candidate; no attribution was run.</li>
+      <li>Egress for the days between 11-08 and 11-26: the alert Prometheus keeps 2 days.</li>
+      <li>Data transfer other than the gateway's edge output (Core, Prime and web are not exported to the alert Prometheus).</li>
+      <li>Billable Actions minutes per workflow.</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+<div class="tooltip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+const fly = [
+  { name: "allsource-core", value: 103.02, note: "shared-cpu-8x 16 GB, $101.52 derived; 10 GB volume $1.50", partial: true },
+  { name: "allsource-prime", value: 4.68, note: "2 × shared-cpu-1x 256MB + 2 × 1 GB volumes" },
+  { name: "allsource-auth", value: 4.38, note: "2 × shared-cpu-1x 256MB" },
+  { name: "allsource-control-plane", value: 4.38, note: "2 × shared-cpu-1x 256MB (gateway)" },
+  { name: "allsource-query", value: 3.69, note: "shared-cpu-1x 512MB" },
+  { name: "allsource-web", value: 3.69, note: "shared-cpu-1x 512MB" },
+  { name: "allsource-bandwidth-alerts", value: 2.34, note: "shared-cpu-1x 256MB + 1 GB volume" },
+  { name: "allsource-core-rehearsal", value: 1.50, note: "machine stopped (8 CPU, 16 GB); 10 GB volume" },
+  { name: "allsource-admin", value: 0, note: "machine stopped; app suspended" },
+].sort((a, b) => b.value - a.value);
+
+const hourEnd = 1795830242 * 1000;
+const hourlyBytes = [166761489, 143792779, 118277866, 97599812, 98280188, 106729067, 101759559, 103221630,
+  47542655, 29708013, 34393818, 31769376, 29244527, 28464491, 34631948, 30727301,
+  74837034, 217509178, 142765303, 101724429, 100975597, 99580047, 96565931, 212347919];
+const hourly = hourlyBytes.map((b, i) => ({ t: new Date(hourEnd - (hourlyBytes.length - 1 - i) * 3600e3), value: b / 1e9 }));
+
+const daily = [
+  { name: "24 h to 11-06 23:35Z", value: 33.70 },
+  { name: "24 h to 11-07 23:35Z", value: 19.75 },
+  { name: "24 h to 11-08 11:22Z", value: 16.33 },
+  { name: "24 h to 11-27 01:44Z", value: 3.03 },
+  { name: "24 h to 11-28 01:44Z", value: 2.25 },
+];
+
+const tip = document.getElementById("tip");
+function showTip(e, title, body) {
+  tip.innerHTML = "<b></b><span></span>";
+  tip.querySelector("b").textContent = title;
+  tip.querySelector("span").textContent = body;
+  tip.style.display = "block";
+  const pad = 14;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  const r = tip.getBoundingClientRect();
+  if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+const SVG = "http://www.w3.org/2000/svg";
+function el(tag, attrs, text) {
+  const n = document.createElementNS(SVG, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+const money = v => "$" + v.toFixed(2);
+const hhmm = d => String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
+
+function fillTable(id, head, rows) {
+  const t = document.getElementById(id);
+  const thead = document.createElement("thead");
+  const htr = document.createElement("tr");
+  head.forEach((h, j) => { const th = document.createElement("th"); th.textContent = h; if (j === 1) th.className = "num"; htr.appendChild(th); });
+  thead.appendChild(htr); t.appendChild(thead);
+  const tb = document.createElement("tbody");
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    r.forEach((v, j) => { const td = document.createElement("td"); if (j === 1) td.className = "num"; td.textContent = v; tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+}
+
+function barPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  return `M${x},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x} Z`;
+}
+function colPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  return `M${x},${y + h} V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h} Z`;
+}
+
+(function flyChart() {
+  const host = document.getElementById("flyChart");
+  const labelW = 190, valueW = 80, rowH = 26, gap = 6, W = 560;
+  const plotW = W - labelW - valueW;
+  const H = fly.length * (rowH + gap) + 8;
+  const max = Math.max(...fly.map(r => r.value));
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Fly monthly cost by app" });
+  for (let i = 1; i <= 4; i++) {
+    const x = labelW + plotW * i / 4;
+    svg.appendChild(el("line", { class: "grid", x1: x, x2: x, y1: 0, y2: H - 4 }));
+  }
+  svg.appendChild(el("line", { class: "base", x1: labelW, x2: labelW, y1: 0, y2: H - 4 }));
+  fly.forEach((r, i) => {
+    const y = i * (rowH + gap) + 4;
+    const w = Math.max(3, plotW * r.value / max);
+    const g = el("g", { class: "row" });
+    g.appendChild(el("text", { class: "lbl", x: labelW - 8, y: y + rowH / 2 + 4, "text-anchor": "end" }, r.name));
+    g.appendChild(el("path", { class: "bar" + (r.partial ? " partial" : ""), d: barPath(labelW, y + 3, w, rowH - 6, 4) }));
+    g.appendChild(el("text", { class: "val", x: labelW + w + 6, y: y + rowH / 2 + 4 }, (r.partial ? "≈ " : "") + money(r.value)));
+    const hit = el("rect", { class: "hit", x: 0, y: y, width: W, height: rowH });
+    hit.addEventListener("mousemove", e => showTip(e, r.name, (r.partial ? "≈ " : "") + money(r.value) + "/mo · " + r.note));
+    hit.addEventListener("mouseleave", hideTip);
+    g.appendChild(hit);
+    svg.appendChild(g);
+  });
+  host.appendChild(svg);
+  fillTable("flyTable", ["App", "Cost /mo", "Detail"], fly.map(r => [r.name, (r.partial ? "≈ " : "") + money(r.value), r.note]));
+})();
+
+(function hourChart() {
+  const host = document.getElementById("hourChart");
+  const W = 560, H = 200, left = 36, right = 8, top = 24, bottom = 26;
+  const plotW = W - left - right, plotH = H - top - bottom, max = 0.5;
+  const sy = v => top + plotH * (1 - v / max);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Gateway egress per hour over the last 24 hours" });
+  [0, 0.1, 0.2, 0.3, 0.4, 0.5].forEach(t => {
+    svg.appendChild(el("line", { class: t === 0 ? "base" : "grid", x1: left, x2: W - right, y1: sy(t), y2: sy(t) }));
+    svg.appendChild(el("text", { x: left - 6, y: sy(t) + 4, "text-anchor": "end" }, t.toFixed(1)));
+  });
+  const slot = plotW / hourly.length, bw = slot - 2;
+  hourly.forEach((h, i) => {
+    const x = left + i * slot + 1;
+    const g = el("g", { class: "row" });
+    g.appendChild(el("path", { class: "bar", d: colPath(x, sy(h.value), bw, sy(0) - sy(h.value), 4) }));
+    if (i % 4 === 3) g.appendChild(el("text", { x: x + bw / 2, y: H - 8, "text-anchor": "middle" }, hhmm(h.t)));
+    const hit = el("rect", { class: "hit", x: x - 1, y: top, width: slot, height: plotH });
+    hit.addEventListener("mousemove", e => showTip(e, "Hour ending " + h.t.toISOString().slice(5, 10) + " " + hhmm(h.t) + "Z", h.value.toFixed(3) + " GB · ≈ $" + (h.value * 0.02).toFixed(4)));
+    hit.addEventListener("mouseleave", hideTip);
+    g.appendChild(hit);
+    svg.appendChild(g);
+  });
+  const warnH = 10 / 24;
+  svg.appendChild(el("line", { x1: left, x2: W - right, y1: sy(warnH), y2: sy(warnH), stroke: "var(--warning)", "stroke-width": 2, "stroke-dasharray": "6 4", "pointer-events": "none" }));
+  svg.appendChild(el("text", { class: "lbl", x: W - right, y: top - 10, "text-anchor": "end" }, "⚠ dashed: 10 GB/day pace, 0.42 GB/h"));
+  host.appendChild(svg);
+  fillTable("hourTable", ["Hour ending (UTC)", "GB"], hourly.map(h => [h.t.toISOString().slice(5, 10) + " " + hhmm(h.t), h.value.toFixed(3)]));
+})();
+
+(function egress() {
+  const host = document.getElementById("egressChart");
+  const labelW = 150, rowH = 26, gap = 6, W = 560, top = 26;
+  const H = top + daily.length * (rowH + gap) + 26;
+  const max = 55, plotW = W - labelW - 24;
+  const sx = v => labelW + plotW * v / max;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Daily gateway egress against warning and critical thresholds" });
+  const bottomY = top + daily.length * (rowH + gap);
+  [0, 10, 20, 30, 40, 50].forEach(t => {
+    svg.appendChild(el("line", { class: t === 0 ? "base" : "grid", x1: sx(t), x2: sx(t), y1: top - 4, y2: bottomY }));
+    svg.appendChild(el("text", { x: sx(t), y: bottomY + 18, "text-anchor": "middle" }, t + " GB"));
+  });
+  daily.forEach((d, i) => {
+    const y = top + i * (rowH + gap);
+    const g = el("g", { class: "row" });
+    g.appendChild(el("text", { class: "lbl", x: labelW - 8, y: y + rowH / 2 + 4, "text-anchor": "end" }, d.name));
+    g.appendChild(el("path", { class: "bar", d: barPath(sx(0), y + 3, Math.max(3, sx(d.value) - sx(0)), rowH - 6, 4) }));
+    g.appendChild(el("text", { class: "val", x: sx(d.value) + 6, y: y + rowH / 2 + 4 }, d.value.toFixed(2) + " GB"));
+    const hit = el("rect", { class: "hit", x: 0, y: y, width: W, height: rowH });
+    hit.addEventListener("mousemove", e => showTip(e, d.name, d.value.toFixed(2) + " GB · ≈ $" + (d.value * 0.02).toFixed(2) + " at $0.02/GB"));
+    hit.addEventListener("mouseleave", hideTip);
+    g.appendChild(hit);
+    svg.appendChild(g);
+  });
+  [[10, "var(--warning)", "⚠ warning"], [50, "var(--critical)", "✕ critical"]].forEach(([v, c, l]) => {
+    svg.appendChild(el("line", { x1: sx(v), x2: sx(v), y1: top - 8, y2: bottomY, stroke: c, "stroke-width": 2 }));
+    svg.appendChild(el("text", { class: "lbl", x: sx(v), y: top - 12, "text-anchor": v === 50 ? "end" : "middle" }, l + " " + v + " GB"));
+  });
+  host.appendChild(svg);
+  fillTable("egressTable", ["Window", "GB", "Cost"], daily.map(d => [d.name, d.value.toFixed(2), "$" + (d.value * 0.02).toFixed(2)]));
+})();
+
+document.getElementById("theme").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme
+    ? root.dataset.theme === "dark"
+    : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+});
+</script>
+</body>
+</html>

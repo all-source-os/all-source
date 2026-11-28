@@ -307,6 +307,7 @@ Client SDKs live under `sdks/`: [Rust](../sdks/rust/README.md), Go (`sdks/go/`),
 - [Deploy denial diagnosis (2026-10-26)](reports/2026-10-26-auth-deploy-denial-diagnosis.html): the auth path that refused unregistered keys and ranked safeguards.
 - [Gateway config strip outage (2026-11-06)](reports/2026-11-06-gateway-config-strip-outage.md): `api.all-source.xyz` served nothing for 32.5 minutes after a config file was replaced by an empty one.
 - [Infrastructure costs status (2026-11-08)](reports/2026-11-08-infra-costs-status.html): Fly machines, volumes, gateway egress and the actions that cut cost.
+- [Infrastructure costs status (2026-11-28)](reports/2026-11-28-infra-costs-status.html): Fly down $17.19/month to $127.68, gateway egress down to 2.25 GB/day, Core's 16 GB sizing.
 
 ### Verification reports
 
