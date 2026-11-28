@@ -71,11 +71,15 @@ cold-tier archive is configured, so expired heartbeats are deleted outright;
 set `ALLSOURCE_COLD_STORAGE_URL` to archive them instead
 (`docs/operations/COLD_TIER.md`).
 
-**Never run an unscoped read of `system` on the prod machine.** A
+**Read large tenants offline, not on the prod machine.** A
 `/api/v1/events/query?tenant_id=system&limit=200` on 2026-11-25 hydrated the
-whole tenant (429 MB on disk) to 16.1 GB RSS and was OOM-killed instead of
-refused. Copy the files off with `fly ssh sftp get` and read them with
-`tooling/allsource-inspect` locally.
+whole tenant (9,761,062 events, 429 MB on disk) to 16.1 GB RSS and was
+OOM-killed. Admission estimated it from bytes alone (×16, ~7.7 GB) and let it
+through; it now also estimates from the footer row count (2,048 bytes per
+event, `ALLSOURCE_RESIDENT_BYTES_PER_EVENT`) and takes the larger, so such a
+read returns `archive_hydration_refused` instead (gh#444). To inspect a
+tenant that large, copy the files off with `fly ssh sftp get` and read them
+with `tooling/allsource-inspect` locally.
 
 ### Customer tenants keep events forever
 
@@ -153,10 +157,11 @@ deliberate: a probe that cannot measure must not stop every load.
 | `ALLSOURCE_COMPACTION_INPUT_BYTES` | 32 MiB | Compressed input per snapshot. **This is the term that bounds a sweep's peak memory** (~16x resident). |
 | `ALLSOURCE_MEMORY_RESERVE_BYTES` | 1 GiB | Headroom kept free. Admission refuses a load that would eat into it. |
 | `ALLSOURCE_RESIDENT_BYTE_RATIO` | 16 | Resident bytes per archive byte. Measured, not derived — re-measure before changing. |
+| `ALLSOURCE_RESIDENT_BYTES_PER_EVENT` | 2048 | Resident bytes per event, from footer row counts. Admission uses the larger of this and the byte ratio. Covers tenants of tiny events (gh#444). |
 | `ALLSOURCE_CACHE_BYTES` | 2 GiB | Estimate-based eviction target. Soft. |
 | `ALLSOURCE_ARCHIVE_WORKERS` | 1 | Concurrent strict cold loaders. |
 
-Raising `ALLSOURCE_RESIDENT_BYTE_RATIO` makes admission stricter; lowering it
+Raising `ALLSOURCE_RESIDENT_BYTE_RATIO` or `ALLSOURCE_RESIDENT_BYTES_PER_EVENT` makes admission stricter; lowering either
 admits loads that may not fit. If you lower it, measure RSS before and after
 a cold load of a known-size tenant and put the number in a commit message.
 

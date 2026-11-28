@@ -176,6 +176,14 @@ pub struct BatchWriteStats {
     pub size_flushes: u64,
 }
 
+/// A tenant's archive as read from file metadata and Parquet footers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TenantArchiveSize {
+    pub bytes: u64,
+    pub rows: u64,
+    pub files: usize,
+}
+
 /// Result of a batch write operation
 #[derive(Debug, Clone)]
 pub struct BatchWriteResult {
@@ -1230,15 +1238,27 @@ impl ParquetStorage {
     /// the call: an under-count makes the decision more permissive, and this
     /// figure only ever gates work that the headroom check re-verifies as it
     /// proceeds.
-    pub fn tenant_archive_bytes(&self, tenant_id: &str) -> Result<(u64, usize)> {
+    pub fn tenant_archive_size(&self, tenant_id: &str) -> Result<TenantArchiveSize> {
+        use parquet::file::reader::{FileReader, SerializedFileReader};
+
         let files = self.list_parquet_files_for_tenant(tenant_id)?;
-        let count = files.len();
-        let bytes = files
-            .iter()
-            .filter_map(|path| std::fs::metadata(path).ok())
-            .map(|metadata| metadata.len())
-            .sum();
-        Ok((bytes, count))
+        let mut size = TenantArchiveSize {
+            files: files.len(),
+            ..TenantArchiveSize::default()
+        };
+        for path in &files {
+            let Ok(file) = File::open(path) else {
+                continue;
+            };
+            size.bytes += file.metadata().map_or(0, |metadata| metadata.len());
+            // Footer only: no row group is decoded. An unreadable footer adds
+            // no rows, and the hydration that follows reports the file.
+            if let Ok(reader) = SerializedFileReader::new(file) {
+                size.rows +=
+                    u64::try_from(reader.metadata().file_metadata().num_rows()).unwrap_or(0);
+            }
+        }
+        Ok(size)
     }
 
     fn list_complete_tenant_archive(
@@ -2563,6 +2583,35 @@ mod tests {
                 });
         assert_eq!(alice_count, 2);
         assert_eq!(bob_count, 3);
+    }
+
+    #[test]
+    fn tenant_archive_size_counts_rows_from_footers_across_files() {
+        let temp_dir = TempDir::new().unwrap();
+        let storage = ParquetStorage::new(temp_dir.path()).unwrap();
+
+        for flush in 0..2 {
+            for i in 0..3 {
+                storage
+                    .append_event(event_with_tenant("alice", &format!("a-{flush}-{i}")))
+                    .unwrap();
+            }
+            storage.flush().unwrap();
+        }
+        storage
+            .append_event(event_with_tenant("bob", "b-0"))
+            .unwrap();
+        storage.flush().unwrap();
+
+        let alice = storage.tenant_archive_size("alice").unwrap();
+        assert_eq!(alice.files, 2);
+        assert_eq!(alice.rows, 6);
+        assert!(alice.bytes > 0);
+        assert_eq!(storage.tenant_archive_size("bob").unwrap().rows, 1);
+        assert_eq!(
+            storage.tenant_archive_size("nobody").unwrap(),
+            TenantArchiveSize::default()
+        );
     }
 
     #[test]

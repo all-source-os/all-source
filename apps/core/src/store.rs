@@ -1963,11 +1963,12 @@ impl EventStore {
 
     /// Refuse a cold load the process has no room for, before it allocates.
     ///
-    /// The archive's size on disk is read rather than its decoded size,
-    /// because the decoded size is only knowable by decoding it — which is
-    /// the thing being decided. The ratio between them is measured, not
-    /// derived, so it is an env knob
-    /// (`hydration_admission::DEFAULT_RESIDENT_BYTES_PER_ARCHIVE_BYTE`).
+    /// The archive's size on disk and its footer row count are read rather
+    /// than its decoded size, because the decoded size is only knowable by
+    /// decoding it — which is the thing being decided. Both ratios are
+    /// measured, not derived, so they are env knobs
+    /// (`hydration_admission::DEFAULT_RESIDENT_BYTES_PER_ARCHIVE_BYTE`,
+    /// `DEFAULT_RESIDENT_BYTES_PER_EVENT`).
     ///
     /// No eviction happens here. Trading warm tenants for a load that may
     /// still not fit is a worse outcome than refusing one request, and
@@ -1988,18 +1989,21 @@ impl EventStore {
         if available.is_none() {
             return Ok(());
         }
-        let (archive_bytes, file_count) = storage.read().tenant_archive_bytes(tenant_id)?;
-        let reserve = admission::reserve_from_env();
-        let ratio = admission::ratio_from_env();
-        match admission::admit(archive_bytes, available, reserve, ratio) {
+        let size = storage.read().tenant_archive_size(tenant_id)?;
+        let archive = admission::Archive {
+            bytes: size.bytes,
+            rows: size.rows,
+        };
+        match admission::admit(archive, available, admission::Costs::from_env()) {
             Ok(()) => Ok(()),
             Err(refusal) => {
                 #[cfg(feature = "server")]
                 self.metrics.hydration_refusals_total.inc();
                 tracing::warn!(
                     tenant_id = tenant_id,
-                    archive_bytes = archive_bytes,
-                    file_count = file_count,
+                    archive_bytes = size.bytes,
+                    archive_rows = size.rows,
+                    file_count = size.files,
                     needed_bytes = refusal.needed_bytes,
                     available_bytes = refusal.available_bytes,
                     resident_estimate_bytes = self.tenant_loader.total_bytes(),
